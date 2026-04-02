@@ -24,13 +24,22 @@ function dueDiffDays(due) {
   if (!due) return null
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  return Math.floor((new Date(due).getTime() - today.getTime()) / 86_400_000)
+  return Math.floor((localDate(due).getTime() - today.getTime()) / 86_400_000)
+}
+
+function localDate(str) {
+  return str ? new Date(`${str}T00:00:00`) : null
+}
+
+function fmtDate(str) {
+  const d = localDate(str)
+  return d ? d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 }
 
 function DueLabel({ due }) {
   if (!due) return <span style={{ color: '#333' }}>—</span>
   const diff = dueDiffDays(due)
-  const label = new Date(due).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+  const label = fmtDate(due)
   if (diff < 0)  return <span style={{ color: '#EF4444', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span></span>
   if (diff <= 7) return <span style={{ color: '#E8A838', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span></span>
   return <span style={{ color: '#AAA' }}>{label}</span>
@@ -136,7 +145,7 @@ function PoCard({ po, onSaved }) {
         <p style={{ margin: 0, fontSize: '13px', color: '#AAA' }}>{po.supplier_name}</p>
         {po.order_date && (
           <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#555' }}>
-            {new Date(po.order_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {fmtDate(po.order_date)}
           </span>
         )}
       </div>
@@ -321,7 +330,7 @@ export default function PurchaseOrders() {
                         </a>
                       </td>
                       <td style={{ padding: '11px 14px', fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace' }}>
-                        {po.order_date ? new Date(po.order_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                        {po.order_date ? fmtDate(po.order_date) : '—'}
                       </td>
                       <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{po.supplier_name}</td>
                       <td style={{ padding: '11px 14px' }}>
