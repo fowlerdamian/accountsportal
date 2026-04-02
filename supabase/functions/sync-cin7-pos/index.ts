@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ACTIVE_STATUSES = ["DRAFT", "ORDERED"];
+const ACTIVE_STATUSES = ["DRAFT", "ORDERED", "INVOICED"];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -50,7 +50,7 @@ serve(async (req) => {
     let synced  = 0;
     const errors: string[] = [];
 
-    // Fetch each active status separately so we never page through completed POs
+    // Fetch each active status separately so we never page through all POs
     const allActivePOs: any[] = [];
     for (const status of ACTIVE_STATUSES) {
       let statusPage = 1;
@@ -79,41 +79,36 @@ serve(async (req) => {
 
         statusTotal = json.Total ?? 0;
         const list: any[] = json.PurchaseList ?? [];
-        allActivePOs.push(...list.filter(po => po.CombinedInvoiceStatus !== "INVOICED"));
+        allActivePOs.push(...list);
         statusPage++;
         if (list.length < limit) break;
       }
     }
 
-    // Process all active POs together
-    {
-      const activePOs = allActivePOs;
+    if (allActivePOs.length > 0) {
+      const rows = await Promise.all(allActivePOs.map(async (po) => {
+        const hasAttachment = await checkAttachment(po.ID, cin7Headers);
+        return {
+          cin7_id:        po.ID,
+          po_number:      po.OrderNumber,
+          supplier_name:  po.Supplier ?? "Unknown",
+          status:         toDbStatus(po.Status),
+          order_date:     po.OrderDate ? po.OrderDate.substring(0, 10) : null,
+          due_date:       po.ID in existingDueDates ? existingDueDates[po.ID] : null,
+          total_amount:   po.InvoiceAmount ?? 0,
+          currency:       po.BaseCurrency ?? "AUD",
+          line_items:     [],
+          has_attachment: hasAttachment,
+          synced_at:      new Date().toISOString(),
+        };
+      }));
 
-      if (activePOs.length > 0) {
-        const rows = await Promise.all(activePOs.map(async (po) => {
-          const hasAttachment = await checkAttachment(po.ID, cin7Headers);
-          return {
-            cin7_id:        po.ID,
-            po_number:      po.OrderNumber,
-            supplier_name:  po.Supplier ?? "Unknown",
-            status:         toDbStatus(po.Status),
-            order_date:     po.OrderDate ? po.OrderDate.substring(0, 10) : null,
-            due_date:       po.ID in existingDueDates ? existingDueDates[po.ID] : null,
-            total_amount:   po.InvoiceAmount ?? 0,
-            currency:       po.BaseCurrency ?? "AUD",
-            line_items:     [],
-            has_attachment: hasAttachment,
-            synced_at:      new Date().toISOString(),
-          };
-        }));
+      const { error } = await supabase
+        .from("purchase_orders")
+        .upsert(rows, { onConflict: "cin7_id" });
 
-        const { error } = await supabase
-          .from("purchase_orders")
-          .upsert(rows, { onConflict: "cin7_id" });
-
-        if (error) errors.push(error.message);
-        else synced += rows.length;
-      }
+      if (error) errors.push(error.message);
+      else synced += rows.length;
     }
 
     return new Response(
@@ -145,6 +140,7 @@ function toDbStatus(s: string): string {
     DRAFT:      "Draft",
     AUTHORISED: "Authorised",
     ORDERED:    "Ordered",
+    INVOICED:   "Invoiced",
     RECEIVING:  "Receiving",
     RECEIVED:   "Received",
     COMPLETED:  "Received",

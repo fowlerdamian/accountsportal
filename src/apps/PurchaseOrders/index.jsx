@@ -3,22 +3,20 @@ import { supabase } from '../../lib/supabase.js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ACTIVE_STATUSES = ['Draft', 'Ordered']
+const ALL_STATUSES   = ['Draft', 'Ordered', 'Invoiced']
+const DEFAULT_FILTER = ['Draft', 'Ordered']
 
 const STATUS_STYLE = {
   Draft:      { color: '#555',    background: '#111',                  border: '1px solid #2a2a2a' },
   Authorised: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)',  border: '1px solid rgba(96,165,250,0.3)' },
   Ordered:    { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)' },
+  Invoiced:   { color: '#34d399', background: 'rgba(52,211,153,0.1)',  border: '1px solid rgba(52,211,153,0.3)' },
   Receiving:  { color: '#E8A838', background: 'rgba(232,168,56,0.1)',  border: '1px solid rgba(232,168,56,0.3)' },
   Received:   { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
   Cancelled:  { color: '#888',    background: '#111',                  border: '1px solid #222' },
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function aud(n) {
-  return n == null ? '—' : new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n)
-}
 
 function dueDiffDays(due) {
   if (!due) return null
@@ -107,6 +105,31 @@ function KpiCard({ label, value, valueStyle }) {
   )
 }
 
+// ─── Filter toggle ────────────────────────────────────────────────────────────
+
+function FilterToggle({ status, active, onToggle }) {
+  const ss = STATUS_STYLE[status] ?? STATUS_STYLE.Draft
+  return (
+    <button
+      onClick={() => onToggle(status)}
+      style={{
+        padding: '4px 12px',
+        fontSize: '11px',
+        fontFamily: '"JetBrains Mono", monospace',
+        borderRadius: '20px',
+        cursor: 'pointer',
+        transition: 'opacity 150ms',
+        border: ss.border,
+        background: active ? ss.background : 'transparent',
+        color: active ? ss.color : '#444',
+        opacity: active ? 1 : 0.6,
+      }}
+    >
+      {status}
+    </button>
+  )
+}
+
 // ─── Mobile card ──────────────────────────────────────────────────────────────
 
 function PoCard({ po, onSaved }) {
@@ -172,18 +195,19 @@ function useIsMobile() {
 }
 
 export default function PurchaseOrders() {
-  const [orders,   setOrders]   = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [syncing,  setSyncing]  = useState(false)
-  const [syncMsg,  setSyncMsg]  = useState(null)
-  const [lastSync, setLastSync] = useState(null)
+  const [orders,        setOrders]        = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [syncing,       setSyncing]       = useState(false)
+  const [syncMsg,       setSyncMsg]       = useState(null)
+  const [lastSync,      setLastSync]      = useState(null)
+  const [activeFilters, setActiveFilters] = useState(DEFAULT_FILTER)
   const isMobile = useIsMobile()
 
   const fetchOrders = useCallback(async () => {
     const { data, error } = await supabase
       .from('purchase_orders')
       .select('*')
-      .in('status', ACTIVE_STATUSES)
+      .in('status', ALL_STATUSES)
       .order('due_date', { ascending: true, nullsFirst: false })
     if (!error && data) {
       setOrders(data)
@@ -196,6 +220,17 @@ export default function PurchaseOrders() {
 
   function handleDueSaved(poId, newDate) {
     setOrders(prev => prev.map(o => o.id === poId ? { ...o, due_date: newDate } : o))
+  }
+
+  function toggleFilter(status) {
+    setActiveFilters(prev => {
+      if (prev.includes(status)) {
+        // Keep at least one active
+        if (prev.length === 1) return prev
+        return prev.filter(s => s !== status)
+      }
+      return [...prev, status]
+    })
   }
 
   async function handleSync() {
@@ -217,9 +252,9 @@ export default function PurchaseOrders() {
     }
   }
 
-  const overdue    = orders.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d < 0 })
-  const dueSoon    = orders.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d >= 0 && d <= 7 })
-  const totalValue = orders.reduce((s, o) => s + (o.total_amount ?? 0), 0)
+  const visible   = orders.filter(o => activeFilters.includes(o.status))
+  const overdue   = visible.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d < 0 })
+  const dueSoon   = visible.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d >= 0 && d <= 7 })
 
   if (loading) {
     return (
@@ -233,7 +268,7 @@ export default function PurchaseOrders() {
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 24px', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', margin: 0, letterSpacing: '-0.01em' }}>
             Purchase Orders
@@ -269,23 +304,33 @@ export default function PurchaseOrders() {
         </div>
       </div>
 
+      {/* ── Filter toggles ─────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Show:
+        </span>
+        {ALL_STATUSES.map(s => (
+          <FilterToggle key={s} status={s} active={activeFilters.includes(s)} onToggle={toggleFilter} />
+        ))}
+      </div>
+
       {/* ── KPI cards ──────────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '24px' }}>
-        <KpiCard label="Open POs"      value={orders.length} />
-        <KpiCard label="Overdue"       value={overdue.length}  valueStyle={overdue.length  > 0 ? { color: '#EF4444' } : {}} />
-        <KpiCard label="Due This Week" value={dueSoon.length}  valueStyle={dueSoon.length  > 0 ? { color: '#E8A838' } : {}} />
-        <KpiCard label="Order Sent"    value={orders.filter(o => o.has_attachment).length} />
+        <KpiCard label="Showing"       value={visible.length} />
+        <KpiCard label="Overdue"       value={overdue.length} valueStyle={overdue.length > 0 ? { color: '#EF4444' } : {}} />
+        <KpiCard label="Due This Week" value={dueSoon.length} valueStyle={dueSoon.length > 0 ? { color: '#E8A838' } : {}} />
+        <KpiCard label="Order Sent"    value={visible.filter(o => o.has_attachment).length} />
       </div>
 
       {/* ── Mobile: card list ──────────────────────────────────────────────── */}
       {isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {orders.length === 0 ? (
+          {visible.length === 0 ? (
             <p style={{ textAlign: 'center', color: '#444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace', padding: '40px 0' }}>
-              No open POs. Tap <strong style={{ color: '#666' }}>Sync Cin7</strong>.
+              No orders match the current filter.
             </p>
           ) : (
-            orders.map(po => <PoCard key={po.id} po={po} onSaved={handleDueSaved} />)
+            visible.map(po => <PoCard key={po.id} po={po} onSaved={handleDueSaved} />)
           )}
         </div>
       ) : (
@@ -303,14 +348,14 @@ export default function PurchaseOrders() {
               </tr>
             </thead>
             <tbody>
-              {orders.length === 0 ? (
+              {visible.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: '#444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
-                    No open purchase orders. Click <strong style={{ color: '#666' }}>Sync Cin7</strong> to pull the latest data.
+                    No orders match the current filter.
                   </td>
                 </tr>
               ) : (
-                orders.map(po => {
+                visible.map(po => {
                   const diff = dueDiffDays(po.due_date)
                   const isOverdue = diff !== null && diff < 0
                   const ss = STATUS_STYLE[po.status] ?? STATUS_STYLE.Draft
