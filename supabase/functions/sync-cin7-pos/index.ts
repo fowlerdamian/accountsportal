@@ -73,16 +73,21 @@ serve(async (req) => {
       const activePOs = list.filter(po => ACTIVE_STATUSES.includes(po.Status));
 
       if (activePOs.length > 0) {
-        const rows = activePOs.map((po) => ({
-          cin7_id:       po.ID,
-          po_number:     po.OrderNumber,
-          supplier_name: po.Supplier ?? "Unknown",
-          status:        toDbStatus(po.Status),
-          due_date:      po.RequiredBy ? po.RequiredBy.substring(0, 10) : null,
-          total_amount:  po.InvoiceAmount ?? 0,
-          currency:      po.BaseCurrency ?? "AUD",
-          line_items:    [],
-          synced_at:     new Date().toISOString(),
+        // Check attachments for each active PO in parallel (capped at 5 concurrent)
+        const rows = await Promise.all(activePOs.map(async (po) => {
+          const hasAttachment = await checkAttachment(po.ID, cin7Headers);
+          return {
+            cin7_id:        po.ID,
+            po_number:      po.OrderNumber,
+            supplier_name:  po.Supplier ?? "Unknown",
+            status:         toDbStatus(po.Status),
+            due_date:       po.RequiredBy ? po.RequiredBy.substring(0, 10) : null,
+            total_amount:   po.InvoiceAmount ?? 0,
+            currency:       po.BaseCurrency ?? "AUD",
+            line_items:     [],
+            has_attachment: hasAttachment,
+            synced_at:      new Date().toISOString(),
+          };
         }));
 
         const { error } = await supabase
@@ -108,6 +113,21 @@ serve(async (req) => {
     );
   }
 });
+
+async function checkAttachment(poId: string, headers: Record<string, string>): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${CIN7_BASE}/attachment?EntityType=Purchase&EntityID=${poId}`,
+      { headers },
+    );
+    if (!res.ok) return false;
+    const json = await res.json();
+    const list = json.Attachments ?? json.AttachmentList ?? json.List ?? json;
+    return Array.isArray(list) ? list.length > 0 : false;
+  } catch {
+    return false;
+  }
+}
 
 function toDbStatus(s: string): string {
   const map: Record<string, string> = {

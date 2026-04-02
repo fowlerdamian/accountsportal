@@ -178,12 +178,12 @@ export default function PurchaseOrders() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
-              {['PO #', 'Supplier', 'Status', 'Due Date', 'Amount'].map((h, i) => (
+              {['PO #', 'Supplier', 'Status', 'Due Date', 'Amount', 'Order Placed'].map((h, i) => (
                 <th
                   key={h}
                   style={{
                     padding: '10px 14px',
-                    textAlign: i === 4 ? 'right' : 'left',
+                    textAlign: i === 4 ? 'right' : i === 5 ? 'center' : 'left',
                     fontSize: '10px',
                     fontFamily: '"JetBrains Mono", monospace',
                     color: '#444',
@@ -200,7 +200,7 @@ export default function PurchaseOrders() {
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: '#444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
+                <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: '#444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
                   No open purchase orders. Click <strong style={{ color: '#666' }}>Sync Cin7</strong> to pull the latest data.
                 </td>
               </tr>
@@ -220,8 +220,17 @@ export default function PurchaseOrders() {
                     onMouseEnter={e => { e.currentTarget.style.background = isOverdue ? 'rgba(239,68,68,0.08)' : '#111' }}
                     onMouseLeave={e => { e.currentTarget.style.background = isOverdue ? 'rgba(239,68,68,0.04)' : 'transparent' }}
                   >
-                    <td style={{ padding: '11px 14px', fontSize: '13px', color: '#E5E5E5', fontFamily: '"JetBrains Mono", monospace', fontWeight: 500 }}>
-                      {po.po_number}
+                    <td style={{ padding: '11px 14px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace', fontWeight: 500 }}>
+                      <a
+                        href={`https://inventory.dearsystems.com/Purchase#${po.cin7_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#E8A838', textDecoration: 'none' }}
+                        onMouseEnter={e => { e.currentTarget.style.textDecoration = 'underline' }}
+                        onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none' }}
+                      >
+                        {po.po_number}
+                      </a>
                     </td>
                     <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>
                       {po.supplier_name}
@@ -236,6 +245,12 @@ export default function PurchaseOrders() {
                     </td>
                     <td style={{ padding: '11px 14px', fontSize: '13px', color: '#E5E5E5', textAlign: 'right', fontFamily: '"JetBrains Mono", monospace' }}>
                       {aud(po.total_amount)}
+                    </td>
+                    <td style={{ padding: '11px 14px', textAlign: 'center' }}>
+                      {po.has_attachment
+                        ? <span title="Order placed — PDF attached" style={{ fontSize: '16px' }}>✅</span>
+                        : <span title="No attachment — order may not have been sent" style={{ fontSize: '16px', opacity: 0.25 }}>⬜</span>
+                      }
                     </td>
                   </tr>
                 )
