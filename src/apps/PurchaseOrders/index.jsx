@@ -141,7 +141,11 @@ export default function PurchaseOrders() {
     setSyncMsg(null)
     try {
       const { data, error } = await supabase.functions.invoke('sync-cin7-pos')
-      if (error) throw error
+      if (error) {
+        let detail = error.message ?? 'Unknown error'
+        try { const body = await error.context?.json?.(); detail = JSON.stringify(body) } catch {}
+        throw new Error(detail)
+      }
       setSyncMsg({ type: 'ok', text: `${data?.synced ?? 0} purchase orders updated from Cin7` })
       await fetchOrders()
     } catch (err) {
