@@ -21,4 +21,12 @@ export const APPS = [
     status:      'live',
     external:    false,
   },
+  {
+    name:        'Purchase Orders',
+    description: 'Monitor PO due dates with live sync from Cin7 Core',
+    route:       '/apps/purchase-orders',
+    icon:        '📦',
+    status:      'live',
+    external:    false,
+  },
 ]

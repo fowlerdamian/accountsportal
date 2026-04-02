@@ -6,6 +6,7 @@ import LoginPage from './components/LoginPage.jsx'
 import PortalDashboard from './pages/Dashboard.jsx'
 import ProfitProcessor from './apps/ProfitProcessor/index.jsx'
 import LogisticsDashboard from './apps/Logistics/components/LogisticsDashboard.jsx'
+import PurchaseOrders from './apps/PurchaseOrders/index.jsx'
 import InvoiceList from './apps/Logistics/components/InvoiceList.jsx'
 import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
 import RateCards from './apps/Logistics/components/RateCards.jsx'
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="dashboard" element={<PortalDashboard />} />
             <Route path="apps/profit" element={<ProfitProcessor />} />
             <Route path="apps/logistics" element={<LogisticsDashboard />} />
+            <Route path="apps/purchase-orders" element={<PurchaseOrders />} />
             <Route path="apps/logistics/invoices" element={<InvoiceList />} />
             <Route path="apps/logistics/invoices/:id" element={<InvoiceDetail />} />
             <Route path="apps/logistics/rate-cards" element={<RateCards />} />
