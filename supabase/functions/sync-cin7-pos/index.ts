@@ -46,42 +46,48 @@ serve(async (req) => {
       existingDueDates[row.cin7_id] = row.due_date;
     }
 
-    let page  = 1;
     const limit = 100;
-    let total   = Infinity;
     let synced  = 0;
     const errors: string[] = [];
 
-    while ((page - 1) * limit < total) {
-      const url = `${CIN7_BASE}/purchaseList?Limit=${limit}&Page=${page}`;
-      const res = await fetch(url, { headers: cin7Headers });
-      const rawText = await res.text();
+    // Fetch each active status separately so we never page through completed POs
+    const allActivePOs: any[] = [];
+    for (const status of ACTIVE_STATUSES) {
+      let statusPage = 1;
+      let statusTotal = Infinity;
+      while ((statusPage - 1) * limit < statusTotal) {
+        const url = `${CIN7_BASE}/purchaseList?Limit=${limit}&Page=${statusPage}&Status=${status}`;
+        const res = await fetch(url, { headers: cin7Headers });
+        const rawText = await res.text();
 
-      if (!res.ok) {
-        return new Response(
-          JSON.stringify({ error: `Cin7 API error ${res.status}`, detail: rawText.substring(0, 500) }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+        if (!res.ok) {
+          return new Response(
+            JSON.stringify({ error: `Cin7 API error ${res.status}`, detail: rawText.substring(0, 500) }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        let json: any;
+        try {
+          json = JSON.parse(rawText);
+        } catch {
+          return new Response(
+            JSON.stringify({ error: "Cin7 returned non-JSON", detail: rawText.substring(0, 200) }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        statusTotal = json.Total ?? 0;
+        const list: any[] = json.PurchaseList ?? [];
+        allActivePOs.push(...list.filter(po => po.CombinedInvoiceStatus !== "INVOICED"));
+        statusPage++;
+        if (list.length < limit) break;
       }
+    }
 
-      let json: any;
-      try {
-        json = JSON.parse(rawText);
-      } catch {
-        return new Response(
-          JSON.stringify({ error: "Cin7 returned non-JSON", detail: rawText.substring(0, 200) }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-
-      total = json.Total ?? 0;
-      const list: any[] = json.PurchaseList ?? [];
-
-      // Active status AND not yet invoiced
-      const activePOs = list.filter(po =>
-        ACTIVE_STATUSES.includes(po.Status) &&
-        po.CombinedInvoiceStatus !== "INVOICED"
-      );
+    // Process all active POs together
+    {
+      const activePOs = allActivePOs;
 
       if (activePOs.length > 0) {
         const rows = await Promise.all(activePOs.map(async (po) => {
@@ -108,9 +114,6 @@ serve(async (req) => {
         if (error) errors.push(error.message);
         else synced += rows.length;
       }
-
-      page++;
-      if (list.length < limit) break;
     }
 
     return new Response(
