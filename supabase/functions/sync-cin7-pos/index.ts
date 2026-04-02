@@ -1,115 +1,123 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CIN7_BASE = "https://inventory.dearsystems.com/ExternalApi/v2";
 
-const CORS = {
+const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-interface Cin7PO {
-  ID: string;
-  OrderNumber: string;
-  SupplierName: string;
-  Status: string;
-  RequiredBy: string | null;
-  TotalBeforeTax: number;
-  BaseCurrency: string;
-  Lines: unknown[];
-}
+// Statuses that represent open/in-progress POs
+const ACTIVE_STATUSES = ["AUTHORISED", "ORDERED", "RECEIVING", "DRAFT"];
 
-interface Cin7Response {
-  PurchaseOrderList: Cin7PO[];
-  Total: number;
-}
-
-const STATUS_MAP: Record<string, string> = {
-  Draft:      "Draft",
-  Authorised: "Authorised",
-  Ordered:    "Ordered",
-  Receiving:  "Receiving",
-  Received:   "Received",
-  Cancelled:  "Cancelled",
-};
-
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS });
-  }
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405, headers: CORS });
+    return new Response(null, { headers: corsHeaders });
   }
 
-  const cin7AccountId = Deno.env.get("CIN7_ACCOUNT_ID");
-  const cin7ApiKey    = Deno.env.get("CIN7_API_KEY");
+  try {
+    const cin7AccountId = Deno.env.get("CIN7_ACCOUNT_ID");
+    const cin7ApiKey    = Deno.env.get("CIN7_API_KEY");
 
-  if (!cin7AccountId || !cin7ApiKey) {
-    return new Response(
-      JSON.stringify({ error: "CIN7_ACCOUNT_ID and CIN7_API_KEY secrets are not set" }),
-      { status: 500, headers: { ...CORS, "Content-Type": "application/json" } },
-    );
-  }
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  const cin7Headers = {
-    "api-AuthorizationToken": cin7ApiKey,
-    "api-Integration-Id":     cin7AccountId,
-    "Content-Type":           "application/json",
-  };
-
-  let page  = 1;
-  const limit = 100;
-  let total   = Infinity;
-  let synced  = 0;
-  const errors: string[] = [];
-
-  while ((page - 1) * limit < total) {
-    const url = `${CIN7_BASE}/purchaseorder?Limit=${limit}&Page=${page}&Status=Authorised,Ordered,Receiving`;
-    const res = await fetch(url, { headers: cin7Headers });
-
-    if (!res.ok) {
-      const body = await res.text();
+    if (!cin7AccountId || !cin7ApiKey) {
       return new Response(
-        JSON.stringify({ error: `Cin7 API error ${res.status}`, detail: body }),
-        { status: 502, headers: { ...CORS, "Content-Type": "application/json" } },
+        JSON.stringify({ error: "CIN7_ACCOUNT_ID and CIN7_API_KEY secrets are not set" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const json: Cin7Response = await res.json();
-    total = json.Total;
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
 
-    const rows = json.PurchaseOrderList.map((po) => ({
-      cin7_id:       po.ID,
-      po_number:     po.OrderNumber,
-      supplier_name: po.SupplierName,
-      status:        STATUS_MAP[po.Status] ?? "Draft",
-      due_date:      po.RequiredBy ? po.RequiredBy.substring(0, 10) : null,
-      total_amount:  po.TotalBeforeTax ?? 0,
-      currency:      po.BaseCurrency ?? "AUD",
-      line_items:    po.Lines ?? [],
-      synced_at:     new Date().toISOString(),
-    }));
+    const cin7Headers = {
+      "api-auth-accountid":      cin7AccountId,
+      "api-auth-applicationkey": cin7ApiKey,
+      "Content-Type":            "application/json",
+    };
 
-    if (rows.length > 0) {
-      const { error } = await supabase
-        .from("purchase_orders")
-        .upsert(rows, { onConflict: "cin7_id" });
+    let page  = 1;
+    const limit = 100;
+    let total   = Infinity;
+    let synced  = 0;
+    const errors: string[] = [];
 
-      if (error) errors.push(error.message);
-      else synced += rows.length;
+    while ((page - 1) * limit < total) {
+      const url = `${CIN7_BASE}/purchaseList?Limit=${limit}&Page=${page}`;
+      const res = await fetch(url, { headers: cin7Headers });
+      const rawText = await res.text();
+
+      if (!res.ok) {
+        return new Response(
+          JSON.stringify({ error: `Cin7 API error ${res.status}`, detail: rawText.substring(0, 500) }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      let json: any;
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        return new Response(
+          JSON.stringify({ error: "Cin7 returned non-JSON", detail: rawText.substring(0, 200) }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      total = json.Total ?? 0;
+      const list: any[] = json.PurchaseList ?? [];
+
+      // Only upsert active POs — filter client-side since the API doesn't support multi-status filters
+      const activePOs = list.filter(po => ACTIVE_STATUSES.includes(po.Status));
+
+      if (activePOs.length > 0) {
+        const rows = activePOs.map((po) => ({
+          cin7_id:       po.ID,
+          po_number:     po.OrderNumber,
+          supplier_name: po.Supplier ?? "Unknown",
+          status:        toDbStatus(po.Status),
+          due_date:      po.RequiredBy ? po.RequiredBy.substring(0, 10) : null,
+          total_amount:  po.InvoiceAmount ?? 0,
+          currency:      po.BaseCurrency ?? "AUD",
+          line_items:    [],
+          synced_at:     new Date().toISOString(),
+        }));
+
+        const { error } = await supabase
+          .from("purchase_orders")
+          .upsert(rows, { onConflict: "cin7_id" });
+
+        if (error) errors.push(error.message);
+        else synced += rows.length;
+      }
+
+      page++;
+      if (list.length < limit) break;
     }
 
-    page++;
-    if (json.PurchaseOrderList.length < limit) break;
+    return new Response(
+      JSON.stringify({ synced, errors }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
-
-  return new Response(
-    JSON.stringify({ synced, errors }),
-    { status: 200, headers: { ...CORS, "Content-Type": "application/json" } },
-  );
 });
+
+function toDbStatus(s: string): string {
+  const map: Record<string, string> = {
+    DRAFT:      "Draft",
+    AUTHORISED: "Authorised",
+    ORDERED:    "Ordered",
+    RECEIVING:  "Receiving",
+    RECEIVED:   "Received",
+    COMPLETED:  "Received",
+    CANCELLED:  "Cancelled",
+  };
+  return map[s] ?? "Draft";
+}
