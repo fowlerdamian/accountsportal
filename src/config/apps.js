@@ -1,0 +1,24 @@
+// ─── App tile configuration ───────────────────────────────────────────────────
+// To add a new tool, append an object to this array.
+// status: 'live' | 'beta' | 'coming-soon'
+// external: true  → opens in new tab (for tools hosted elsewhere)
+// external: false → internal React Router route
+
+export const APPS = [
+  {
+    name:        'Profit Processor',
+    description: 'Process and flag Cin7 Core Profit Summary Report exports',
+    route:       '/apps/profit',
+    icon:        '📊',
+    status:      'live',
+    external:    false,
+  },
+  {
+    name:        'Logistics',
+    description: 'Freight invoice management, rate card reconciliation, and dispute letters',
+    route:       '/apps/logistics',
+    icon:        '🚚',
+    status:      'live',
+    external:    false,
+  },
+]
