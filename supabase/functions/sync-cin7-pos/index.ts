@@ -2,6 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CIN7_BASE = "https://inventory.dearsystems.com/ExternalApi/v2";
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 interface Cin7PO {
   ID: string;
   OrderNumber: string;
@@ -28,8 +34,11 @@ const STATUS_MAP: Record<string, string> = {
 };
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: 405, headers: CORS });
   }
 
   const cin7AccountId = Deno.env.get("CIN7_ACCOUNT_ID");
@@ -38,7 +47,7 @@ Deno.serve(async (req) => {
   if (!cin7AccountId || !cin7ApiKey) {
     return new Response(
       JSON.stringify({ error: "CIN7_ACCOUNT_ID and CIN7_API_KEY secrets are not set" }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
+      { status: 500, headers: { ...CORS, "Content-Type": "application/json" } },
     );
   }
 
@@ -67,7 +76,7 @@ Deno.serve(async (req) => {
       const body = await res.text();
       return new Response(
         JSON.stringify({ error: `Cin7 API error ${res.status}`, detail: body }),
-        { status: 502, headers: { "Content-Type": "application/json" } },
+        { status: 502, headers: { ...CORS, "Content-Type": "application/json" } },
       );
     }
 
@@ -101,6 +110,6 @@ Deno.serve(async (req) => {
 
   return new Response(
     JSON.stringify({ synced, errors }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
+    { status: 200, headers: { ...CORS, "Content-Type": "application/json" } },
   );
 });
