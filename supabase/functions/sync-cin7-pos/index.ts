@@ -8,7 +8,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Statuses that represent open/in-progress POs
 const ACTIVE_STATUSES = ["AUTHORISED", "ORDERED", "RECEIVING", "DRAFT"];
 
 serve(async (req) => {
@@ -37,6 +36,15 @@ serve(async (req) => {
       "api-auth-applicationkey": cin7ApiKey,
       "Content-Type":            "application/json",
     };
+
+    // Fetch existing due_dates so manual entries are not overwritten on sync
+    const { data: existing } = await supabase
+      .from("purchase_orders")
+      .select("cin7_id, due_date");
+    const existingDueDates: Record<string, string | null> = {};
+    for (const row of existing ?? []) {
+      existingDueDates[row.cin7_id] = row.due_date;
+    }
 
     let page  = 1;
     const limit = 100;
@@ -69,11 +77,13 @@ serve(async (req) => {
       total = json.Total ?? 0;
       const list: any[] = json.PurchaseList ?? [];
 
-      // Only upsert active POs — filter client-side since the API doesn't support multi-status filters
-      const activePOs = list.filter(po => ACTIVE_STATUSES.includes(po.Status));
+      // Active status AND not yet invoiced
+      const activePOs = list.filter(po =>
+        ACTIVE_STATUSES.includes(po.Status) &&
+        po.CombinedInvoiceStatus !== "INVOICED"
+      );
 
       if (activePOs.length > 0) {
-        // Check attachments for each active PO in parallel (capped at 5 concurrent)
         const rows = await Promise.all(activePOs.map(async (po) => {
           const hasAttachment = await checkAttachment(po.ID, cin7Headers);
           return {
@@ -81,7 +91,8 @@ serve(async (req) => {
             po_number:      po.OrderNumber,
             supplier_name:  po.Supplier ?? "Unknown",
             status:         toDbStatus(po.Status),
-            due_date:       po.RequiredBy ? po.RequiredBy.substring(0, 10) : null,
+            // Preserve manually entered due_date; only default to null for new POs
+            due_date:       po.ID in existingDueDates ? existingDueDates[po.ID] : null,
             total_amount:   po.InvoiceAmount ?? 0,
             currency:       po.BaseCurrency ?? "AUD",
             line_items:     [],

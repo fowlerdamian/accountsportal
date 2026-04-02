@@ -6,12 +6,12 @@ import { supabase } from '../../lib/supabase.js'
 const ACTIVE_STATUSES = ['Authorised', 'Ordered', 'Receiving']
 
 const STATUS_STYLE = {
-  Draft:      { color: '#555',    background: '#111',                border: '1px solid #2a2a2a' },
+  Draft:      { color: '#555',    background: '#111',                 border: '1px solid #2a2a2a' },
   Authorised: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },
   Ordered:    { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)' },
   Receiving:  { color: '#E8A838', background: 'rgba(232,168,56,0.1)', border: '1px solid rgba(232,168,56,0.3)' },
   Received:   { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
-  Cancelled:  { color: '#888',    background: '#111',                border: '1px solid #222' },
+  Cancelled:  { color: '#888',    background: '#111',                 border: '1px solid #222' },
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -27,22 +27,70 @@ function dueDiffDays(due) {
   return Math.floor((new Date(due).getTime() - today.getTime()) / 86_400_000)
 }
 
-function DueCell({ due }) {
-  if (!due) return <span style={{ color: '#444' }}>—</span>
+function DueLabel({ due }) {
+  if (!due) return <span style={{ color: '#333' }}>—</span>
   const diff = dueDiffDays(due)
   const label = new Date(due).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-
-  if (diff < 0) return (
-    <span style={{ color: '#EF4444', fontWeight: 500 }}>
-      {label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span>
-    </span>
-  )
-  if (diff <= 7) return (
-    <span style={{ color: '#E8A838', fontWeight: 500 }}>
-      {label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span>
-    </span>
-  )
+  if (diff < 0)  return <span style={{ color: '#EF4444', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span></span>
+  if (diff <= 7) return <span style={{ color: '#E8A838', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span></span>
   return <span style={{ color: '#AAA' }}>{label}</span>
+}
+
+// ─── Inline editable due date cell ───────────────────────────────────────────
+
+function DueDateCell({ poId, due, onSaved }) {
+  const [editing, setEditing] = useState(false)
+  const [value,   setValue]   = useState(due ?? '')
+  const [saving,  setSaving]  = useState(false)
+
+  async function save(newVal) {
+    setSaving(true)
+    const { error } = await supabase
+      .from('purchase_orders')
+      .update({ due_date: newVal || null })
+      .eq('id', poId)
+    setSaving(false)
+    if (!error) {
+      onSaved(poId, newVal || null)
+    }
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        type="date"
+        autoFocus
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={() => save(value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(value); if (e.key === 'Escape') setEditing(false) }}
+        style={{
+          background: '#1a1a1a',
+          border: '1px solid rgba(232,168,56,0.5)',
+          borderRadius: '4px',
+          color: '#E5E5E5',
+          fontSize: '13px',
+          padding: '3px 6px',
+          outline: 'none',
+          fontFamily: '"JetBrains Mono", monospace',
+          width: '140px',
+          opacity: saving ? 0.5 : 1,
+        }}
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={() => { setValue(due ?? ''); setEditing(true) }}
+      title="Click to set due date"
+      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', minWidth: '120px' }}
+    >
+      <DueLabel due={due} />
+      <span style={{ fontSize: '10px', color: '#333', flexShrink: 0 }}>✎</span>
+    </div>
+  )
 }
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
@@ -66,7 +114,7 @@ export default function PurchaseOrders() {
   const [orders,   setOrders]   = useState([])
   const [loading,  setLoading]  = useState(true)
   const [syncing,  setSyncing]  = useState(false)
-  const [syncMsg,  setSyncMsg]  = useState(null)   // { type: 'ok'|'err', text }
+  const [syncMsg,  setSyncMsg]  = useState(null)
   const [lastSync, setLastSync] = useState(null)
 
   const fetchOrders = useCallback(async () => {
@@ -84,6 +132,10 @@ export default function PurchaseOrders() {
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
+  function handleDueSaved(poId, newDate) {
+    setOrders(prev => prev.map(o => o.id === poId ? { ...o, due_date: newDate } : o))
+  }
+
   async function handleSync() {
     setSyncing(true)
     setSyncMsg(null)
@@ -99,9 +151,8 @@ export default function PurchaseOrders() {
     }
   }
 
-  // KPI derivations
-  const overdue   = orders.filter(o => dueDiffDays(o.due_date) !== null && dueDiffDays(o.due_date) < 0)
-  const dueSoon   = orders.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d >= 0 && d <= 7 })
+  const overdue    = orders.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d < 0 })
+  const dueSoon    = orders.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d >= 0 && d <= 7 })
   const totalValue = orders.reduce((s, o) => s + (o.total_amount ?? 0), 0)
 
   if (loading) {
@@ -124,17 +175,13 @@ export default function PurchaseOrders() {
           <p style={{ fontSize: '13px', color: '#555', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
             {lastSync
               ? `Last synced ${new Date(lastSync).toLocaleString('en-AU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}`
-              : 'Synced from Cin7 Core'}
+              : 'Synced from Cin7 Core · due dates set manually'}
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {syncMsg && (
-            <span style={{
-              fontSize: '12px',
-              fontFamily: '"JetBrains Mono", monospace',
-              color: syncMsg.type === 'ok' ? '#4ade80' : '#EF4444',
-            }}>
+            <span style={{ fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: syncMsg.type === 'ok' ? '#4ade80' : '#EF4444' }}>
               {syncMsg.text}
             </span>
           )}
@@ -142,20 +189,11 @@ export default function PurchaseOrders() {
             onClick={handleSync}
             disabled={syncing}
             style={{
-              padding: '8px 16px',
-              fontSize: '12px',
-              fontWeight: 500,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              color: syncing ? '#555' : '#E8A838',
+              padding: '8px 16px', fontSize: '12px', fontWeight: 500, letterSpacing: '0.04em',
+              textTransform: 'uppercase', color: syncing ? '#555' : '#E8A838',
               border: `1px solid ${syncing ? '#333' : 'rgba(232,168,56,0.35)'}`,
-              background: 'transparent',
-              borderRadius: '6px',
-              cursor: syncing ? 'not-allowed' : 'pointer',
-              transition: 'background 150ms',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
+              background: 'transparent', borderRadius: '6px',
+              cursor: syncing ? 'not-allowed' : 'pointer', transition: 'background 150ms',
             }}
             onMouseEnter={e => { if (!syncing) e.currentTarget.style.background = 'rgba(232,168,56,0.08)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
@@ -178,20 +216,8 @@ export default function PurchaseOrders() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
-              {['PO #', 'Supplier', 'Status', 'Due Date', 'Amount', 'Order Placed'].map((h, i) => (
-                <th
-                  key={h}
-                  style={{
-                    padding: '10px 14px',
-                    textAlign: i === 4 ? 'right' : i === 5 ? 'center' : 'left',
-                    fontSize: '10px',
-                    fontFamily: '"JetBrains Mono", monospace',
-                    color: '#444',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    fontWeight: 500,
-                  }}
-                >
+              {[['PO #', 'left'], ['Supplier', 'left'], ['Status', 'left'], ['Due Date', 'left'], ['Amount', 'right'], ['Order Sent', 'center']].map(([h, align]) => (
+                <th key={h} style={{ padding: '10px 14px', textAlign: align, fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>
                   {h}
                 </th>
               ))}
@@ -212,11 +238,7 @@ export default function PurchaseOrders() {
                 return (
                   <tr
                     key={po.id}
-                    style={{
-                      borderBottom: '1px solid #181818',
-                      background: isOverdue ? 'rgba(239,68,68,0.04)' : 'transparent',
-                      transition: 'background 120ms',
-                    }}
+                    style={{ borderBottom: '1px solid #181818', background: isOverdue ? 'rgba(239,68,68,0.04)' : 'transparent', transition: 'background 120ms' }}
                     onMouseEnter={e => { e.currentTarget.style.background = isOverdue ? 'rgba(239,68,68,0.08)' : '#111' }}
                     onMouseLeave={e => { e.currentTarget.style.background = isOverdue ? 'rgba(239,68,68,0.04)' : 'transparent' }}
                   >
@@ -232,25 +254,22 @@ export default function PurchaseOrders() {
                         {po.po_number}
                       </a>
                     </td>
-                    <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>
-                      {po.supplier_name}
-                    </td>
+                    <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{po.supplier_name}</td>
                     <td style={{ padding: '11px 14px' }}>
                       <span style={{ ...ss, display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>
                         {po.status}
                       </span>
                     </td>
                     <td style={{ padding: '11px 14px', fontSize: '13px' }}>
-                      <DueCell due={po.due_date} />
+                      <DueDateCell poId={po.id} due={po.due_date} onSaved={handleDueSaved} />
                     </td>
                     <td style={{ padding: '11px 14px', fontSize: '13px', color: '#E5E5E5', textAlign: 'right', fontFamily: '"JetBrains Mono", monospace' }}>
                       {aud(po.total_amount)}
                     </td>
                     <td style={{ padding: '11px 14px', textAlign: 'center' }}>
-                      {po.has_attachment
-                        ? <span title="Order placed — PDF attached" style={{ fontSize: '16px' }}>✅</span>
-                        : <span title="No attachment — order may not have been sent" style={{ fontSize: '16px', opacity: 0.25 }}>⬜</span>
-                      }
+                      {po.has_attachment && (
+                        <span title="Order sent" style={{ color: '#4ade80', fontSize: '15px' }}>✓</span>
+                      )}
                     </td>
                   </tr>
                 )
