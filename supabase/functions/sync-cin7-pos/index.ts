@@ -97,7 +97,7 @@ serve(async (req) => {
             po_number:      po.OrderNumber,
             supplier_name:  po.Supplier ?? "Unknown",
             status:         toDbStatus(po.Status),
-            // Preserve manually entered due_date; only default to null for new POs
+            order_date:     po.OrderDate ? po.OrderDate.substring(0, 10) : null,
             due_date:       po.ID in existingDueDates ? existingDueDates[po.ID] : null,
             total_amount:   po.InvoiceAmount ?? 0,
             currency:       po.BaseCurrency ?? "AUD",

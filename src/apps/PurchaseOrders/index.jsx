@@ -131,18 +131,20 @@ function PoCard({ po, onSaved }) {
         </div>
       </div>
 
-      {/* Row 2: supplier */}
-      <p style={{ margin: 0, fontSize: '13px', color: '#AAA' }}>{po.supplier_name}</p>
+      {/* Row 2: supplier + created date */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+        <p style={{ margin: 0, fontSize: '13px', color: '#AAA' }}>{po.supplier_name}</p>
+        {po.order_date && (
+          <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#555' }}>
+            {new Date(po.order_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
+        )}
+      </div>
 
-      {/* Row 3: due date + amount */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Due</span>
-          <DueDateCell poId={po.id} due={po.due_date} onSaved={onSaved} />
-        </div>
-        <span style={{ fontSize: '13px', color: '#E5E5E5', fontFamily: '"JetBrains Mono", monospace' }}>
-          {aud(po.total_amount)}
-        </span>
+      {/* Row 3: due date */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Due</span>
+        <DueDateCell poId={po.id} due={po.due_date} onSaved={onSaved} />
       </div>
     </div>
   )
@@ -263,7 +265,7 @@ export default function PurchaseOrders() {
         <KpiCard label="Open POs"      value={orders.length} />
         <KpiCard label="Overdue"       value={overdue.length}  valueStyle={overdue.length  > 0 ? { color: '#EF4444' } : {}} />
         <KpiCard label="Due This Week" value={dueSoon.length}  valueStyle={dueSoon.length  > 0 ? { color: '#E8A838' } : {}} />
-        <KpiCard label="Total Value"   value={aud(totalValue)} />
+        <KpiCard label="Order Sent"    value={orders.filter(o => o.has_attachment).length} />
       </div>
 
       {/* ── Mobile: card list ──────────────────────────────────────────────── */}
@@ -284,7 +286,7 @@ export default function PurchaseOrders() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
-                {[['PO #', 'left'], ['Supplier', 'left'], ['Status', 'left'], ['Due Date', 'left'], ['Amount', 'right'], ['Order Sent', 'center']].map(([h, align]) => (
+                {[['PO #', 'left'], ['Created', 'left'], ['Supplier', 'left'], ['Status', 'left'], ['Due Date', 'left'], ['Order Sent', 'center']].map(([h, align]) => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: align, fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>
                     {h}
                   </th>
@@ -318,6 +320,9 @@ export default function PurchaseOrders() {
                           {po.po_number}
                         </a>
                       </td>
+                      <td style={{ padding: '11px 14px', fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace' }}>
+                        {po.order_date ? new Date(po.order_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                      </td>
                       <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{po.supplier_name}</td>
                       <td style={{ padding: '11px 14px' }}>
                         <span style={{ ...ss, display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>
@@ -326,9 +331,6 @@ export default function PurchaseOrders() {
                       </td>
                       <td style={{ padding: '11px 14px', fontSize: '13px' }}>
                         <DueDateCell poId={po.id} due={po.due_date} onSaved={handleDueSaved} />
-                      </td>
-                      <td style={{ padding: '11px 14px', fontSize: '13px', color: '#E5E5E5', textAlign: 'right', fontFamily: '"JetBrains Mono", monospace' }}>
-                        {aud(po.total_amount)}
                       </td>
                       <td style={{ padding: '11px 14px', textAlign: 'center' }}>
                         {po.has_attachment && <span title="Order sent" style={{ color: '#4ade80', fontSize: '15px' }}>✓</span>}
