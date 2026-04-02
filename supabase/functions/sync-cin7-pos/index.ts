@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ACTIVE_STATUSES = ["AUTHORISED", "ORDERED", "RECEIVING", "DRAFT"];
+const ACTIVE_STATUSES = ["DRAFT", "ORDERED"];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

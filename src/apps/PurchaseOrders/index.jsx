@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase.js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ACTIVE_STATUSES = ['Authorised', 'Ordered', 'Receiving']
+const ACTIVE_STATUSES = ['Draft', 'Ordered']
 
 const STATUS_STYLE = {
   Draft:      { color: '#555',    background: '#111',                 border: '1px solid #2a2a2a' },
