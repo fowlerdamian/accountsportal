@@ -130,14 +130,11 @@ serve(async (req) => {
 
 async function checkAttachment(poId: string, headers: Record<string, string>): Promise<boolean> {
   try {
-    const res = await fetch(
-      `${CIN7_BASE}/attachment?EntityType=Purchase&EntityID=${poId}`,
-      { headers },
-    );
+    const res = await fetch(`${CIN7_BASE}/purchase?ID=${poId}`, { headers });
     if (!res.ok) return false;
     const json = await res.json();
-    const list = json.Attachments ?? json.AttachmentList ?? json.List ?? json;
-    return Array.isArray(list) ? list.length > 0 : false;
+    const attachments = json.Attachments ?? [];
+    return Array.isArray(attachments) && attachments.length > 0;
   } catch {
     return false;
   }
