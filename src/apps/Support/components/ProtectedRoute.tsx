@@ -17,12 +17,13 @@ export function ProtectedRoute({ children, requirePortalAccess }: Props) {
     );
   }
 
-  if (!session) {
-    return <Navigate to="/login" replace />;
-  }
+  // TODO: re-enable auth — login wall temporarily down
+  // if (!session) {
+  //   return <Navigate to="/login" replace />;
+  // }
 
   // Warehouse users can only access /warehouse
-  if (requirePortalAccess && isWarehouse) {
+  if (session && requirePortalAccess && isWarehouse) {
     return <Navigate to="/warehouse" replace />;
   }
 
