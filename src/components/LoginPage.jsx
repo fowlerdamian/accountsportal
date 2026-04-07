@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-const ALLOWED_DOMAIN = 'automotivegroup.com.au'
+const ALLOWED_DOMAIN  = 'automotivegroup.com.au'
+const ALLOWED_EMAILS  = ['automotivegroupaustralia@gmail.com']
 
 export default function LoginPage() {
   const { user, loading, signInWithMagicLink } = useAuth()
@@ -24,8 +25,10 @@ export default function LoginPage() {
 
     const trimmed = email.trim().toLowerCase()
 
-    // Client-side domain check for a fast, clear error
-    if (!trimmed.endsWith(`@${ALLOWED_DOMAIN}`)) {
+    // Client-side domain/email check for a fast, clear error
+    const domainOk = trimmed.endsWith(`@${ALLOWED_DOMAIN}`)
+    const emailOk  = ALLOWED_EMAILS.includes(trimmed)
+    if (!domainOk && !emailOk) {
       setError(`Only @${ALLOWED_DOMAIN} accounts can access this portal.`)
       return
     }
