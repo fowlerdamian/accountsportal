@@ -1,6 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Design token overrides — Support Hub inherits portal's visual language */
+@layer base {
+  :root {
+    /* Portal exact palette */
+    --background: 0 0% 3%;          /* #080808 */
+    --foreground: 0 0% 90%;         /* #E5E5E5 */
+    --card: 240 7% 7%;              /* #111116 */
+    --card-foreground: 0 0% 90%;
+    --popover: 240 4% 9%;           /* ~#141417 */
+    --popover-foreground: 0 0% 90%;
+
+    /* Amber accent — matches portal's #E8A838 */
+    --primary: 38 79% 57%;          /* #E8A838 */
+    --primary-foreground: 0 0% 5%;  /* near-black text on amber */
+
+    --secondary: 240 4% 12%;        /* ~#1e1e22 */
+    --secondary-foreground: 0 0% 90%;
+    --muted: 240 4% 10%;            /* ~#181820 */
+    --muted-foreground: 0 0% 37%;   /* #5e5e5e — matches portal's #555/#666 */
+    --accent: 240 4% 12%;
+    --accent-foreground: 0 0% 90%;
+    --destructive: 0 65% 51%;       /* #EF4444 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 4% 12%;           /* #1e1e22 */
+    --input: 240 4% 14%;
+    --ring: 38 79% 57%;             /* amber focus ring */
+    --radius: 8px;                  /* portal card radius */
+
+    /* Status colours */
+    --status-urgent: 0 65% 51%;     /* #EF4444 */
+    --status-warning: 38 79% 57%;   /* #E8A838 amber */
+    --status-progress: 213 94% 58%; /* #3B9EFF blue */
+    --status-resolved: 142 71% 45%; /* #22C55E green */
+    --status-neutral: 0 0% 40%;     /* #666 */
+
+    /* Surface layers */
+    --surface: 240 7% 7%;
+    --surface-elevated: 240 4% 12%;
+    --border-hover: 240 4% 18%;
+
+    /* Sidebar — same dark as portal */
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 0 0% 37%;
+    --sidebar-primary: 38 79% 57%;
+    --sidebar-primary-foreground: 0 0% 5%;
+    --sidebar-accent: 240 4% 12%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 240 4% 12%;
+    --sidebar-ring: 38 79% 57%;
+  }
+}
 
 @layer base {
   html, body, #root {

@@ -29,4 +29,20 @@ export const APPS = [
     status:      'live',
     external:    false,
   },
+  {
+    name:        'Support Hub',
+    description: 'Case management, action items, and warehouse task tracking',
+    route:       '/support',
+    icon:        '🎧',
+    status:      'live',
+    external:    false,
+  },
+  {
+    name:        'Contractor Hub',
+    description: 'Project and contractor management, time tracking, and AI assistant',
+    route:       '/hub',
+    icon:        '🏗️',
+    status:      'live',
+    external:    false,
+  },
 ]
