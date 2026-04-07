@@ -53,4 +53,12 @@ export const APPS = [
     status:      'live',
     external:    false,
   },
+  {
+    name:        'Settings',
+    description: 'Account details, login links, and user role & tile access management',
+    route:       '/settings',
+    icon:        '⚙️',
+    status:      'live',
+    external:    false,
+  },
 ]
