@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Layout from './components/Layout.jsx'
 import LoginPage from './components/LoginPage.jsx'
 import PortalDashboard from './pages/Dashboard.jsx'
+import TileSettings from './pages/TileSettings.jsx'
 import ProfitProcessor from './apps/ProfitProcessor/index.jsx'
 import LogisticsDashboard from './apps/Logistics/components/LogisticsDashboard.jsx'
 import PurchaseOrders from './apps/PurchaseOrders/index.jsx'
@@ -109,6 +110,7 @@ export default function App() {
             >
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<PortalDashboard />} />
+              <Route path="dashboard/settings" element={<TileSettings />} />
               <Route path="apps/profit" element={<ProfitProcessor />} />
               <Route path="apps/logistics" element={<LogisticsDashboard />} />
               <Route path="apps/purchase-orders" element={<PurchaseOrders />} />

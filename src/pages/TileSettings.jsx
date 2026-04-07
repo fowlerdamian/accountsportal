@@ -1,0 +1,146 @@
+import { Link } from 'react-router-dom'
+import { APPS } from '../config/apps.js'
+import { useAllUserTileSettings } from '../hooks/useTileSettings.js'
+import { useIsAdmin } from '../hooks/useIsAdmin.js'
+
+const LIVE_APPS = APPS.filter(a => a.status === 'live' || a.status === 'beta')
+
+function Toggle({ checked, onChange, disabled }) {
+  return (
+    <button
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      style={{
+        width: '36px', height: '20px', borderRadius: '10px', border: 'none',
+        background: checked ? '#E8A838' : '#2a2a2a',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        position: 'relative', transition: 'background 150ms', flexShrink: 0,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: '3px',
+        left: checked ? '19px' : '3px',
+        width: '14px', height: '14px', borderRadius: '50%',
+        background: '#fff', transition: 'left 150ms',
+      }} />
+    </button>
+  )
+}
+
+export default function TileSettings() {
+  const isAdmin = useIsAdmin()
+  const { users, settings, saving, error, toggle } = useAllUserTileSettings()
+
+  if (!isAdmin) {
+    return (
+      <div style={{ padding: '40px 24px', color: '#555', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>
+        Access denied.
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      flex: 1, overflowY: 'auto', padding: '40px 24px',
+      maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box',
+    }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <Link
+          to="/dashboard"
+          style={{
+            fontSize: '11px', color: '#555', textDecoration: 'none',
+            fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em',
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
+          }}
+        >
+          ← Dashboard
+        </Link>
+        <span style={{ color: '#333' }}>/</span>
+        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', margin: 0, letterSpacing: '-0.01em' }}>
+          Manage Access
+        </h1>
+        {saving && (
+          <span style={{ fontSize: '11px', color: '#555', fontFamily: '"JetBrains Mono", monospace', marginLeft: 'auto' }}>
+            Saving…
+          </span>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ marginBottom: '24px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#EF4444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
+          {error.message}
+        </div>
+      )}
+
+      {!users ? (
+        <div style={{ color: '#555', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>Loading…</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+
+          {/* Column headers */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `200px repeat(${LIVE_APPS.length}, 1fr)`,
+            gap: '8px', padding: '0 16px 12px', alignItems: 'end',
+          }}>
+            <div style={{ fontSize: '11px', color: '#444', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              User
+            </div>
+            {LIVE_APPS.map(app => (
+              <div key={app.route} style={{
+                fontSize: '10px', color: '#444', fontFamily: '"JetBrains Mono", monospace',
+                letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'center',
+                lineHeight: 1.3,
+              }}>
+                {app.icon}<br />{app.name.split(' ')[0]}
+              </div>
+            ))}
+          </div>
+
+          {/* User rows */}
+          {users.map(user => {
+            const userSettings = settings[user.id] || {}
+            return (
+              <div
+                key={user.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `200px repeat(${LIVE_APPS.length}, 1fr)`,
+                  gap: '8px', padding: '14px 16px', alignItems: 'center',
+                  background: '#0c0c0e', border: '1px solid #1e1e22', borderRadius: '6px',
+                }}
+              >
+                {/* User info */}
+                <div>
+                  <div style={{ fontSize: '12px', color: '#E5E5E5', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user.email}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#555', fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {user.role}
+                  </div>
+                </div>
+
+                {/* Toggle per tile */}
+                {LIVE_APPS.map(app => {
+                  const enabled = userSettings[app.route] !== false // default on
+                  return (
+                    <div key={app.route} style={{ display: 'flex', justifyContent: 'center' }}>
+                      <Toggle
+                        checked={enabled}
+                        disabled={saving}
+                        onChange={val => toggle(user.id, app.route, val)}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}

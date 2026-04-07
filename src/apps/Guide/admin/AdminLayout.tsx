@@ -16,7 +16,7 @@ export function AdminLayout() {
   }
 
   if (!user || !userRole) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const initials = user.user_metadata?.full_name
