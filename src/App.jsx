@@ -14,11 +14,28 @@ import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
 import RateCards from './apps/Logistics/components/RateCards.jsx'
 import Disputes from './apps/Logistics/components/Disputes.jsx'
 import SupportApp from './apps/Support/SupportApp'
+
+// Contractor Hub
 import HubDashboard from './apps/Guide/pages/hub/HubDashboard'
 import ContractorsList from './apps/Guide/pages/hub/ContractorsList'
 import ContractorProfile from './apps/Guide/pages/hub/ContractorProfile'
 import ProjectsList from './apps/Guide/pages/hub/ProjectsList'
 import ProjectView from './apps/Guide/pages/hub/ProjectView'
+
+// Guide Portal
+import { AdminLayout } from './apps/Guide/admin/AdminLayout'
+import GuideDashboard from './apps/Guide/pages/admin/Dashboard'
+import GuidesList from './apps/Guide/pages/admin/GuidesList'
+import GuideEditor from './apps/Guide/pages/admin/GuideEditor'
+import GuideShare from './apps/Guide/pages/admin/GuideShare'
+import GuideReports from './apps/Guide/pages/admin/Reports'
+import GuideSupport from './apps/Guide/pages/admin/Support'
+import GuideFeedback from './apps/Guide/pages/admin/Feedback'
+import GuideSettings from './apps/Guide/pages/admin/Settings'
+import GuideCategories from './apps/Guide/pages/admin/Categories'
+import GuideBrands from './apps/Guide/pages/admin/Brands'
+import GuideUsers from './apps/Guide/pages/admin/Users'
+import GuideViewer from './apps/Guide/pages/guide/GuideViewer'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
@@ -36,46 +53,59 @@ export default function App() {
             {/* Support Hub — public, no login required */}
             <Route path="/support/*" element={<SupportApp />} />
 
-            {/* Contractor Hub — uses Guide's AuthProvider for role-aware auth */}
+            {/* Guide Portal + Contractor Hub — share GuideAuthProvider */}
             <Route
-              path="/hub/*"
+              path="/"
               element={
                 <ProtectedRoute>
                   <GuideAuthProvider>
                     <Routes>
-                      <Route index element={<HubDashboard />} />
-                      <Route path="contractors" element={<ContractorsList />} />
-                      <Route path="contractors/:id" element={<ContractorProfile />} />
-                      <Route path="projects" element={<ProjectsList />} />
-                      <Route path="projects/:id" element={<ProjectView />} />
+
+                      {/* Guide Portal */}
+                      <Route path="guide" element={<AdminLayout />}>
+                        <Route index element={<GuideDashboard />} />
+                        <Route path="guides" element={<GuidesList />} />
+                        <Route path="guides/:id" element={<GuideEditor />} />
+                        <Route path="guides/:id/share" element={<GuideShare />} />
+                        <Route path="reports" element={<GuideReports />} />
+                        <Route path="support" element={<GuideSupport />} />
+                        <Route path="feedback" element={<GuideFeedback />} />
+                        <Route path="settings" element={<GuideSettings />} />
+                        <Route path="categories" element={<GuideCategories />} />
+                        <Route path="brands" element={<GuideBrands />} />
+                        <Route path="users" element={<GuideUsers />} />
+                      </Route>
+
+                      {/* Guide Viewer (public-ish, same auth wrapper) */}
+                      <Route path="guide/view/:id" element={<GuideViewer />} />
+
+                      {/* Contractor Hub */}
+                      <Route path="hub" element={<HubDashboard />} />
+                      <Route path="hub/contractors" element={<ContractorsList />} />
+                      <Route path="hub/contractors/:id" element={<ContractorProfile />} />
+                      <Route path="hub/projects" element={<ProjectsList />} />
+                      <Route path="hub/projects/:id" element={<ProjectView />} />
+
+                      {/* Portal dashboard + apps */}
+                      <Route path="/" element={<Layout />}>
+                        <Route index element={<Navigate to="/dashboard" replace />} />
+                        <Route path="dashboard" element={<PortalDashboard />} />
+                        <Route path="apps/profit" element={<ProfitProcessor />} />
+                        <Route path="apps/logistics" element={<LogisticsDashboard />} />
+                        <Route path="apps/purchase-orders" element={<PurchaseOrders />} />
+                        <Route path="apps/logistics/invoices" element={<InvoiceList />} />
+                        <Route path="apps/logistics/invoices/:id" element={<InvoiceDetail />} />
+                        <Route path="apps/logistics/rate-cards" element={<RateCards />} />
+                        <Route path="apps/logistics/disputes" element={<Disputes />} />
+                      </Route>
+
+                      {/* Catch-all */}
+                      <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Routes>
                   </GuideAuthProvider>
                 </ProtectedRoute>
               }
             />
-
-            {/* Protected — all share the portal Layout (header + outlet) */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<PortalDashboard />} />
-              <Route path="apps/profit" element={<ProfitProcessor />} />
-              <Route path="apps/logistics" element={<LogisticsDashboard />} />
-              <Route path="apps/purchase-orders" element={<PurchaseOrders />} />
-              <Route path="apps/logistics/invoices" element={<InvoiceList />} />
-              <Route path="apps/logistics/invoices/:id" element={<InvoiceDetail />} />
-              <Route path="apps/logistics/rate-cards" element={<RateCards />} />
-              <Route path="apps/logistics/disputes" element={<Disputes />} />
-            </Route>
-
-            {/* Catch-all */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>

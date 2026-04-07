@@ -45,4 +45,12 @@ export const APPS = [
     status:      'live',
     external:    false,
   },
+  {
+    name:        'Guide Portal',
+    description: 'Product guides, categories, brands, and customer feedback management',
+    route:       '/guide',
+    icon:        '📖',
+    status:      'live',
+    external:    false,
+  },
 ]
