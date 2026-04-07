@@ -30,8 +30,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let initialised = false;
+
+    // getSession() is authoritative for the initial load — sets loading=false once done
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      initialised = true;
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchRole(session.user.id).then(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // onAuthStateChange handles subsequent auth events (sign in/out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        // Skip the initial event — getSession() handles that
+        if (!initialised) return;
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -47,16 +64,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchRole(session.user.id).then(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
 
     return () => subscription.unsubscribe();
   }, []);
