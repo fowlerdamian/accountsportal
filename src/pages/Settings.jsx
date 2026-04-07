@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { supabase } from '../lib/supabase.js'
+import { useNavigate } from 'react-router-dom'
 import { APPS } from '../config/apps.js'
 import { useIsAdmin } from '../hooks/useIsAdmin.js'
 
@@ -67,19 +68,11 @@ const ROLE_LABELS = {
 // ─── Account section ──────────────────────────────────────────────────────────
 
 function AccountSection({ user }) {
-  const [sent, setSent]     = useState(false)
-  const [busy, setBusy]     = useState(false)
-  const [error, setError]   = useState(null)
+  const navigate = useNavigate()
 
-  const sendMagicLink = async () => {
-    setBusy(true); setError(null)
-    const { error } = await supabase.auth.signInWithOtp({
-      email: user.email,
-      options: { emailRedirectTo: window.location.origin },
-    })
-    setBusy(false)
-    if (error) setError(error.message)
-    else setSent(true)
+  const signOut = async () => {
+    await supabase.auth.signOut()
+    navigate('/login')
   }
 
   return (
@@ -93,31 +86,17 @@ function AccountSection({ user }) {
               Logged in · magic link authentication
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {sent && (
-              <span style={{ fontSize: '11px', color: '#22C55E', fontFamily: '"JetBrains Mono", monospace' }}>
-                Link sent ✓
-              </span>
-            )}
-            {error && (
-              <span style={{ fontSize: '11px', color: '#EF4444', fontFamily: '"JetBrains Mono", monospace' }}>
-                {error}
-              </span>
-            )}
-            <button
-              onClick={sendMagicLink}
-              disabled={busy || sent}
-              style={{
-                fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
-                textTransform: 'uppercase', color: busy || sent ? '#444' : '#E8A838',
-                background: 'none', border: '1px solid',
-                borderColor: busy || sent ? '#282828' : 'rgba(232,168,56,0.4)',
-                borderRadius: '4px', padding: '6px 14px', cursor: busy || sent ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {busy ? 'Sending…' : sent ? 'Sent' : 'Send Login Link'}
-            </button>
-          </div>
+          <button
+            onClick={signOut}
+            style={{
+              fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: '#EF4444',
+              background: 'none', border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: '4px', padding: '6px 14px', cursor: 'pointer',
+            }}
+          >
+            Sign Out
+          </button>
         </div>
       </Card>
     </section>
