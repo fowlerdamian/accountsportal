@@ -53,16 +53,14 @@ export default function App() {
             {/* Support Hub — public, no login required */}
             <Route path="/support/*" element={<SupportApp />} />
 
-            {/* Guide Portal + Contractor Hub — share GuideAuthProvider */}
+            {/* Guide Portal */}
             <Route
-              path="/"
+              path="/guide/*"
               element={
                 <ProtectedRoute>
                   <GuideAuthProvider>
                     <Routes>
-
-                      {/* Guide Portal */}
-                      <Route path="guide" element={<AdminLayout />}>
+                      <Route element={<AdminLayout />}>
                         <Route index element={<GuideDashboard />} />
                         <Route path="guides" element={<GuidesList />} />
                         <Route path="guides/:id" element={<GuideEditor />} />
@@ -75,37 +73,53 @@ export default function App() {
                         <Route path="brands" element={<GuideBrands />} />
                         <Route path="users" element={<GuideUsers />} />
                       </Route>
-
-                      {/* Guide Viewer (public-ish, same auth wrapper) */}
-                      <Route path="guide/view/:id" element={<GuideViewer />} />
-
-                      {/* Contractor Hub */}
-                      <Route path="hub" element={<HubDashboard />} />
-                      <Route path="hub/contractors" element={<ContractorsList />} />
-                      <Route path="hub/contractors/:id" element={<ContractorProfile />} />
-                      <Route path="hub/projects" element={<ProjectsList />} />
-                      <Route path="hub/projects/:id" element={<ProjectView />} />
-
-                      {/* Portal dashboard + apps */}
-                      <Route path="/" element={<Layout />}>
-                        <Route index element={<Navigate to="/dashboard" replace />} />
-                        <Route path="dashboard" element={<PortalDashboard />} />
-                        <Route path="apps/profit" element={<ProfitProcessor />} />
-                        <Route path="apps/logistics" element={<LogisticsDashboard />} />
-                        <Route path="apps/purchase-orders" element={<PurchaseOrders />} />
-                        <Route path="apps/logistics/invoices" element={<InvoiceList />} />
-                        <Route path="apps/logistics/invoices/:id" element={<InvoiceDetail />} />
-                        <Route path="apps/logistics/rate-cards" element={<RateCards />} />
-                        <Route path="apps/logistics/disputes" element={<Disputes />} />
-                      </Route>
-
-                      {/* Catch-all */}
-                      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="view/:id" element={<GuideViewer />} />
                     </Routes>
                   </GuideAuthProvider>
                 </ProtectedRoute>
               }
             />
+
+            {/* Contractor Hub */}
+            <Route
+              path="/hub/*"
+              element={
+                <ProtectedRoute>
+                  <GuideAuthProvider>
+                    <Routes>
+                      <Route index element={<HubDashboard />} />
+                      <Route path="contractors" element={<ContractorsList />} />
+                      <Route path="contractors/:id" element={<ContractorProfile />} />
+                      <Route path="projects" element={<ProjectsList />} />
+                      <Route path="projects/:id" element={<ProjectView />} />
+                    </Routes>
+                  </GuideAuthProvider>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Portal — dashboard + apps */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="dashboard" element={<PortalDashboard />} />
+              <Route path="apps/profit" element={<ProfitProcessor />} />
+              <Route path="apps/logistics" element={<LogisticsDashboard />} />
+              <Route path="apps/purchase-orders" element={<PurchaseOrders />} />
+              <Route path="apps/logistics/invoices" element={<InvoiceList />} />
+              <Route path="apps/logistics/invoices/:id" element={<InvoiceDetail />} />
+              <Route path="apps/logistics/rate-cards" element={<RateCards />} />
+              <Route path="apps/logistics/disputes" element={<Disputes />} />
+            </Route>
+
+            {/* Catch-all */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>
