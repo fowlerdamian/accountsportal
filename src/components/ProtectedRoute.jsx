@@ -1,25 +1,73 @@
-import { Navigate } from 'react-router-dom'
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 
-function LoadingScreen() {
+const GUEST_KEY = 'portal_guest_email'
+
+function GuestGate({ onEnter }) {
+  const [email, setEmail] = useState('')
+
+  const submit = e => {
+    e.preventDefault()
+    const trimmed = email.trim().toLowerCase()
+    if (!trimmed) return
+    localStorage.setItem(GUEST_KEY, trimmed)
+    onEnter(trimmed)
+  }
+
   return (
-    <div
-      className="min-h-screen flex items-center justify-center"
-      style={{ background: '#080808' }}
-    >
-      <div
-        className="w-7 h-7 rounded-full border-2 animate-spin"
-        style={{ borderColor: '#E8A838', borderTopColor: 'transparent' }}
-      />
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', background: '#080808',
+    }}>
+      <form onSubmit={submit} style={{
+        width: '100%', maxWidth: '360px', padding: '0 24px',
+        display: 'flex', flexDirection: 'column', gap: '16px',
+      }}>
+        <div>
+          <div style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', marginBottom: '4px' }}>
+            Welcome
+          </div>
+          <div style={{ fontSize: '12px', color: '#555', fontFamily: '"JetBrains Mono", monospace' }}>
+            Enter your email to continue
+          </div>
+        </div>
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="you@automotivegroup.com.au"
+          required
+          autoFocus
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            background: '#111113', border: '1px solid #2a2a2e',
+            borderRadius: '6px', padding: '10px 14px',
+            fontSize: '13px', color: '#E5E5E5', outline: 'none',
+          }}
+        />
+        <button
+          type="submit"
+          style={{
+            background: '#E8A838', border: 'none', borderRadius: '6px',
+            padding: '10px', fontSize: '13px', fontWeight: 600,
+            color: '#000', cursor: 'pointer',
+          }}
+        >
+          Continue
+        </button>
+      </form>
     </div>
   )
 }
 
 export default function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user } = useAuth()
+  const [guest, setGuest] = useState(() => localStorage.getItem(GUEST_KEY))
 
   // TODO: re-enable auth wall
   // if (loading) return <LoadingScreen />
   // if (!user)   return <Navigate to="/login" replace />
+
+  if (!user && !guest) return <GuestGate onEnter={setGuest} />
   return children
 }
