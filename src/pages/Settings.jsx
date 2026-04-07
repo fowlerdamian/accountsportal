@@ -65,10 +65,41 @@ const ROLE_LABELS = {
   user:   { label: 'User',   color: '#666' },
 }
 
+const inputStyle = {
+  width: '100%', boxSizing: 'border-box',
+  background: '#111113', border: '1px solid #2a2a2e',
+  borderRadius: '6px', padding: '8px 12px',
+  fontSize: '13px', color: '#E5E5E5',
+  fontFamily: 'inherit', outline: 'none',
+}
+
+const labelStyle = {
+  fontSize: '11px', color: '#555',
+  fontFamily: '"JetBrains Mono", monospace',
+  letterSpacing: '0.08em', textTransform: 'uppercase',
+  display: 'block', marginBottom: '6px',
+}
+
 // ─── Account section ──────────────────────────────────────────────────────────
 
 function AccountSection({ user }) {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const meta      = user.user_metadata || {}
+  const [name,    setName]    = useState(meta.full_name || '')
+  const [phone,   setPhone]   = useState(meta.phone || '')
+  const [saving,  setSaving]  = useState(false)
+  const [saved,   setSaved]   = useState(false)
+  const [error,   setError]   = useState(null)
+
+  const save = async () => {
+    setSaving(true); setSaved(false); setError(null)
+    const { error } = await supabase.auth.updateUser({
+      data: { full_name: name.trim(), phone: phone.trim() },
+    })
+    setSaving(false)
+    if (error) setError(error.message)
+    else { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+  }
 
   const signOut = async () => {
     await supabase.auth.signOut()
@@ -79,24 +110,81 @@ function AccountSection({ user }) {
     <section style={{ marginBottom: '40px' }}>
       <SectionHeading>My Account</SectionHeading>
       <Card>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+          {/* Email — read only */}
           <div>
-            <div style={{ fontSize: '13px', color: '#E5E5E5', marginBottom: '4px' }}>{user.email}</div>
-            <div style={{ fontSize: '11px', color: '#555', fontFamily: '"JetBrains Mono", monospace' }}>
-              Logged in · magic link authentication
+            <label style={labelStyle}>Email</label>
+            <input
+              value={user.email}
+              readOnly
+              style={{ ...inputStyle, color: '#555', cursor: 'default' }}
+            />
+          </div>
+
+          {/* Full name */}
+          <div>
+            <label style={labelStyle}>Full Name</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Your name"
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Phone */}
+          <div>
+            <label style={labelStyle}>Phone</label>
+            <input
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="+61 4xx xxx xxx"
+              style={inputStyle}
+            />
+          </div>
+
+          {error && (
+            <div style={{ fontSize: '12px', color: '#EF4444', fontFamily: '"JetBrains Mono", monospace' }}>
+              {error}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', paddingTop: '4px' }}>
+            <button
+              onClick={signOut}
+              style={{
+                fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
+                textTransform: 'uppercase', color: '#EF4444',
+                background: 'none', border: '1px solid rgba(239,68,68,0.3)',
+                borderRadius: '4px', padding: '6px 14px', cursor: 'pointer',
+              }}
+            >
+              Sign Out
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {saved && (
+                <span style={{ fontSize: '11px', color: '#22C55E', fontFamily: '"JetBrains Mono", monospace' }}>
+                  Saved ✓
+                </span>
+              )}
+              <button
+                onClick={save}
+                disabled={saving}
+                style={{
+                  fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
+                  textTransform: 'uppercase', color: saving ? '#444' : '#E8A838',
+                  background: 'none', border: '1px solid',
+                  borderColor: saving ? '#282828' : 'rgba(232,168,56,0.4)',
+                  borderRadius: '4px', padding: '6px 14px',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
             </div>
           </div>
-          <button
-            onClick={signOut}
-            style={{
-              fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: '#EF4444',
-              background: 'none', border: '1px solid rgba(239,68,68,0.3)',
-              borderRadius: '4px', padding: '6px 14px', cursor: 'pointer',
-            }}
-          >
-            Sign Out
-          </button>
         </div>
       </Card>
     </section>
