@@ -11,6 +11,8 @@ export default defineConfig({
       // Guide Portal — components/ was copied flat into Guide/, so map it back
       '@guide/components': path.resolve(__dirname, './src/apps/Guide'),
       '@guide': path.resolve(__dirname, './src/apps/Guide'),
+      // Contractor Hub
+      '@hub': path.resolve(__dirname, './src/apps/ContractorHub'),
     },
   },
 })
