@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { Check, ArrowUpDown } from 'lucide-react'
 import { FLAG } from '../utils/processor.js'
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -19,16 +20,16 @@ function fmtPercent(value) {
 // ─── Color logic ─────────────────────────────────────────────────────────────
 
 function profitColor(value) {
-  if (value > 0.005)  return '#22C55E'
-  if (value < -0.005) return '#EF4444'
+  if (value > 0.005)  return '#60a57e'
+  if (value < -0.005) return '#ff1744'
   return '#888'
 }
 
 function gpColor(gpPercent, invoiceExGst) {
   if (Math.abs(invoiceExGst) < 0.01) return '#888'
   if (gpPercent > 90) return '#F59E0B'
-  if (gpPercent < 20) return '#EF4444'
-  return '#22C55E'
+  if (gpPercent < 20) return '#ff1744'
+  return '#60a57e'
 }
 
 // ─── Flag badges ─────────────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ function OrderNumCell({ orderNum, orderLinks, linksLoading }) {
         target="_blank"
         rel="noopener noreferrer"
         className="font-mono text-sm whitespace-nowrap hover:underline underline-offset-2"
-        style={{ color: '#E8A838' }}
+        style={{ color: '#f3ca0f' }}
       >
         {orderNum}
       </a>
@@ -77,13 +78,13 @@ function OrderNumCell({ orderNum, orderLinks, linksLoading }) {
   return (
     <span
       className="font-mono text-sm whitespace-nowrap inline-flex items-center gap-1.5"
-      style={{ color: '#E8A838' }}
+      style={{ color: '#f3ca0f' }}
     >
       {orderNum}
       {linksLoading && (
         <span
           className="inline-block w-1 h-1 rounded-full animate-pulse flex-shrink-0"
-          style={{ background: '#E8A838', opacity: 0.4 }}
+          style={{ background: '#f3ca0f', opacity: 0.4 }}
         />
       )}
     </span>
@@ -101,15 +102,13 @@ function ApproveCheckbox({ orderNum, isApproved, onToggleApprove }) {
       <span
         className="relative inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm border flex-shrink-0"
         style={{
-          background:   isApproved ? '#22C55E' : 'transparent',
-          borderColor:  isApproved ? '#22C55E' : '#444',
+          background:   isApproved ? '#60a57e' : 'transparent',
+          borderColor:  isApproved ? '#60a57e' : '#444',
           transition:   'background 0.15s, border-color 0.15s',
         }}
       >
         {isApproved && (
-          <svg width="8" height="6" viewBox="0 0 8 6" fill="none" style={{ display: 'block' }}>
-            <path d="M1 3l2 2 4-4" stroke="#000" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <Check size={10} strokeWidth={2} style={{ color: '#000' }} />
         )}
         <input
           type="checkbox"
@@ -124,7 +123,7 @@ function ApproveCheckbox({ orderNum, isApproved, onToggleApprove }) {
 
 function Row({ order, isEven, orderLinks, linksLoading, isApproved, onToggleApprove }) {
   return (
-    <tr style={{ background: isEven ? '#0d0d0d' : '#0a0a0a' }}>
+    <tr style={{ background: isEven ? '#0a0a0a' : '#000000' }}>
       <td className="px-4 py-2.5">
         <OrderNumCell
           orderNum={order.orderNum}
@@ -164,7 +163,7 @@ function Row({ order, isEven, orderLinks, linksLoading, isApproved, onToggleAppr
               onToggleApprove={onToggleApprove}
             />
             {isApproved ? (
-              <span className="text-[10px] font-mono" style={{ color: '#22C55E' }}>approved</span>
+              <span className="text-[10px] font-mono" style={{ color: '#60a57e' }}>approved</span>
             ) : (
               order.flags.map((f) => <FlagBadge key={f} flag={f} />)
             )}
@@ -191,10 +190,15 @@ const COLUMNS = [
 
 function SortIcon({ dir }) {
   return (
-    <svg width="8" height="10" viewBox="0 0 8 10" fill="none" style={{ display: 'inline', marginLeft: 4, verticalAlign: 'middle', flexShrink: 0 }}>
-      <path d="M4 1v8M1 4L4 1l3 3" stroke={dir === 'asc' ? 'currentColor' : '#333'} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M4 9L1 6l3 3 3-3" stroke={dir === 'desc' ? 'currentColor' : '#333'} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
+    <ArrowUpDown
+      size={12}
+      strokeWidth={1.5}
+      style={{
+        display: 'inline', marginLeft: 4, verticalAlign: 'middle', flexShrink: 0,
+        color: dir ? 'currentColor' : 'var(--text-disabled)',
+        opacity: dir ? 1 : 0.5,
+      }}
+    />
   )
 }
 
@@ -241,7 +245,7 @@ export default function DataTable({ orders, orderLinks = {}, linksLoading = fals
         <thead>
           <tr
             className="sticky top-0 z-10"
-            style={{ background: '#141414', borderBottom: '1px solid #222' }}
+            style={{ background: '#0a0a0a', borderBottom: '1px solid #222222' }}
           >
             {COLUMNS.map((col) => {
               const isActive = sortCol === col.key
@@ -252,7 +256,7 @@ export default function DataTable({ orders, orderLinks = {}, linksLoading = fals
                   className={`px-4 py-3 text-[10px] font-medium uppercase tracking-[0.1em] whitespace-nowrap ${
                     col.align === 'right' ? 'text-right' : 'text-left'
                   } ${col.key ? 'cursor-pointer select-none' : ''}`}
-                  style={{ color: isActive ? '#E8A838' : '#555', transition: 'color 0.15s' }}
+                  style={{ color: isActive ? '#f3ca0f' : '#555', transition: 'color 0.15s' }}
                 >
                   {col.label}
                   {col.key && <SortIcon dir={isActive ? sortDir : null} />}

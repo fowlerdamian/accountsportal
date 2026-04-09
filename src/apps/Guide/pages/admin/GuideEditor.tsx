@@ -44,6 +44,14 @@ async function uploadToStorage(file: File, folder: string): Promise<string> {
   return data.publicUrl;
 }
 
+// Module-level drag payload — avoids dataTransfer.getData limitations in dragover.
+// Safe since only one drag happens at a time.
+interface ImageDragPayload {
+  url: string;
+  originalUrl: string | null;
+}
+let _activeImageDrag: ImageDragPayload | null = null;
+
 interface DropZoneProps {
   label: string;
   currentUrl?: string | null;
@@ -51,9 +59,13 @@ interface DropZoneProps {
   onClear?: () => void;
   onEdit?: () => void;
   folder: string;
+  /** Set when this slot has an image that should be draggable to other slots */
+  dragPayload?: ImageDragPayload;
+  /** Called when another image slot's image is dropped onto this slot */
+  onDropTransfer?: (url: string, originalUrl: string | null) => void;
 }
 
-function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder }: DropZoneProps) {
+function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder, dragPayload, onDropTransfer }: DropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -79,12 +91,22 @@ function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder }: Drop
     }
   };
 
+  const handleTransferDrop = (e: React.DragEvent): boolean => {
+    if (!_activeImageDrag || !onDropTransfer) return false;
+    e.preventDefault();
+    onDropTransfer(_activeImageDrag.url, _activeImageDrag.originalUrl);
+    return true;
+  };
+
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    // File drop takes priority
     const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
-  }, [folder]);
+    if (file) { handleFile(file); return; }
+    // Inter-step image transfer
+    handleTransferDrop(e);
+  }, [folder, onDropTransfer]);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -94,8 +116,39 @@ function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder }: Drop
 
   if (currentUrl) {
     return (
-      <div className="relative border rounded-lg overflow-hidden group">
-        <img src={currentUrl} alt="" className="w-full h-32 object-cover" />
+      <div
+        className={`relative border rounded-lg overflow-hidden group transition-[box-shadow] ${
+          dragOver ? 'ring-2 ring-primary' : ''
+        }`}
+        onDragOver={(e) => {
+          if (_activeImageDrag && onDropTransfer) { e.preventDefault(); setDragOver(true); }
+          else if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); }
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          setDragOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) { e.preventDefault(); handleFile(file); return; }
+          handleTransferDrop(e);
+        }}
+      >
+        <img
+          src={currentUrl}
+          alt=""
+          className={`w-full h-32 object-cover ${dragPayload ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          draggable={!!dragPayload}
+          onDragStart={(e) => {
+            if (!dragPayload) return;
+            _activeImageDrag = dragPayload;
+            e.dataTransfer.effectAllowed = 'copy';
+          }}
+          onDragEnd={() => { _activeImageDrag = null; setDragOver(false); }}
+        />
+        {dragOver && (
+          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center pointer-events-none">
+            <Upload className="w-6 h-6 text-primary" />
+          </div>
+        )}
         {onEdit && (
           <button
             type="button"
@@ -148,12 +201,13 @@ interface SortableStepProps {
   index: number;
   onUpdate: (index: number, field: string, value: string) => void;
   onUpdateImage: (index: number, field: 'image_url' | 'image2_url', value: string | null) => void;
+  onTransferImage: (index: number, field: 'image_url' | 'image2_url', url: string, originalUrl: string | null) => void;
   onOpenEditor: (index: number, field: 'image_url' | 'image2_url') => void;
   onRemove: (index: number) => void;
   canRemove: boolean;
 }
 
-function SortableStep({ id, step, index, onUpdate, onUpdateImage, onOpenEditor, onRemove, canRemove }: SortableStepProps) {
+function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImage, onOpenEditor, onRemove, canRemove }: SortableStepProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -178,6 +232,8 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onOpenEditor, 
             <DropZone
               label="Primary image"
               currentUrl={step.image_url}
+              dragPayload={step.image_url ? { url: step.image_url, originalUrl: step.image_original_url ?? null } : undefined}
+              onDropTransfer={(url, origUrl) => onTransferImage(index, 'image_url', url, origUrl)}
               onUpload={(url) => onUpdateImage(index, 'image_url', url)}
               onClear={() => onUpdateImage(index, 'image_url', null)}
               onEdit={step.image_url ? () => onOpenEditor(index, 'image_url') : undefined}
@@ -186,6 +242,8 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onOpenEditor, 
             <DropZone
               label="Add second image"
               currentUrl={step.image2_url}
+              dragPayload={step.image2_url ? { url: step.image2_url, originalUrl: step.image2_original_url ?? null } : undefined}
+              onDropTransfer={(url, origUrl) => onTransferImage(index, 'image2_url', url, origUrl)}
               onUpload={(url) => onUpdateImage(index, 'image2_url', url)}
               onClear={() => onUpdateImage(index, 'image2_url', null)}
               onEdit={step.image2_url ? () => onOpenEditor(index, 'image2_url') : undefined}
@@ -205,7 +263,8 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onOpenEditor, 
 
 // --- Main editor ---
 export default function GuideEditor() {
-  const { id } = useParams();
+  const { id: rawId } = useParams();
+  const id = rawId === 'new' ? undefined : rawId;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isEditing = !!id;
@@ -230,9 +289,21 @@ export default function GuideEditor() {
   const [pdfImportOpen, setPdfImportOpen] = useState(false);
   const [vehicles, setVehicles] = useState<{ make: string; model: string; year_from: string; year_to: string }[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editorTarget, setEditorTarget] = useState<{ stepIndex: number; field: 'image_url' | 'image2_url' } | null>(null);
+  const [editorTarget, setEditorTarget] = useState<{ stepIndex: number; field: 'image_url' | 'image2_url'; variantId?: string | null } | null>(null);
   const [editorImageUrl, setEditorImageUrl] = useState("");
   const [editorOriginalUrl, setEditorOriginalUrl] = useState<string | null>(null);
+
+  // Variants state
+  interface VariantDraft {
+    id?: string;
+    variant_label: string;
+    slug: string;
+    steps: StepDraft[];
+  }
+  const [variants, setVariants] = useState<VariantDraft[]>([]);
+  const [editingVariantIdx, setEditingVariantIdx] = useState<number | null>(null);
+  const [newVariantLabel, setNewVariantLabel] = useState("");
+  const [showAddVariant, setShowAddVariant] = useState(false);
 
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -328,6 +399,29 @@ export default function GuideEditor() {
       })));
     }
 
+    // Load variants and their steps
+    if (id) {
+      supabase.from("guide_variants").select("*").eq("instruction_set_id", id).then(({ data: variantRows }) => {
+        if (variantRows && variantRows.length > 0) {
+          Promise.all(variantRows.map(async (v: any) => {
+            const { data: vSteps } = await supabase.from("instruction_steps")
+              .select("*").eq("instruction_set_id", id).eq("variant_id", v.id).order("order_index");
+            return {
+              id: v.id,
+              variant_label: v.variant_label,
+              slug: v.slug,
+              steps: (vSteps || []).map((s: any) => ({
+                id: s.id, step_number: s.step_number, subtitle: s.subtitle,
+                description: s.description, order_index: s.order_index,
+                image_url: s.image_url, image_original_url: s.image_original_url,
+                image2_url: s.image2_url, image2_original_url: s.image2_original_url,
+              })),
+            } as VariantDraft;
+          })).then(setVariants);
+        }
+      });
+    }
+
     setInitialized(true);
   }, [isEditing, initialized, loadingGuide, loadingSteps, loadingVehicles, existingGuide, existingSteps, existingVehicles]);
 
@@ -387,6 +481,44 @@ export default function GuideEditor() {
         }
       }
 
+      // Save variants and their steps
+      if (guideId) {
+        // Delete old variants and their steps
+        const { data: oldVariants } = await supabase.from("guide_variants").select("id").eq("instruction_set_id", guideId);
+        if (oldVariants && oldVariants.length > 0) {
+          const oldIds = oldVariants.map((v: any) => v.id);
+          await supabase.from("instruction_steps").delete().in("variant_id", oldIds);
+          await supabase.from("guide_variants").delete().eq("instruction_set_id", guideId);
+        }
+        // Insert new variants
+        for (const variant of variants) {
+          const variantSlug = variant.slug || generateSlug();
+          const { data: vData, error: vErr } = await supabase.from("guide_variants").insert({
+            instruction_set_id: guideId,
+            variant_label: variant.variant_label,
+            slug: variantSlug,
+          }).select().single();
+          if (vErr) throw vErr;
+          // Insert variant steps
+          const vSteps = variant.steps.filter(s => s.subtitle || s.description).map((s, i) => ({
+            instruction_set_id: guideId!,
+            variant_id: vData.id,
+            step_number: i + 1,
+            subtitle: s.subtitle || `Step ${i + 1}`,
+            description: s.description || '',
+            order_index: i + 1,
+            image_url: s.image_url || null,
+            image_original_url: s.image_original_url || null,
+            image2_url: s.image2_url || null,
+            image2_original_url: s.image2_original_url || null,
+          }));
+          if (vSteps.length > 0) {
+            const { error: vsErr } = await supabase.from("instruction_steps").insert(vSteps);
+            if (vsErr) throw vsErr;
+          }
+        }
+      }
+
       // Save vehicles
       if (guideId) {
         const { error: delVehErr } = await (supabase.from("guide_vehicles" as any) as any).delete().eq("instruction_set_id", guideId);
@@ -411,7 +543,7 @@ export default function GuideEditor() {
       queryClient.invalidateQueries({ queryKey: ["guide_vehicles"] });
       toast.success("Guide saved!");
       if (!isEditing && guideId) {
-        navigate(`/admin/guides/${guideId}/edit`, { replace: true });
+        navigate(`/guide/guides/${guideId}/edit`, { replace: true });
       }
       return true;
     } catch (err: any) {
@@ -442,6 +574,14 @@ export default function GuideEditor() {
     const updated = [...guideSteps];
     updated[index] = { ...updated[index], [field]: value };
     setGuideSteps(updated);
+  };
+
+  const transferStepImage = (index: number, field: 'image_url' | 'image2_url', url: string, originalUrl: string | null) => {
+    const updated = [...guideSteps];
+    const origField = field === 'image_url' ? 'image_original_url' : 'image2_original_url';
+    updated[index] = { ...updated[index], [field]: url, [origField]: originalUrl ?? url };
+    setGuideSteps(updated);
+    toast.success("Image copied to this slot");
   };
 
   const updateStepImage = (index: number, field: 'image_url' | 'image2_url', value: string | null) => {
@@ -674,6 +814,7 @@ export default function GuideEditor() {
                     index={i}
                     onUpdate={updateStep}
                     onUpdateImage={updateStepImage}
+                    onTransferImage={transferStepImage}
                     onOpenEditor={openEditor}
                     onRemove={removeStep}
                     canRemove={guideSteps.length > 1}
@@ -690,17 +831,199 @@ export default function GuideEditor() {
         {currentStep === 3 && (
           <div className="space-y-5">
             <h2 className="text-lg font-semibold">Variants</h2>
-            <p className="text-sm text-muted-foreground">Variants allow you to create alternative step sequences for different product configurations.</p>
+            <p className="text-sm text-muted-foreground">
+              Variants allow you to create alternative step sequences for different product configurations (e.g. different vehicle models).
+            </p>
+
+            {/* Standard variant (always present) */}
             <div className="border rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-sm">Standard</p>
-                  <p className="text-xs text-muted-foreground">Default variant — inherits all steps above</p>
+                  <p className="text-xs text-muted-foreground">Default — uses the {guideSteps.length} step{guideSteps.length !== 1 ? 's' : ''} from the Installation Steps tab</p>
                 </div>
                 <Badge>Default</Badge>
               </div>
             </div>
-            <Button variant="outline"><Plus className="w-4 h-4 mr-2" /> Add Variant</Button>
+
+            {/* Existing variants */}
+            {variants.map((variant, vIdx) => (
+              <div key={vIdx} className="border rounded-lg overflow-hidden">
+                <div
+                  className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => setEditingVariantIdx(editingVariantIdx === vIdx ? null : vIdx)}
+                >
+                  <div>
+                    <p className="font-medium text-sm">{variant.variant_label}</p>
+                    <p className="text-xs text-muted-foreground">{variant.steps.length} step{variant.steps.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive h-8"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setVariants(variants.filter((_, i) => i !== vIdx));
+                        if (editingVariantIdx === vIdx) setEditingVariantIdx(null);
+                        toast.success("Variant removed");
+                      }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${editingVariantIdx === vIdx ? 'rotate-90' : ''}`} />
+                  </div>
+                </div>
+
+                {/* Expanded variant step editor */}
+                {editingVariantIdx === vIdx && (
+                  <div className="border-t p-4 space-y-4 bg-muted/10">
+                    <div className="flex items-center gap-3">
+                      <Label className="text-xs shrink-0">Label</Label>
+                      <Input
+                        value={variant.variant_label}
+                        onChange={(e) => {
+                          const updated = [...variants];
+                          updated[vIdx] = { ...updated[vIdx], variant_label: e.target.value };
+                          setVariants(updated);
+                        }}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+
+                    {/* Variant steps */}
+                    {variant.steps.map((step, sIdx) => (
+                      <div key={sIdx} className="border rounded-lg p-3 space-y-2 bg-background">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-muted-foreground">Step {sIdx + 1}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-destructive"
+                            onClick={() => {
+                              if (variant.steps.length <= 1) return;
+                              const updated = [...variants];
+                              updated[vIdx] = {
+                                ...updated[vIdx],
+                                steps: variant.steps.filter((_, i) => i !== sIdx).map((s, i) => ({ ...s, step_number: i + 1, order_index: i + 1 })),
+                              };
+                              setVariants(updated);
+                            }}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        <Input
+                          placeholder="Step subtitle"
+                          value={step.subtitle}
+                          onChange={(e) => {
+                            const updated = [...variants];
+                            updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], subtitle: e.target.value };
+                            setVariants(updated);
+                          }}
+                          className="h-8 text-sm"
+                        />
+                        <Textarea
+                          placeholder="Step description"
+                          value={step.description}
+                          onChange={(e) => {
+                            const updated = [...variants];
+                            updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], description: e.target.value };
+                            setVariants(updated);
+                          }}
+                          rows={3}
+                          className="text-sm"
+                        />
+                      </div>
+                    ))}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const updated = [...variants];
+                        updated[vIdx] = {
+                          ...updated[vIdx],
+                          steps: [...variant.steps, {
+                            step_number: variant.steps.length + 1,
+                            subtitle: '',
+                            description: '',
+                            order_index: variant.steps.length + 1,
+                          }],
+                        };
+                        setVariants(updated);
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Add Step
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Add variant panel */}
+            {showAddVariant ? (
+              <div className="border rounded-lg p-4 space-y-3">
+                <Label className="text-sm">New Variant Label</Label>
+                <Input
+                  placeholder="e.g. Left-hand drive, Diesel model"
+                  value={newVariantLabel}
+                  onChange={(e) => setNewVariantLabel(e.target.value)}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={!newVariantLabel.trim()}
+                    onClick={() => {
+                      setVariants([...variants, {
+                        variant_label: newVariantLabel.trim(),
+                        slug: generateSlug(),
+                        steps: guideSteps.map((s, i) => ({
+                          step_number: i + 1,
+                          subtitle: s.subtitle,
+                          description: s.description,
+                          order_index: i + 1,
+                          image_url: s.image_url,
+                          image_original_url: s.image_original_url,
+                          image2_url: s.image2_url,
+                          image2_original_url: s.image2_original_url,
+                        })),
+                      }]);
+                      setNewVariantLabel("");
+                      setShowAddVariant(false);
+                      toast.success("Variant added — steps copied from Standard");
+                    }}
+                  >
+                    Create (copy steps)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!newVariantLabel.trim()}
+                    onClick={() => {
+                      setVariants([...variants, {
+                        variant_label: newVariantLabel.trim(),
+                        slug: generateSlug(),
+                        steps: [{ step_number: 1, subtitle: '', description: '', order_index: 1 }],
+                      }]);
+                      setNewVariantLabel("");
+                      setShowAddVariant(false);
+                      toast.success("Variant added — start fresh");
+                    }}
+                  >
+                    Create (start fresh)
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowAddVariant(false); setNewVariantLabel(""); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={() => setShowAddVariant(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Add Variant
+              </Button>
+            )}
           </div>
         )}
 
@@ -748,7 +1071,7 @@ export default function GuideEditor() {
                         }
                         queryClient.invalidateQueries({ queryKey: ["publications"] });
                         toast.success(`Published to ${brand.name}!`);
-                        navigate(`/admin/guides/${id}/share`);
+                        navigate(`/guide/guides/${id}/share`);
                       } catch (err: any) {
                         toast.error(err.message);
                       }

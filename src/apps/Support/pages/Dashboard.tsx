@@ -42,8 +42,8 @@ function StatPill({ label, count, colorClass, active, onClick }: { label: string
     <button
       onClick={onClick}
       style={{
-        background: '#0c0c0c',
-        border: active ? '1px solid rgba(232,168,56,0.5)' : '1px solid #1e1e1e',
+        background: '#0a0a0a',
+        border: active ? '1px solid rgba(243,202,15,0.5)' : '1px solid #1e1e1e',
         borderRadius: '8px',
         padding: '16px 20px',
         display: 'flex',
@@ -52,7 +52,7 @@ function StatPill({ label, count, colorClass, active, onClick }: { label: string
         textAlign: 'left',
         cursor: 'pointer',
         transition: 'border-color 150ms',
-        boxShadow: active ? '0 0 0 1px rgba(232,168,56,0.25)' : 'none',
+        boxShadow: active ? '0 0 0 1px rgba(243,202,15,0.25)' : 'none',
       }}
     >
       <span className={cn('font-mono text-2xl font-medium leading-none', colorClass)}>{count}</span>
@@ -62,7 +62,7 @@ function StatPill({ label, count, colorClass, active, onClick }: { label: string
           fontFamily: '"JetBrains Mono", monospace',
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
-          color: '#555',
+          color: '#a0a0a0',
         }}
       >
         {label}
@@ -196,24 +196,24 @@ export default function Dashboard() {
     <div>
       {/* Page heading — portal pattern */}
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', margin: 0, letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
           Cases
         </h1>
-        <p style={{ fontSize: '13px', color: '#555', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
+        <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
           {teamMember?.name ? `Welcome back, ${teamMember.name.split(' ')[0]}` : 'Support Hub'}
         </p>
       </div>
 
       {/* Stats — portal KPI card pattern */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 mb-6">
-        <StatPill label="New" count={openCount} colorClass="text-[#E5E5E5]" active={statusFilter === 'open'} onClick={() => toggleStatusFilter('open')} />
+        <StatPill label="New" count={openCount} colorClass="text-[#ffffff]" active={statusFilter === 'open'} onClick={() => toggleStatusFilter('open')} />
         <StatPill label="Actioned" count={actionedCount} colorClass="text-[#3B9EFF]" active={statusFilter === 'actioned'} onClick={() => toggleStatusFilter('actioned')} />
-        <StatPill label="In hand" count={inHandCount} colorClass="text-[#E8A838]" active={statusFilter === 'in_hand'} onClick={() => toggleStatusFilter('in_hand')} />
-        <StatPill label="Closed" count={closedCount} colorClass="text-[#22C55E]" active={statusFilter === 'closed'} onClick={() => toggleStatusFilter('closed')} />
+        <StatPill label="In hand" count={inHandCount} colorClass="text-[#f3ca0f]" active={statusFilter === 'in_hand'} onClick={() => toggleStatusFilter('in_hand')} />
+        <StatPill label="Closed" count={closedCount} colorClass="text-[#60a57e]" active={statusFilter === 'closed'} onClick={() => toggleStatusFilter('closed')} />
       </div>
 
       {/* Filter tabs — amber active underline */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #1e1e22', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #222222', marginBottom: '16px' }}>
         {tabs.map(tab => (
           <button
             key={tab.key}
@@ -224,9 +224,9 @@ export default function Dashboard() {
               fontWeight: 500,
               background: 'none',
               border: 'none',
-              borderBottom: activeTab === tab.key && !statusFilter ? '2px solid #E8A838' : '2px solid transparent',
+              borderBottom: activeTab === tab.key && !statusFilter ? '2px solid #f3ca0f' : '2px solid transparent',
               marginBottom: '-1px',
-              color: activeTab === tab.key && !statusFilter ? '#E8A838' : '#555',
+              color: activeTab === tab.key && !statusFilter ? '#f3ca0f' : '#555',
               cursor: 'pointer',
               transition: 'color 120ms, border-color 120ms',
               fontFamily: 'inherit',
@@ -248,18 +248,18 @@ export default function Dashboard() {
           placeholder="Search cases..."
           style={{
             width: '100%',
-            background: '#0c0c0c',
-            border: '1px solid #1e1e22',
+            background: '#0a0a0a',
+            border: '1px solid #222222',
             borderRadius: '4px',
             fontSize: '13px',
             padding: '8px 44px 8px 36px',
-            color: '#E5E5E5',
+            color: '#ffffff',
             outline: 'none',
             boxSizing: 'border-box',
             fontFamily: 'inherit',
           }}
-          onFocus={e => { e.currentTarget.style.borderColor = 'rgba(232,168,56,0.4)'; }}
-          onBlur={e => { e.currentTarget.style.borderColor = '#1e1e22'; }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)'; }}
+          onBlur={e => { e.currentTarget.style.borderColor = '#222222'; }}
         />
         <span
           style={{
@@ -270,7 +270,7 @@ export default function Dashboard() {
             fontSize: '10px',
             fontFamily: '"JetBrains Mono", monospace',
             color: '#444',
-            border: '1px solid #282828',
+            border: '1px solid #222222',
             padding: '1px 5px',
             borderRadius: '2px',
           }}
@@ -288,10 +288,10 @@ export default function Dashboard() {
             style={{
               padding: '3px 10px',
               fontSize: '11px',
-              background: typeFilter === f.key ? 'rgba(232,168,56,0.12)' : 'transparent',
-              border: typeFilter === f.key ? '1px solid rgba(232,168,56,0.4)' : '1px solid #1e1e22',
+              background: typeFilter === f.key ? 'rgba(243,202,15,0.12)' : 'transparent',
+              border: typeFilter === f.key ? '1px solid rgba(243,202,15,0.4)' : '1px solid #222222',
               borderRadius: '3px',
-              color: typeFilter === f.key ? '#E8A838' : '#555',
+              color: typeFilter === f.key ? '#f3ca0f' : '#555',
               cursor: 'pointer',
               transition: 'all 120ms',
               fontFamily: 'inherit',
@@ -309,10 +309,10 @@ export default function Dashboard() {
             style={{
               padding: '3px 10px',
               fontSize: '11px',
-              background: sortBy === s.key ? 'rgba(232,168,56,0.12)' : 'transparent',
-              border: sortBy === s.key ? '1px solid rgba(232,168,56,0.4)' : '1px solid #1e1e22',
+              background: sortBy === s.key ? 'rgba(243,202,15,0.12)' : 'transparent',
+              border: sortBy === s.key ? '1px solid rgba(243,202,15,0.4)' : '1px solid #222222',
               borderRadius: '3px',
-              color: sortBy === s.key ? '#E8A838' : '#555',
+              color: sortBy === s.key ? '#f3ca0f' : '#555',
               cursor: 'pointer',
               transition: 'all 120ms',
               fontFamily: 'inherit',

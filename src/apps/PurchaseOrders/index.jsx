@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { ArrowUpDown, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -7,13 +8,13 @@ const ALL_STATUSES   = ['Draft', 'Ordered', 'Invoiced']
 const DEFAULT_FILTER = ['Draft', 'Ordered']
 
 const STATUS_STYLE = {
-  Draft:      { color: '#555',    background: '#111',                  border: '1px solid #2a2a2a' },
+  Draft:      { color: '#a0a0a0',    background: '#0a0a0a',                  border: '1px solid #222222' },
   Authorised: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)',  border: '1px solid rgba(96,165,250,0.3)' },
   Ordered:    { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)' },
   Invoiced:   { color: '#34d399', background: 'rgba(52,211,153,0.1)',  border: '1px solid rgba(52,211,153,0.3)' },
-  Receiving:  { color: '#E8A838', background: 'rgba(232,168,56,0.1)',  border: '1px solid rgba(232,168,56,0.3)' },
+  Receiving:  { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)',  border: '1px solid rgba(243,202,15,0.3)' },
   Received:   { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
-  Cancelled:  { color: '#888',    background: '#111',                  border: '1px solid #222' },
+  Cancelled:  { color: '#888',    background: '#0a0a0a',                  border: '1px solid #222' },
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -38,8 +39,8 @@ function DueLabel({ due }) {
   if (!due) return <span style={{ color: '#333' }}>—</span>
   const diff = dueDiffDays(due)
   const label = fmtDate(due)
-  if (diff < 0)  return <span style={{ color: '#EF4444', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span></span>
-  if (diff <= 7) return <span style={{ color: '#E8A838', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span></span>
+  if (diff < 0)  return <span style={{ color: '#ff1744', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span></span>
+  if (diff <= 7) return <span style={{ color: '#f3ca0f', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span></span>
   return <span style={{ color: '#AAA' }}>{label}</span>
 }
 
@@ -71,8 +72,8 @@ function DueDateCell({ poId, due, onSaved }) {
         onBlur={() => save(value)}
         onKeyDown={e => { if (e.key === 'Enter') save(value); if (e.key === 'Escape') setEditing(false) }}
         style={{
-          background: '#1a1a1a', border: '1px solid rgba(232,168,56,0.5)',
-          borderRadius: '4px', color: '#E5E5E5', fontSize: '13px',
+          background: '#1a1a1a', border: '1px solid rgba(243,202,15,0.5)',
+          borderRadius: '4px', color: '#ffffff', fontSize: '13px',
           padding: '6px 8px', outline: 'none',
           fontFamily: '"JetBrains Mono", monospace', width: '100%',
           opacity: saving ? 0.5 : 1, boxSizing: 'border-box',
@@ -94,11 +95,11 @@ function DueDateCell({ poId, due, onSaved }) {
 
 function KpiCard({ label, value, valueStyle }) {
   return (
-    <div style={{ background: '#0c0c0c', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '16px' }}>
-      <p style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
+    <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '16px' }}>
+      <p style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
         {label}
       </p>
-      <p style={{ fontSize: '20px', fontWeight: 600, color: '#E5E5E5', margin: '6px 0 0', ...valueStyle }}>
+      <p style={{ fontSize: '20px', fontWeight: 600, color: '#ffffff', margin: '6px 0 0', ...valueStyle }}>
         {value}
       </p>
     </div>
@@ -139,8 +140,8 @@ function PoCard({ po, onSaved }) {
 
   return (
     <div style={{
-      background: isOverdue ? 'rgba(239,68,68,0.04)' : '#0c0c0c',
-      border: `1px solid ${isOverdue ? 'rgba(239,68,68,0.2)' : '#1e1e1e'}`,
+      background: isOverdue ? 'rgba(239,68,68,0.04)' : '#0a0a0a',
+      border: `1px solid ${isOverdue ? 'rgba(239,68,68,0.2)' : '#222222'}`,
       borderRadius: '8px', padding: '14px 16px',
       display: 'flex', flexDirection: 'column', gap: '10px',
     }}>
@@ -149,7 +150,7 @@ function PoCard({ po, onSaved }) {
         <a
           href={`https://inventory.dearsystems.com/Purchase#${po.cin7_id}`}
           target="_blank" rel="noopener noreferrer"
-          style={{ color: '#E8A838', textDecoration: 'none', fontSize: '14px', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}
+          style={{ color: '#f3ca0f', textDecoration: 'none', fontSize: '14px', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}
         >
           {po.po_number}
         </a>
@@ -158,7 +159,7 @@ function PoCard({ po, onSaved }) {
             {po.status}
           </span>
           {po.has_attachment && (
-            <span title="Order sent" style={{ color: '#4ade80', fontSize: '15px' }}>✓</span>
+            <CheckCircle2 size={16} strokeWidth={1.5} style={{ color: 'var(--status-success)' }} />
           )}
         </div>
       </div>
@@ -167,7 +168,7 @@ function PoCard({ po, onSaved }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
         <p style={{ margin: 0, fontSize: '13px', color: '#AAA' }}>{po.supplier_name}</p>
         {po.order_date && (
-          <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#555' }}>
+          <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0' }}>
             {fmtDate(po.order_date)}
           </span>
         )}
@@ -201,6 +202,8 @@ export default function PurchaseOrders() {
   const [syncMsg,       setSyncMsg]       = useState(null)
   const [lastSync,      setLastSync]      = useState(null)
   const [activeFilters, setActiveFilters] = useState(DEFAULT_FILTER)
+  const [sortCol, setSortCol] = useState('due_date')
+  const [sortDir, setSortDir] = useState('asc')
   const isMobile = useIsMobile()
 
   const fetchOrders = useCallback(async () => {
@@ -252,14 +255,42 @@ export default function PurchaseOrders() {
     }
   }
 
-  const visible   = orders.filter(o => activeFilters.includes(o.status))
+  function handleSort(col) {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(col)
+      setSortDir('asc')
+    }
+  }
+
+  const visible = useMemo(() => {
+    const filtered = orders.filter(o => activeFilters.includes(o.status))
+    if (!sortCol) return filtered
+    return [...filtered].sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol]
+      // Handle nulls — push to end
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      // Booleans
+      if (typeof av === 'boolean') { av = av ? 1 : 0; bv = bv ? 1 : 0 }
+      // Strings
+      if (typeof av === 'string') {
+        const cmp = av.localeCompare(bv)
+        return sortDir === 'asc' ? cmp : -cmp
+      }
+      // Numbers
+      return sortDir === 'asc' ? av - bv : bv - av
+    })
+  }, [orders, activeFilters, sortCol, sortDir])
   const overdue   = visible.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d < 0 })
   const dueSoon   = visible.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d >= 0 && d <= 7 })
 
   if (loading) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid #E8A838', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
+        <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid #f3ca0f', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
       </div>
     )
   }
@@ -270,10 +301,10 @@ export default function PurchaseOrders() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', margin: 0, letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
             Purchase Orders
           </h1>
-          <p style={{ fontSize: '12px', color: '#555', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
+          <p style={{ fontSize: '12px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
             {lastSync
               ? `Synced ${new Date(lastSync).toLocaleString('en-AU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}`
               : 'Synced from Cin7 Core'}
@@ -282,7 +313,7 @@ export default function PurchaseOrders() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {syncMsg && (
-            <span style={{ fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: syncMsg.type === 'ok' ? '#4ade80' : '#EF4444' }}>
+            <span style={{ fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: syncMsg.type === 'ok' ? '#4ade80' : '#ff1744' }}>
               {syncMsg.text}
             </span>
           )}
@@ -291,12 +322,12 @@ export default function PurchaseOrders() {
             disabled={syncing}
             style={{
               padding: '8px 16px', fontSize: '12px', fontWeight: 500, letterSpacing: '0.04em',
-              textTransform: 'uppercase', color: syncing ? '#555' : '#E8A838',
-              border: `1px solid ${syncing ? '#333' : 'rgba(232,168,56,0.35)'}`,
+              textTransform: 'uppercase', color: syncing ? '#555' : '#f3ca0f',
+              border: `1px solid ${syncing ? '#333' : 'rgba(243,202,15,0.35)'}`,
               background: 'transparent', borderRadius: '6px',
               cursor: syncing ? 'not-allowed' : 'pointer', transition: 'background 150ms',
             }}
-            onMouseEnter={e => { if (!syncing) e.currentTarget.style.background = 'rgba(232,168,56,0.08)' }}
+            onMouseEnter={e => { if (!syncing) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
             {syncing ? '↻ Syncing…' : '↻ Sync Cin7'}
@@ -317,8 +348,8 @@ export default function PurchaseOrders() {
       {/* ── KPI cards ──────────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '24px' }}>
         <KpiCard label="Showing"       value={visible.length} />
-        <KpiCard label="Overdue"       value={overdue.length} valueStyle={overdue.length > 0 ? { color: '#EF4444' } : {}} />
-        <KpiCard label="Due This Week" value={dueSoon.length} valueStyle={dueSoon.length > 0 ? { color: '#E8A838' } : {}} />
+        <KpiCard label="Overdue"       value={overdue.length} valueStyle={overdue.length > 0 ? { color: '#ff1744' } : {}} />
+        <KpiCard label="Due This Week" value={dueSoon.length} valueStyle={dueSoon.length > 0 ? { color: '#f3ca0f' } : {}} />
         <KpiCard label="Order Sent"    value={visible.filter(o => o.has_attachment).length} />
       </div>
 
@@ -336,15 +367,39 @@ export default function PurchaseOrders() {
       ) : (
 
       /* ── Desktop: table ──────────────────────────────────────────────────── */
-        <div style={{ background: '#0c0c0c', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
+        <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
-                {[['PO #', 'left'], ['Created', 'left'], ['Supplier', 'left'], ['Status', 'left'], ['Due Date', 'left'], ['Order Sent', 'center']].map(([h, align]) => (
-                  <th key={h} style={{ padding: '10px 14px', textAlign: align, fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>
-                    {h}
-                  </th>
-                ))}
+              <tr style={{ borderBottom: '1px solid var(--border-default)' }}>
+                {[
+                  { label: 'PO #',       key: 'po_number',     align: 'left' },
+                  { label: 'Created',     key: 'order_date',    align: 'left' },
+                  { label: 'Supplier',    key: 'supplier_name', align: 'left' },
+                  { label: 'Status',      key: 'status',        align: 'left' },
+                  { label: 'Due Date',    key: 'due_date',      align: 'left' },
+                  { label: 'Order Sent',  key: 'has_attachment', align: 'center' },
+                ].map(col => {
+                  const active = sortCol === col.key
+                  return (
+                    <th
+                      key={col.key}
+                      onClick={() => handleSort(col.key)}
+                      style={{
+                        padding: '10px 14px', textAlign: col.align,
+                        fontSize: '10px', fontFamily: 'var(--font-mono)',
+                        color: active ? 'var(--accent)' : 'var(--text-disabled)',
+                        textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500,
+                        cursor: 'pointer', userSelect: 'none', transition: 'color 150ms',
+                      }}
+                    >
+                      {col.label}
+                      <ArrowUpDown size={10} strokeWidth={1.5} style={{
+                        display: 'inline', marginLeft: 4, verticalAlign: 'middle',
+                        opacity: active ? 1 : 0.3,
+                      }} />
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
@@ -368,7 +423,7 @@ export default function PurchaseOrders() {
                     >
                       <td style={{ padding: '11px 14px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace', fontWeight: 500 }}>
                         <a href={`https://inventory.dearsystems.com/Purchase#${po.cin7_id}`} target="_blank" rel="noopener noreferrer"
-                          style={{ color: '#E8A838', textDecoration: 'none' }}
+                          style={{ color: '#f3ca0f', textDecoration: 'none' }}
                           onMouseEnter={e => { e.currentTarget.style.textDecoration = 'underline' }}
                           onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none' }}>
                           {po.po_number}
@@ -387,7 +442,7 @@ export default function PurchaseOrders() {
                         <DueDateCell poId={po.id} due={po.due_date} onSaved={handleDueSaved} />
                       </td>
                       <td style={{ padding: '11px 14px', textAlign: 'center' }}>
-                        {po.has_attachment && <span title="Order sent" style={{ color: '#4ade80', fontSize: '15px' }}>✓</span>}
+                        {po.has_attachment && <CheckCircle2 size={16} strokeWidth={1.5} style={{ color: 'var(--status-success)' }} />}
                       </td>
                     </tr>
                   )

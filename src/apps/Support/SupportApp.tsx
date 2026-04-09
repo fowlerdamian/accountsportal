@@ -17,7 +17,7 @@ import NotFound from '@/pages/NotFound';
 
 const queryClient = new QueryClient();
 
-// Mounted at /support/* in the accounts portal.
+// Mounted at /support/* in the staff portal.
 // AuthProvider tracks Supabase session state but no ProtectedRoute — /support is public.
 export default function SupportApp() {
   return (

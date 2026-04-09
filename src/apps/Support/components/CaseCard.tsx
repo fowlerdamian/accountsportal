@@ -23,7 +23,7 @@ export function CaseCard({ caseData, index }: CaseCardProps) {
       transition={{ duration: 0.2, delay: index * 0.05 }}
       onClick={() => navigate(`/support/cases/${caseData.id}`)}
       style={{
-        background: '#111116',
+        background: '#0a0a0a',
         border: '1px solid #222228',
         borderLeft: `3px solid ${borderColor}`,
         borderRadius: '8px',
@@ -32,7 +32,7 @@ export function CaseCard({ caseData, index }: CaseCardProps) {
         userSelect: 'none',
       }}
       whileHover={{
-        borderColor: 'rgba(232,168,56,0.35)',
+        borderColor: 'rgba(243,202,15,0.35)',
         y: -1,
         boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
       }}
@@ -47,7 +47,7 @@ export function CaseCard({ caseData, index }: CaseCardProps) {
               marginLeft: 'auto',
               fontSize: '11px',
               fontFamily: '"JetBrains Mono", monospace',
-              color: '#E8A838',
+              color: '#f3ca0f',
             }}
           >
             #{caseData.case_number}
@@ -55,7 +55,7 @@ export function CaseCard({ caseData, index }: CaseCardProps) {
         </div>
 
         {/* Title */}
-        <p style={{ fontSize: '14px', fontWeight: 600, color: '#E5E5E5', margin: '0 0 4px' }}>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', margin: '0 0 4px' }}>
           {caseData.title}
         </p>
 
@@ -68,7 +68,7 @@ export function CaseCard({ caseData, index }: CaseCardProps) {
             marginBottom: '12px',
             fontSize: '11px',
             fontFamily: '"JetBrains Mono", monospace',
-            color: '#555',
+            color: '#a0a0a0',
           }}
         >
           <span>Order {caseData.order_number}</span>

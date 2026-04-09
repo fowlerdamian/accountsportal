@@ -22,7 +22,7 @@ type AnnotateTool = "circle" | "arrow" | "select";
 type StrokeWeight = 2 | 3 | 5;
 
 const COLOUR_SWATCHES = [
-  { label: "Red", hex: "#EF4444" },
+  { label: "Red", hex: "#ff1744" },
   { label: "Yellow", hex: "#FBBF24" },
   { label: "White", hex: "#FFFFFF" },
   { label: "Black", hex: "#111827" },

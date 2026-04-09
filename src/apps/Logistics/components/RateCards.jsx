@@ -72,8 +72,8 @@ function SubTab({ label, active, onClick }) {
       onClick={onClick}
       style={{
         padding: '8px 16px', fontSize: '12px', fontWeight: 500, cursor: 'pointer',
-        background: 'transparent', border: 'none', borderBottom: `2px solid ${active ? '#E8A838' : 'transparent'}`,
-        color: active ? '#E8A838' : '#666', transition: 'color 120ms',
+        background: 'transparent', border: 'none', borderBottom: `2px solid ${active ? '#f3ca0f' : 'transparent'}`,
+        color: active ? '#f3ca0f' : '#666', transition: 'color 120ms',
       }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#AAA' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#666' }}
@@ -244,26 +244,26 @@ export default function RateCards() {
   // ─── Styles ─────────────────────────────────────────────────────────────────
 
   const inputStyle = {
-    background: '#111', border: '1px solid #2a2a2a', borderRadius: '6px',
-    color: '#E5E5E5', fontSize: '13px', padding: '7px 10px', outline: 'none',
+    background: '#0a0a0a', border: '1px solid #222222', borderRadius: '6px',
+    color: '#ffffff', fontSize: '13px', padding: '7px 10px', outline: 'none',
     fontFamily: 'inherit', width: '100%', boxSizing: 'border-box',
   }
 
   const btnPrimary = {
     fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
-    cursor: 'pointer', color: '#E8A838', border: '1px solid rgba(232,168,56,0.35)',
+    cursor: 'pointer', color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)',
     background: 'transparent', transition: 'background 120ms',
   }
 
   const btnGhost = {
     fontSize: '12px', padding: '6px 14px', borderRadius: '6px',
-    cursor: 'pointer', color: '#555', border: '1px solid #222', background: 'transparent',
+    cursor: 'pointer', color: '#a0a0a0', border: '1px solid #222', background: 'transparent',
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#E8A838', borderTopColor: 'transparent' }} />
+        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }} />
       </div>
     )
   }
@@ -274,15 +274,15 @@ export default function RateCards() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
-          <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', margin: 0 }}>Rate Cards</h1>
-          <p style={{ fontSize: '13px', color: '#555', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>Contracted freight rates by carrier and lane</p>
+          <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0 }}>Rate Cards</h1>
+          <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>Contracted freight rates by carrier and lane</p>
         </div>
         {activeSubTab === 'rates' && (
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
               onClick={openUploadModal}
               style={btnPrimary}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,168,56,0.08)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
             >
               Upload rate card
@@ -290,7 +290,7 @@ export default function RateCards() {
             <button
               onClick={() => setShowForm(v => !v)}
               style={btnPrimary}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,168,56,0.08)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
             >
               + Add rate
@@ -312,7 +312,7 @@ export default function RateCards() {
         <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
           background: msg.type === 'ok' ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)',
           border: `1px solid ${msg.type === 'ok' ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`,
-          color: msg.type === 'ok' ? '#4ade80' : '#EF4444' }}>
+          color: msg.type === 'ok' ? '#4ade80' : '#ff1744' }}>
           {msg.text}
         </div>
       )}
@@ -321,8 +321,8 @@ export default function RateCards() {
       {activeSubTab === 'rates' && (
         <>
           {showForm && (
-            <div style={{ background: '#0c0c0c', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-              <p style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>New rate card entry</p>
+            <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+              <p style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>New rate card entry</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px', marginBottom: '12px' }}>
                 <select
                   value={form.carrier_id}
@@ -354,11 +354,11 @@ export default function RateCards() {
             return (
               <div key={carrier.id} style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#E5E5E5' }}>{carrier.name}</span>
-                  {carrier.email && <span style={{ fontSize: '12px', color: '#555', fontFamily: '"JetBrains Mono", monospace' }}>{carrier.email}</span>}
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>{carrier.name}</span>
+                  {carrier.email && <span style={{ fontSize: '12px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace' }}>{carrier.email}</span>}
                   <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#444', fontFamily: '"JetBrains Mono", monospace' }}>{rates.length} rate{rates.length !== 1 ? 's' : ''}</span>
                 </div>
-                <div style={{ background: '#0c0c0c', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
                   {rates.length === 0 ? (
                     <p style={{ padding: '16px', fontSize: '13px', color: '#444', fontFamily: '"JetBrains Mono", monospace', margin: 0 }}>
                       No rate card loaded — add rates above
@@ -375,11 +375,11 @@ export default function RateCards() {
                       <tbody>
                         {rates.map(r => (
                           <tr key={r.id} style={{ borderBottom: '1px solid #181818', transition: 'background 120ms' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#111'}
+                            onMouseEnter={e => e.currentTarget.style.background = '#0a0a0a'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{r.service}</td>
                             <td style={{ padding: '11px 14px', fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace' }}>{r.lane}</td>
-                            <td style={{ padding: '11px 14px', fontSize: '13px', color: '#E8A838', fontWeight: 500, textAlign: 'right' }}>{r.rate}</td>
+                            <td style={{ padding: '11px 14px', fontSize: '13px', color: '#f3ca0f', fontWeight: 500, textAlign: 'right' }}>{r.rate}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -394,7 +394,7 @@ export default function RateCards() {
 
       {/* ── Carriers tab ───────────────────────────────────────────────────────── */}
       {activeSubTab === 'carriers' && (
-        <div style={{ background: '#0c0c0c', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
+        <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
@@ -438,7 +438,7 @@ export default function RateCards() {
                         onClick={() => saveCarrier(carrier.id)}
                         disabled={!dirty || isSaving}
                         style={{ ...btnPrimary, opacity: (!dirty || isSaving) ? 0.4 : 1, cursor: (!dirty || isSaving) ? 'default' : 'pointer' }}
-                        onMouseEnter={e => { if (dirty && !isSaving) e.currentTarget.style.background = 'rgba(232,168,56,0.08)' }}
+                        onMouseEnter={e => { if (dirty && !isSaving) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                       >
                         {isSaving ? 'Saving…' : 'Save'}
@@ -455,16 +455,16 @@ export default function RateCards() {
       {/* ── Upload modal ───────────────────────────────────────────────────────── */}
       {uploadModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#111', border: '1px solid #2a2a2a', borderRadius: '10px', width: '100%', maxWidth: '480px', padding: '24px' }}>
+          <div style={{ background: '#0a0a0a', border: '1px solid #222222', borderRadius: '10px', width: '100%', maxWidth: '480px', padding: '24px' }}>
 
             {!uploadDone ? (
               <>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#E5E5E5', margin: '0 0 4px' }}>Upload rate card</p>
-                <p style={{ fontSize: '12px', color: '#555', fontFamily: '"JetBrains Mono", monospace', margin: '0 0 20px' }}>CSV will be appended — existing rates are not deleted</p>
+                <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', margin: '0 0 4px' }}>Upload rate card</p>
+                <p style={{ fontSize: '12px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', margin: '0 0 20px' }}>CSV will be appended — existing rates are not deleted</p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
                   <div>
-                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>Carrier</label>
+                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>Carrier</label>
                     <select
                       value={uploadCarrierId}
                       onChange={e => setUploadCarrierId(e.target.value)}
@@ -476,7 +476,7 @@ export default function RateCards() {
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>CSV File</label>
+                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>CSV File</label>
                     <input
                       type="file"
                       accept=".csv"
@@ -487,8 +487,8 @@ export default function RateCards() {
 
                   <button
                     onClick={downloadTemplate}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: '#555', textAlign: 'left', transition: 'color 120ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#E8A838' }}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textAlign: 'left', transition: 'color 120ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#f3ca0f' }}
                     onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
                   >
                     ↓ Download template
@@ -500,7 +500,7 @@ export default function RateCards() {
                     onClick={handleUpload}
                     disabled={uploading || !uploadCarrierId || !uploadCsvText}
                     style={{ ...btnPrimary, opacity: (uploading || !uploadCarrierId || !uploadCsvText) ? 0.5 : 1, cursor: (uploading || !uploadCarrierId || !uploadCsvText) ? 'not-allowed' : 'pointer' }}
-                    onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'rgba(232,168,56,0.08)' }}
+                    onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                   >
                     {uploading ? 'Uploading…' : 'Upload'}
@@ -510,22 +510,22 @@ export default function RateCards() {
               </>
             ) : (
               <>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#E5E5E5', margin: '0 0 16px' }}>Upload complete</p>
+                <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', margin: '0 0 16px' }}>Upload complete</p>
 
-                <div style={{ background: '#0c0c0c', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
+                <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
                   <p style={{ margin: '0 0 4px', color: '#4ade80' }}>{uploadResult.added} rate{uploadResult.added !== 1 ? 's' : ''} added</p>
-                  {uploadResult.superseded > 0 && <p style={{ margin: '0 0 4px', color: '#E8A838' }}>{uploadResult.superseded} existing rate{uploadResult.superseded !== 1 ? 's' : ''} superseded</p>}
-                  {uploadResult.skipped.length > 0 && <p style={{ margin: '0 0 4px', color: '#EF4444' }}>{uploadResult.skipped.length} row{uploadResult.skipped.length !== 1 ? 's' : ''} skipped</p>}
+                  {uploadResult.superseded > 0 && <p style={{ margin: '0 0 4px', color: '#f3ca0f' }}>{uploadResult.superseded} existing rate{uploadResult.superseded !== 1 ? 's' : ''} superseded</p>}
+                  {uploadResult.skipped.length > 0 && <p style={{ margin: '0 0 4px', color: '#ff1744' }}>{uploadResult.skipped.length} row{uploadResult.skipped.length !== 1 ? 's' : ''} skipped</p>}
                 </div>
 
                 {uploadResult.skipped.length > 0 && (
                   <div style={{ marginBottom: '16px' }}>
-                    <p style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#555', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>Skipped rows</p>
-                    <div style={{ background: '#0c0c0c', border: '1px solid #1e1e1e', borderRadius: '6px', overflow: 'hidden' }}>
+                    <p style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>Skipped rows</p>
+                    <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', overflow: 'hidden' }}>
                       {uploadResult.skipped.map((s, i) => (
                         <div key={i} style={{ padding: '8px 12px', borderBottom: i < uploadResult.skipped.length - 1 ? '1px solid #181818' : 'none', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace' }}>
-                          <span style={{ color: '#555' }}>Row {s.row} · </span>
-                          <span style={{ color: '#EF4444' }}>{s.reason}</span>
+                          <span style={{ color: '#a0a0a0' }}>Row {s.row} · </span>
+                          <span style={{ color: '#ff1744' }}>{s.reason}</span>
                         </div>
                       ))}
                     </div>
@@ -535,7 +535,7 @@ export default function RateCards() {
                 <button
                   onClick={closeUploadModal}
                   style={btnPrimary}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,168,56,0.08)' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                 >
                   Done

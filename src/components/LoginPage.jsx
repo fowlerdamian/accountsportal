@@ -60,7 +60,7 @@ export default function LoginPage() {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center p-6"
-      style={{ background: '#080808' }}
+      style={{ background: '#000000' }}
     >
       <div
         className="w-full max-w-sm rounded-lg p-8 flex flex-col gap-7"
@@ -69,15 +69,15 @@ export default function LoginPage() {
         {/* Logo / wordmark */}
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2.5">
-            <div className="w-1.5 h-6 rounded-sm" style={{ background: '#E8A838' }} />
+            <div className="w-1.5 h-6 rounded-sm" style={{ background: '#f3ca0f' }} />
             <span
               className="text-base font-semibold tracking-widest uppercase"
-              style={{ color: '#E5E5E5' }}
+              style={{ color: '#ffffff' }}
             >
-              AGA Tools
+              Staff Portal
             </span>
           </div>
-          <p className="text-[11px] font-mono pl-4" style={{ color: '#555' }}>
+          <p className="text-[11px] font-mono pl-4" style={{ color: '#a0a0a0' }}>
             Internal portal · Sign in to continue
           </p>
         </div>
@@ -92,7 +92,7 @@ export default function LoginPage() {
               <p className="text-sm font-medium" style={{ color: '#86EFAC' }}>
                 Check your inbox
               </p>
-              <p className="text-xs font-mono" style={{ color: '#555' }}>
+              <p className="text-xs font-mono" style={{ color: '#a0a0a0' }}>
                 We've sent a login link to <span style={{ color: '#888' }}>{email.trim()}</span>.
                 The link expires in 60 minutes.
               </p>
@@ -100,7 +100,7 @@ export default function LoginPage() {
             <button
               onClick={() => { setSent(false); setEmail('') }}
               className="text-xs font-mono text-center transition-colors"
-              style={{ color: '#555', background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ color: '#a0a0a0', background: 'none', border: 'none', cursor: 'pointer' }}
               onMouseEnter={(e) => { e.currentTarget.style.color = '#888' }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#555' }}
             >
@@ -113,7 +113,7 @@ export default function LoginPage() {
             <div className="flex flex-col gap-1.5">
               <label
                 className="text-[11px] uppercase tracking-widest font-medium"
-                style={{ color: '#555' }}
+                style={{ color: '#a0a0a0' }}
               >
                 Email
               </label>
@@ -128,11 +128,11 @@ export default function LoginPage() {
                 className="w-full rounded px-3 py-2.5 text-sm font-mono outline-none transition-colors"
                 style={{
                   background: '#0a0a0c',
-                  border: '1px solid #2a2a2e',
-                  color: '#E5E5E5',
+                  border: '1px solid #222222',
+                  color: '#ffffff',
                 }}
-                onFocus={(e) => { e.target.style.borderColor = '#E8A838' }}
-                onBlur={(e)  => { e.target.style.borderColor = '#2a2a2e' }}
+                onFocus={(e) => { e.target.style.borderColor = '#f3ca0f' }}
+                onBlur={(e)  => { e.target.style.borderColor = '#222222' }}
               />
             </div>
 
@@ -154,7 +154,7 @@ export default function LoginPage() {
               disabled={submitting}
               className="w-full py-2.5 rounded text-sm font-semibold tracking-wide uppercase mt-1"
               style={{
-                background: submitting ? '#8a6220' : '#E8A838',
+                background: submitting ? '#8a6220' : '#f3ca0f',
                 color: '#0a0a0a',
                 opacity: submitting ? 0.7 : 1,
                 cursor: submitting ? 'not-allowed' : 'pointer',

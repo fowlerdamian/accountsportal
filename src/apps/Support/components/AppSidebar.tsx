@@ -1,5 +1,5 @@
 import { LayoutDashboard, PlusCircle, Settings, LogOut, BarChart3, ClipboardList, Package } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useActionItemsCount } from '@/hooks/useActionItemsCount';
@@ -33,14 +33,15 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
       'flex items-center gap-3 px-3 py-2.5 text-xs font-medium transition-colors duration-150 border-l-2',
       'font-mono tracking-wide uppercase',
       isActive
-        ? 'text-[#E8A838] border-[#E8A838] bg-[rgba(232,168,56,0.06)]'
-        : 'text-[#555] border-transparent hover:text-[#E5E5E5] hover:border-[#333]'
+        ? 'text-[#f3ca0f] border-[#f3ca0f] bg-[rgba(243,202,15,0.06)]'
+        : 'text-[#555] border-transparent hover:text-[#ffffff] hover:border-[#333]'
     );
 
   const sidebarContent = (
     <>
-      {/* Wordmark — mirrors portal header style */}
-      <div
+      {/* Wordmark — back to dashboard */}
+      <Link
+        to="/dashboard"
         style={{
           height: '48px',
           flexShrink: 0,
@@ -48,14 +49,15 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
           alignItems: 'center',
           gap: '8px',
           padding: '0 20px',
-          borderBottom: '1px solid #1e1e22',
+          borderBottom: '1px solid #222222',
+          textDecoration: 'none',
         }}
       >
-        <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#E8A838', flexShrink: 0 }} />
-        <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#E5E5E5' }}>
-          Support Hub
+        <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#f3ca0f', flexShrink: 0 }} />
+        <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff' }}>
+          Dashboard
         </span>
-      </div>
+      </Link>
 
       <nav className="flex-1 flex flex-col gap-0.5 px-2 pt-3">
         {navItems.map((item) => (
@@ -71,7 +73,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
             {item.path === '/support/actions' && actionCount > 0 && (
               <span
                 className="ml-auto h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-medium rounded-sm"
-                style={{ background: 'rgba(239,68,68,0.2)', color: '#EF4444' }}
+                style={{ background: 'rgba(239,68,68,0.2)', color: '#ff1744' }}
               >
                 {actionCount}
               </span>
@@ -87,7 +89,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
             {!isMobile && item.path === '/support/cases/new' && (
               <span
                 className="ml-auto text-[9px] border px-1"
-                style={{ color: '#444', borderColor: '#2a2a2a', fontFamily: '"JetBrains Mono", monospace' }}
+                style={{ color: '#444', borderColor: '#222222', fontFamily: '"JetBrains Mono", monospace' }}
               >
                 N
               </span>
@@ -138,22 +140,22 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
             textTransform: 'uppercase',
             color: '#666',
             background: 'none',
-            border: '1px solid #282828',
+            border: '1px solid #222222',
             borderRadius: '4px',
             cursor: 'pointer',
             transition: 'color 120ms, border-color 120ms',
             fontFamily: 'inherit',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#E8A838';
-            e.currentTarget.style.borderColor = 'rgba(232,168,56,0.4)';
+            e.currentTarget.style.color = '#f3ca0f';
+            e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.color = '#666';
-            e.currentTarget.style.borderColor = '#282828';
+            e.currentTarget.style.borderColor = '#222222';
           }}
         >
-          <LogOut size={12} />
+          <LogOut size={14} strokeWidth={1.5} />
           <span>Sign out</span>
         </button>
       </div>
@@ -163,7 +165,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="left" className="w-56 p-0 flex flex-col" style={{ background: '#080808', borderRight: '1px solid #1e1e22' }}>
+        <SheetContent side="left" className="w-56 p-0 flex flex-col" style={{ background: '#000000', borderRight: '1px solid #222222' }}>
           <VisuallyHidden.Root>
             <SheetTitle>Navigation</SheetTitle>
           </VisuallyHidden.Root>
@@ -176,7 +178,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   return (
     <aside
       className="fixed left-0 top-0 bottom-0 w-56 flex flex-col z-30"
-      style={{ background: '#080808', borderRight: '1px solid #1e1e22' }}
+      style={{ background: '#000000', borderRight: '1px solid #222222' }}
     >
       {sidebarContent}
     </aside>

@@ -1,88 +1,144 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Design token overrides — Support Hub inherits portal's visual language */
 @layer base {
   :root {
-    /* Portal exact palette */
-    --background: 0 0% 3%;          /* #080808 */
-    --foreground: 0 0% 90%;         /* #E5E5E5 */
-    --card: 240 7% 7%;              /* #111116 */
-    --card-foreground: 0 0% 90%;
-    --popover: 240 4% 9%;           /* ~#141417 */
-    --popover-foreground: 0 0% 90%;
+    /* Backgrounds */
+    --bg-primary: #000000;
+    --bg-elevated: #0a0a0a;
+    --bg-surface: #111111;
+    --bg-hover: #1a1a1a;
+    --bg-active: #222222;
 
-    /* Amber accent — matches portal's #E8A838 */
-    --primary: 38 79% 57%;          /* #E8A838 */
-    --primary-foreground: 0 0% 5%;  /* near-black text on amber */
+    /* Borders */
+    --border-default: #222222;
+    --border-subtle: #1a1a1a;
+    --border-strong: #333333;
 
-    --secondary: 240 4% 12%;        /* ~#1e1e22 */
-    --secondary-foreground: 0 0% 90%;
-    --muted: 240 4% 10%;            /* ~#181820 */
-    --muted-foreground: 0 0% 37%;   /* #5e5e5e — matches portal's #555/#666 */
-    --accent: 240 4% 12%;
-    --accent-foreground: 0 0% 90%;
-    --destructive: 0 65% 51%;       /* #EF4444 */
+    /* Text */
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a0;
+    --text-tertiary: #666666;
+    --text-disabled: #444444;
+
+    /* Accent (TrailBait Yellow) */
+    --accent: #f3ca0f;
+    --accent-hover: #d4b00d;
+    --accent-muted: #413813;
+    --accent-subtle: rgba(243, 202, 15, 0.1);
+    --accent-text: #141414;
+
+    /* Status */
+    --status-success: #60a57e;
+    --status-warning: #f6a529;
+    --status-error: #ff1744;
+    --status-info: #f3ca0f;
+
+    /* Categorical */
+    --cat-1: #f3ca0f;
+    --cat-2: #4fc3f7;
+    --cat-3: #ef5350;
+    --cat-4: #66bb6a;
+    --cat-5: #ab47bc;
+    --cat-6: #ff7043;
+    --cat-7: #26c6da;
+    --cat-8: #ec407a;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.5);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
+    --shadow-glow: 0 0 20px rgba(243,202,15,0.15);
+
+    /* Radii */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    /* Font */
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+
+    /* shadcn/ui compatibility tokens (mapped to design system) */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 48 92% 50%;
+    --primary-foreground: 0 0% 8%;
+    --secondary: 0 0% 13%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 7%;
+    --muted-foreground: 0 0% 63%;
+    --accent: 0 0% 13%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 348 100% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 4% 12%;           /* #1e1e22 */
-    --input: 240 4% 14%;
-    --ring: 38 79% 57%;             /* amber focus ring */
-    --radius: 8px;                  /* portal card radius */
+    --border: 0 0% 13%;
+    --input: 0 0% 13%;
+    --ring: 48 92% 50%;
+    --radius: 8px;
 
-    /* Status colours */
-    --status-urgent: 0 65% 51%;     /* #EF4444 */
-    --status-warning: 38 79% 57%;   /* #E8A838 amber */
-    --status-progress: 213 94% 58%; /* #3B9EFF blue */
-    --status-resolved: 142 71% 45%; /* #22C55E green */
-    --status-neutral: 0 0% 40%;     /* #666 */
+    /* Status (HSL for Tailwind) */
+    --status-urgent: 348 100% 55%;
+    --status-warning: 36 92% 56%;
+    --status-progress: 199 91% 64%;
+    --status-resolved: 150 27% 51%;
+    --status-neutral: 0 0% 40%;
 
     /* Surface layers */
-    --surface: 240 7% 7%;
-    --surface-elevated: 240 4% 12%;
-    --border-hover: 240 4% 18%;
+    --surface: 0 0% 4%;
+    --surface-elevated: 0 0% 7%;
+    --border-hover: 0 0% 20%;
 
-    /* Sidebar — same dark as portal */
-    --sidebar-background: 0 0% 3%;
-    --sidebar-foreground: 0 0% 37%;
-    --sidebar-primary: 38 79% 57%;
-    --sidebar-primary-foreground: 0 0% 5%;
-    --sidebar-accent: 240 4% 12%;
-    --sidebar-accent-foreground: 0 0% 90%;
-    --sidebar-border: 240 4% 12%;
-    --sidebar-ring: 38 79% 57%;
+    /* Sidebar */
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 0 0% 63%;
+    --sidebar-primary: 48 92% 50%;
+    --sidebar-primary-foreground: 0 0% 8%;
+    --sidebar-accent: 0 0% 13%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 13%;
+    --sidebar-ring: 48 92% 50%;
   }
 }
 
 @layer base {
   html, body, #root {
     height: 100%;
-    background-color: #080808;
-    color: #E5E5E5;
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
   }
 
   * {
     box-sizing: border-box;
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    @apply bg-background text-foreground;
   }
 }
 
 @layer utilities {
-  /* Custom scrollbars */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #0a0a0a;
+    background: var(--bg-elevated);
   }
   ::-webkit-scrollbar-thumb {
-    background: #2a2a2a;
+    background: var(--border-default);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #E8A838;
+    background: var(--accent);
   }
 }

@@ -13,10 +13,10 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'Consolas', 'monospace'],
-        heading: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
-        body: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'monospace'],
+        heading: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
+        body: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
@@ -49,11 +49,24 @@ export default {
         surface: 'hsl(var(--surface))',
         'surface-elevated': 'hsl(var(--surface-elevated))',
         'border-hover': 'hsl(var(--border-hover))',
+        // Design system direct tokens
+        cat: {
+          1: '#f3ca0f', 2: '#4fc3f7', 3: '#ef5350', 4: '#66bb6a',
+          5: '#ab47bc', 6: '#ff7043', 7: '#26c6da', 8: '#ec407a',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      fontSize: {
+        'page-title': ['1.5rem', { lineHeight: '1.2', letterSpacing: '-0.02em', fontWeight: '600' }],
+        'section': ['1.125rem', { lineHeight: '1.3', letterSpacing: '-0.01em', fontWeight: '600' }],
+        'card-title': ['0.9375rem', { lineHeight: '1.4', letterSpacing: '-0.01em', fontWeight: '500' }],
+        'body': ['0.875rem', { lineHeight: '1.5', fontWeight: '400' }],
+        'caption': ['0.75rem', { lineHeight: '1.5', letterSpacing: '0.02em', fontWeight: '400' }],
+        'label': ['0.6875rem', { lineHeight: '1.4', letterSpacing: '0.05em', fontWeight: '500' }],
       },
       keyframes: {
         'accordion-down': { from: { height: '0' }, to: { height: 'var(--radix-accordion-content-height)' } },

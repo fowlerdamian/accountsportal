@@ -5,8 +5,8 @@ import LogisticsNav from './LogisticsNav.jsx'
 import { aud, invoiceOvercharge } from '../utils/helpers.js'
 
 const STATUS_STYLE = {
-  flagged:  { color: '#E8A838', background: 'rgba(232,168,56,0.1)', border: '1px solid rgba(232,168,56,0.3)' },
-  disputed: { color: '#EF4444', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
+  flagged:  { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
 }
 
 export default function Disputes() {
@@ -29,7 +29,7 @@ export default function Disputes() {
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#E8A838', borderTopColor: 'transparent' }} />
+        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }} />
       </div>
     )
   }
@@ -40,23 +40,23 @@ export default function Disputes() {
     <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
 
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', margin: 0 }}>Disputes</h1>
-        <p style={{ fontSize: '13px', color: '#555', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>Flagged and disputed invoices requiring attention</p>
+        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0 }}>Disputes</h1>
+        <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>Flagged and disputed invoices requiring attention</p>
       </div>
 
       <LogisticsNav />
 
       {invoices.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', background: 'rgba(232,168,56,0.06)', border: '1px solid rgba(232,168,56,0.25)' }}>
-          <span style={{ color: '#E8A838', fontSize: '14px', flexShrink: 0, marginTop: '1px' }}>⚠</span>
-          <p style={{ margin: 0, fontSize: '13px', color: '#E8A838' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', background: 'rgba(243,202,15,0.06)', border: '1px solid rgba(243,202,15,0.25)' }}>
+          <span style={{ color: '#f3ca0f', fontSize: '14px', flexShrink: 0, marginTop: '1px' }}>!</span>
+          <p style={{ margin: 0, fontSize: '13px', color: '#f3ca0f' }}>
             <span style={{ fontWeight: 600 }}>{invoices.length} invoice{invoices.length !== 1 ? 's' : ''} in dispute</span>
             {totalOver > 0 && <> · <span style={{ fontWeight: 600 }}>{aud(totalOver)}</span> total overcharge</>}
           </p>
         </div>
       )}
 
-      <div style={{ background: '#0c0c0c', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
+      <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
@@ -75,10 +75,10 @@ export default function Disputes() {
                   key={inv.id}
                   onClick={() => navigate(`/apps/logistics/invoices/${inv.id}`)}
                   style={{ borderBottom: '1px solid #181818', cursor: 'pointer', transition: 'background 120ms' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#111'}
+                  onMouseEnter={e => e.currentTarget.style.background = '#0a0a0a'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
-                  <td style={{ padding: '11px 14px', fontSize: '13px', color: '#E5E5E5', fontWeight: 500 }}>{inv.invoice_ref}</td>
+                  <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff', fontWeight: 500 }}>{inv.invoice_ref}</td>
                   <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{inv.carriers?.name ?? '—'}</td>
                   <td style={{ padding: '11px 14px' }}>
                     <span style={{ ...ss, display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', textTransform: 'capitalize' }}>
@@ -87,10 +87,10 @@ export default function Disputes() {
                   </td>
                   <td style={{ padding: '11px 14px', fontSize: '13px', textAlign: 'right' }}>
                     {over > 0
-                      ? <span style={{ color: '#EF4444', fontWeight: 500 }}>{aud(over)}</span>
+                      ? <span style={{ color: '#ff1744', fontWeight: 500 }}>{aud(over)}</span>
                       : <span style={{ color: '#444' }}>—</span>}
                   </td>
-                  <td style={{ padding: '11px 14px', fontSize: '12px', color: '#555', fontFamily: '"JetBrains Mono", monospace', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <td style={{ padding: '11px 14px', fontSize: '12px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {inv.notes || '—'}
                   </td>
                   <td style={{ padding: '11px 14px', color: '#333', fontSize: '14px' }}>›</td>

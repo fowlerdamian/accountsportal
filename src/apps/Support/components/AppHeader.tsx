@@ -18,8 +18,8 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
       style={{
         flexShrink: 0,
         height: '48px',
-        background: '#0c0c0e',
-        borderBottom: '1px solid #1e1e22',
+        background: '#0a0a0a',
+        borderBottom: '1px solid #222222',
       }}
     >
       {/* Left: hamburger (mobile) or wordmark accent bar */}
@@ -30,19 +30,19 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
               onClick={onMenuClick}
               style={{ color: '#666', background: 'none', border: 'none', cursor: 'pointer', padding: '6px', marginLeft: '-6px' }}
             >
-              <Menu size={18} />
+              <Menu size={18} strokeWidth={1.5} />
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#E8A838' }} />
-              <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#E5E5E5' }}>
+              <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#f3ca0f' }} />
+              <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff' }}>
                 Support Hub
               </span>
             </div>
           </>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#E8A838' }} />
-            <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#E5E5E5' }}>
+            <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#f3ca0f' }} />
+            <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff' }}>
               Support Hub
             </span>
           </div>
@@ -58,7 +58,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
               style={{
                 fontSize: '11px',
                 fontFamily: '"JetBrains Mono", monospace',
-                color: '#555',
+                color: '#a0a0a0',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
@@ -81,7 +81,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
                 justifyContent: 'center',
                 fontSize: '11px',
                 fontWeight: 600,
-                color: '#0c0c0e',
+                color: '#0a0a0a',
                 backgroundColor: teamMember.avatar_colour,
                 borderRadius: '3px',
                 cursor: 'pointer',
@@ -103,7 +103,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
               textTransform: 'uppercase',
               color: '#666',
               background: 'none',
-              border: '1px solid #282828',
+              border: '1px solid #222222',
               borderRadius: '4px',
               padding: '4px 10px',
               cursor: 'pointer',
@@ -111,12 +111,12 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
               fontFamily: 'inherit',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#E8A838';
-              e.currentTarget.style.borderColor = 'rgba(232,168,56,0.4)';
+              e.currentTarget.style.color = '#f3ca0f';
+              e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.color = '#666';
-              e.currentTarget.style.borderColor = '#282828';
+              e.currentTarget.style.borderColor = '#222222';
             }}
           >
             Sign out

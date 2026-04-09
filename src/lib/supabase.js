@@ -12,7 +12,7 @@ export const supabase = createClient(
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
-    '[AGA Tools] Supabase env vars not set.\n' +
+    '[Staff Portal] Supabase env vars not set.\n' +
     'Copy .env.example → .env.local and add your project credentials.'
   )
 }

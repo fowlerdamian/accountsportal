@@ -7,9 +7,10 @@ import { FileText, Loader2, Upload, AlertTriangle, ImageIcon, Tag } from "lucide
 import { toast } from "sonner";
 import { supabase } from "@guide/integrations/supabase/client";
 import * as pdfjsLib from "pdfjs-dist";
+import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { extractImagesFromPdf, type ExtractionResult } from "@guide/lib/pdfImageExtractor";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 export interface ParsedData {
   title?: string;
@@ -146,6 +147,25 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
     }
   };
 
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
+  const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+
+  const invokeFunction = async (name: string, body: any): Promise<any> => {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${SUPABASE_ANON}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error ?? `Edge function error ${res.status}`);
+    if (data?.error) throw new Error(data.error);
+    return data;
+  };
+
   const extractText = async (buffer: ArrayBuffer): Promise<ParsedData> => {
     setProgressText("Extracting text with AI…");
     const visionCopy = buffer.slice(0);
@@ -173,13 +193,7 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
       invokeBody = { text: fullText };
     }
 
-    const { data, error: fnError } = await supabase.functions.invoke("parse-pdf-text", {
-      body: invokeBody,
-    });
-
-    if (fnError) throw new Error(fnError.message);
-    if (data?.error) throw new Error(data.error);
-    return data;
+    return invokeFunction("parse-pdf-text", invokeBody);
   };
 
   const extractImages = async (buffer: ArrayBuffer): Promise<ExtractionResult> => {
@@ -196,15 +210,13 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
 
       if (!categories || categories.length === 0) return null;
 
-      const { data, error: fnError } = await supabase.functions.invoke("match-category", {
-        body: {
-          title: title || "",
-          short_description: shortDescription || "",
-          categories: categories.map(c => ({ id: c.id, name: c.name })),
-        },
-      });
+      const data = await invokeFunction("match-category", {
+        title: title || "",
+        short_description: shortDescription || "",
+        categories: categories.map(c => ({ id: c.id, name: c.name })),
+      }).catch(() => null);
 
-      if (fnError || !data) return null;
+      if (!data) return null;
 
       // Find the category ID for the matched name
       if (data.matched_category) {

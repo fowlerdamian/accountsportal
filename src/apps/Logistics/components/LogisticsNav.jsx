@@ -39,7 +39,7 @@ export default function LogisticsNav() {
   return (
     <div
       className="flex flex-shrink-0"
-      style={{ borderBottom: '1px solid #1e1e1e', marginBottom: '24px' }}
+      style={{ borderBottom: '1px solid #222222', marginBottom: '24px' }}
     >
       {tabs.map((tab) => {
         const isActive = tab.end
@@ -55,9 +55,9 @@ export default function LogisticsNav() {
             end={tab.end}
             className="flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors border-b-2 outline-none"
             style={{
-              color: isActive ? '#E8A838' : '#666',
-              borderBottomColor: isActive ? '#E8A838' : 'transparent',
-              background: isActive ? 'rgba(232,168,56,0.04)' : 'transparent',
+              color: isActive ? '#f3ca0f' : '#666',
+              borderBottomColor: isActive ? '#f3ca0f' : 'transparent',
+              background: isActive ? 'rgba(243,202,15,0.04)' : 'transparent',
               textDecoration: 'none',
             }}
           >
@@ -68,7 +68,7 @@ export default function LogisticsNav() {
                   width: '7px',
                   height: '7px',
                   borderRadius: '50%',
-                  background: isDanger ? '#EF4444' : '#E8A838',
+                  background: isDanger ? '#ff1744' : '#f3ca0f',
                   flexShrink: 0,
                 }}
               />

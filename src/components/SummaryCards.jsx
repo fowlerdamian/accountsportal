@@ -15,18 +15,18 @@ function fmtPercent(value) {
 
 // ─── Single card ─────────────────────────────────────────────────────────────
 
-function Card({ label, value, sub, valueColor = '#E5E5E5', accent = false }) {
+function Card({ label, value, sub, valueColor = '#ffffff', accent = false }) {
   return (
     <div
       className="rounded-lg p-5 flex flex-col gap-1.5"
       style={{
-        background: '#111',
-        border: `1px solid ${accent ? 'rgba(232,168,56,0.25)' : '#222'}`,
+        background: '#0a0a0a',
+        border: `1px solid ${accent ? 'rgba(243,202,15,0.25)' : '#222'}`,
       }}
     >
       <span
         className="text-[10px] uppercase tracking-[0.12em] font-medium"
-        style={{ color: '#555' }}
+        style={{ color: '#a0a0a0' }}
       >
         {label}
       </span>
@@ -37,7 +37,7 @@ function Card({ label, value, sub, valueColor = '#E5E5E5', accent = false }) {
         {value}
       </span>
       {sub && (
-        <span className="text-[11px] font-mono" style={{ color: '#555' }}>
+        <span className="text-[11px] font-mono" style={{ color: '#a0a0a0' }}>
           {sub}
         </span>
       )}
@@ -50,9 +50,9 @@ function Card({ label, value, sub, valueColor = '#E5E5E5', accent = false }) {
 export default function SummaryCards({ totals }) {
   const { revenue, totalCogs, totalProfit, avgGp, flaggedCount, flagBreakdown } = totals
 
-  const profitColor = totalProfit > 0 ? '#22C55E' : totalProfit < 0 ? '#EF4444' : '#888'
-  const gpColor     = avgGp >= 20 ? '#22C55E' : '#EF4444'
-  const flagColor   = flaggedCount === 0 ? '#22C55E' : flaggedCount <= 3 ? '#E8A838' : '#EF4444'
+  const profitColor = totalProfit > 0 ? '#60a57e' : totalProfit < 0 ? '#ff1744' : '#888'
+  const gpColor     = avgGp >= 20 ? '#60a57e' : '#ff1744'
+  const flagColor   = flaggedCount === 0 ? '#60a57e' : flaggedCount <= 3 ? '#f3ca0f' : '#ff1744'
 
   const flagParts = [
     flagBreakdown.zeroCogs > 0 && `${flagBreakdown.zeroCogs} $0 COGS`,

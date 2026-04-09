@@ -90,9 +90,9 @@ export default function Dashboard() {
                   ))}
                   <td className="p-3 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/guides/${guide.id}/edit`)}>Edit</Button>
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/${guide.slug}`)}>Preview</Button>
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/guides/${guide.id}/share`)}>Share</Button>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}`)}>Edit</Button>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/view/${guide.slug}`)}>Preview</Button>
+                      <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/share`)}>Share</Button>
                     </div>
                   </td>
                 </tr>

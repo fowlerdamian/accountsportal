@@ -1,6 +1,6 @@
-import { supabase } from '@/integrations/supabase/client';
-
-const SITE_URL = 'https://support.automotivegroup.com.au';
+const SITE_URL = 'https://app.automotivegroup.com.au/support';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export function buildCaseUrl(caseId: string): string {
   return `${SITE_URL}/cases/${caseId}`;
@@ -15,16 +15,28 @@ function caseLink(caseId: string, caseNumber: string): string {
   return `<${buildCaseUrl(caseId)}|${caseNumber}>`;
 }
 
-/** Fetch or generate AI summary for a case. Returns summary string. */
-async function getAiSummary(caseId: string, fallbackTitle: string): Promise<string> {
+async function invokeFunction(name: string, body: any): Promise<any> {
   try {
-    const { data } = await supabase.functions.invoke('generate-case-summary', {
-      body: { caseId },
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON,
+        Authorization: `Bearer ${SUPABASE_ANON}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     });
-    return data?.summary || truncate(fallbackTitle, 80);
-  } catch {
-    return truncate(fallbackTitle, 80);
+    return await res.json();
+  } catch (err) {
+    console.warn(`Edge function ${name} failed:`, err);
+    return null;
   }
+}
+
+/** Fetch or generate AI summary for a case. */
+async function getAiSummary(caseId: string, fallbackTitle: string): Promise<string> {
+  const data = await invokeFunction('generate-case-summary', { caseId });
+  return data?.summary || truncate(fallbackTitle, 80);
 }
 
 /**
@@ -32,9 +44,7 @@ async function getAiSummary(caseId: string, fallbackTitle: string): Promise<stri
  * Never throws — silently logs errors so it never blocks the main action.
  */
 function sendToChat(text: string): void {
-  supabase.functions.invoke('notify-google-chat', { body: { text } }).catch((err) => {
-    console.warn('Google Chat notification failed (non-blocking):', err);
-  });
+  invokeFunction('notify-google-chat', { text });
 }
 
 // ── Notification builders ──
@@ -92,4 +102,3 @@ export async function notifyEscalation(opts: {
   const text = `🔴 *ESCALATED — ${link}*\n${summary}\n→ ${opts.adminName} · ${reason}`;
   sendToChat(text);
 }
-

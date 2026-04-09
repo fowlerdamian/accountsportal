@@ -15,13 +15,14 @@ export function AdminLayout() {
     );
   }
 
-  if (!user || !userRole) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  // TODO: re-enable auth — login wall temporarily down
+  // if (!user || !userRole) {
+  //   return <Navigate to="/dashboard" replace />;
+  // }
 
-  const initials = user.user_metadata?.full_name
+  const initials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name.split(" ").map((n: string) => n[0]).join("").toUpperCase()
-    : user.email?.substring(0, 2).toUpperCase() ?? "??";
+    : user?.email?.substring(0, 2).toUpperCase() ?? "??";
 
   return (
     <SidebarProvider>
@@ -32,7 +33,7 @@ export function AdminLayout() {
             <SidebarTrigger className="mr-2 sm:mr-4" />
             <div className="flex-1" />
             <div className="flex items-center gap-2 sm:gap-3">
-              <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
+              <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>
               <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-semibold">
                 {initials}
               </div>

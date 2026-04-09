@@ -18,16 +18,16 @@ function fmtPercent(value) {
 // ─── Color logic ─────────────────────────────────────────────────────────────
 
 function profitColor(value) {
-  if (value > 0.005)  return '#22C55E'
-  if (value < -0.005) return '#EF4444'
+  if (value > 0.005)  return '#60a57e'
+  if (value < -0.005) return '#ff1744'
   return '#888'
 }
 
 function gpColor(gpPercent, invoiceExGst) {
   if (Math.abs(invoiceExGst) < 0.01) return '#888'
   if (gpPercent > 90) return '#F59E0B'
-  if (gpPercent < 20) return '#EF4444'
-  return '#22C55E'
+  if (gpPercent < 20) return '#ff1744'
+  return '#60a57e'
 }
 
 // ─── Flag badges ─────────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ function FlagBadge({ flag }) {
 function Row({ order, isEven }) {
   return (
     <tr style={{ background: isEven ? '#0d0d0d' : '#0a0a0a' }}>
-      <td className="px-4 py-2.5 text-sm font-mono whitespace-nowrap" style={{ color: '#E8A838' }}>
+      <td className="px-4 py-2.5 text-sm font-mono whitespace-nowrap" style={{ color: '#f3ca0f' }}>
         {order.orderNum}
       </td>
       <td className="px-4 py-2.5 text-sm max-w-[180px]" style={{ color: '#CCC' }}>
@@ -138,7 +138,7 @@ export default function DataTable({ orders }) {
                 className={`px-4 py-3 text-[10px] font-medium uppercase tracking-[0.1em] whitespace-nowrap ${
                   col.align === 'right' ? 'text-right' : 'text-left'
                 }`}
-                style={{ color: '#555' }}
+                style={{ color: '#a0a0a0' }}
               >
                 {col.label}
               </th>

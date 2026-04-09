@@ -10,9 +10,9 @@ function Tab({ label, count, active, warn, onClick }) {
       onClick={onClick}
       className="flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors border-b-2 outline-none"
       style={{
-        color: active ? '#E8A838' : '#666',
-        borderBottomColor: active ? '#E8A838' : 'transparent',
-        background: active ? 'rgba(232,168,56,0.04)' : 'transparent',
+        color: active ? '#f3ca0f' : '#666',
+        borderBottomColor: active ? '#f3ca0f' : 'transparent',
+        background: active ? 'rgba(243,202,15,0.04)' : 'transparent',
       }}
       onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = '#AAA' }}
       onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = '#666' }}
@@ -22,11 +22,11 @@ function Tab({ label, count, active, warn, onClick }) {
         className="px-1.5 py-0.5 rounded text-[10px] font-mono"
         style={{
           background: active
-            ? 'rgba(232,168,56,0.15)'
+            ? 'rgba(243,202,15,0.15)'
             : warn
               ? 'rgba(127,29,29,0.5)'
               : '#1a1a1a',
-          color: active ? '#E8A838' : warn ? '#FCA5A5' : '#555',
+          color: active ? '#f3ca0f' : warn ? '#FCA5A5' : '#555',
         }}
       >
         {count}
@@ -62,14 +62,14 @@ export default function ProfitDashboard({ result, onReset, orderLinks = {}, link
       {/* ── Report sub-header ────────────────────────────────────────────────── */}
       <div
         className="flex items-center justify-between flex-wrap gap-3 px-6 py-3 flex-shrink-0"
-        style={{ borderBottom: '1px solid #1e1e1e', background: '#0c0c0e' }}
+        style={{ borderBottom: '1px solid #222222', background: '#0a0a0a' }}
       >
         <div>
           <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: '#888' }}>
             Profit Summary Processor
           </p>
           {period && (
-            <p className="text-[11px] font-mono mt-0.5" style={{ color: '#555' }}>
+            <p className="text-[11px] font-mono mt-0.5" style={{ color: '#a0a0a0' }}>
               {period}
             </p>
           )}
@@ -77,7 +77,7 @@ export default function ProfitDashboard({ result, onReset, orderLinks = {}, link
 
         <div className="flex items-center gap-5">
           <div className="text-right hidden sm:block">
-            <p className="text-[11px] font-mono" style={{ color: '#555' }}>{fileName}</p>
+            <p className="text-[11px] font-mono" style={{ color: '#a0a0a0' }}>{fileName}</p>
             <p className="text-[11px] font-mono" style={{ color: '#444' }}>
               {orders.length} orders processed
             </p>
@@ -86,11 +86,11 @@ export default function ProfitDashboard({ result, onReset, orderLinks = {}, link
             onClick={onReset}
             className="px-4 py-1.5 text-xs font-medium rounded uppercase tracking-wide transition-colors"
             style={{
-              color: '#E8A838',
-              border: '1px solid rgba(232,168,56,0.35)',
+              color: '#f3ca0f',
+              border: '1px solid rgba(243,202,15,0.35)',
               background: 'transparent',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(232,168,56,0.08)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
             New Report
@@ -122,10 +122,10 @@ export default function ProfitDashboard({ result, onReset, orderLinks = {}, link
         {/* Table card */}
         <div
           className="flex flex-col flex-1 overflow-hidden rounded-lg"
-          style={{ border: '1px solid #1e1e1e', background: '#0c0c0c', minHeight: 0 }}
+          style={{ border: '1px solid #222222', background: '#0a0a0a', minHeight: 0 }}
         >
           {/* Tab bar */}
-          <div className="flex flex-shrink-0" style={{ borderBottom: '1px solid #1e1e1e' }}>
+          <div className="flex flex-shrink-0" style={{ borderBottom: '1px solid #222222' }}>
             <Tab
               label="All Orders"
               count={orders.length}

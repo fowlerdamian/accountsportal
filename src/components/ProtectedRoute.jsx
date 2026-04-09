@@ -17,17 +17,17 @@ function GuestGate({ onEnter }) {
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', background: '#080808',
+      justifyContent: 'center', background: '#000000',
     }}>
       <form onSubmit={submit} style={{
         width: '100%', maxWidth: '360px', padding: '0 24px',
         display: 'flex', flexDirection: 'column', gap: '16px',
       }}>
         <div>
-          <div style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', marginBottom: '4px' }}>
+          <div style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', marginBottom: '4px' }}>
             Welcome
           </div>
-          <div style={{ fontSize: '12px', color: '#555', fontFamily: '"JetBrains Mono", monospace' }}>
+          <div style={{ fontSize: '12px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace' }}>
             Enter your email to continue
           </div>
         </div>
@@ -40,15 +40,15 @@ function GuestGate({ onEnter }) {
           autoFocus
           style={{
             width: '100%', boxSizing: 'border-box',
-            background: '#111113', border: '1px solid #2a2a2e',
+            background: '#111113', border: '1px solid #222222',
             borderRadius: '6px', padding: '10px 14px',
-            fontSize: '13px', color: '#E5E5E5', outline: 'none',
+            fontSize: '13px', color: '#ffffff', outline: 'none',
           }}
         />
         <button
           type="submit"
           style={{
-            background: '#E8A838', border: 'none', borderRadius: '6px',
+            background: '#f3ca0f', border: 'none', borderRadius: '6px',
             padding: '10px', fontSize: '13px', fontWeight: 600,
             color: '#000', cursor: 'pointer',
           }}

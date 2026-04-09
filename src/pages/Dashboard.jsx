@@ -10,10 +10,8 @@ export default function PortalDashboard() {
   const { settings } = useTileSettings(user?.id)
   const isAdmin = useIsAdmin()
 
-  // settings === null means still loading — show all while loading
   const visibleApps = APPS.filter(app => {
     if (settings === null) return true
-    // If there's an explicit false entry, hide it; otherwise show
     return settings[app.route] !== false
   })
 
@@ -21,33 +19,18 @@ export default function PortalDashboard() {
 
   return (
     <div style={{
-      flex: 1,
-      overflowY: 'auto',
-      padding: '40px 24px',
-      maxWidth: '1200px',
-      margin: '0 auto',
-      width: '100%',
-      boxSizing: 'border-box',
+      flex: 1, overflowY: 'auto',
+      padding: '32px 24px',
+      maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box',
     }}>
 
       {/* Page heading */}
-      <div style={{ marginBottom: '32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{
-            fontSize: '18px',
-            fontWeight: 600,
-            color: '#E5E5E5',
-            margin: 0,
-            letterSpacing: '-0.01em',
-          }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
             Tools
           </h1>
-          <p style={{
-            fontSize: '13px',
-            color: '#555',
-            margin: '4px 0 0',
-            fontFamily: '"JetBrains Mono", monospace',
-          }}>
+          <p style={{ fontSize: '12px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
             {liveCount} available
           </p>
         </div>
@@ -56,24 +39,13 @@ export default function PortalDashboard() {
           <Link
             to="/dashboard/settings"
             style={{
-              fontSize: '11px',
-              fontWeight: 500,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#555',
-              background: 'none',
-              border: '1px solid #282828',
-              borderRadius: '4px',
-              padding: '6px 12px',
-              cursor: 'pointer',
-              textDecoration: 'none',
-              transition: 'color 120ms, border-color 120ms',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
+              fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: '#a0a0a0', background: 'none', border: '1px solid #222222', borderRadius: '4px',
+              padding: '6px 12px', cursor: 'pointer', textDecoration: 'none',
+              transition: 'color 120ms, border-color 120ms', display: 'inline-flex', alignItems: 'center', gap: '6px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.color = '#E8A838'; e.currentTarget.style.borderColor = 'rgba(232,168,56,0.4)' }}
-            onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.borderColor = '#282828' }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#f3ca0f'; e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.borderColor = '#222222' }}
           >
             Manage Access
           </Link>
@@ -83,8 +55,8 @@ export default function PortalDashboard() {
       {/* Tile grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-        gap: '16px',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+        gap: '12px',
       }}>
         {visibleApps.map((app) => (
           <AppTile key={app.name} app={app} />

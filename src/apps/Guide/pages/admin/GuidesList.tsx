@@ -110,7 +110,7 @@ export default function GuidesList() {
 
       queryClient.invalidateQueries({ queryKey: ["instruction_sets"] });
       toast.success("Guide duplicated");
-      navigate(`/admin/guides/${newGuide.id}/edit`);
+      navigate(`/guide/guides/${newGuide.id}/edit`);
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -193,8 +193,8 @@ export default function GuidesList() {
                       );
                     })}
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/guides/${guide.id}/edit`)}>Edit</Button>
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/guides/${guide.id}/share`)}>Share</Button>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/edit`)}>Edit</Button>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/share`)}>Share</Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateGuide(guide)} title="Duplicate">
                     <Copy className="w-4 h-4" />
                   </Button>

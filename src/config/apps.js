@@ -1,15 +1,15 @@
 // ─── App tile configuration ───────────────────────────────────────────────────
-// To add a new tool, append an object to this array.
+// icon: Lucide icon name (resolved in AppTile.jsx and Layout.jsx)
 // status: 'live' | 'beta' | 'coming-soon'
 // external: true  → opens in new tab (for tools hosted elsewhere)
 // external: false → internal React Router route
 
 export const APPS = [
   {
-    name:        'Profit Processor',
+    name:        'Accounts',
     description: 'Process and flag Cin7 Core Profit Summary Report exports',
     route:       '/apps/profit',
-    icon:        '📊',
+    icon:        'BarChart3',
     status:      'live',
     external:    false,
   },
@@ -17,31 +17,31 @@ export const APPS = [
     name:        'Logistics',
     description: 'Freight invoice management, rate card reconciliation, and dispute letters',
     route:       '/apps/logistics',
-    icon:        '🚚',
+    icon:        'Truck',
     status:      'live',
     external:    false,
   },
   {
-    name:        'Purchase Orders',
+    name:        'Purchasing',
     description: 'Monitor PO due dates with live sync from Cin7 Core',
     route:       '/apps/purchase-orders',
-    icon:        '📦',
+    icon:        'ShoppingCart',
     status:      'live',
     external:    false,
   },
   {
-    name:        'Support Hub',
+    name:        'Customer Service',
     description: 'Case management, action items, and warehouse task tracking',
     route:       '/support',
-    icon:        '🎧',
+    icon:        'Headphones',
     status:      'live',
     external:    false,
   },
   {
-    name:        'Contractor Hub',
+    name:        'Projects',
     description: 'Project and contractor management, time tracking, and AI assistant',
     route:       '/hub',
-    icon:        '🏗️',
+    icon:        'Wrench',
     status:      'live',
     external:    false,
   },
@@ -49,7 +49,7 @@ export const APPS = [
     name:        'Guide Portal',
     description: 'Product guides, categories, brands, and customer feedback management',
     route:       '/guide',
-    icon:        '📖',
+    icon:        'BookOpen',
     status:      'live',
     external:    false,
   },
@@ -57,7 +57,7 @@ export const APPS = [
     name:        'Settings',
     description: 'Account details, login links, and user role & tile access management',
     route:       '/settings',
-    icon:        '⚙️',
+    icon:        'Settings',
     status:      'live',
     external:    false,
   },

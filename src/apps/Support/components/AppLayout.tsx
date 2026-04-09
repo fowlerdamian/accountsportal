@@ -17,7 +17,7 @@ export function AppLayout() {
   const isMobile = useIsMobile();
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#080808' }}>
+    <div style={{ minHeight: '100dvh', background: '#000000' }}>
       <AppSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
       <div className={isMobile ? '' : 'ml-56'} style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
         <AppHeader onMenuClick={() => setSidebarOpen(true)} />
