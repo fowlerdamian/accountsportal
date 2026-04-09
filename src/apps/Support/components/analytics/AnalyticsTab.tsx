@@ -35,7 +35,7 @@ const EXTENDED_COLOURS: Record<ExtendedCategory, string> = {
   order_entry_error: '#D4860A',
   warehouse_error: '#6B3FA0',
   freight_issue: '#1A6FA8',
-  complaint: '#1A6FA8',
+  complaint: '#2E7D32',
   general: '#5A5A5A',
 };
 
@@ -233,9 +233,22 @@ export default function AnalyticsTab() {
           <div className="h-64 animate-pulse bg-surface-elevated" />
         ) : (
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={trendData}>
+            <LineChart data={trendData} margin={{ bottom: granularity === 'daily' && range !== '7d' ? 20 : 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
-              <XAxis dataKey="name" tick={{ fill: '#9A9A9A', fontSize: 11 }} axisLine={{ stroke: '#2A2A2A' }} />
+              <XAxis
+                dataKey="name"
+                tick={{ fill: '#9A9A9A', fontSize: 10 }}
+                axisLine={{ stroke: '#2A2A2A' }}
+                interval={
+                  granularity !== 'daily' ? 0
+                    : range === '7d' ? 0
+                    : range === '30d' ? 4
+                    : 13
+                }
+                angle={granularity === 'daily' && range !== '7d' ? -35 : 0}
+                textAnchor={granularity === 'daily' && range !== '7d' ? 'end' : 'middle'}
+                height={granularity === 'daily' && range !== '7d' ? 48 : 30}
+              />
               <YAxis tick={{ fill: '#9A9A9A', fontSize: 11 }} axisLine={{ stroke: '#2A2A2A' }} allowDecimals={false} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#1E1E1E', border: '1px solid #2A2A2A', borderRadius: '2px', fontSize: '12px' }}
@@ -247,7 +260,7 @@ export default function AnalyticsTab() {
               <Line type="monotone" dataKey="Order Entry Error" stroke="#D4860A" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#1E1E1E' }} activeDot={{ r: 5 }} />
               <Line type="monotone" dataKey="Warehouse Error" stroke="#6B3FA0" strokeWidth={2} dot={{ r: 4, strokeWidth: 0, fill: '#6B3FA0' }} activeDot={{ r: 6 }} />
               <Line type="monotone" dataKey="Freight Issue" stroke="#1A6FA8" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#1E1E1E' }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="Complaint" stroke="#1A6FA8" strokeWidth={2} dot={{ r: 4, strokeWidth: 0, fill: '#1A6FA8' }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="Complaint" stroke="#2E7D32" strokeWidth={2} dot={{ r: 4, strokeWidth: 0, fill: '#2E7D32' }} activeDot={{ r: 6 }} />
               <Line type="monotone" dataKey="General" stroke="#5A5A5A" strokeWidth={2} dot={{ r: 2, strokeWidth: 2, fill: '#5A5A5A' }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>

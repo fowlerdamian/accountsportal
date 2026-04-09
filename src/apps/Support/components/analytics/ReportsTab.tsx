@@ -8,7 +8,7 @@ import { calculateBusinessDaysOpen } from '@/lib/businessDays';
 import { Download } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  PieChart, Pie,
+  PieChart, Pie, Label,
   LineChart, Line,
 } from 'recharts';
 import {
@@ -244,13 +244,21 @@ export default function ReportsTab() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-card border border-border p-4">
               <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">CASES BY TYPE</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={typeData}>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={typeData} margin={{ bottom: 48 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
-                  <XAxis dataKey="name" tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fill: '#5A5A5A', fontSize: 10 }}
+                    axisLine={{ stroke: '#1A1A1A' }}
+                    angle={-35}
+                    textAnchor="end"
+                    interval={0}
+                    height={64}
+                  />
                   <YAxis tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} allowDecimals={false} />
                   <Tooltip {...tooltipStyle} />
-                  <Bar dataKey="count" label={{ position: 'top', fill: '#5A5A5A', fontSize: 11 }}>
+                  <Bar dataKey="count" label={{ position: 'top', fill: '#5A5A5A', fontSize: 11, formatter: (v: number) => v > 0 ? v : '' }}>
                     {typeData.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Bar>
                 </BarChart>
@@ -261,21 +269,34 @@ export default function ReportsTab() {
               <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">CASES BY STATUS</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={80} strokeWidth={0}
+                  <Pie
+                    data={statusData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={80}
+                    strokeWidth={0}
                     label={({ cx, cy, midAngle, innerRadius, outerRadius, value }) => {
+                      if (value === 0) return null;
                       const RADIAN = Math.PI / 180;
                       const r = innerRadius + (outerRadius - innerRadius) * 0.5;
                       const x = cx + r * Math.cos(-midAngle * RADIAN);
                       const y = cy + r * Math.sin(-midAngle * RADIAN);
                       return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>{value}</text>;
-                    }} labelLine={false}
+                    }}
+                    labelLine={false}
                   >
                     {statusData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    <Label
+                      value={periodCases.length}
+                      position="center"
+                      fill="#fff"
+                      style={{ fontSize: '18px', fontWeight: 700 }}
+                    />
                   </Pie>
                   <Tooltip {...tooltipStyle} />
-                  <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize={18} fontWeight={700}>
-                    {periodCases.length}
-                  </text>
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -301,12 +322,20 @@ export default function ReportsTab() {
           <div className="bg-card border border-border p-4 mb-6">
             <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">CASES OVER TIME</h3>
             <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={timeData}>
+              <LineChart data={timeData} margin={{ bottom: days.length > 7 ? 20 : 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
-                <XAxis dataKey="name" tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: '#5A5A5A', fontSize: 10 }}
+                  axisLine={{ stroke: '#1A1A1A' }}
+                  interval={days.length <= 7 ? 0 : days.length <= 14 ? 1 : days.length <= 31 ? 4 : 13}
+                  angle={days.length > 7 ? -35 : 0}
+                  textAnchor={days.length > 7 ? 'end' : 'middle'}
+                  height={days.length > 7 ? 48 : 30}
+                />
                 <YAxis tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} allowDecimals={false} />
                 <Tooltip {...tooltipStyle} />
-                <Line type="monotone" dataKey="count" stroke="#1A6FA8" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="count" stroke="#1A6FA8" strokeWidth={2} dot={days.length <= 14} />
               </LineChart>
             </ResponsiveContainer>
           </div>
