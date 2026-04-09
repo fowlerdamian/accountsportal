@@ -82,7 +82,7 @@ export default function AnalyticsTab() {
 
   const typeCounts = (Object.keys(EXTENDED_LABELS) as ExtendedCategory[]).map(cat => ({
     name: EXTENDED_LABELS[cat],
-    value: allCases.filter(c => getExtendedCategory(c) === cat).length,
+    value: cases.filter(c => getExtendedCategory(c) === cat).length,
     color: EXTENDED_COLOURS[cat],
   })).filter(d => d.value > 0);
 
