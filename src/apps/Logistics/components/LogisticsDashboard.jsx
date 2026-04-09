@@ -102,9 +102,15 @@ export default function LogisticsDashboard() {
                 <tr
                   key={inv.id}
                   onClick={() => navigate(`/apps/logistics/invoices/${inv.id}`)}
-                  style={{ borderBottom: '1px solid #181818', cursor: 'pointer', transition: 'background 120ms' }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/apps/logistics/invoices/${inv.id}`); } }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Invoice ${inv.invoice_ref}`}
+                  style={{ borderBottom: '1px solid #181818', cursor: 'pointer', transition: 'background 120ms', outline: 'none' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#0a0a0a'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  onFocus={e => e.currentTarget.style.background = '#0a0a0a'}
+                  onBlur={e => e.currentTarget.style.background = 'transparent'}
                 >
                   <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff', fontWeight: 500 }}>{inv.invoice_ref}</td>
                   <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{inv.carriers?.name ?? '—'}</td>

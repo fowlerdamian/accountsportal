@@ -279,6 +279,18 @@ export default function Dashboard() {
         </span>
       </div>
 
+      {/* Reset filters — shown when non-default filters are active */}
+      {(typeFilter !== 'all' || sortBy !== 'newest' || activeTab !== 'active') && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+          <button
+            onClick={() => { setTypeFilter('all'); setSortBy('newest'); setActiveTab('active'); setStatusFilter(null); }}
+            style={{ fontSize: '11px', color: '#f3ca0f', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
+          >
+            Reset filters
+          </button>
+        </div>
+      )}
+
       {/* Inline filters — amber active */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginBottom: '20px' }}>
         {typeFilters.map(f => (
@@ -333,10 +345,28 @@ export default function Dashboard() {
       ) : filteredCases.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <p className="text-sm">
-            {activeTab === 'active'
-              ? 'Everything is under control — no active cases right now.'
-              : 'No cases match your filters'}
+            {statusFilter
+              ? `No ${statusFilter.replace('_', ' ')} cases`
+              : activeTab === 'active'
+              ? debouncedSearch
+                ? 'No active cases match your search'
+                : 'Everything is under control — no active cases right now.'
+              : activeTab === 'closed'
+              ? debouncedSearch
+                ? 'No closed cases match your search'
+                : 'No closed cases yet'
+              : debouncedSearch
+              ? 'No cases match your search'
+              : 'No cases yet'}
           </p>
+          {(debouncedSearch || typeFilter !== 'all') && (
+            <button
+              onClick={() => { setSearchQuery(''); setTypeFilter('all'); setStatusFilter(null); }}
+              className="mt-2 text-xs underline hover:text-foreground transition-colors"
+            >
+              Clear search & filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-3">

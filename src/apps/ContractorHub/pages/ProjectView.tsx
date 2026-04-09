@@ -256,6 +256,7 @@ function ProjectViewContent() {
     reordered.splice(to, 0, moved);
     reorderTasks(reordered.map((t, i) => ({ id: t.id, position: i })));
     setDraggedId(null);
+    toast.success("Tasks reordered");
   }
 
   // ── File upload ───────────────────────────────────────────

@@ -5,6 +5,7 @@ import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Plus, Pencil, Trash2, Loader2, Check, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@guide/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@guide/components/ui/alert-dialog";
 import { Label } from "@guide/components/ui/label";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,6 +17,7 @@ export default function Categories() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const guideCount = (catId: string) => guides.filter((g: any) => g.category_id === catId).length;
@@ -47,7 +49,13 @@ export default function Categories() {
       toast.error(`Cannot delete — ${count} guide(s) assigned`);
       return;
     }
-    const { error } = await supabase.from("categories").delete().eq("id", id);
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmId) return;
+    const { error } = await supabase.from("categories").delete().eq("id", deleteConfirmId);
+    setDeleteConfirmId(null);
     if (error) { toast.error(error.message); return; }
     queryClient.invalidateQueries({ queryKey: ["categories"] });
     toast.success("Category deleted");
@@ -132,5 +140,22 @@ export default function Categories() {
         </table>
       </div>
     </div>
+
+    <AlertDialog open={!!deleteConfirmId} onOpenChange={(v) => { if (!v) setDeleteConfirmId(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete category?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will permanently delete the category. This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

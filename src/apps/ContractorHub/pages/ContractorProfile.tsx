@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, ArrowLeft, Mail, Phone, Edit2, Check, X } from "lucide-react";
+import { Loader2, ChevronRight, Mail, Phone, Edit2, Check, X } from "lucide-react";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
@@ -108,13 +108,11 @@ export default function ContractorProfile() {
     <HubLayout>
       <div className="space-y-6 animate-fade-in max-w-4xl">
         {/* Breadcrumb */}
-        <button
-          onClick={() => navigate("/hub/contractors")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Contractors
-        </button>
+        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link to="/hub/contractors" className="hover:text-foreground transition-colors">Contractors</Link>
+          <ChevronRight className="w-3.5 h-3.5" />
+          <span className="text-foreground">{contractor.name}</span>
+        </nav>
 
         {/* Header */}
         <div className="rounded-lg border bg-background p-5">

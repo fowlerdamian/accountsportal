@@ -8,11 +8,12 @@ interface StatsCardProps {
   icon?: ReactNode;
   trend?: string;
   className?: string;
+  onClick?: () => void;
 }
 
-export function StatsCard({ title, value, subtitle, icon, trend, className }: StatsCardProps) {
+export function StatsCard({ title, value, subtitle, icon, trend, className, onClick }: StatsCardProps) {
   return (
-    <div className={cn("rounded-lg border bg-card p-5 animate-fade-in", className)}>
+    <div className={cn("rounded-lg border bg-card p-5 animate-fade-in", className)} onClick={onClick} role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted-foreground font-medium">{title}</p>

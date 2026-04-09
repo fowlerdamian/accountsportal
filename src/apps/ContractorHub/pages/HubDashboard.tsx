@@ -119,7 +119,7 @@ function ContractorDashboard({ contractorId }: { contractorId: string }) {
 // ── Staff dashboard ──────────────────────────────────────────
 
 function StaffDashboard() {
-  const navigate = useNavigate();
+  const navigate        = useNavigate();
   const { data: metrics, isLoading: metricsLoading } = useHubDashboardMetrics();
   const { data: activity = [], isLoading: actLoading } = useDashboardActivity();
 
@@ -137,6 +137,7 @@ function StaffDashboard() {
           value={metricsLoading ? "—" : metrics?.activeProjects ?? 0}
           icon={<FolderOpen className="w-5 h-5" />}
           className="cursor-pointer hover:border-primary/50 transition-colors"
+          onClick={() => navigate("/hub/projects")}
         />
         <StatsCard
           title="Overdue Tasks"
@@ -146,6 +147,7 @@ function StaffDashboard() {
             "cursor-pointer hover:border-primary/50 transition-colors",
             (metrics?.overdueTasks ?? 0) > 0 && "[&_p.text-2xl]:text-red-400",
           )}
+          onClick={() => navigate("/hub/projects")}
         />
         <StatsCard
           title="Hours This Week"

@@ -139,9 +139,6 @@ export default function NewCasePage() {
         setLookupError(trimmed);
       } else {
         setLookedUpOrder(data as Cin7Order);
-        // Auto-advance after successful lookup
-        setDirection(1);
-        setTimeout(() => setStep(3), 400);
       }
     } catch (err) {
       console.error('Order lookup failed:', err);
