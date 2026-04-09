@@ -86,7 +86,7 @@ import { toast } from "sonner";
 import { Loader2, Save } from "lucide-react";
 
 function ProfileSettings() {
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -94,7 +94,10 @@ function ProfileSettings() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setEmail(user.email || "");
 
     // Fetch profile
@@ -105,8 +108,9 @@ function ProfileSettings() {
       .maybeSingle()
       .then(({ data }) => {
         setFullName(data?.full_name || "");
-        setLoading(false);
-      });
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [user]);
 
   const saveName = async () => {
@@ -201,7 +205,7 @@ function ProfileSettings() {
           <Label className="text-sm font-medium">Role</Label>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">
-              {useAuth().userRole || "—"}
+              {userRole || "—"}
             </span>
             <span className="text-xs text-muted-foreground">Contact an admin to change your role</span>
           </div>

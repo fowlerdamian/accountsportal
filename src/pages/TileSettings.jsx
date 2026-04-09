@@ -1,7 +1,22 @@
 import { Link } from 'react-router-dom'
+import {
+  BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+} from 'lucide-react'
 import { APPS } from '../config/apps.js'
 import { useAllUserTileSettings } from '../hooks/useTileSettings.js'
 import { useIsAdmin } from '../hooks/useIsAdmin.js'
+
+const ICON_MAP = {
+  BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+}
+
+function AppIcon({ name }) {
+  const Icon = ICON_MAP[name]
+  if (!Icon) return <span style={{ fontSize: '12px', color: '#555' }}>{name}</span>
+  return <Icon size={14} strokeWidth={1.5} />
+}
 
 const LIVE_APPS = APPS.filter(a => a.status === 'live' || a.status === 'beta')
 
@@ -12,7 +27,7 @@ function Toggle({ checked, onChange, disabled }) {
       disabled={disabled}
       style={{
         width: '36px', height: '20px', borderRadius: '10px', border: 'none',
-        background: checked ? '#E8A838' : '#2a2a2a',
+        background: checked ? '#f3ca0f' : '#222222',
         cursor: disabled ? 'not-allowed' : 'pointer',
         position: 'relative', transition: 'background 150ms', flexShrink: 0,
         opacity: disabled ? 0.5 : 1,
@@ -34,7 +49,7 @@ export default function TileSettings() {
 
   if (!isAdmin) {
     return (
-      <div style={{ padding: '40px 24px', color: '#555', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>
+      <div style={{ padding: '40px 24px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>
         Access denied.
       </div>
     )
@@ -51,7 +66,7 @@ export default function TileSettings() {
         <Link
           to="/dashboard"
           style={{
-            fontSize: '11px', color: '#555', textDecoration: 'none',
+            fontSize: '11px', color: '#a0a0a0', textDecoration: 'none',
             fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em',
             display: 'inline-flex', alignItems: 'center', gap: '4px',
           }}
@@ -59,24 +74,24 @@ export default function TileSettings() {
           ← Dashboard
         </Link>
         <span style={{ color: '#333' }}>/</span>
-        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', margin: 0, letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
           Manage Access
         </h1>
         {saving && (
-          <span style={{ fontSize: '11px', color: '#555', fontFamily: '"JetBrains Mono", monospace', marginLeft: 'auto' }}>
+          <span style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', marginLeft: 'auto' }}>
             Saving…
           </span>
         )}
       </div>
 
       {error && (
-        <div style={{ marginBottom: '24px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#EF4444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
+        <div style={{ marginBottom: '24px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ff1744', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
           {error.message}
         </div>
       )}
 
       {!users ? (
-        <div style={{ color: '#555', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>Loading…</div>
+        <div style={{ color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>Loading…</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
 
@@ -95,7 +110,7 @@ export default function TileSettings() {
                 letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'center',
                 lineHeight: 1.3,
               }}>
-                {app.icon}<br />{app.name.split(' ')[0]}
+                <AppIcon name={app.icon} /><br />{app.name.split(' ')[0]}
               </div>
             ))}
           </div>
@@ -110,15 +125,15 @@ export default function TileSettings() {
                   display: 'grid',
                   gridTemplateColumns: `200px repeat(${LIVE_APPS.length}, 1fr)`,
                   gap: '8px', padding: '14px 16px', alignItems: 'center',
-                  background: '#0c0c0e', border: '1px solid #1e1e22', borderRadius: '6px',
+                  background: '#0a0a0a', border: '1px solid #222222', borderRadius: '6px',
                 }}
               >
                 {/* User info */}
                 <div>
-                  <div style={{ fontSize: '12px', color: '#E5E5E5', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: '12px', color: '#ffffff', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {user.email}
                   </div>
-                  <div style={{ fontSize: '10px', color: '#555', fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  <div style={{ fontSize: '10px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                     {user.role}
                   </div>
                 </div>

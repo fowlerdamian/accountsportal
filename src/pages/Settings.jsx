@@ -1,9 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
+import {
+  BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings as SettingsIcon,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+} from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { supabase } from '../lib/supabase.js'
 import { useNavigate } from 'react-router-dom'
 import { APPS } from '../config/apps.js'
 import { useIsAdmin } from '../hooks/useIsAdmin.js'
+
+const ICON_MAP = {
+  BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings: SettingsIcon,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+}
+
+function AppIcon({ name }) {
+  const Icon = ICON_MAP[name]
+  if (!Icon) return <span style={{ fontSize: '12px', color: '#555' }}>{name}</span>
+  return <Icon size={16} strokeWidth={1.5} color="#a0a0a0" />
+}
 
 const LIVE_APPS = APPS.filter(a => (a.status === 'live' || a.status === 'beta') && a.route !== '/settings')
 
@@ -12,7 +27,7 @@ const LIVE_APPS = APPS.filter(a => (a.status === 'live' || a.status === 'beta') 
 function SectionHeading({ children }) {
   return (
     <h2 style={{
-      fontSize: '11px', fontWeight: 600, color: '#555',
+      fontSize: '11px', fontWeight: 600, color: '#a0a0a0',
       letterSpacing: '0.12em', textTransform: 'uppercase',
       fontFamily: '"JetBrains Mono", monospace',
       margin: '0 0 12px',
@@ -25,7 +40,7 @@ function SectionHeading({ children }) {
 function Card({ children, style }) {
   return (
     <div style={{
-      background: '#0c0c0e', border: '1px solid #1e1e22',
+      background: '#0a0a0a', border: '1px solid #222222',
       borderRadius: '8px', padding: '20px 24px',
       ...style,
     }}>
@@ -41,7 +56,7 @@ function Toggle({ checked, onChange, disabled }) {
       disabled={disabled}
       style={{
         width: '32px', height: '18px', borderRadius: '9px', border: 'none',
-        background: checked ? '#E8A838' : '#2a2a2a',
+        background: checked ? '#f3ca0f' : '#222222',
         cursor: disabled ? 'not-allowed' : 'pointer',
         position: 'relative', transition: 'background 150ms', flexShrink: 0,
         opacity: disabled ? 0.5 : 1,
@@ -60,21 +75,21 @@ function Toggle({ checked, onChange, disabled }) {
 const ROLE_OPTIONS = ['admin', 'editor', 'user']
 
 const ROLE_LABELS = {
-  admin:  { label: 'Admin',  color: '#E8A838' },
+  admin:  { label: 'Admin',  color: '#f3ca0f' },
   editor: { label: 'Editor', color: '#60A5FA' },
   user:   { label: 'User',   color: '#666' },
 }
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',
-  background: '#111113', border: '1px solid #2a2a2e',
+  background: '#111113', border: '1px solid #222222',
   borderRadius: '6px', padding: '8px 12px',
-  fontSize: '13px', color: '#E5E5E5',
+  fontSize: '13px', color: '#ffffff',
   fontFamily: 'inherit', outline: 'none',
 }
 
 const labelStyle = {
-  fontSize: '11px', color: '#555',
+  fontSize: '11px', color: '#a0a0a0',
   fontFamily: '"JetBrains Mono", monospace',
   letterSpacing: '0.08em', textTransform: 'uppercase',
   display: 'block', marginBottom: '6px',
@@ -118,7 +133,7 @@ function AccountSection({ user }) {
             <input
               value={user.email}
               readOnly
-              style={{ ...inputStyle, color: '#555', cursor: 'default' }}
+              style={{ ...inputStyle, color: '#a0a0a0', cursor: 'default' }}
             />
           </div>
 
@@ -145,7 +160,7 @@ function AccountSection({ user }) {
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#EF4444', fontFamily: '"JetBrains Mono", monospace' }}>
+            <div style={{ fontSize: '12px', color: '#ff1744', fontFamily: '"JetBrains Mono", monospace' }}>
               {error}
             </div>
           )}
@@ -156,7 +171,7 @@ function AccountSection({ user }) {
               onClick={signOut}
               style={{
                 fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
-                textTransform: 'uppercase', color: '#EF4444',
+                textTransform: 'uppercase', color: '#ff1744',
                 background: 'none', border: '1px solid rgba(239,68,68,0.3)',
                 borderRadius: '4px', padding: '6px 14px', cursor: 'pointer',
               }}
@@ -165,8 +180,8 @@ function AccountSection({ user }) {
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {saved && (
-                <span style={{ fontSize: '11px', color: '#22C55E', fontFamily: '"JetBrains Mono", monospace' }}>
-                  Saved ✓
+                <span style={{ fontSize: '11px', color: '#60a57e', fontFamily: '"JetBrains Mono", monospace' }}>
+                  Saved
                 </span>
               )}
               <button
@@ -174,9 +189,9 @@ function AccountSection({ user }) {
                 disabled={saving}
                 style={{
                   fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
-                  textTransform: 'uppercase', color: saving ? '#444' : '#E8A838',
+                  textTransform: 'uppercase', color: saving ? '#444' : '#f3ca0f',
                   background: 'none', border: '1px solid',
-                  borderColor: saving ? '#282828' : 'rgba(232,168,56,0.4)',
+                  borderColor: saving ? '#222222' : 'rgba(243,202,15,0.4)',
                   borderRadius: '4px', padding: '6px 14px',
                   cursor: saving ? 'not-allowed' : 'pointer',
                 }}
@@ -241,7 +256,7 @@ function UserManagement() {
   }
 
   if (!users) return (
-    <div style={{ color: '#555', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>Loading…</div>
+    <div style={{ color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>Loading…</div>
   )
 
   return (
@@ -249,11 +264,11 @@ function UserManagement() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
         <SectionHeading>User Management</SectionHeading>
         {saving && (
-          <span style={{ fontSize: '11px', color: '#555', fontFamily: '"JetBrains Mono", monospace' }}>Saving…</span>
+          <span style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace' }}>Saving…</span>
         )}
       </div>
       {error && (
-        <div style={{ marginBottom: '12px', padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#EF4444', fontSize: '12px' }}>
+        <div style={{ marginBottom: '12px', padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ff1744', fontSize: '12px' }}>
           {error}
         </div>
       )}
@@ -276,8 +291,8 @@ function UserManagement() {
                 {/* Avatar */}
                 <div style={{
                   width: '32px', height: '32px', borderRadius: '50%',
-                  background: '#1e1e22', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: '12px', color: '#555',
+                  background: '#222222', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontSize: '12px', color: '#a0a0a0',
                   flexShrink: 0, fontFamily: '"JetBrains Mono", monospace', fontWeight: 600,
                 }}>
                   {u.email[0].toUpperCase()}
@@ -285,7 +300,7 @@ function UserManagement() {
 
                 {/* Email */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', color: '#E5E5E5', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: '13px', color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {u.email}
                   </div>
                 </div>
@@ -307,11 +322,11 @@ function UserManagement() {
 
               {/* Expanded panel */}
               {isExpanded && (
-                <div style={{ borderTop: '1px solid #1e1e22', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ borderTop: '1px solid #222222', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                   {/* Role picker */}
                   <div>
-                    <div style={{ fontSize: '11px', color: '#555', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
                       Role
                     </div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -327,7 +342,7 @@ function UserManagement() {
                               fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
                               textTransform: 'uppercase', fontFamily: '"JetBrains Mono", monospace',
                               padding: '6px 16px', borderRadius: '4px', cursor: saving ? 'not-allowed' : 'pointer',
-                              border: `1px solid ${active ? cfg.color + '66' : '#282828'}`,
+                              border: `1px solid ${active ? cfg.color + '66' : '#222222'}`,
                               background: active ? cfg.color + '18' : 'transparent',
                               color: active ? cfg.color : '#555',
                               transition: 'all 120ms',
@@ -347,7 +362,7 @@ function UserManagement() {
 
                   {/* Tile access */}
                   <div>
-                    <div style={{ fontSize: '11px', color: '#555', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
                       Tile Access
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -356,8 +371,8 @@ function UserManagement() {
                         return (
                           <div key={app.route} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <span style={{ fontSize: '16px' }}>{app.icon}</span>
-                              <span style={{ fontSize: '12px', color: '#E5E5E5' }}>{app.name}</span>
+                              <AppIcon name={app.icon} />
+                              <span style={{ fontSize: '12px', color: '#ffffff' }}>{app.name}</span>
                             </div>
                             <Toggle
                               checked={enabled}
@@ -385,23 +400,21 @@ export default function Settings() {
   const { user } = useAuth()
   const isAdmin  = useIsAdmin()
 
-  if (!user) return null
-
   return (
     <div style={{
       flex: 1, overflowY: 'auto', padding: '40px 24px',
       maxWidth: '800px', margin: '0 auto', width: '100%', boxSizing: 'border-box',
     }}>
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#E5E5E5', margin: 0, letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
           Settings
         </h1>
-        <p style={{ fontSize: '13px', color: '#555', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
+        <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
           Account and access management
         </p>
       </div>
 
-      <AccountSection user={user} />
+      {user && <AccountSection user={user} />}
 
       {isAdmin && <UserManagement />}
     </div>

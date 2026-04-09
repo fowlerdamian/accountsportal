@@ -18,11 +18,12 @@ import Disputes from './apps/Logistics/components/Disputes.jsx'
 import SupportApp from './apps/Support/SupportApp'
 
 // Contractor Hub
-import HubDashboard from './apps/Guide/pages/hub/HubDashboard'
-import ContractorsList from './apps/Guide/pages/hub/ContractorsList'
-import ContractorProfile from './apps/Guide/pages/hub/ContractorProfile'
-import ProjectsList from './apps/Guide/pages/hub/ProjectsList'
-import ProjectView from './apps/Guide/pages/hub/ProjectView'
+import HubDashboard from './apps/ContractorHub/pages/HubDashboard'
+import ContractorsList from './apps/ContractorHub/pages/ContractorsList'
+import ContractorProfile from './apps/ContractorHub/pages/ContractorProfile'
+import ProjectsList from './apps/ContractorHub/pages/ProjectsList'
+import ProjectView from './apps/ContractorHub/pages/ProjectView'
+import HubSettings from './apps/ContractorHub/pages/HubSettings'
 
 // Guide Portal
 import { AdminLayout } from './apps/Guide/admin/AdminLayout'
@@ -75,7 +76,7 @@ export default function App() {
                         <Route path="brands" element={<GuideBrands />} />
                         <Route path="users" element={<GuideUsers />} />
                       </Route>
-                      <Route path="view/:id" element={<GuideViewer />} />
+                      <Route path="view/:slug" element={<GuideViewer />} />
                     </Routes>
                   </GuideAuthProvider>
                 </ProtectedRoute>
@@ -94,6 +95,7 @@ export default function App() {
                       <Route path="contractors/:id" element={<ContractorProfile />} />
                       <Route path="projects" element={<ProjectsList />} />
                       <Route path="projects/:id" element={<ProjectView />} />
+                      <Route path="settings" element={<HubSettings />} />
                     </Routes>
                   </GuideAuthProvider>
                 </ProtectedRoute>
