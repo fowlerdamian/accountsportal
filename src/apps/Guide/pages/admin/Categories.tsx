@@ -66,6 +66,7 @@ export default function Categories() {
   }
 
   return (
+    <>
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
@@ -142,6 +143,7 @@ export default function Categories() {
     </div>
 
     <AlertDialog open={!!deleteConfirmId} onOpenChange={(v) => { if (!v) setDeleteConfirmId(null); }}>
+
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete category?</AlertDialogTitle>
@@ -157,5 +159,6 @@ export default function Categories() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    </>
   );
 }
