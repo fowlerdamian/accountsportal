@@ -430,7 +430,7 @@ export default function GuideShare() {
           </TabsList>
           {brands.map(brand => {
             const pub = publications.find((p: any) => p.brand_id === brand.id);
-            const url = `https://${brand.domain}/guide/view/${guide.slug}`;
+            const url = `https://${brand.domain}/${guide.slug}`;
             const isPublished = pub?.status === 'published';
             return (
               <TabsContent key={brand.key} value={brand.key} className="space-y-6">
@@ -502,7 +502,7 @@ export default function GuideShare() {
         <div className="fixed inset-0 z-50 bg-background/95 flex items-center justify-center" onClick={() => setFullscreen(null)}>
           <button className="absolute top-4 right-4 p-2" onClick={() => setFullscreen(null)}><X className="w-6 h-6" /></button>
           <div className="text-center space-y-4">
-            <QRCodeCanvas value={`https://${brands.find(b => b.key === fullscreen)?.domain}/guide/view/${guide.slug}`} size={400} fgColor="#000000" level="M" />
+            <QRCodeCanvas value={`https://${brands.find(b => b.key === fullscreen)?.domain}/${guide.slug}`} size={400} fgColor="#000000" level="M" />
             <p className="text-sm text-muted-foreground">{guide.title}</p>
           </div>
         </div>

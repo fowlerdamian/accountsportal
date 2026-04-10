@@ -59,7 +59,7 @@ export default function App() {
             <Route path="/support/*" element={<SupportApp />} />
 
             {/* Guide Portal — public viewer */}
-            <Route path="/guide/view/:slug" element={<GuideAuthProvider><GuideViewer /></GuideAuthProvider>} />
+            <Route path="/:slug" element={<GuideAuthProvider><GuideViewer /></GuideAuthProvider>} />
 
             {/* Guide Portal — protected admin */}
             <Route
@@ -127,7 +127,7 @@ export default function App() {
               <Route path="apps/logistics/invoices/:id" element={<InvoiceDetail />} />
               <Route path="apps/logistics/rate-cards" element={<RateCards />} />
               <Route path="apps/logistics/disputes" element={<Disputes />} />
-              <Route path="apps/sales-support" element={<SalesSupport />} />
+              <Route path="apps/sales-support/*" element={<SalesSupport />} />
             </Route>
 
             {/* Catch-all */}
