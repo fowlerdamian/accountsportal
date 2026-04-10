@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { AuthProvider as GuideAuthProvider } from './apps/Guide/contexts/AuthContext'
@@ -42,6 +42,12 @@ import GuideBrands from './apps/Guide/pages/admin/Brands'
 import GuideUsers from './apps/Guide/pages/admin/Users'
 import GuideViewer from './apps/Guide/pages/guide/GuideViewer'
 
+// Redirect old viewer URL formats to the current /:slug public route
+function SlugRedirect() {
+  const { slug } = useParams()
+  return <Navigate to={`/${slug}`} replace />
+}
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
 })
@@ -57,6 +63,10 @@ export default function App() {
 
             {/* Support Hub — public, no login required */}
             <Route path="/support/*" element={<SupportApp />} />
+
+            {/* Redirect old viewer URL formats → new public /:slug route */}
+            <Route path="/guide/view/:slug" element={<SlugRedirect />} />
+            <Route path="/guide/:slug" element={<SlugRedirect />} />
 
             {/* Guide Portal — public viewer */}
             <Route path="/:slug" element={<GuideAuthProvider><GuideViewer /></GuideAuthProvider>} />
