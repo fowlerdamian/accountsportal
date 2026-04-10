@@ -2,14 +2,14 @@ import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import {
   BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings,
-  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck, ShieldCheck,
 } from 'lucide-react'
 
 // ─── Icon resolver ───────────────────────────────────────────────────────────
 
 const ICON_MAP = {
   BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings,
-  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck, ShieldCheck,
 }
 
 function AppIcon({ name, size = 22, className = '' }) {
@@ -57,10 +57,9 @@ function TileCard({ app, hovered }) {
       transition: 'border-color 150ms, transform 150ms, box-shadow 150ms',
       userSelect: 'none',
     }}>
-      {/* Icon + badge row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <AppIcon name={app.icon} size={22} className={hovered && !isComingSoon ? '' : ''} />
-        <StatusBadge status={app.status} />
+      {/* Icon row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        <AppIcon name={app.icon} size={22} />
       </div>
 
       {/* Text */}
