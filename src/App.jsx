@@ -64,9 +64,8 @@ export default function App() {
             {/* Support Hub — public, no login required */}
             <Route path="/support/*" element={<SupportApp />} />
 
-            {/* Redirect old viewer URL formats → new public /:slug route */}
+            {/* Redirect old /guide/view/:slug viewer URLs → new public /:slug route */}
             <Route path="/guide/view/:slug" element={<SlugRedirect />} />
-            <Route path="/guide/:slug" element={<SlugRedirect />} />
 
             {/* Guide Portal — public viewer */}
             <Route path="/:slug" element={<GuideAuthProvider><GuideViewer /></GuideAuthProvider>} />
