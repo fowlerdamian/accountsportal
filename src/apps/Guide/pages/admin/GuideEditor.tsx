@@ -1058,7 +1058,7 @@ export default function GuideEditor() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground break-all">
-                      {brand.domain}/guide/{(existingGuide as any)?.slug || '...'}
+                      {brand.domain}/{(existingGuide as any)?.slug || '...'}
                     </p>
                     <Button size="sm" className="w-full" disabled={saving} onClick={async () => {
                       await saveDraft();
