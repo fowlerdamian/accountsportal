@@ -48,6 +48,40 @@ function SlugRedirect() {
   return <Navigate to={`/${slug}`} replace />
 }
 
+// On guide subdomains (guide.trailbait.com.au etc.), any /guide/:slug path
+// is a legacy QR-code URL — redirect to the public viewer.
+// On the admin domain, render the normal protected admin routes.
+function GuideAppRouter() {
+  const params = useParams()
+  const rest = params['*'] || ''
+  if (window.location.hostname.startsWith('guide.') && rest) {
+    const slug = rest.split('/')[0]
+    return <Navigate to={`/${slug}`} replace />
+  }
+  return (
+    <ProtectedRoute>
+      <GuideAuthProvider>
+        <Routes>
+          <Route element={<AdminLayout />}>
+            <Route index element={<GuideDashboard />} />
+            <Route path="guides" element={<GuidesList />} />
+            <Route path="guides/:id" element={<GuideEditor />} />
+            <Route path="guides/:id/edit" element={<GuideEditor />} />
+            <Route path="guides/:id/share" element={<GuideShare />} />
+            <Route path="reports" element={<GuideReports />} />
+            <Route path="support" element={<GuideSupport />} />
+            <Route path="feedback" element={<GuideFeedback />} />
+            <Route path="settings" element={<GuideSettings />} />
+            <Route path="categories" element={<GuideCategories />} />
+            <Route path="brands" element={<GuideBrands />} />
+            <Route path="users" element={<GuideUsers />} />
+          </Route>
+        </Routes>
+      </GuideAuthProvider>
+    </ProtectedRoute>
+  )
+}
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
 })
@@ -70,32 +104,8 @@ export default function App() {
             {/* Guide Portal — public viewer */}
             <Route path="/:slug" element={<GuideAuthProvider><GuideViewer /></GuideAuthProvider>} />
 
-            {/* Guide Portal — protected admin */}
-            <Route
-              path="/guide/*"
-              element={
-                <ProtectedRoute>
-                  <GuideAuthProvider>
-                    <Routes>
-                      <Route element={<AdminLayout />}>
-                        <Route index element={<GuideDashboard />} />
-                        <Route path="guides" element={<GuidesList />} />
-                        <Route path="guides/:id" element={<GuideEditor />} />
-                        <Route path="guides/:id/edit" element={<GuideEditor />} />
-                        <Route path="guides/:id/share" element={<GuideShare />} />
-                        <Route path="reports" element={<GuideReports />} />
-                        <Route path="support" element={<GuideSupport />} />
-                        <Route path="feedback" element={<GuideFeedback />} />
-                        <Route path="settings" element={<GuideSettings />} />
-                        <Route path="categories" element={<GuideCategories />} />
-                        <Route path="brands" element={<GuideBrands />} />
-                        <Route path="users" element={<GuideUsers />} />
-                      </Route>
-                    </Routes>
-                  </GuideAuthProvider>
-                </ProtectedRoute>
-              }
-            />
+            {/* Guide Portal — protected admin (domain-aware: redirects legacy /guide/:slug QR URLs on viewer subdomains) */}
+            <Route path="/guide/*" element={<GuideAppRouter />} />
 
             {/* Contractor Hub */}
             <Route
