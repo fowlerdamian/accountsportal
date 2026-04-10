@@ -54,6 +54,14 @@ export const APPS = [
     external:    false,
   },
   {
+    name:        'Sales Support',
+    description: 'Sales support tooling and workflow assistance',
+    route:       '/apps/sales-support',
+    icon:        'TrendingUp',
+    status:      'live',
+    external:    false,
+  },
+  {
     name:        'Compliance',
     description: 'ISO 9001:2015 QMS documentation, self-audit, and evidence management',
     route:       '/hub/compliance',

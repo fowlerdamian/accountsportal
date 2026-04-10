@@ -16,6 +16,7 @@ import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
 import RateCards from './apps/Logistics/components/RateCards.jsx'
 import Disputes from './apps/Logistics/components/Disputes.jsx'
 import SupportApp from './apps/Support/SupportApp'
+import SalesSupport from './apps/SalesSupport/index.jsx'
 
 // Contractor Hub
 import HubDashboard from './apps/ContractorHub/pages/HubDashboard'
@@ -124,6 +125,7 @@ export default function App() {
               <Route path="apps/logistics/invoices/:id" element={<InvoiceDetail />} />
               <Route path="apps/logistics/rate-cards" element={<RateCards />} />
               <Route path="apps/logistics/disputes" element={<Disputes />} />
+              <Route path="apps/sales-support" element={<SalesSupport />} />
             </Route>
 
             {/* Catch-all */}
