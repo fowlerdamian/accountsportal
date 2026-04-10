@@ -430,7 +430,7 @@ export default function GuideShare() {
           </TabsList>
           {brands.map(brand => {
             const pub = publications.find((p: any) => p.brand_id === brand.id);
-            const url = `https://${brand.domain}/guide/${guide.slug}`;
+            const url = `https://${brand.domain}/guide/view/${guide.slug}`;
             const isPublished = pub?.status === 'published';
             return (
               <TabsContent key={brand.key} value={brand.key} className="space-y-6">
