@@ -50,6 +50,7 @@ function TileCard({ app, hovered }) {
       border: `1px solid ${hovered && !isComingSoon ? 'rgba(243,202,15,0.35)' : 'var(--border-default)'}`,
       borderRadius: 'var(--radius-md)',
       padding: '24px',
+      height: '100%', boxSizing: 'border-box',
       display: 'flex', flexDirection: 'column', gap: '16px',
       opacity: isComingSoon ? 0.5 : 1,
       cursor: isComingSoon ? 'not-allowed' : 'pointer',
@@ -96,10 +97,10 @@ export default function AppTile({ app }) {
   const wrapperProps = {
     onMouseEnter: () => setHovered(true),
     onMouseLeave: () => setHovered(false),
-    style: { textDecoration: 'none', display: 'block' },
+    style: { textDecoration: 'none', display: 'block', height: '100%' },
   }
 
-  if (isComingSoon) return <div {...wrapperProps}>{card}</div>
+  if (isComingSoon) return <div {...wrapperProps} style={{ ...wrapperProps.style, height: '100%' }}>{card}</div>
   if (app.external) return <a href={app.route} target="_blank" rel="noopener noreferrer" {...wrapperProps}>{card}</a>
   return <Link to={app.route} {...wrapperProps}>{card}</Link>
 }
