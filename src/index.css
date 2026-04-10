@@ -91,6 +91,12 @@
     --status-resolved: 150 27% 51%;
     --status-neutral: 0 0% 40%;
 
+    /* Success / Warning for Compliance module */
+    --success: 150 27% 51%;
+    --success-foreground: 0 0% 100%;
+    --warning: 36 92% 56%;
+    --warning-foreground: 0 0% 8%;
+
     /* Surface layers */
     --surface: 0 0% 4%;
     --surface-elevated: 0 0% 7%;
@@ -123,6 +129,21 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .card-gradient {
+    background: linear-gradient(135deg, hsl(0 0% 6%) 0%, hsl(0 0% 4%) 100%);
+  }
+  .glow-gold {
+    box-shadow: 0 0 20px rgba(243, 202, 15, 0.25), 0 0 40px rgba(243, 202, 15, 0.1);
+  }
+  .text-gradient-gold {
+    background: linear-gradient(135deg, #f3ca0f 0%, #d4b00d 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }
 

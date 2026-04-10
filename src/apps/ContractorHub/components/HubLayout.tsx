@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { NavLink, Link, useMatch } from "react-router-dom";
-import { LayoutDashboard, FolderOpen, Users, LogOut, Menu, Plus, Settings } from "lucide-react";
+import { LayoutDashboard, FolderOpen, Users, LogOut, Menu, Plus, Settings, ShieldCheck } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "@guide/contexts/AuthContext";
 import { useIsMobile } from "@guide/hooks/use-mobile";
@@ -40,6 +40,7 @@ const navItems = [
   { label: "Dashboard",   icon: LayoutDashboard, path: "/hub",              end: true },
   { label: "Projects",    icon: FolderOpen,       path: "/hub/projects",     end: false },
   { label: "Contractors", icon: Users,            path: "/hub/contractors",  end: false },
+  { label: "Compliance",  icon: ShieldCheck,      path: "/hub/compliance",   end: false },
   { label: "Settings",    icon: Settings,         path: "/hub/settings",     end: false },
 ];
 
@@ -144,9 +145,10 @@ function SidebarContent({
 
 interface HubLayoutProps {
   children: React.ReactNode;
+  fullScreen?: boolean;
 }
 
-export function HubLayout({ children }: HubLayoutProps) {
+export function HubLayout({ children, fullScreen }: HubLayoutProps) {
   const [aiOpen, setAiOpen]           = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
@@ -307,11 +309,10 @@ export function HubLayout({ children }: HubLayoutProps) {
 
           {/* Page content */}
           <main
-            style={{
-              flex: 1, overflowY: "auto",
-              padding: isMobile ? "24px 16px" : "32px 24px",
-              maxWidth: "1200px", width: "100%", boxSizing: "border-box",
-            }}
+            style={fullScreen
+              ? { flex: 1, overflow: "hidden", width: "100%", display: "flex", flexDirection: "column" }
+              : { flex: 1, overflowY: "auto", padding: isMobile ? "24px 16px" : "32px 24px", maxWidth: "1200px", width: "100%", boxSizing: "border-box" }
+            }
           >
             {children}
           </main>

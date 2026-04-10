@@ -24,6 +24,7 @@ import ContractorProfile from './apps/ContractorHub/pages/ContractorProfile'
 import ProjectsList from './apps/ContractorHub/pages/ProjectsList'
 import ProjectView from './apps/ContractorHub/pages/ProjectView'
 import HubSettings from './apps/ContractorHub/pages/HubSettings'
+import CompliancePage from './apps/ContractorHub/pages/CompliancePage'
 
 // Guide Portal
 import { AdminLayout } from './apps/Guide/admin/AdminLayout'
@@ -95,6 +96,7 @@ export default function App() {
                       <Route path="contractors/:id" element={<ContractorProfile />} />
                       <Route path="projects" element={<ProjectsList />} />
                       <Route path="projects/:id" element={<ProjectView />} />
+                      <Route path="compliance/*" element={<CompliancePage />} />
                       <Route path="settings" element={<HubSettings />} />
                     </Routes>
                   </GuideAuthProvider>

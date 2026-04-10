@@ -46,6 +46,8 @@ export default {
         'status-progress': 'hsl(var(--status-progress))',
         'status-resolved': 'hsl(var(--status-resolved))',
         'status-neutral': 'hsl(var(--status-neutral))',
+        success: { DEFAULT: 'hsl(var(--success))', foreground: 'hsl(var(--success-foreground))' },
+        warning: { DEFAULT: 'hsl(var(--warning))', foreground: 'hsl(var(--warning-foreground))' },
         surface: 'hsl(var(--surface))',
         'surface-elevated': 'hsl(var(--surface-elevated))',
         'border-hover': 'hsl(var(--border-hover))',
