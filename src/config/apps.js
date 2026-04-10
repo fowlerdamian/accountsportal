@@ -54,6 +54,14 @@ export const APPS = [
     external:    false,
   },
   {
+    name:        'Compliance',
+    description: 'ISO 9001:2015 QMS documentation, self-audit, and evidence management',
+    route:       '/hub/compliance',
+    icon:        'ShieldCheck',
+    status:      'live',
+    external:    false,
+  },
+  {
     name:        'Settings',
     description: 'Account details, login links, and user role & tile access management',
     route:       '/settings',
