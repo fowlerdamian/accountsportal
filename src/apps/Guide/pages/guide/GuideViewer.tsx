@@ -45,6 +45,11 @@ export default function GuideViewer() {
   const brand = brands[0];
 
   useEffect(() => {
+    document.title = guide?.title ? `${guide.title} | Product Guide` : 'Product Guide';
+    return () => { document.title = 'Staff Portal'; };
+  }, [guide?.title]);
+
+  useEffect(() => {
     if (guide?.id) {
       const saved = localStorage.getItem(`guide-progress-${guide.id}`);
       if (saved) setCompletedSteps(new Set(JSON.parse(saved)));
