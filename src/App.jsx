@@ -58,7 +58,10 @@ export default function App() {
             {/* Support Hub — public, no login required */}
             <Route path="/support/*" element={<SupportApp />} />
 
-            {/* Guide Portal */}
+            {/* Guide Portal — public viewer */}
+            <Route path="/guide/view/:slug" element={<GuideAuthProvider><GuideViewer /></GuideAuthProvider>} />
+
+            {/* Guide Portal — protected admin */}
             <Route
               path="/guide/*"
               element={
@@ -78,7 +81,6 @@ export default function App() {
                         <Route path="brands" element={<GuideBrands />} />
                         <Route path="users" element={<GuideUsers />} />
                       </Route>
-                      <Route path="view/:slug" element={<GuideViewer />} />
                     </Routes>
                   </GuideAuthProvider>
                 </ProtectedRoute>
