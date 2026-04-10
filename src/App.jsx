@@ -72,6 +72,7 @@ export default function App() {
                         <Route index element={<GuideDashboard />} />
                         <Route path="guides" element={<GuidesList />} />
                         <Route path="guides/:id" element={<GuideEditor />} />
+                        <Route path="guides/:id/edit" element={<GuideEditor />} />
                         <Route path="guides/:id/share" element={<GuideShare />} />
                         <Route path="reports" element={<GuideReports />} />
                         <Route path="support" element={<GuideSupport />} />
