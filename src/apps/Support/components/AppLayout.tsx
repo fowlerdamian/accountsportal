@@ -19,7 +19,7 @@ export function AppLayout() {
   const { session, isLoading } = useAuth();
 
   if (isLoading) return null;
-  if (!session) return <Navigate to="/support/login" replace />;
+  if (!session) return <Navigate to="/login" replace />;
 
   return (
     <div style={{ minHeight: '100dvh', background: '#000000' }}>

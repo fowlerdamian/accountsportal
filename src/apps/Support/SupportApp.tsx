@@ -14,7 +14,6 @@ import ActionItemsPage from '@/pages/ActionItemsPage';
 import WarehouseDashboard from '@/pages/WarehouseDashboard';
 import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
 import NotFound from '@/pages/NotFound';
-import LoginPage from '@/pages/LoginPage';
 
 const queryClient = new QueryClient();
 
@@ -28,7 +27,6 @@ export default function SupportApp() {
         <Sonner />
         <AuthProvider>
           <Routes>
-            <Route path="login" element={<LoginPage />} />
             <Route element={<AppLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="cases/new" element={<NewCasePage />} />
