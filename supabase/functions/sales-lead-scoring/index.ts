@@ -215,7 +215,7 @@ serve(async (req) => {
   // Create scoring job
   const { data: job } = await supabase
     .from("research_jobs")
-    .insert({ channel: body.channel ?? "trailbait", job_type: "scoring", status: "running", started_at: new Date().toISOString() })
+    .insert({ channel: body.channel ?? "all", job_type: "scoring", status: "running", started_at: new Date().toISOString() })
     .select("id").single();
 
   let scored = 0;

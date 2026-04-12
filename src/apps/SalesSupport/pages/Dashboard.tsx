@@ -45,10 +45,12 @@ export default function Dashboard() {
     try {
       setSyncStep("Discovering leads…");
       await supabase.functions.invoke("sales-lead-discovery", { body: {} });
-      setSyncStep("Enriching…");
-      await supabase.functions.invoke("sales-lead-enrichment", { body: {} });
-      setSyncStep("Scoring…");
-      await supabase.functions.invoke("sales-lead-scoring", { body: {} });
+      for (const channel of ["trailbait", "fleetcraft", "aga"] as const) {
+        setSyncStep(`Enriching ${channel}…`);
+        await supabase.functions.invoke("sales-lead-enrichment", { body: { channel } });
+        setSyncStep(`Scoring ${channel}…`);
+        await supabase.functions.invoke("sales-lead-scoring", { body: { channel } });
+      }
       qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
     } finally {
       setActiveSync(null);
