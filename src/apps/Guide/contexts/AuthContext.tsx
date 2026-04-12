@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
-import { Session, User } from "@supabase/supabase-js";
+import { User } from "@supabase/supabase-js";
 import { supabase } from "@guide/integrations/supabase/client";
+import { useAuth as usePortalAuth } from "../../../context/AuthContext";
 
 interface AuthContextType {
-  session: Session | null;
   user: User | null;
   userRole: "admin" | "editor" | null;
   loading: boolean;
@@ -13,13 +13,13 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const { user, loading: portalLoading, signOut } = usePortalAuth();
   const [userRole, setUserRole] = useState<"admin" | "editor" | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [roleFetching, setRoleFetching] = useState(false);
   const roleFetchedFor = useRef<string | null>(null);
 
   const fetchRole = async (userId: string) => {
+    setRoleFetching(true);
     const { data } = await supabase
       .from("user_roles")
       .select("role")
@@ -27,57 +27,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
     setUserRole((data?.role as "admin" | "editor") ?? null);
     roleFetchedFor.current = userId;
+    setRoleFetching(false);
   };
 
   useEffect(() => {
-    let initialised = false;
-
-    // getSession() is authoritative for the initial load — sets loading=false once done
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      initialised = true;
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchRole(session.user.id).then(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
-
-    // onAuthStateChange handles subsequent auth events (sign in/out, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        // Skip the initial event — getSession() handles that
-        if (!initialised) return;
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          if (roleFetchedFor.current !== session.user.id) {
-            fetchRole(session.user.id).then(() => setLoading(false));
-          } else {
-            setLoading(false);
-          }
-        } else {
-          setUserRole(null);
-          roleFetchedFor.current = null;
-          setLoading(false);
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setUser(null);
-    setUserRole(null);
-    roleFetchedFor.current = null;
-  };
+    if (!user) {
+      setUserRole(null);
+      roleFetchedFor.current = null;
+      return;
+    }
+    if (roleFetchedFor.current !== user.id) {
+      fetchRole(user.id);
+    }
+  }, [user?.id]);
 
   return (
-    <AuthContext.Provider value={{ session, user, userRole, loading, signOut }}>
+    <AuthContext.Provider value={{
+      user,
+      userRole,
+      loading: portalLoading || roleFetching,
+      signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );

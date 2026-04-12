@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { ChatBot } from './ChatBot';
@@ -16,10 +16,9 @@ export function AppLayout() {
   const showShortcuts = useCallback(() => setShortcutsOpen(true), []);
   useKeyboardShortcuts(openChat, showShortcuts);
   const isMobile = useIsMobile();
-  const { session, isLoading } = useAuth();
+  const { isLoading } = useAuth();
 
   if (isLoading) return null;
-  if (!session) return <Navigate to="/login" replace />;
 
   return (
     <div style={{ minHeight: '100dvh', background: '#000000' }}>
