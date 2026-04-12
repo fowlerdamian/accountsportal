@@ -29,7 +29,7 @@ function ComplianceRoutes() {
       <Route path="supporting-docs" element={<ComplianceSupportingDocs />} />
       <Route path="files" element={<ComplianceFileManager />} />
       <Route path="setup" element={<ComplianceSetup />} />
-      <Route path="*" element={<Navigate to="" replace />} />
+      <Route path="*" element={<Navigate to="/compliance" replace />} />
     </Routes>
   );
 }

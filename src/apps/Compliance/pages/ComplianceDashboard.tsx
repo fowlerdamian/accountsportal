@@ -70,19 +70,19 @@ export default function ComplianceDashboard() {
           <p className="mt-2 text-sm text-muted-foreground">{completedCount} of {totalCount} documents completed</p>
           <div className="mt-4 flex gap-2 flex-wrap">
             {completedCount > 0 && (
-              <Button variant="secondary" size="sm" onClick={() => navigate('audit')} className="gap-2">
+              <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/audit')} className="gap-2">
                 <Shield className="h-4 w-4" />
                 {completedCount === totalCount ? 'Run Self-Audit' : 'Self-Audit (Preview)'}
               </Button>
             )}
             {completedCount > 0 && (
-              <Button variant="secondary" size="sm" onClick={() => navigate('files')} className="gap-2">
+              <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/files')} className="gap-2">
                 <FolderArchive className="h-4 w-4" />
                 File Manager
               </Button>
             )}
             {(
-              <Button variant="secondary" size="sm" onClick={() => navigate('profile')} className="gap-2">
+              <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/setup')} className="gap-2">
                 <Shield className="h-4 w-4" />
                 Company Profile
               </Button>
@@ -108,7 +108,7 @@ export default function ComplianceDashboard() {
                 return (
                   <button
                     key={doc.id}
-                    onClick={() => navigate(`document/${doc.id}`)}
+                    onClick={() => navigate(`/compliance/document/${doc.id}`)}
                     className={`group relative flex flex-col items-start rounded-xl border p-5 text-left transition-all hover:shadow-lg hover:border-primary/50 ${categoryColors[cat]}`}
                   >
                     <div className="flex w-full items-start justify-between mb-3">
@@ -143,7 +143,7 @@ export default function ComplianceDashboard() {
           className="mb-8"
         >
           <button
-            onClick={() => navigate('supporting-docs')}
+            onClick={() => navigate('/compliance/supporting-docs')}
             className="group flex w-full items-center gap-4 rounded-xl border border-border/60 bg-secondary/30 p-5 text-left transition-all hover:border-primary/40 hover:bg-secondary/60"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -202,7 +202,7 @@ export default function ComplianceDashboard() {
                               variant="outline"
                               size="sm"
                               className="gap-1 h-7 text-xs"
-                              onClick={() => navigate(`document/${action.document_id}?reanswer=${action.question_index}&actionId=${action.id}`)}
+                              onClick={() => navigate(`/compliance/document/${action.document_id}?reanswer=${action.question_index}&actionId=${action.id}`)}
                             >
                               <ArrowRight className="h-3 w-3" /> Re-answer
                             </Button>
