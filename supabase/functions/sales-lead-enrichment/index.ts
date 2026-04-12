@@ -229,6 +229,7 @@ serve(async (req) => {
   const cseKey    = Deno.env.get("GOOGLE_PLACES_API_KEY") ?? "";  // same GCP project key
   const cseCx     = Deno.env.get("GOOGLE_CSE_CX") ?? "";
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+  const apolloKey    = Deno.env.get("APOLLO_API_KEY") ?? "";
   const cin7Account  = Deno.env.get("CIN7_ACCOUNT_ID") ?? "";
   const cin7Key      = Deno.env.get("CIN7_API_KEY") ?? "";
 
@@ -367,16 +368,58 @@ serve(async (req) => {
         };
       }
 
-      // 4. Social media
+      // 4. Apollo people search — find decision-maker contact (free, no phone reveal)
+      if (apolloKey && !lead.recommended_contact_name && !(updates.recommended_contact_name)) {
+        const websiteForApollo = updates.website ?? lead.website ?? "";
+        let domain: string | null = null;
+        try {
+          domain = new URL(websiteForApollo.startsWith("http") ? websiteForApollo : `https://${websiteForApollo}`)
+            .hostname.replace(/^www\./, "");
+        } catch { /* skip */ }
+
+        if (domain) {
+          try {
+            await sleep(300);
+            const apolloRes = await fetch("https://api.apollo.io/v1/mixed_people/search", {
+              method:  "POST",
+              headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
+              body:    JSON.stringify({
+                organization_domains: [domain],
+                person_seniorities:   ["owner", "founder", "c_suite", "vp", "director", "manager"],
+                per_page: 1,
+              }),
+            });
+            if (apolloRes.ok) {
+              const apolloData = await apolloRes.json();
+              const person     = apolloData.people?.[0];
+              if (person) {
+                const fullName = `${person.first_name ?? ""} ${person.last_name ?? ""}`.trim();
+                if (fullName) {
+                  updates.recommended_contact_name     = fullName;
+                  updates.recommended_contact_position = person.title ?? null;
+                  updates.recommended_contact_source   = "apollo";
+                }
+                if (person.linkedin_url && !lead.social_linkedin) {
+                  updates.social_linkedin = person.linkedin_url;
+                }
+              }
+            }
+          } catch (err) {
+            console.warn("Apollo search failed for", lead.company_name, err);
+          }
+        }
+      }
+
+      // 5. Social media
       if (cseKey && cseCx) {
         await sleep(400);
         const socials = await findSocials(lead.company_name, cseKey, cseCx);
         if (socials.facebook)  updates.social_facebook  = socials.facebook;
         if (socials.instagram) updates.social_instagram = socials.instagram;
-        if (socials.linkedin)  updates.social_linkedin  = socials.linkedin;
+        if (socials.linkedin && !updates.social_linkedin) updates.social_linkedin = socials.linkedin;
       }
 
-      // 5. Cin7 cross-reference
+      // 6. Cin7 cross-reference
       if (cin7Account && cin7Key) {
         const cin7 = await findCin7Customer(lead.company_name, cin7Account, cin7Key);
         if (cin7) {

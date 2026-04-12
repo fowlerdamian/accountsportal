@@ -26,13 +26,18 @@ interface StageGroup {
   deals: HSDeal[];
 }
 
-// HubSpot default deal stage IDs → labels (adjust to match your pipeline)
+// Pipeline stage IDs → labels (must match your HubSpot pipeline stage IDs)
 const STAGE_LABELS: Record<string, string> = {
-  appointmentscheduled: "Appointment Scheduled",
-  qualifiedtobuy:       "Qualified",
-  presentationscheduled:"Presentation",
-  decisionmakerboughtin:"Decision Maker",
-  contractsent:         "Contract Sent",
+  // Custom pipeline stages
+  mql:                  "MQL",
+  sql:                  "SQL",
+  contacted:            "Contacted",
+  presentedproposal:    "Presented Proposal",
+  presentationscheduled:"Presented Proposal",  // HubSpot default alias
+  verbalgoahead:        "Verbal Go-Ahead",
+  firstorderplaced:     "First Order Placed",
+  regularbuyer:         "Regular Buyer",
+  // Fallbacks for HubSpot defaults
   closedwon:            "Closed Won",
   closedlost:           "Closed Lost",
 };
@@ -68,7 +73,7 @@ export default function Pipeline() {
   const deals = data ?? [];
 
   // Group by stage
-  const stageOrder = Object.keys(STAGE_LABELS);
+  const stageOrder = ["mql", "sql", "contacted", "presentedproposal", "presentationscheduled", "verbalgoahead", "firstorderplaced", "regularbuyer", "closedwon", "closedlost"];
   const stageMap = new Map<string, HSDeal[]>();
   for (const d of deals) {
     const s = d.properties.dealstage ?? "unknown";
