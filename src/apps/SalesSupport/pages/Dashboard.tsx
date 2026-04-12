@@ -63,6 +63,8 @@ export default function Dashboard() {
       await supabase.functions.invoke("sales-cin7-sync", { body: {} });
       setSyncStep("Deduplicating leads…");
       await supabase.functions.invoke("sales-lead-dedup", { body: {} });
+      setSyncStep("Scoring leads…");
+      await supabase.functions.invoke("sales-lead-scoring", { body: {} });
       setSyncStep("Enriching HubSpot records…");
       await supabase.functions.invoke("sales-hubspot-sync", { body: { action: "back_sync" } });
       setSyncStep("Generating call list…");
