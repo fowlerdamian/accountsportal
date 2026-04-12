@@ -147,7 +147,7 @@ export default function App() {
               <Route path="logistics/disputes" element={<Disputes />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
-              <Route path="compliance/*" element={<ComplianceApp />} />
+              <Route path="compliance/*" element={<GuideAuthProvider><ComplianceApp /></GuideAuthProvider>} />
             </Route>
 
             {/* Catch-all */}
