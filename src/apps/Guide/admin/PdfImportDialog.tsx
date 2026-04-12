@@ -168,7 +168,6 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
 
   const extractText = async (buffer: ArrayBuffer): Promise<ParsedData> => {
     setProgressText("Extracting text with AI…");
-    const visionCopy = buffer.slice(0);
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     let fullText = "";
     for (let i = 1; i <= Math.min(pdf.numPages, 50); i++) {
@@ -181,19 +180,28 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
     const letterCount = (fullText.match(/[a-zA-Z]/g) || []).length;
     const useVision = fullText.trim().length < 200 || letterCount < 80;
 
-    let invokeBody: Record<string, string>;
     if (useVision) {
-      const bytes = new Uint8Array(visionCopy);
-      let binary = "";
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
+      // Render each page to a compressed JPEG — avoids sending raw PDF bytes
+      // which can exceed the 6 MB edge function body limit
+      setProgressText("Rendering pages for AI vision…");
+      const maxPages = Math.min(pdf.numPages, 15);
+      const pageImages: string[] = [];
+      for (let i = 1; i <= maxPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d")!;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        // Strip the "data:image/jpeg;base64," prefix
+        pageImages.push(canvas.toDataURL("image/jpeg", 0.65).split(",")[1]);
       }
-      invokeBody = { pdfBase64: btoa(binary) };
+      return invokeFunction("parse-pdf-text", { pageImages });
     } else {
-      invokeBody = { text: fullText };
+      // Trim to keep the JSON body well under the 6 MB limit
+      return invokeFunction("parse-pdf-text", { text: fullText.slice(0, 80_000) });
     }
-
-    return invokeFunction("parse-pdf-text", invokeBody);
   };
 
   const extractImages = async (buffer: ArrayBuffer): Promise<ExtractionResult> => {

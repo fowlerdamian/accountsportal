@@ -1,5 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -31,7 +29,7 @@ Rules:
 - For vehicles look for Suitable For, Fits, Compatible With, Vehicle Application sections
 - Return ONLY the raw JSON object`;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -46,29 +44,42 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { text, pdfBase64 } = body;
+    const { text, pdfBase64, pageImages } = body;
 
-    if (!text && !pdfBase64) {
+    if (!text && !pdfBase64 && (!pageImages || pageImages.length === 0)) {
       return new Response(
-        JSON.stringify({ error: "No text or pdfBase64 provided" }),
+        JSON.stringify({ error: "No text, pdfBase64, or pageImages provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Build Claude API request
     const messages: any[] = [];
-    if (pdfBase64) {
-      // Vision mode: send PDF as base64 document
+
+    if (pageImages?.length) {
+      // Vision mode: pre-rendered JPEG page images (avoids large PDF body)
+      const imageBlocks = pageImages.slice(0, 20).map((b64: string) => ({
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg", data: b64 },
+      }));
+      messages.push({
+        role: "user",
+        content: [
+          ...imageBlocks,
+          {
+            type: "text",
+            text: "Extract all installation guide information from these PDF page images. Follow the system instructions exactly.",
+          },
+        ],
+      });
+    } else if (pdfBase64) {
+      // Legacy vision mode: full PDF base64 document
       messages.push({
         role: "user",
         content: [
           {
             type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: pdfBase64,
-            },
+            source: { type: "base64", media_type: "application/pdf", data: pdfBase64 },
           },
           {
             type: "text",
@@ -77,6 +88,7 @@ serve(async (req) => {
         ],
       });
     } else {
+      // Text mode
       messages.push({
         role: "user",
         content: `Extract all installation guide information from the following document text. Follow the system instructions exactly.\n\n${text}`,
@@ -91,7 +103,7 @@ serve(async (req) => {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         messages,
@@ -109,7 +121,6 @@ serve(async (req) => {
     const claudeData = await claudeRes.json();
     const responseText = claudeData.content?.[0]?.text ?? "";
 
-    // Parse the JSON from Claude's response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return new Response(
@@ -123,7 +134,7 @@ serve(async (req) => {
       JSON.stringify(parsed),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (err) {
+  } catch (err: any) {
     return new Response(
       JSON.stringify({ error: err.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
