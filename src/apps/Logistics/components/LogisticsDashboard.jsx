@@ -101,8 +101,8 @@ export default function LogisticsDashboard() {
               return (
                 <tr
                   key={inv.id}
-                  onClick={() => navigate(`/apps/logistics/invoices/${inv.id}`)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/apps/logistics/invoices/${inv.id}`); } }}
+                  onClick={() => navigate(`/logistics/invoices/${inv.id}`)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/logistics/invoices/${inv.id}`); } }}
                   tabIndex={0}
                   role="button"
                   aria-label={`Invoice ${inv.invoice_ref}`}

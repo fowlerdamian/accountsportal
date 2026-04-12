@@ -3,10 +3,10 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@portal/lib/supabase'
 
 const tabs = [
-  { label: 'Dashboard',  to: '/apps/logistics',          end: true  },
-  { label: 'Invoices',   to: '/apps/logistics/invoices', end: false, flagKey: 'flagged'   },
-  { label: 'Rate Cards', to: '/apps/logistics/rate-cards', end: false },
-  { label: 'Disputes',   to: '/apps/logistics/disputes', end: false, flagKey: 'disputed'  },
+  { label: 'Dashboard',  to: '/logistics',          end: true  },
+  { label: 'Invoices',   to: '/logistics/invoices', end: false, flagKey: 'flagged'   },
+  { label: 'Rate Cards', to: '/logistics/rate-cards', end: false },
+  { label: 'Disputes',   to: '/logistics/disputes', end: false, flagKey: 'disputed'  },
 ]
 
 export default function LogisticsNav() {

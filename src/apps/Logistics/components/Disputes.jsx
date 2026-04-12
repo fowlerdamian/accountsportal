@@ -73,7 +73,7 @@ export default function Disputes() {
               return (
                 <tr
                   key={inv.id}
-                  onClick={() => navigate(`/apps/logistics/invoices/${inv.id}`)}
+                  onClick={() => navigate(`/logistics/invoices/${inv.id}`)}
                   style={{ borderBottom: '1px solid #181818', cursor: 'pointer', transition: 'background 120ms' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#0a0a0a'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
