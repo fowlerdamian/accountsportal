@@ -399,7 +399,7 @@ export default function GuideEditor() {
       })));
     }
 
-    // Load variants and their steps
+    // Load variants and their steps, then mark initialized
     if (id) {
       supabase.from("guide_variants").select("*").eq("instruction_set_id", id).then(({ data: variantRows }) => {
         if (variantRows && variantRows.length > 0) {
@@ -417,12 +417,17 @@ export default function GuideEditor() {
                 image2_url: s.image2_url, image2_original_url: s.image2_original_url,
               })),
             } as VariantDraft;
-          })).then(setVariants);
+          })).then((variants) => {
+            setVariants(variants);
+            setInitialized(true);
+          });
+        } else {
+          setInitialized(true);
         }
       });
+    } else {
+      setInitialized(true);
     }
-
-    setInitialized(true);
   }, [isEditing, initialized, loadingGuide, loadingSteps, loadingVehicles, existingGuide, existingSteps, existingVehicles]);
 
   const generateSlug = () => Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 10);
