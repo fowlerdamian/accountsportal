@@ -20,16 +20,21 @@ function cin7Headers(accountId: string, apiKey: string) {
 
 // ─── Fetch all customers for a given tag ─────────────────────────────────────
 
-async function fetchCustomersByTag(tag: string, accountId: string, apiKey: string): Promise<any[]> {
+async function fetchCustomersByTag(
+  tag: string,
+  accountId: string,
+  apiKey: string,
+  modifiedSince?: string   // YYYY-MM-DD — only fetch customers added/changed since this date
+): Promise<any[]> {
   const customers: any[] = [];
   let page = 1;
   const limit = 100;
 
   while (true) {
-    const res = await fetch(
-      `${CIN7_BASE}/customer?Tags=${encodeURIComponent(tag)}&Limit=${limit}&Page=${page}`,
-      { headers: cin7Headers(accountId, apiKey) }
-    );
+    let url = `${CIN7_BASE}/customer?Tags=${encodeURIComponent(tag)}&Limit=${limit}&Page=${page}`;
+    if (modifiedSince) url += `&ModifiedSince=${modifiedSince}`;
+
+    const res = await fetch(url, { headers: cin7Headers(accountId, apiKey) });
     if (!res.ok) break;
 
     const data = await res.json();
@@ -249,22 +254,43 @@ serve(async (req) => {
     jobIds[ch] = job?.id;
   }
 
-  const summary = { trailbait: 0, fleetcraft: 0, aga: 0 };
+  const summary = { trailbait: 0, fleetcraft: 0, aga: 0, skipped: 0 };
 
   try {
-    // Load recently synced TrailBait customers (last 6 hours) to skip them
-    const sixHoursAgo = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+    // ── Determine last successful sync date ───────────────────────────────────
+    const { data: lastJob } = await supabase
+      .from("research_jobs")
+      .select("started_at")
+      .eq("job_type", "cin7_sync")
+      .eq("status", "completed")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    // Use date one day before last sync so we don't miss anything on boundary
+    const modifiedSince = lastJob?.started_at
+      ? new Date(new Date(lastJob.started_at).getTime() - 86400000).toISOString().split("T")[0]
+      : undefined;
+
+    console.log("[cin7-sync] modifiedSince:", modifiedSince ?? "full sync (first run)");
+
+    // ── TrailBait (tag D) — full order history per customer ───────────────────
+    // Skip customers already synced in the last 23 hours (matches daily cadence)
+    const twentyThreeHoursAgo = new Date(Date.now() - 23 * 3600 * 1000).toISOString();
     const { data: recentRows } = await supabase
       .from("trailbait_order_history")
       .select("cin7_customer_id")
-      .gte("last_synced", sixHoursAgo);
+      .gte("last_synced", twentyThreeHoursAgo);
     const recentlySyncedIds = new Set<string>((recentRows ?? []).map((r: any) => String(r.cin7_customer_id)));
 
-    // ── TrailBait (tag D) ─────────────────────────────────────────────────────
-    const trailbaitCustomers = await fetchCustomersByTag("D", accountId, apiKey);
+    const trailbaitCustomers = await fetchCustomersByTag("D", accountId, apiKey, modifiedSince);
+    console.log(`[cin7-sync] TrailBait customers to process: ${trailbaitCustomers.length}`);
+
     for (const c of trailbaitCustomers) {
       await sleep(200);
       try {
+        const customerId = String(c.ID ?? c.CustomerID ?? "");
+        if (recentlySyncedIds.has(customerId)) { summary.skipped++; continue; }
         await syncTrailBaitCustomer(c, supabase, accountId, apiKey, recentlySyncedIds);
         summary.trailbait++;
       } catch (err) {
@@ -272,9 +298,21 @@ serve(async (req) => {
       }
     }
 
-    // ── FleetCraft (tag F) ────────────────────────────────────────────────────
-    const fleetcraftCustomers = await fetchCustomersByTag("F", accountId, apiKey);
+    // ── FleetCraft (tag F) — existing customer check only ────────────────────
+    // Load already-linked IDs so we don't re-check customers we've already matched
+    const { data: linkedF } = await supabase
+      .from("sales_leads")
+      .select("cin7_customer_id")
+      .eq("channel", "fleetcraft")
+      .not("cin7_customer_id", "is", null);
+    const linkedFleetcraftIds = new Set<string>((linkedF ?? []).map((r: any) => String(r.cin7_customer_id)));
+
+    const fleetcraftCustomers = await fetchCustomersByTag("F", accountId, apiKey, modifiedSince);
+    console.log(`[cin7-sync] FleetCraft customers to process: ${fleetcraftCustomers.length}`);
+
     for (const c of fleetcraftCustomers) {
+      const cid = String(c.ID ?? c.CustomerID ?? "");
+      if (linkedFleetcraftIds.has(cid)) { summary.skipped++; continue; }
       await sleep(100);
       try {
         await syncExistingCustomerCheck(c, "F", supabase);
@@ -284,9 +322,20 @@ serve(async (req) => {
       }
     }
 
-    // ── AGA (tag A) ───────────────────────────────────────────────────────────
-    const agaCustomers = await fetchCustomersByTag("A", accountId, apiKey);
+    // ── AGA (tag A) — existing customer check only ────────────────────────────
+    const { data: linkedA } = await supabase
+      .from("sales_leads")
+      .select("cin7_customer_id")
+      .eq("channel", "aga")
+      .not("cin7_customer_id", "is", null);
+    const linkedAgaIds = new Set<string>((linkedA ?? []).map((r: any) => String(r.cin7_customer_id)));
+
+    const agaCustomers = await fetchCustomersByTag("A", accountId, apiKey, modifiedSince);
+    console.log(`[cin7-sync] AGA customers to process: ${agaCustomers.length}`);
+
     for (const c of agaCustomers) {
+      const cid = String(c.ID ?? c.CustomerID ?? "");
+      if (linkedAgaIds.has(cid)) { summary.skipped++; continue; }
       await sleep(100);
       try {
         await syncExistingCustomerCheck(c, "A", supabase);
