@@ -6,53 +6,64 @@ const ALLOWED_DOMAIN  = 'automotivegroup.com.au'
 const ALLOWED_EMAILS  = ['automotivegroupaustralia@gmail.com']
 
 export default function LoginPage() {
-  const { user, loading, signInWithMagicLink } = useAuth()
+  const { user, loading, signIn, signInWithMagicLink } = useAuth()
   const navigate = useNavigate()
 
   const [email, setEmail]         = useState('')
+  const [password, setPassword]   = useState('')
+  const [mode, setMode]           = useState('password') // 'password' | 'magic'
   const [error, setError]         = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [sent, setSent]           = useState(false)
 
-  // Already logged in → skip straight to dashboard
   useEffect(() => {
     if (!loading && user) navigate('/dashboard', { replace: true })
   }, [user, loading, navigate])
+
+  const isAllowed = (email) => {
+    const t = email.trim().toLowerCase()
+    return t.endsWith(`@${ALLOWED_DOMAIN}`) || ALLOWED_EMAILS.includes(t)
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
 
-    const trimmed = email.trim().toLowerCase()
-
-    // Client-side domain/email check for a fast, clear error
-    const domainOk = trimmed.endsWith(`@${ALLOWED_DOMAIN}`)
-    const emailOk  = ALLOWED_EMAILS.includes(trimmed)
-    if (!domainOk && !emailOk) {
+    if (!isAllowed(email)) {
       setError(`Only @${ALLOWED_DOMAIN} accounts can access this portal.`)
       return
     }
 
     setSubmitting(true)
-    const { error: authError } = await signInWithMagicLink(trimmed)
-    setSubmitting(false)
 
-    if (authError) {
-      const msg = authError.message || ''
-      if (
-        msg.toLowerCase().includes('fetch') ||
-        msg.toLowerCase().includes('network') ||
-        msg.toLowerCase().includes('json') ||
-        msg.toLowerCase().includes('token')
-      ) {
-        setError('Could not reach the authentication server. Verify that VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are correctly set in Vercel.')
-      } else {
-        setError(msg || 'An unexpected error occurred.')
+    if (mode === 'password') {
+      const { error: authError } = await signIn(email.trim().toLowerCase(), password)
+      setSubmitting(false)
+      if (authError) {
+        setError(authError.message === 'Invalid login credentials'
+          ? 'Incorrect email or password.'
+          : authError.message || 'Sign in failed.')
       }
-      return
+      // On success, the AuthContext onAuthStateChange fires → navigate happens in useEffect
+    } else {
+      const { error: authError } = await signInWithMagicLink(email.trim().toLowerCase())
+      setSubmitting(false)
+      if (authError) {
+        const msg = authError.message || ''
+        if (
+          msg.toLowerCase().includes('fetch') ||
+          msg.toLowerCase().includes('network') ||
+          msg.toLowerCase().includes('json') ||
+          msg.toLowerCase().includes('token')
+        ) {
+          setError('Could not reach the authentication server. Verify that VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are correctly set in Vercel.')
+        } else {
+          setError(msg || 'An unexpected error occurred.')
+        }
+        return
+      }
+      setSent(true)
     }
-
-    setSent(true)
   }
 
   if (loading) return null
@@ -83,7 +94,7 @@ export default function LoginPage() {
         </div>
 
         {sent ? (
-          /* ── Confirmation state ─────────────────────────────────────────── */
+          /* ── Magic link sent ──────────────────────────────────────────────── */
           <div className="flex flex-col gap-4">
             <div
               className="rounded px-4 py-4 flex flex-col gap-2"
@@ -108,8 +119,9 @@ export default function LoginPage() {
             </button>
           </div>
         ) : (
-          /* ── Email form ─────────────────────────────────────────────────── */
+          /* ── Login form ───────────────────────────────────────────────────── */
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {/* Email */}
             <div className="flex flex-col gap-1.5">
               <label
                 className="text-[11px] uppercase tracking-widest font-medium"
@@ -136,6 +148,34 @@ export default function LoginPage() {
               />
             </div>
 
+            {/* Password (only in password mode) */}
+            {mode === 'password' && (
+              <div className="flex flex-col gap-1.5">
+                <label
+                  className="text-[11px] uppercase tracking-widest font-medium"
+                  style={{ color: '#a0a0a0' }}
+                >
+                  Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded px-3 py-2.5 text-sm font-mono outline-none transition-colors"
+                  style={{
+                    background: '#0a0a0c',
+                    border: '1px solid #222222',
+                    color: '#ffffff',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = '#f3ca0f' }}
+                  onBlur={(e)  => { e.target.style.borderColor = '#222222' }}
+                />
+              </div>
+            )}
+
             {error && (
               <p
                 className="text-xs font-mono px-3 py-2 rounded"
@@ -160,7 +200,21 @@ export default function LoginPage() {
                 cursor: submitting ? 'not-allowed' : 'pointer',
               }}
             >
-              {submitting ? 'Sending…' : 'Send Login Link'}
+              {submitting
+                ? (mode === 'password' ? 'Signing in…' : 'Sending…')
+                : (mode === 'password' ? 'Sign In' : 'Send Login Link')}
+            </button>
+
+            {/* Mode toggle */}
+            <button
+              type="button"
+              onClick={() => { setMode(m => m === 'password' ? 'magic' : 'password'); setError(null) }}
+              className="text-xs font-mono text-center transition-colors"
+              style={{ color: '#555', background: 'none', border: 'none', cursor: 'pointer' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#888' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#555' }}
+            >
+              {mode === 'password' ? 'Sign in with a magic link instead' : 'Sign in with password instead'}
             </button>
           </form>
         )}

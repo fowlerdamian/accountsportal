@@ -5,7 +5,7 @@ import { cn } from "../../../apps/Guide/lib/utils";
 import { useLeads } from "../hooks/useSalesQueries";
 import { LeadScoreBadge } from "../components/LeadScoreBadge";
 import { LeadDetailDrawer } from "../components/LeadDetailDrawer";
-import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, SUPABASE_FN_URL, type Channel } from "../lib/constants";
+import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type Channel } from "../lib/constants";
 import type { SalesLead } from "../hooks/useSalesQueries";
 import { supabase } from "../../../lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
@@ -80,22 +80,12 @@ export default function LeadList() {
     const ids = [...selectedIds];
     try {
       if (action === "hubspot") {
-        const { data: { session } } = await supabase.auth.getSession();
         for (const id of ids) {
-          await fetch(SUPABASE_FN_URL("sales-hubspot-sync"), {
-            method:  "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token ?? ""}` },
-            body: JSON.stringify({ lead_id: id }),
-          });
+          await supabase.functions.invoke("sales-hubspot-sync", { body: { lead_id: id } });
         }
       } else if (action === "enrich") {
-        const { data: { session } } = await supabase.auth.getSession();
         for (const id of ids) {
-          await fetch(SUPABASE_FN_URL("sales-lead-enrichment"), {
-            method:  "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token ?? ""}` },
-            body: JSON.stringify({ lead_id: id }),
-          });
+          await supabase.functions.invoke("sales-lead-enrichment", { body: { lead_id: id } });
         }
       } else if (action === "disqualify") {
         await supabase.from("sales_leads").update({ status: "disqualified" }).in("id", ids);
@@ -290,7 +280,7 @@ export default function LeadList() {
                   </td>
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     {lead.hubspot_company_id && (
-                      <a href={`https://app.hubspot.com/contacts/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
+                      <a href={`https://app-ap1.hubspot.com/contacts/22572063/company/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
                         className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-orange-400 inline-block">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>

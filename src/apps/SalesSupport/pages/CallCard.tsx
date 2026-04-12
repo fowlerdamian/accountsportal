@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useCallEntry, useUpdateCallOutcome, useSaveCallNotes } from "../hooks/useSalesQueries";
-import { SUPABASE_FN_URL, type Channel } from "../lib/constants";
+import { type Channel } from "../lib/constants";
 import { supabase } from "../../../lib/supabase";
 
 const OUTCOMES = [
@@ -26,9 +26,10 @@ export default function CallCard() {
   const updateOutcome             = useUpdateCallOutcome();
   const saveNotes                 = useSaveCallNotes();
 
-  const [notes, setNotes]         = useState("");
+  const [notes, setNotes]           = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
-  const [syncing, setSyncing]     = useState(false);
+  const [syncing, setSyncing]       = useState(false);
+  const [syncingOutcome, setSyncingOutcome] = useState<string | null>(null);
 
   useEffect(() => {
     if (call?.call_notes) setNotes(call.call_notes);
@@ -47,25 +48,25 @@ export default function CallCard() {
   const lead  = call.sales_leads;
 
   async function markOutcome(outcome: string) {
-    await updateOutcome.mutateAsync({
-      callId:   call.id,
-      outcome,
-      notes,
-      calledAt: new Date().toISOString(),
-    });
-    // Sync note to HubSpot
-    if (lead?.hubspot_company_id) {
-      setSyncing(true);
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await fetch(SUPABASE_FN_URL("sales-hubspot-sync"), {
-          method:  "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token ?? ""}` },
-          body: JSON.stringify({ action: "sync_notes" }),
-        });
-      } finally {
-        setSyncing(false);
+    setSyncingOutcome(outcome);
+    try {
+      await updateOutcome.mutateAsync({
+        callId:   call.id,
+        outcome,
+        notes,
+        calledAt: new Date().toISOString(),
+      });
+      // Sync note to HubSpot
+      if (lead?.hubspot_company_id) {
+        setSyncing(true);
+        try {
+          await supabase.functions.invoke("sales-hubspot-sync", { body: { action: "sync_notes" } });
+        } finally {
+          setSyncing(false);
+        }
       }
+    } finally {
+      setSyncingOutcome(null);
     }
   }
 
@@ -114,7 +115,7 @@ export default function CallCard() {
               </a>
             )}
             {lead?.hubspot_company_id && (
-              <a href={`https://app.hubspot.com/contacts/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
+              <a href={`https://app-ap1.hubspot.com/contacts/22572063/company/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" /> HubSpot
               </a>
@@ -280,10 +281,10 @@ export default function CallCard() {
               <button
                 key={key}
                 onClick={() => markOutcome(key)}
-                disabled={updateOutcome.isPending || syncing}
+                disabled={!!syncingOutcome || syncing}
                 className={cn("px-4 py-2 text-sm rounded-lg border transition-all disabled:opacity-50", color)}
               >
-                {(updateOutcome.isPending || syncing) && updateOutcome.variables?.outcome === key
+                {syncingOutcome === key
                   ? <Loader2 className="w-4 h-4 animate-spin" />
                   : label}
               </button>

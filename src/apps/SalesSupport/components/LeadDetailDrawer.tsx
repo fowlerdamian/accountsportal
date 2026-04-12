@@ -2,7 +2,7 @@ import { useState } from "react";
 import { X, ExternalLink, Star, Globe, Phone, MapPin, User, Link, TrendingDown, TrendingUp, Minus, Loader2, PhoneCall } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { LeadScoreBadge } from "./LeadScoreBadge";
-import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, SUPABASE_FN_URL, type Channel } from "../lib/constants";
+import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type Channel } from "../lib/constants";
 import { useOrderHistory } from "../hooks/useSalesQueries";
 import type { SalesLead } from "../hooks/useSalesQueries";
 import { supabase } from "../../../lib/supabase";
@@ -36,16 +36,10 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
   async function pushToHubSpot() {
     setSyncing(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(SUPABASE_FN_URL("sales-hubspot-sync"), {
-        method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${session?.access_token ?? ""}`,
-        },
-        body: JSON.stringify({ lead_id: lead.id }),
+      const { error } = await supabase.functions.invoke("sales-hubspot-sync", {
+        body: { lead_id: lead.id },
       });
-      if (res.ok) onLeadUpdated();
+      if (!error) onLeadUpdated();
     } finally {
       setSyncing(false);
     }
@@ -166,7 +160,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
               </a>
             )}
             {lead.hubspot_company_id ? (
-              <a href={`https://app.hubspot.com/contacts/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
+              <a href={`https://app-ap1.hubspot.com/contacts/22572063/company/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-orange-500/10 text-orange-400 text-sm hover:bg-orange-500/20 transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" /> View in HubSpot
               </a>
@@ -374,7 +368,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
               <dt className="text-muted-foreground">Source</dt>
               <dd>{lead.discovery_source}</dd>
               <dt className="text-muted-foreground">Found</dt>
-              <dd>{new Date(lead.discovery_date).toLocaleDateString("en-AU")}</dd>
+              <dd>{new Date(lead.created_at).toLocaleDateString("en-AU")}</dd>
               {lead.cin7_customer_id && (
                 <>
                   <dt className="text-muted-foreground">Cin7 ID</dt>

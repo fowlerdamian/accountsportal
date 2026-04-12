@@ -13,6 +13,8 @@ export default defineConfig({
       '@guide': path.resolve(__dirname, './src/apps/Guide'),
       // Contractor Hub
       '@hub': path.resolve(__dirname, './src/apps/ContractorHub'),
+      // Sales Support
+      '@sales': path.resolve(__dirname, './src/apps/SalesSupport'),
     },
   },
 })

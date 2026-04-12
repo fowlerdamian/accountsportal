@@ -2,10 +2,11 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, TrendingUp, Phone, Users, RotateCcw, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useDashboardMetrics } from "../hooks/useSalesQueries";
-import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNEL_DESCRIPTION, CHANNELS, SUPABASE_FN_URL, type Channel } from "../lib/constants";
+import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNEL_DESCRIPTION, CHANNELS, type Channel } from "../lib/constants";
 import { LeadScoreBadge } from "../components/LeadScoreBadge";
 import { supabase } from "../../../lib/supabase";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
@@ -34,21 +35,15 @@ function JobStatusBadge({ status }: { status: string }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { data, isLoading } = useDashboardMetrics();
   const [triggering, setTriggering] = useState<string | null>(null);
 
   async function triggerJob(fnName: string) {
     setTriggering(fnName);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      await fetch(SUPABASE_FN_URL(fnName), {
-        method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${session?.access_token ?? ""}`,
-        },
-        body: JSON.stringify({}),
-      });
+      await supabase.functions.invoke(fnName, { body: {} });
+      qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
     } finally {
       setTriggering(null);
     }
@@ -63,20 +58,21 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="p-6">
+    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Sales Support</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Lead research, enrichment, and call planning</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
           {[
             { fn: "sales-lead-discovery",    label: "Discover",      title: "Run lead discovery for all channels" },
             { fn: "sales-lead-enrichment",   label: "Enrich",        title: "Enrich new/researched leads" },
             { fn: "sales-cin7-sync",         label: "Cin7 Sync",     title: "Sync Cin7 order history & existing customers" },
             { fn: "sales-lead-scoring",      label: "Score",         title: "Rescore all enriched leads" },
-            { fn: "sales-calllist-generate", label: "Gen Call List", title: "Generate today's call list" },
+            { fn: "sales-calllist-generate", label: "Call List",     title: "Generate today's call list" },
           ].map(({ fn, label, title }) => (
             <button key={fn} onClick={() => triggerJob(fn)} disabled={!!triggering} title={title}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50">
@@ -180,6 +176,7 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+    </div>
     </div>
   );
 }

@@ -7,39 +7,56 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
-  const { session, isWarehouse } = useAuth();
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [mode, setMode]         = useState<'password' | 'magic'>('password');
+  const [loading, setLoading]   = useState(false);
+  const [sent, setSent]         = useState(false);
+  const { session, isWarehouse, isLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (session) {
-      navigate(isWarehouse ? '/warehouse' : '/', { replace: true });
+    if (!isLoading && session) {
+      navigate(isWarehouse ? '/support/warehouse' : '/support', { replace: true });
     }
-  }, [session, isWarehouse, navigate]);
+  }, [session, isWarehouse, isLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || loading) return;
-
+    if (loading) return;
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false, emailRedirectTo: window.location.origin },
-    });
-    setLoading(false);
-    if (error) {
-      if (error.message.toLowerCase().includes('signups not allowed') || error.message.toLowerCase().includes('not allowed')) {
-        toast.error('No account found — ask your admin for an invite');
-      } else {
-        toast.error(error.message);
+
+    if (mode === 'password') {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      setLoading(false);
+      if (error) {
+        toast.error(
+          error.message === 'Invalid login credentials'
+            ? 'Incorrect email or password.'
+            : error.message
+        );
       }
-      return;
+      // On success, useEffect above handles redirect
+    } else {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false, emailRedirectTo: window.location.origin + '/support' },
+      });
+      setLoading(false);
+      if (error) {
+        if (error.message.toLowerCase().includes('signups not allowed') || error.message.toLowerCase().includes('not allowed')) {
+          toast.error('No account found — ask your admin for an invite');
+        } else {
+          toast.error(error.message);
+        }
+        return;
+      }
+      setSent(true);
+      toast.success('Check your inbox for a sign-in link');
     }
-    setSent(true);
-    toast.success('Check your inbox for a sign-in link');
   };
+
+  if (isLoading) return null;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -77,8 +94,23 @@ export default function LoginPage() {
               onChange={e => setEmail(e.target.value)}
               placeholder="you@company.com"
               required
+              autoFocus
+              autoComplete="email"
               className="w-full bg-background border border-input text-foreground text-sm px-3 py-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors"
             />
+
+            {mode === 'password' && (
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Password"
+                required
+                autoComplete="current-password"
+                className="w-full bg-background border border-input text-foreground text-sm px-3 py-2.5 placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors"
+              />
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -87,11 +119,19 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Sending link…
+                  {mode === 'password' ? 'Signing in…' : 'Sending link…'}
                 </>
               ) : (
-                'Send magic link'
+                mode === 'password' ? 'Sign In' : 'Send magic link'
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMode(m => m === 'password' ? 'magic' : 'password')}
+              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
+            >
+              {mode === 'password' ? 'Sign in with a magic link instead' : 'Sign in with password instead'}
             </button>
           </form>
         )}

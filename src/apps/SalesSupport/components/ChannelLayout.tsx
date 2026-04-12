@@ -24,9 +24,9 @@ export default function ChannelLayout({ channel }: Props) {
   const base = `/apps/sales-support/${ch}`;
 
   return (
-    <div className="flex flex-col min-h-full">
-      {/* Channel header */}
-      <div className={cn("border-b border-border/50 bg-card/50 px-6 py-3", colors.border)}>
+    <div className="flex flex-col">
+      {/* Channel header — sticky within the SalesSupport scroll container */}
+      <div className={cn("sticky top-0 z-10 border-b border-border/50 bg-card/50 px-6 py-3", colors.border)}>
         <div className="flex items-center gap-4">
           {/* Back to dashboard */}
           <button
@@ -89,8 +89,10 @@ export default function ChannelLayout({ channel }: Props) {
       </div>
 
       {/* Page content */}
-      <div className="flex-1 p-6">
-        <Outlet context={{ channel: ch }} />
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          <Outlet context={{ channel: ch }} />
+        </div>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, ExternalLink, RefreshCw, DollarSign, Clock } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
-import { SUPABASE_FN_URL, type Channel } from "../lib/constants";
+import { type Channel } from "../lib/constants";
 import { supabase } from "../../../lib/supabase";
 
 interface HSDeal {
@@ -52,13 +52,15 @@ export default function Pipeline() {
   const { data, isLoading, refetch, error } = useQuery({
     queryKey: ["hs_deals", channel],
     queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${SUPABASE_FN_URL("sales-hubspot-sync")}?channel=${channel}`, {
-        headers: { "Authorization": `Bearer ${session?.access_token ?? ""}` },
+      const { data, error } = await supabase.functions.invoke("sales-hubspot-sync", {
+        body: { action: "get_deals", channel },
       });
-      if (!res.ok) throw new Error("Failed to fetch deals");
-      const json = await res.json();
-      return json.deals as HSDeal[];
+      if (error) {
+        let msg = "Failed to fetch HubSpot deals";
+        try { const body = await (error as any).context?.json?.(); if (body?.error) msg = body.error; } catch {}
+        throw new Error(msg);
+      }
+      return data.deals as HSDeal[];
     },
     staleTime: 60_000,
   });
@@ -105,9 +107,16 @@ export default function Pipeline() {
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       ) : error ? (
-        <div className="py-12 text-center">
-          <p className="text-muted-foreground text-sm">
-            Could not load HubSpot deals. Check that HUBSPOT_ACCESS_TOKEN is configured.
+        <div className="py-12 text-center space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">
+            {(error as Error).message === "HUBSPOT_ACCESS_TOKEN not configured"
+              ? "HubSpot is not connected yet."
+              : "Could not load HubSpot deals."}
+          </p>
+          <p className="text-xs text-muted-foreground/60">
+            {(error as Error).message === "HUBSPOT_ACCESS_TOKEN not configured"
+              ? "Add HUBSPOT_ACCESS_TOKEN to your Supabase edge function secrets to enable the pipeline view."
+              : (error as Error).message}
           </p>
         </div>
       ) : deals.length === 0 ? (
@@ -168,7 +177,7 @@ export default function Pipeline() {
                             <div>Close date: {new Date(deal.properties.closedate).toLocaleDateString("en-AU")}</div>
                           )}
                           <a
-                            href={`https://app.hubspot.com/deals/${deal.id}`}
+                            href={`https://app-ap1.hubspot.com/deals/22572063/${deal.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}

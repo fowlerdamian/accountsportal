@@ -3,7 +3,7 @@ import { useOutletContext, useNavigate } from "react-router-dom";
 import { Loader2, Phone, RefreshCw, ChevronRight, Star, Globe, User, RotateCcw } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useCallList } from "../hooks/useSalesQueries";
-import { SUPABASE_FN_URL, type Channel } from "../lib/constants";
+import { type Channel } from "../lib/constants";
 import { supabase } from "../../../lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -34,12 +34,7 @@ export default function CallList() {
   async function generateList() {
     setGen(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      await fetch(SUPABASE_FN_URL("sales-calllist-generate"), {
-        method:  "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token ?? ""}` },
-        body: JSON.stringify({ channel, date }),
-      });
+      await supabase.functions.invoke("sales-calllist-generate", { body: { channel, date } });
       qc.invalidateQueries({ queryKey: ["call_list", channel, date] });
     } finally {
       setGen(false);

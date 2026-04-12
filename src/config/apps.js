@@ -55,7 +55,7 @@ export const APPS = [
   },
   {
     name:        'Sales Support',
-    description: 'Sales support tooling and workflow assistance',
+    description: 'Lead discovery, enrichment, scoring, and daily call list generation across TrailBait, FleetCraft, and AGA channels',
     route:       '/apps/sales-support',
     icon:        'TrendingUp',
     status:      'live',

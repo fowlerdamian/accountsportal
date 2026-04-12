@@ -149,7 +149,11 @@ export default function Reports() {
     return <div className="flex justify-center py-20"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
   }
 
-  const d = data!;
+  if (!data) {
+    return <div className="py-20 text-center text-sm text-muted-foreground">No report data available yet.</div>;
+  }
+
+  const d = data;
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -241,11 +245,8 @@ export default function Reports() {
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip {...TOOLTIP_STYLE} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="made"  fill="#66bb6a" radius={[3, 3, 0, 0]} maxBarSize={20} name="Completed" stackId="a" />
-            <Bar dataKey="total" fill="#4fc3f7" radius={[3, 3, 0, 0]} maxBarSize={20} name="Scheduled"
-              // Show the delta (remaining) rather than stacking totals
-              stackId="b" opacity={0.4}
-            />
+            <Bar dataKey="total" fill="#4fc3f7" radius={[3, 3, 0, 0]} maxBarSize={20} name="Scheduled" opacity={0.4} />
+            <Bar dataKey="made"  fill="#66bb6a" radius={[3, 3, 0, 0]} maxBarSize={20} name="Completed" />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
