@@ -373,19 +373,42 @@ serve(async (req) => {
 
   // ── Back-sync: enrich existing HubSpot records ───────────────────────────
   if (body.action === "back_sync") {
-    // Ensure custom Google properties exist in HubSpot
     await ensureCompanyProperties(hsToken);
 
-    // Fetch all leads that are already in HubSpot
-    const { data: leads } = await supabase
+    // ── Pass 1: link unlinked leads that already exist in HubSpot ──────────
+    const { data: unlinked } = await supabase
+      .from("sales_leads")
+      .select("*")
+      .is("hubspot_company_id", null)
+      .not("website", "is", null)
+      .limit(300);
+
+    let linked = 0;
+    for (const lead of unlinked ?? []) {
+      await sleep(150);
+      const domain    = extractDomain(lead.website);
+      if (!domain) continue;
+      const companyId = await findHubSpotCompany(domain, hsToken);
+      if (!companyId) continue;
+      await supabase
+        .from("sales_leads")
+        .update({ hubspot_company_id: companyId, hubspot_synced_at: new Date().toISOString() })
+        .eq("id", lead.id);
+      // Merge the ID so the enrich pass below picks it up
+      lead.hubspot_company_id = companyId;
+      linked++;
+    }
+
+    // ── Pass 2: enrich all leads now linked to HubSpot ──────────────────────
+    const { data: linked_leads } = await supabase
       .from("sales_leads")
       .select("*")
       .not("hubspot_company_id", "is", null)
       .limit(200);
 
     let updated = 0;
-    for (const lead of leads ?? []) {
-      await sleep(150); // stay within HubSpot rate limits
+    for (const lead of linked_leads ?? []) {
+      await sleep(150);
       const ok = await updateHubSpotCompany(lead, lead.hubspot_company_id, hsToken);
       if (ok) {
         await updateHubSpotContact(lead, lead.hubspot_company_id, hsToken);
@@ -394,7 +417,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, updated }),
+      JSON.stringify({ ok: true, linked, updated }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
