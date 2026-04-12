@@ -15,6 +15,7 @@ export interface CompanyProfile {
   logoUrl: string | null;
   contactName: string;
   contactTitle: string;
+  signatureDataUrl: string | null;
 }
 
 export const EMPTY_COMPANY_PROFILE: CompanyProfile = {
@@ -34,4 +35,5 @@ export const EMPTY_COMPANY_PROFILE: CompanyProfile = {
   logoUrl: null,
   contactName: '',
   contactTitle: '',
+  signatureDataUrl: null,
 };

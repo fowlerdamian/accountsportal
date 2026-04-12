@@ -5,13 +5,14 @@ import { useAuth } from '@guide/contexts/AuthContext';
 import { auditSupabase } from '../client';
 import { CompanyProfile, EMPTY_COMPANY_PROFILE } from '../lib/company-profile';
 import { motion } from 'framer-motion';
-import { Shield, Upload, Building2, Globe, User, MapPin, Factory, X } from 'lucide-react';
+import { Shield, Upload, Building2, Globe, User, MapPin, Factory, X, PenLine, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import SignatureCanvas from 'react-signature-canvas';
 
 const AUSTRALIAN_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'];
 
@@ -22,6 +23,7 @@ export default function ComplianceSetup() {
   const [form, setForm] = useState<CompanyProfile>(EMPTY_COMPANY_PROFILE);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const sigPadRef = useRef<SignatureCanvas>(null);
 
   // Check if company already exists for this domain
   useEffect(() => {
@@ -270,6 +272,45 @@ export default function ComplianceSetup() {
                   <Label htmlFor="mainProducts">Main Products / Services</Label>
                   <Textarea id="mainProducts" value={form.mainProducts} onChange={(e) => update('mainProducts', e.target.value)} placeholder="Describe your main products or services..." rows={3} className="mt-1" />
                 </div>
+              </div>
+            </section>
+
+            {/* Director Signature */}
+            <section className="rounded-xl border border-border card-gradient p-6">
+              <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-2">
+                <PenLine className="h-4 w-4" /> Director Signature
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">Draw your signature below. It will appear on all generated documents.</p>
+
+              <div className="rounded-xl border border-border bg-white overflow-hidden">
+                <SignatureCanvas
+                  ref={sigPadRef}
+                  penColor="#1a1a2e"
+                  canvasProps={{ className: 'w-full', height: 160, style: { width: '100%', display: 'block' } }}
+                  onEnd={() => {
+                    const dataUrl = sigPadRef.current?.toDataURL('image/png') ?? null;
+                    setForm((prev) => ({ ...prev, signatureDataUrl: dataUrl }));
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between mt-3">
+                {form.signatureDataUrl
+                  ? <span className="text-xs text-success flex items-center gap-1"><PenLine className="h-3 w-3" /> Signature captured</span>
+                  : <span className="text-xs text-muted-foreground">Sign in the box above</span>
+                }
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={() => {
+                    sigPadRef.current?.clear();
+                    setForm((prev) => ({ ...prev, signatureDataUrl: null }));
+                  }}
+                >
+                  <RotateCcw className="h-3 w-3" /> Clear
+                </Button>
               </div>
             </section>
 

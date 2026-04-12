@@ -20,6 +20,7 @@ interface CompanyProfileData {
   abn?: string;
   contactName?: string;
   contactTitle?: string;
+  signatureDataUrl?: string | null;
 }
 
 interface HeaderConfig {
@@ -530,7 +531,7 @@ export async function generatePdf(
   }
 
   // ── Signature block ──
-  const sigHeight = 42;
+  const sigHeight = 52;
   checkNewPage(sigHeight);
   y += 8;
 
@@ -549,20 +550,33 @@ export async function generatePdf(
   pdf.setTextColor(120, 120, 120);
   pdf.setFont('helvetica', 'normal');
   pdf.text('AUTHORISED BY', margin, y);
-  y += 6;
+  y += 5;
 
-  // Stylised signature (Times italic — closest to script in standard PDF fonts)
-  pdf.setFontSize(20);
-  pdf.setTextColor(r, g, b);
-  pdf.setFont('times', 'bolditalic');
-  pdf.text(sigName, margin, y);
-  y += 3;
+  // Drawn signature image or italic fallback
+  const sigImgWidth = 80;
+  const sigImgHeight = 22;
+  if (companyProfile?.signatureDataUrl) {
+    try {
+      pdf.addImage(companyProfile.signatureDataUrl, 'PNG', margin, y, sigImgWidth, sigImgHeight);
+    } catch {
+      // fallback to styled text if image fails
+      pdf.setFontSize(20);
+      pdf.setTextColor(r, g, b);
+      pdf.setFont('times', 'bolditalic');
+      pdf.text(sigName, margin, y + sigImgHeight - 4);
+    }
+  } else {
+    pdf.setFontSize(20);
+    pdf.setTextColor(r, g, b);
+    pdf.setFont('times', 'bolditalic');
+    pdf.text(sigName, margin, y + sigImgHeight - 4);
+  }
+  y += sigImgHeight + 1;
 
   // Signature underline
-  pdf.setDrawColor(r, g, b);
+  pdf.setDrawColor(60, 60, 60);
   pdf.setLineWidth(0.4);
-  const sigTextWidth = pdf.getTextWidth(sigName);
-  pdf.line(margin, y, margin + Math.min(sigTextWidth, contentWidth * 0.5), y);
+  pdf.line(margin, y, margin + sigImgWidth, y);
   y += 5;
 
   // Printed name + title
