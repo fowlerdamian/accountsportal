@@ -232,8 +232,63 @@ serve(async (req) => {
   const cin7Account  = Deno.env.get("CIN7_ACCOUNT_ID") ?? "";
   const cin7Key      = Deno.env.get("CIN7_API_KEY") ?? "";
 
-  let body: { lead_id?: string; channel?: string } = {};
+  let body: { action?: string; lead_id?: string; channel?: string } = {};
   try { body = await req.json(); } catch { /* no body */ }
+
+  // ── On-demand Apollo phone reveal ─────────────────────────────────────────
+  if (body.action === "reveal_phone" && body.lead_id) {
+    const apolloKey = Deno.env.get("APOLLO_API_KEY") ?? "";
+    if (!apolloKey) {
+      return new Response(JSON.stringify({ error: "APOLLO_API_KEY not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const { data: lead } = await supabase.from("sales_leads").select("*").eq("id", body.lead_id).single();
+    if (!lead) {
+      return new Response(JSON.stringify({ error: "Lead not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Use Apollo people/match to find + reveal phone for the specific contact
+    const nameParts = (lead.recommended_contact_name ?? "").trim().split(" ");
+    const matchPayload: Record<string, any> = {
+      organization_name:     lead.company_name,
+      reveal_phone_number:   true,
+    };
+    if (nameParts[0]) matchPayload.first_name = nameParts[0];
+    if (nameParts[1]) matchPayload.last_name  = nameParts.slice(1).join(" ");
+    if (lead.website)  matchPayload.domain    = new URL(lead.website.startsWith("http") ? lead.website : `https://${lead.website}`).hostname.replace(/^www\./, "");
+
+    try {
+      const res = await fetch("https://api.apollo.io/v1/people/match", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
+        body:    JSON.stringify(matchPayload),
+      });
+
+      if (!res.ok) {
+        return new Response(JSON.stringify({ error: "Apollo API error", status: res.status }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const data   = await res.json();
+      const person = data.person;
+
+      const phones: any[] = person?.phone_numbers ?? [];
+      const phone =
+        phones.find((p: any) => p.type === "mobile")?.sanitized_number ??
+        phones.find((p: any) => p.type === "direct_phone")?.sanitized_number ??
+        phones[0]?.sanitized_number ?? null;
+
+      if (phone) {
+        await supabase.from("sales_leads").update({ phone }).eq("id", body.lead_id);
+      }
+
+      return new Response(
+        JSON.stringify({ ok: true, phone, found: !!person }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (err) {
+      return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+  }
 
   // Build query for leads to enrich
   let query = supabase

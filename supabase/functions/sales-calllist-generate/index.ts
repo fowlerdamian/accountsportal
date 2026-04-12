@@ -6,7 +6,171 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const HS_BASE     = "https://api.hubapi.com";
+const APOLLO_BASE = "https://api.apollo.io/v1";
+
 type Channel = "trailbait" | "fleetcraft" | "aga";
+
+function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+function extractDomain(url: string): string | null {
+  try {
+    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+  } catch { return null; }
+}
+
+// ─── Contact position priorities per channel ──────────────────────────────────
+// Each inner array is a tier — tier 0 is most desirable. Lower tier = better match.
+
+const CONTACT_PRIORITIES: Record<Channel, string[][]> = {
+  trailbait: [
+    ["owner", "proprietor", "co-founder", "founder"],
+    ["purchasing manager", "procurement manager", "buyer", "merchandise manager"],
+    ["general manager", "operations manager", "store manager", "branch manager"],
+    ["director", "managing director", "ceo", "md"],
+    ["manager"],
+  ],
+  fleetcraft: [
+    ["fleet manager", "fleet coordinator", "fleet supervisor"],
+    ["procurement manager", "purchasing manager", "supply chain manager"],
+    ["operations manager", "operations director", "general manager"],
+    ["director", "managing director", "owner", "ceo"],
+    ["manager"],
+  ],
+  aga: [
+    ["purchasing director", "procurement director", "category director", "head of procurement"],
+    ["purchasing manager", "procurement manager", "category manager", "sourcing manager"],
+    ["product manager", "brand manager", "merchandise manager"],
+    ["managing director", "ceo", "md", "director", "owner"],
+    ["manager"],
+  ],
+};
+
+// ─── Apollo.io contact finder ─────────────────────────────────────────────────
+
+interface ApolloContact {
+  name:     string;
+  position: string;
+  email:    string | null;
+}
+
+async function findContactViaApollo(
+  domain: string,
+  channel: Channel,
+  apiKey: string
+): Promise<ApolloContact | null> {
+  try {
+    const res = await fetch(`${APOLLO_BASE}/mixed_people/search`, {
+      method:  "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        "Cache-Control": "no-cache",
+        "X-Api-Key":     apiKey,
+      },
+      body: JSON.stringify({
+        organization_domains: [domain],
+        page:     1,
+        per_page: 15,
+        // No server-side title filter — we rank client-side for flexibility
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data   = await res.json();
+    const people = (data.people ?? []).filter((p: any) => p.first_name && p.last_name);
+    if (!people.length) return null;
+
+    const priorities = CONTACT_PRIORITIES[channel];
+    let bestPerson: any = null;
+    let bestTier        = priorities.length;
+
+    for (const person of people) {
+      const title = (person.title ?? "").toLowerCase();
+      for (let tier = 0; tier < priorities.length; tier++) {
+        if (priorities[tier].some((kw) => title.includes(kw))) {
+          if (tier < bestTier) {
+            bestTier   = tier;
+            bestPerson = person;
+          }
+          break;
+        }
+      }
+    }
+
+    // Apollo returns results roughly by seniority — first result is a safe fallback
+    if (!bestPerson) bestPerson = people[0];
+    if (!bestPerson) return null;
+
+    return {
+      name:     bestPerson.name ?? `${bestPerson.first_name} ${bestPerson.last_name}`.trim(),
+      position: bestPerson.title ?? "",
+      email:    bestPerson.email ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function hsHeaders(token: string) {
+  return { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+// ─── HubSpot communication filters ───────────────────────────────────────────
+
+/**
+ * Returns HubSpot company IDs that have had a note created in the last `daysBack` days.
+ * Uses a single batch search call — avoids per-company API calls.
+ */
+async function fetchRecentlyContactedCompanyIds(token: string, daysBack: number): Promise<Set<string>> {
+  const since = Date.now() - daysBack * 86_400_000;
+  const companyIds = new Set<string>();
+  try {
+    const res = await fetch(`${HS_BASE}/crm/v3/objects/notes/search`, {
+      method:  "POST",
+      headers: hsHeaders(token),
+      body: JSON.stringify({
+        filterGroups: [{ filters: [{ propertyName: "hs_timestamp", operator: "GTE", value: since }] }],
+        properties:   ["hs_timestamp"],
+        associations: ["companies"],
+        limit: 100,
+      }),
+    });
+    if (!res.ok) return companyIds;
+    const data = await res.json();
+    for (const note of data.results ?? []) {
+      for (const assoc of note.associations?.companies?.results ?? []) {
+        companyIds.add(String(assoc.id));
+      }
+    }
+  } catch { /* ignore — fail open */ }
+  return companyIds;
+}
+
+/**
+ * Returns the subset of `dealIds` whose stage is closedwon or closedlost.
+ * Uses a single batch read call.
+ */
+async function fetchClosedDealIds(dealIds: string[], token: string): Promise<Set<string>> {
+  const closedIds = new Set<string>();
+  if (!dealIds.length) return closedIds;
+  try {
+    const res = await fetch(`${HS_BASE}/crm/v3/objects/deals/batch/read`, {
+      method:  "POST",
+      headers: hsHeaders(token),
+      body: JSON.stringify({
+        inputs:     dealIds.map((id) => ({ id })),
+        properties: ["dealstage"],
+      }),
+    });
+    if (!res.ok) return closedIds;
+    const data = await res.json();
+    for (const deal of data.results ?? []) {
+      const stage = deal.properties?.dealstage;
+      if (stage === "closedwon" || stage === "closedlost") closedIds.add(deal.id);
+    }
+  } catch { /* ignore — fail open */ }
+  return closedIds;
+}
 
 const CHANNEL_PITCH: Record<Channel, string> = {
   trailbait:  "Accelerate accessory fitment times through innovative products. Add additional unique products to increase average invoice value.",
@@ -196,11 +360,48 @@ serve(async (req) => {
         continue;
       }
 
+      // ── HubSpot communication filter ────────────────────────────────────────
+      // Suppress leads that already have active HubSpot engagement so we don't
+      // double-call anyone currently in an open sales conversation.
+      const hsToken = Deno.env.get("HUBSPOT_ACCESS_TOKEN") ?? "";
+      let filteredLeads = leads as any[];
+
+      if (hsToken) {
+        const suppressedIds = new Set<string>();
+
+        // 1. Suppress closed deals (won or lost) — no point calling
+        const dealIds = leads.filter((l: any) => l.hubspot_deal_id).map((l: any) => l.hubspot_deal_id);
+        const closedDealIds = await fetchClosedDealIds(dealIds, hsToken);
+        for (const lead of leads as any[]) {
+          if (lead.hubspot_deal_id && closedDealIds.has(lead.hubspot_deal_id)) {
+            suppressedIds.add(lead.id);
+          }
+        }
+
+        // 2. Suppress companies with a HubSpot note in the last 14 days
+        const recentCompanyIds = await fetchRecentlyContactedCompanyIds(hsToken, 14);
+        for (const lead of leads as any[]) {
+          if (lead.hubspot_company_id && recentCompanyIds.has(String(lead.hubspot_company_id))) {
+            suppressedIds.add(lead.id);
+          }
+        }
+
+        if (suppressedIds.size) {
+          filteredLeads = leads.filter((l: any) => !suppressedIds.has(l.id));
+        }
+      }
+
+      if (!filteredLeads.length) {
+        await supabase.from("research_jobs").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", job?.id);
+        summary[channel] = 0;
+        continue;
+      }
+
       // Boost win-back candidates for TrailBait
-      let ranked = [...leads];
+      let ranked = [...filteredLeads];
       if (channel === "trailbait") {
         // Fetch order history for win-back check
-        const cin7Ids = leads.filter((l: any) => l.cin7_customer_id).map((l: any) => l.cin7_customer_id);
+        const cin7Ids = filteredLeads.filter((l: any) => l.cin7_customer_id).map((l: any) => l.cin7_customer_id);
         const historyMap: Record<string, any> = {};
         if (cin7Ids.length) {
           const { data: histories } = await supabase
@@ -211,7 +412,7 @@ serve(async (req) => {
         }
 
         // Attach order history and compute priority score
-        ranked = leads
+        ranked = filteredLeads
           .map((l: any) => ({
             ...l,
             _orderHistory: l.cin7_customer_id ? (historyMap[l.cin7_customer_id] ?? null) : null,
@@ -222,11 +423,46 @@ serve(async (req) => {
           }))
           .sort((a: any, b: any) => b._priorityScore - a._priorityScore);
       } else {
-        ranked = leads.map((l: any) => ({ ...l, _orderHistory: null }));
+        ranked = filteredLeads.map((l: any) => ({ ...l, _orderHistory: null }));
       }
 
       // Take top 20
       const top20 = ranked.slice(0, 20);
+
+      // Resolve contacts via Apollo.io for leads that still need one
+      const apolloKey = Deno.env.get("APOLLO_API_KEY") ?? "";
+      if (apolloKey) {
+        for (const lead of top20) {
+          // Look up if no contact yet, or only have a website-scraped name (often unreliable)
+          const needsContact = !lead.recommended_contact_name
+            || lead.recommended_contact_source === "website";
+
+          if (!needsContact || !lead.website) continue;
+
+          const domain = extractDomain(lead.website);
+          if (!domain) continue;
+
+          const contact = await findContactViaApollo(domain, channel, apolloKey);
+          if (contact) {
+            const contactUpdate: Record<string, any> = {
+              recommended_contact_name:     contact.name,
+              recommended_contact_position: contact.position,
+              recommended_contact_source:   "apollo",
+            };
+            if (contact.email && !lead.email) contactUpdate.email = contact.email;
+
+            await supabase.from("sales_leads").update(contactUpdate).eq("id", lead.id);
+
+            // Merge into local object so the context brief uses fresh data
+            lead.recommended_contact_name     = contact.name;
+            lead.recommended_contact_position = contact.position;
+            lead.recommended_contact_source   = "apollo";
+            if (contact.email && !lead.email) lead.email = contact.email;
+          }
+
+          await sleep(300); // stay within Apollo rate limits
+        }
+      }
 
       // Generate call list entries
       const inserts = [];

@@ -21,7 +21,7 @@ export default function ChannelLayout({ channel }: Props) {
   const location = useLocation();
 
   // Base path for this channel
-  const base = `/apps/sales-support/${ch}`;
+  const base = `/sales-support/${ch}`;
 
   return (
     <div className="flex flex-col">
@@ -30,7 +30,7 @@ export default function ChannelLayout({ channel }: Props) {
         <div className="flex items-center gap-4">
           {/* Back to dashboard */}
           <button
-            onClick={() => navigate("/apps/sales-support")}
+            onClick={() => navigate("/sales-support")}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -47,7 +47,7 @@ export default function ChannelLayout({ channel }: Props) {
               return (
                 <button
                   key={c}
-                  onClick={() => navigate(`/apps/sales-support/${c}/leads`)}
+                  onClick={() => navigate(`/sales-support/${c}/leads`)}
                   className={cn(
                     "px-3 py-1 rounded text-xs font-medium transition-all",
                     active

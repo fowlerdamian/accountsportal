@@ -4,7 +4,7 @@ import { Loader2, Phone, RefreshCw, ChevronRight, Star, Globe, User, RotateCcw }
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useCallList } from "../hooks/useSalesQueries";
 import { type Channel } from "../lib/constants";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@portal/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 
 const CALL_REASON_COLOR = (reason: string) => {
@@ -109,7 +109,7 @@ export default function CallList() {
                   return (
                     <div
                       key={call.id}
-                      onClick={() => navigate(`/apps/sales-support/${channel}/calls/${call.id}`)}
+                      onClick={() => navigate(`/sales-support/${channel}/calls/${call.id}`)}
                       className="rounded-xl border border-border bg-card/50 p-4 hover:border-foreground/20 transition-all cursor-pointer group"
                     >
                       <div className="flex items-start gap-3">
@@ -186,7 +186,7 @@ export default function CallList() {
                   return (
                     <div
                       key={call.id}
-                      onClick={() => navigate(`/apps/sales-support/${channel}/calls/${call.id}`)}
+                      onClick={() => navigate(`/sales-support/${channel}/calls/${call.id}`)}
                       className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/30 transition-colors cursor-pointer opacity-70"
                     >
                       <span className="text-xs text-muted-foreground w-5 text-right">{call.priority_rank}</span>

@@ -218,6 +218,130 @@ Lead Score: ${lead.lead_score ?? "?"}/100`;
   return true;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ─── Custom HubSpot property definitions ─────────────────────────────────────
+
+const CUSTOM_PROPERTIES = [
+  {
+    name:        "google_rating",
+    label:       "Google Rating",
+    type:        "number",
+    fieldType:   "number",
+    groupName:   "companyinformation",
+    description: "Google Places star rating (0–5)",
+  },
+  {
+    name:        "google_review_count",
+    label:       "Google Review Count",
+    type:        "number",
+    fieldType:   "number",
+    groupName:   "companyinformation",
+    description: "Total number of Google reviews",
+  },
+  {
+    name:        "google_place_id",
+    label:       "Google Place ID",
+    type:        "string",
+    fieldType:   "text",
+    groupName:   "companyinformation",
+    description: "Google Places ID for this business",
+  },
+];
+
+async function ensureCompanyProperties(token: string): Promise<void> {
+  for (const prop of CUSTOM_PROPERTIES) {
+    const res = await fetch(`${HS_BASE}/crm/v3/properties/companies`, {
+      method:  "POST",
+      headers: hsHeaders(token),
+      body:    JSON.stringify(prop),
+    });
+    // 409 = already exists — that's fine
+    if (!res.ok && res.status !== 409) {
+      console.warn(`ensureCompanyProperties: failed to create ${prop.name} (${res.status})`);
+    }
+  }
+}
+
+// ─── Update existing HubSpot company with enriched data ───────────────────────
+
+async function updateHubSpotCompany(lead: any, companyId: string, token: string): Promise<boolean> {
+  const addrParts = parseAddress(lead.address);
+  const properties: Record<string, string> = {};
+
+  if (lead.phone)           properties.phone   = lead.phone;
+  if (lead.website)         properties.website = lead.website;
+  if (lead.website)         properties.domain  = extractDomain(lead.website);
+  if (addrParts.address)    properties.address = addrParts.address;
+  if (addrParts.city)       properties.city    = addrParts.city;
+  if (addrParts.state)      properties.state   = addrParts.state;
+  if (addrParts.zip)        properties.zip     = addrParts.zip;
+  if (addrParts.country)    properties.country = addrParts.country;
+
+  // Build description from website summary + Google rating
+  const descParts: string[] = [];
+  if (lead.website_summary)     descParts.push(lead.website_summary);
+  if (lead.google_rating != null) descParts.push(`Google Rating: ${lead.google_rating}/5 (${lead.google_review_count ?? 0} reviews)`);
+  if (descParts.length)         properties.description = descParts.join("\n\n");
+
+  // Social links — stored as individual columns
+  if (lead.social_linkedin) properties.linkedin_company_page = lead.social_linkedin;
+  if (lead.social_facebook) properties.facebook_company_page = lead.social_facebook;
+
+  // Google Places custom properties
+  if (lead.google_rating != null)    properties.google_rating       = String(lead.google_rating);
+  if (lead.google_review_count != null) properties.google_review_count = String(lead.google_review_count);
+  if (lead.google_place_id)          properties.google_place_id     = lead.google_place_id;
+
+  if (Object.keys(properties).length === 0) return false;
+
+  const res = await fetch(`${HS_BASE}/crm/v3/objects/companies/${companyId}`, {
+    method:  "PATCH",
+    headers: hsHeaders(token),
+    body:    JSON.stringify({ properties }),
+  });
+  return res.ok;
+}
+
+// ─── Update first associated contact with fresh data ─────────────────────────
+
+async function updateHubSpotContact(lead: any, companyId: string, token: string): Promise<boolean> {
+  if (!lead.recommended_contact_name) return false;
+
+  // Fetch associated contacts
+  const assocRes = await fetch(
+    `${HS_BASE}/crm/v3/objects/companies/${companyId}/associations/contacts?limit=1`,
+    { headers: hsHeaders(token) }
+  );
+  if (!assocRes.ok) return false;
+  const assocData = await assocRes.json();
+  const contactId = assocData.results?.[0]?.id ?? null;
+  if (!contactId) return false;
+
+  const nameParts = lead.recommended_contact_name.trim().split(" ");
+  const firstName = nameParts[0] ?? "";
+  const lastName  = nameParts.slice(1).join(" ") || lead.company_name;
+
+  const properties: Record<string, string> = {
+    firstname: firstName,
+    lastname:  lastName,
+  };
+  if (lead.recommended_contact_position) properties.jobtitle = lead.recommended_contact_position;
+  if (lead.email)                         properties.email    = lead.email;
+  if (lead.phone)                         properties.phone    = lead.phone;
+
+  const res = await fetch(`${HS_BASE}/crm/v3/objects/contacts/${contactId}`, {
+    method:  "PATCH",
+    headers: hsHeaders(token),
+    body:    JSON.stringify({ properties }),
+  });
+  return res.ok;
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -243,6 +367,34 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ ok: true, deals }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // ── Back-sync: enrich existing HubSpot records ───────────────────────────
+  if (body.action === "back_sync") {
+    // Ensure custom Google properties exist in HubSpot
+    await ensureCompanyProperties(hsToken);
+
+    // Fetch all leads that are already in HubSpot
+    const { data: leads } = await supabase
+      .from("sales_leads")
+      .select("*")
+      .not("hubspot_company_id", "is", null)
+      .limit(200);
+
+    let updated = 0;
+    for (const lead of leads ?? []) {
+      await sleep(150); // stay within HubSpot rate limits
+      const ok = await updateHubSpotCompany(lead, lead.hubspot_company_id, hsToken);
+      if (ok) {
+        await updateHubSpotContact(lead, lead.hubspot_company_id, hsToken);
+        updated++;
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ ok: true, updated }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

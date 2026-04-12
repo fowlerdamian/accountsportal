@@ -7,7 +7,7 @@ import {
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useCallEntry, useUpdateCallOutcome, useSaveCallNotes } from "../hooks/useSalesQueries";
 import { type Channel } from "../lib/constants";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@portal/lib/supabase";
 
 const OUTCOMES = [
   { key: "connected",      label: "Connected",      color: "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" },
@@ -30,6 +30,8 @@ export default function CallCard() {
   const [notesSaved, setNotesSaved] = useState(false);
   const [syncing, setSyncing]       = useState(false);
   const [syncingOutcome, setSyncingOutcome] = useState<string | null>(null);
+  const [revealedPhone, setRevealedPhone]   = useState<string | null>(null);
+  const [revealingPhone, setRevealingPhone] = useState(false);
 
   useEffect(() => {
     if (call?.call_notes) setNotes(call.call_notes);
@@ -70,6 +72,19 @@ export default function CallCard() {
     }
   }
 
+  async function revealPhone() {
+    if (!lead?.id) return;
+    setRevealingPhone(true);
+    try {
+      const { data } = await supabase.functions.invoke("sales-lead-enrichment", {
+        body: { action: "reveal_phone", lead_id: lead.id },
+      });
+      if (data?.phone) setRevealedPhone(data.phone);
+    } finally {
+      setRevealingPhone(false);
+    }
+  }
+
   async function handleSaveNotes() {
     await saveNotes.mutateAsync({ callId: call.id, notes });
     setNotesSaved(true);
@@ -88,7 +103,7 @@ export default function CallCard() {
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
       {/* Back nav */}
       <button
-        onClick={() => navigate(`/apps/sales-support/${channel}/calls`)}
+        onClick={() => navigate(`/sales-support/${channel}/calls`)}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
@@ -124,12 +139,23 @@ export default function CallCard() {
         </div>
 
         {/* Phone — prominent */}
-        {brief.phone && (
-          <a href={`tel:${brief.phone}`}
+        {(revealedPhone ?? brief.phone) ? (
+          <a href={`tel:${revealedPhone ?? brief.phone}`}
             className="mt-4 flex items-center gap-2 text-2xl font-mono font-semibold text-primary hover:text-primary/80 transition-colors">
             <Phone className="w-5 h-5" />
-            {brief.phone}
+            {revealedPhone ?? brief.phone}
           </a>
+        ) : (
+          <button
+            onClick={revealPhone}
+            disabled={revealingPhone}
+            className="mt-4 flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/70 transition-colors disabled:opacity-50 text-muted-foreground"
+          >
+            {revealingPhone
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Phone className="w-4 h-4" />}
+            {revealingPhone ? "Finding number…" : "Reveal direct number"}
+          </button>
         )}
       </div>
 
@@ -308,7 +334,7 @@ export default function CallCard() {
             </p>
           </div>
           <button
-            onClick={() => navigate(`/apps/sales-support/${channel}/calls`)}
+            onClick={() => navigate(`/sales-support/${channel}/calls`)}
             className="ml-auto px-3 py-1.5 text-xs bg-muted rounded hover:bg-muted/70 transition-colors"
           >
             Back to list

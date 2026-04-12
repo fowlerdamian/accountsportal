@@ -4,7 +4,7 @@ import { cn } from "../../../apps/Guide/lib/utils";
 import { useDashboardMetrics } from "../hooks/useSalesQueries";
 import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNEL_DESCRIPTION, CHANNELS, type Channel } from "../lib/constants";
 import { LeadScoreBadge } from "../components/LeadScoreBadge";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@portal/lib/supabase";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -37,15 +37,38 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data, isLoading } = useDashboardMetrics();
-  const [triggering, setTriggering] = useState<string | null>(null);
+  const [activeSync, setActiveSync] = useState<string | null>(null);
+  const [syncStep, setSyncStep]     = useState<string>("");
 
-  async function triggerJob(fnName: string) {
-    setTriggering(fnName);
+  async function runResearch() {
+    setActiveSync("research");
     try {
-      await supabase.functions.invoke(fnName, { body: {} });
+      setSyncStep("Discovering leads…");
+      await supabase.functions.invoke("sales-lead-discovery", { body: {} });
+      setSyncStep("Enriching…");
+      await supabase.functions.invoke("sales-lead-enrichment", { body: {} });
+      setSyncStep("Scoring…");
+      await supabase.functions.invoke("sales-lead-scoring", { body: {} });
       qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
     } finally {
-      setTriggering(null);
+      setActiveSync(null);
+      setSyncStep("");
+    }
+  }
+
+  async function runListSync() {
+    setActiveSync("list");
+    try {
+      setSyncStep("Syncing Cin7…");
+      await supabase.functions.invoke("sales-cin7-sync", { body: {} });
+      setSyncStep("Enriching HubSpot records…");
+      await supabase.functions.invoke("sales-hubspot-sync", { body: { action: "back_sync" } });
+      setSyncStep("Generating call list…");
+      await supabase.functions.invoke("sales-calllist-generate", { body: {} });
+      qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
+    } finally {
+      setActiveSync(null);
+      setSyncStep("");
     }
   }
 
@@ -66,20 +89,27 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold">Sales Support</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Lead research, enrichment, and call planning</p>
         </div>
-        <div className="flex flex-wrap gap-2 justify-end">
-          {[
-            { fn: "sales-lead-discovery",    label: "Discover",      title: "Run lead discovery for all channels" },
-            { fn: "sales-lead-enrichment",   label: "Enrich",        title: "Enrich new/researched leads" },
-            { fn: "sales-cin7-sync",         label: "Cin7 Sync",     title: "Sync Cin7 order history & existing customers" },
-            { fn: "sales-lead-scoring",      label: "Score",         title: "Rescore all enriched leads" },
-            { fn: "sales-calllist-generate", label: "Call List",     title: "Generate today's call list" },
-          ].map(({ fn, label, title }) => (
-            <button key={fn} onClick={() => triggerJob(fn)} disabled={!!triggering} title={title}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50">
-              {triggering === fn ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-              {label}
-            </button>
-          ))}
+        <div className="flex gap-2">
+          <button
+            onClick={runResearch}
+            disabled={!!activeSync}
+            title="Discover new leads, enrich, then score"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {activeSync === "research"
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>{syncStep}</span></>
+              : <><RotateCcw className="w-3.5 h-3.5" /><span>Research</span></>}
+          </button>
+          <button
+            onClick={runListSync}
+            disabled={!!activeSync}
+            title="Sync Cin7 order data then generate today's call list"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-muted text-foreground rounded hover:bg-muted/70 transition-colors disabled:opacity-50 border border-border"
+          >
+            {activeSync === "list"
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>{syncStep}</span></>
+              : <><RotateCcw className="w-3.5 h-3.5" /><span>List</span></>}
+          </button>
         </div>
       </div>
 
@@ -93,7 +123,7 @@ export default function Dashboard() {
             <div
               key={ch}
               className={cn("rounded-xl border bg-card/50 p-4 space-y-4 cursor-pointer hover:border-foreground/20 transition-colors", colors.border)}
-              onClick={() => navigate(`/apps/sales-support/${ch}/leads`)}
+              onClick={() => navigate(`/sales-support/${ch}/leads`)}
             >
               {/* Channel heading */}
               <div className={cn("inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold border", colors.bg, colors.text, colors.border)}>
@@ -127,7 +157,7 @@ export default function Dashboard() {
                     {metrics.top3Leads.map((l: any) => (
                       <div
                         key={l.id}
-                        onClick={(e) => { e.stopPropagation(); navigate(`/apps/sales-support/${ch}/leads`); }}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/sales-support/${ch}/leads`); }}
                         className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
                       >
                         <span className="text-sm font-medium truncate">{l.company_name}</span>
@@ -158,7 +188,7 @@ export default function Dashboard() {
               {(data?.recentJobs ?? []).length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                    No research jobs yet — click "Discover" to run the first one.
+                    No research jobs yet — click "Research" to run the first one.
                   </td>
                 </tr>
               ) : (data?.recentJobs ?? []).map((job: any) => (
