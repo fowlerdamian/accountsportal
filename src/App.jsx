@@ -96,7 +96,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
 
             {/* Support Hub */}
-            <Route path="/support/*" element={<SupportApp />} />
+            <Route path="/support/*" element={<ProtectedRoute><SupportApp /></ProtectedRoute>} />
 
             {/* Redirect old /guide/view/:slug viewer URLs → new public /:slug route */}
             <Route path="/guide/view/:slug" element={<SlugRedirect />} />
