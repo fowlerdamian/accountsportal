@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Loader2, TrendingUp, Phone, Users, RotateCcw, AlertCircle, CheckCircle, Clock, GitMerge } from "lucide-react";
+import { Loader2, TrendingUp, Phone, Users, RotateCcw, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useDashboardMetrics } from "../hooks/useSalesQueries";
 import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNEL_DESCRIPTION, CHANNELS, type Channel } from "../lib/constants";
@@ -56,29 +56,19 @@ export default function Dashboard() {
     }
   }
 
-  async function runDedup() {
-    setActiveSync("dedup");
-    try {
-      setSyncStep("Deduplicating…");
-      await supabase.functions.invoke("sales-lead-dedup", { body: {} });
-      qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
-      qc.invalidateQueries({ queryKey: ["sales_leads"] });
-    } finally {
-      setActiveSync(null);
-      setSyncStep("");
-    }
-  }
-
   async function runListSync() {
     setActiveSync("list");
     try {
       setSyncStep("Syncing Cin7…");
       await supabase.functions.invoke("sales-cin7-sync", { body: {} });
+      setSyncStep("Deduplicating leads…");
+      await supabase.functions.invoke("sales-lead-dedup", { body: {} });
       setSyncStep("Enriching HubSpot records…");
       await supabase.functions.invoke("sales-hubspot-sync", { body: { action: "back_sync" } });
       setSyncStep("Generating call list…");
       await supabase.functions.invoke("sales-calllist-generate", { body: {} });
       qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
+      qc.invalidateQueries({ queryKey: ["sales_leads"] });
     } finally {
       setActiveSync(null);
       setSyncStep("");
@@ -122,16 +112,6 @@ export default function Dashboard() {
             {activeSync === "list"
               ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>{syncStep}</span></>
               : <><RotateCcw className="w-3.5 h-3.5" /><span>List</span></>}
-          </button>
-          <button
-            onClick={runDedup}
-            disabled={!!activeSync}
-            title="Find and merge duplicate lead records"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-muted text-foreground rounded hover:bg-muted/70 transition-colors disabled:opacity-50 border border-border"
-          >
-            {activeSync === "dedup"
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>{syncStep}</span></>
-              : <><GitMerge className="w-3.5 h-3.5" /><span>Dedup</span></>}
           </button>
         </div>
       </div>
