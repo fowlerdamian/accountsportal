@@ -66,6 +66,20 @@ async function fetchOrdersForCustomer(
   return data?.SaleList ?? [];
 }
 
+// ─── Fetch line items for a single sale ──────────────────────────────────────
+
+async function fetchSaleLines(saleId: string, accountId: string, apiKey: string): Promise<any[]> {
+  const res = await fetch(
+    `${CIN7_BASE}/sale?ID=${saleId}`,
+    { headers: cin7Headers(accountId, apiKey) }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  // DEAR returns SaleOrderLines on the order object
+  const order = data?.SaleOrderList?.[0] ?? data?.Sale ?? data;
+  return order?.SaleOrderLines ?? order?.Lines ?? [];
+}
+
 // ─── TrailBait: full order history analysis ───────────────────────────────────
 
 async function syncTrailBaitCustomer(
@@ -84,20 +98,21 @@ async function syncTrailBaitCustomer(
   const orders90 = await fetchOrdersForCustomer(customerId, 90, accountId, apiKey);
   await sleep(150);
 
-  const now       = new Date();
-  const cutoff30  = new Date(now);
+  const now      = new Date();
+  const cutoff30 = new Date(now);
   cutoff30.setDate(now.getDate() - 30);
 
-  const orders30  = orders90.filter((o: any) => {
-    const d = new Date(o.SaleOrderDate ?? o.OrderDate ?? "");
-    return d >= cutoff30;
-  });
+  // DEAR Systems saleList uses "SaleDate" as the date field
+  const saleDate = (o: any): Date =>
+    new Date(o.SaleDate ?? o.SaleOrderDate ?? o.OrderDate ?? o.CreatedDate ?? "");
+
+  const orders30 = orders90.filter((o: any) => saleDate(o) >= cutoff30);
 
   // Last order date
   let lastOrderDate: Date | null = null;
   for (const o of orders90) {
-    const d = new Date(o.SaleOrderDate ?? o.OrderDate ?? "");
-    if (!lastOrderDate || d > lastOrderDate) lastOrderDate = d;
+    const d = saleDate(o);
+    if (!isNaN(d.getTime()) && (!lastOrderDate || d > lastOrderDate)) lastOrderDate = d;
   }
 
   const daysSinceLast = lastOrderDate
@@ -108,23 +123,34 @@ async function syncTrailBaitCustomer(
   const totalRevenue90 = orders90.reduce((sum: number, o: any) => sum + (Number(o.Total) || 0), 0);
   const avgOrderValue  = orders90.length ? totalRevenue90 / orders90.length : 0;
 
-  // Top products by quantity
+  // Top products — fetch line items for the most recent 5 orders
   const productQty: Record<string, { name: string; qty: number; sku: string }> = {};
-  for (const o of orders90) {
-    for (const line of o.Lines ?? []) {
-      const sku  = line.SKU ?? line.ProductCode ?? "";
-      const name = line.Name ?? line.ProductName ?? sku;
+  const recentOrders = orders90
+    .slice()
+    .sort((a: any, b: any) => saleDate(b).getTime() - saleDate(a).getTime())
+    .slice(0, 5);
+
+  for (const o of recentOrders) {
+    const saleId = o.SaleID ?? o.ID ?? o.SaleOrderID;
+    if (!saleId) continue;
+    await sleep(200);
+    const lines = await fetchSaleLines(String(saleId), accountId, apiKey);
+    for (const line of lines) {
+      const sku  = line.ProductCode ?? line.SKU ?? line.Code ?? "";
+      const name = line.ProductDescription ?? line.Name ?? line.ProductName ?? sku;
       const qty  = Number(line.Quantity) || 0;
+      if (!sku) continue;
       if (!productQty[sku]) productQty[sku] = { name, qty: 0, sku };
       productQty[sku].qty += qty;
     }
   }
+
   const topProducts = Object.values(productQty)
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 5);
 
-  // Win-back: no order in 30+ days
-  const isWinback = daysSinceLast > 30;
+  // Win-back: no order in 30+ days but had orders in last 90
+  const isWinback = orders90.length > 0 && daysSinceLast > 30;
 
   // Find matching lead
   const companyName = customer.Name ?? "";
