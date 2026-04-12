@@ -154,7 +154,7 @@ export default function ComplianceFileManager() {
       <header className="border-b border-border px-6 py-5">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('..')} title="Back to Dashboard">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/compliance')} title="Back to Dashboard">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             {companyProfile?.logoUrl ? (

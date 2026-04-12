@@ -38,7 +38,7 @@ export default function ComplianceSetup() {
 
       if (company) {
         await auditSupabase.from('profiles').update({ company_id: company.id } as any).eq('user_id', user.id);
-        navigate('..', { replace: true });
+        navigate('/compliance', { replace: true });
       }
     };
     checkExisting();
@@ -102,7 +102,7 @@ export default function ComplianceSetup() {
 
       setCompanyProfile(form);
       toast.success('Company profile saved!');
-      navigate('..', { replace: true });
+      navigate('/compliance', { replace: true });
     } catch (err) {
       console.error('Setup error:', err);
       toast.error('Failed to save company profile');

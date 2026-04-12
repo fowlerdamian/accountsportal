@@ -126,7 +126,7 @@ export default function ComplianceSupportingDocs() {
     <div className="min-h-full">
       <header className="border-b border-border px-6 py-5">
         <div className="mx-auto max-w-6xl flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('..')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/compliance')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-3">

@@ -129,7 +129,7 @@ export default function ComplianceSelfAudit() {
     <div className="min-h-full">
       <header className="border-b border-border px-6 py-5">
         <div className="mx-auto flex max-w-4xl items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('..')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/compliance')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-3">
@@ -150,7 +150,7 @@ export default function ComplianceSelfAudit() {
             <Shield className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <h2 className="text-lg font-semibold text-foreground mb-2">No Documents to Audit</h2>
             <p className="text-muted-foreground mb-6">Complete at least one document to run the self-audit.</p>
-            <Button onClick={() => navigate('..')}>Go to Dashboard</Button>
+            <Button onClick={() => navigate('/compliance')}>Go to Dashboard</Button>
           </div>
         ) : !auditResults && !isAuditing ? (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-8 text-center">
@@ -243,7 +243,7 @@ export default function ComplianceSelfAudit() {
                 </Button>
               )}
               <Button onClick={() => { setAuditResults(null); setFixedIds(new Set()); }} variant="secondary">Re-run Audit</Button>
-              <Button onClick={() => navigate('..')}>Back to Dashboard</Button>
+              <Button onClick={() => navigate('/compliance')}>Back to Dashboard</Button>
             </div>
           </div>
         ) : null}

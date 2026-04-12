@@ -370,7 +370,7 @@ export default function ComplianceDocumentChat() {
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur px-6 py-4">
         <div className="mx-auto flex max-w-4xl items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('..')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/compliance')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1">
@@ -527,7 +527,7 @@ export default function ComplianceDocumentChat() {
             <Button variant="outline" size="sm" className="gap-1" onClick={() => setEditingMode(true)}>
               <Pencil className="h-3.5 w-3.5" /> Edit Answers
             </Button>
-            <Button variant="secondary" onClick={() => navigate('..')} size="sm">Back to Dashboard</Button>
+            <Button variant="secondary" onClick={() => navigate('/compliance')} size="sm">Back to Dashboard</Button>
           </div>
         </div>
       )}
