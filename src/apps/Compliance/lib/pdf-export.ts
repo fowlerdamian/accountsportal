@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { auditSupabase as supabase } from '../client';
+import { auditSupabase } from '../client';
 
 interface PdfDocumentData {
   title: string;
@@ -18,6 +18,8 @@ interface CompanyProfileData {
   email?: string;
   website?: string;
   abn?: string;
+  contactName?: string;
+  contactTitle?: string;
 }
 
 interface HeaderConfig {
@@ -55,7 +57,7 @@ function getImageDimensions(url: string): Promise<{ width: number; height: numbe
 }
 
 export async function loadHeaderConfig(): Promise<HeaderConfig> {
-  const { data } = await supabase.from('header_config').select('*').limit(1).maybeSingle();
+  const { data } = await auditSupabase.from('header_config').select('*').limit(1).maybeSingle();
   return (data as HeaderConfig) || DEFAULT_HEADER_CONFIG;
 }
 
@@ -526,6 +528,58 @@ export async function generatePdf(
       }
     }
   }
+
+  // ── Signature block ──
+  const sigHeight = 42;
+  checkNewPage(sigHeight);
+  y += 8;
+
+  // Separator line above signature block
+  pdf.setDrawColor(220, 220, 220);
+  pdf.setLineWidth(0.3);
+  pdf.line(margin, y, pageWidth - margin, y);
+  y += 10;
+
+  const sigName = companyProfile?.contactName || 'Director';
+  const sigTitle = companyProfile?.contactTitle || 'Director';
+  const sigDate = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  // Label
+  pdf.setFontSize(8);
+  pdf.setTextColor(120, 120, 120);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text('AUTHORISED BY', margin, y);
+  y += 6;
+
+  // Stylised signature (Times italic — closest to script in standard PDF fonts)
+  pdf.setFontSize(20);
+  pdf.setTextColor(r, g, b);
+  pdf.setFont('times', 'bolditalic');
+  pdf.text(sigName, margin, y);
+  y += 3;
+
+  // Signature underline
+  pdf.setDrawColor(r, g, b);
+  pdf.setLineWidth(0.4);
+  const sigTextWidth = pdf.getTextWidth(sigName);
+  pdf.line(margin, y, margin + Math.min(sigTextWidth, contentWidth * 0.5), y);
+  y += 5;
+
+  // Printed name + title
+  pdf.setFontSize(9);
+  pdf.setTextColor(40, 40, 40);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text(sigName, margin, y);
+  y += 4.5;
+
+  pdf.setFont('helvetica', 'normal');
+  pdf.setTextColor(100, 100, 100);
+  pdf.text(sigTitle, margin, y);
+  y += 4.5;
+
+  // Date
+  pdf.setFontSize(8);
+  pdf.text(`Date: ${sigDate}`, margin, y);
 
   // ── Add footers to all pages ──
   const totalPages = pdf.getNumberOfPages();
