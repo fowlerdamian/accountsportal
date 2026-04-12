@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { auditSupabase } from '../client';
+import { supabase } from '@portal/lib/supabase';
 import ReactMarkdown from 'react-markdown';
 
 export default function ComplianceDocumentChat() {
@@ -126,7 +127,7 @@ export default function ComplianceDocumentChat() {
     if (!docId || !doc) return;
     setIsEvaluating(true);
     try {
-      const { data, error } = await auditSupabase.functions.invoke('evaluate-answer', {
+      const { data, error } = await supabase.functions.invoke('evaluate-answer', {
         body: { question: questionText, answer: answerText, documentTitle: doc.title, clause: doc.clause, companyProfile },
       });
       if (error) throw error;
@@ -216,7 +217,7 @@ export default function ComplianceDocumentChat() {
         }
       }
 
-      const { data, error } = await auditSupabase.functions.invoke('kb-check', {
+      const { data, error } = await supabase.functions.invoke('kb-check', {
         body: { question: currentQuestion.question, hint: currentQuestion.hint, documentTitle: doc.title, clause: doc.clause, companyProfile, previousAnswers },
       });
 
@@ -285,7 +286,7 @@ export default function ComplianceDocumentChat() {
   const handleCreateDocument = async () => {
     setIsGenerating(true);
     try {
-      const { data, error } = await auditSupabase.functions.invoke('generate-document', {
+      const { data, error } = await supabase.functions.invoke('generate-document', {
         body: {
           documentTitle: doc.title,
           clause: doc.clause,
@@ -328,7 +329,7 @@ export default function ComplianceDocumentChat() {
 
     setIsEvaluating(true);
     try {
-      const { data } = await auditSupabase.functions.invoke('evaluate-answer', {
+      const { data } = await supabase.functions.invoke('evaluate-answer', {
         body: { question: reanswerMode.questionText, answer: content, documentTitle: doc.title, clause: doc.clause, companyProfile },
       });
 

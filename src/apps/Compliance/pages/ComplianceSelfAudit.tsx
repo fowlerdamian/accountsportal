@@ -5,7 +5,7 @@ import { AuditResult } from '../lib/iso-documents';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Shield, CheckCircle2, XCircle, AlertTriangle, Loader2, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { auditSupabase } from '../client';
+import { supabase } from '@portal/lib/supabase';
 import { toast } from 'sonner';
 
 export default function ComplianceSelfAudit() {
@@ -31,7 +31,7 @@ export default function ComplianceSelfAudit() {
       setAuditProgress({ current: 0, total: completedDocs.length });
 
       for (let b = 0; b < batches.length; b++) {
-        const { data, error } = await auditSupabase.functions.invoke('iso-audit', {
+        const { data, error } = await supabase.functions.invoke('iso-audit', {
           body: {
             documents: batches[b].map((d) => ({
               id: d.id, title: d.title, clause: d.clause, generatedContent: d.generatedContent,
@@ -64,7 +64,7 @@ export default function ComplianceSelfAudit() {
         ?.map((r, i) => ({ result: r, index: i }))
         .filter(({ result: r, index: i }) => r.documentId === result.documentId && r.status !== 'pass' && !fixedIds.has(findingKey(r, i))) || [];
 
-      const { data, error } = await auditSupabase.functions.invoke('apply-audit-fix', {
+      const { data, error } = await supabase.functions.invoke('apply-audit-fix', {
         body: {
           documentTitle: doc.title,
           clause: doc.clause,
