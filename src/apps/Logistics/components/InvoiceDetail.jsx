@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { supabase } from '../../../lib/supabase.js'
+import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
 import { aud, lineVariance, invoiceOvercharge, invoiceTotal } from '../utils/helpers.js'
 

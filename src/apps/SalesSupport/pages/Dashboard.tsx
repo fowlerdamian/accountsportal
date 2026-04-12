@@ -4,7 +4,7 @@ import { cn } from "../../../apps/Guide/lib/utils";
 import { useDashboardMetrics } from "../hooks/useSalesQueries";
 import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNEL_DESCRIPTION, CHANNELS, type Channel } from "../lib/constants";
 import { LeadScoreBadge } from "../components/LeadScoreBadge";
-import { supabase } from "@portal/lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useISO } from '../context/ISOContext';
-import { useActions } from '../context/ActionsContext';
+import { useISO } from '../contexts/ISOContext';
+import { useActions } from '../contexts/ActionsContext';
 import { useAuth } from '@guide/contexts/AuthContext';
 import { DOCUMENT_QUESTIONS, ChatMessage } from '../lib/iso-documents';
 import { motion, AnimatePresence } from 'framer-motion';

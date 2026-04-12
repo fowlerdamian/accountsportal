@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      // Portal root — shared lib, context, components
+      '@portal': path.resolve(__dirname, './src'),
       // Support Hub — @/ resolves to its own src tree
       '@': path.resolve(__dirname, './src/apps/Support'),
       // Guide Portal — components/ was copied flat into Guide/, so map it back

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Shield, Mail, Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAuditAuth } from '../context/AuditAuthContext';
+import { useAuditAuth } from '../contexts/AuditAuthContext';
 import { toast } from 'sonner';
 
 export default function ComplianceLogin() {

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "@guide/integrations/supabase/client";
-import { useAuth as usePortalAuth } from "../../../context/AuthContext";
+import { useAuth as usePortalAuth } from "@portal/context/AuthContext";
 
 interface AuthContextType {
   user: User | null;

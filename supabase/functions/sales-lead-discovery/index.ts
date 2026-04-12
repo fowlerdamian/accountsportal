@@ -144,12 +144,13 @@ async function googleNewsSearch(query: string, cseKey: string, cseCx: string): P
   }));
 }
 
-async function googleMapsSearch(query: string, placesKey: string): Promise<any[]> {
+async function googleMapsSearch(query: string, placesKey: string): Promise<{ results: any[]; diagnostic?: string }> {
   const url = `${PLACES_BASE}/textsearch/json?query=${encodeURIComponent(query)}&region=au&key=${placesKey}`;
   const res = await fetch(url);
-  if (!res.ok) return [];
+  if (!res.ok) return { results: [], diagnostic: `HTTP ${res.status}` };
   const data = await res.json();
-  return data.results ?? [];
+  const diagnostic = data.status !== "OK" ? `Places API: ${data.status} — ${data.error_message ?? ""}` : undefined;
+  return { results: data.results ?? [], diagnostic };
 }
 
 // ─── Extract tender winner from search result snippet ────────────────────────
@@ -251,7 +252,9 @@ serve(async (req) => {
 
           // Maps search for most queries
           if (!isTenderQuery) {
-            rawResults = await googleMapsSearch(query, placesKey);
+            const { results, diagnostic } = await googleMapsSearch(query, placesKey);
+            rawResults = results;
+            if (diagnostic) errors.push(`[Maps] ${query}: ${diagnostic}`);
           } else {
             const webResults = await googleSearch(query, cseKey, cseCx, 10);
             rawResults = webResults.map((r: any) => ({

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { ArrowUpDown, CheckCircle2 } from 'lucide-react'
-import { supabase } from '../../lib/supabase.js'
+import { supabase } from '@portal/lib/supabase'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

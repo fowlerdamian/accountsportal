@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { ISOProvider, useISO } from './context/ISOContext';
-import { ActionsProvider } from './context/ActionsContext';
+import { ISOProvider, useISO } from './contexts/ISOContext';
+import { ActionsProvider } from './contexts/ActionsContext';
 import ComplianceSetup from './pages/ComplianceSetup';
 import ComplianceDashboard from './pages/ComplianceDashboard';
 import ComplianceDocumentChat from './pages/ComplianceDocumentChat';

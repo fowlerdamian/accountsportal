@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, ExternalLink, RefreshCw, DollarSign, Clock } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { type Channel } from "../lib/constants";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@portal/lib/supabase";
 
 interface HSDeal {
   id: string;

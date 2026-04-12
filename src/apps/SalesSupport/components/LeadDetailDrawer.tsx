@@ -5,7 +5,7 @@ import { LeadScoreBadge } from "./LeadScoreBadge";
 import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type Channel } from "../lib/constants";
 import { useOrderHistory } from "../hooks/useSalesQueries";
 import type { SalesLead } from "../hooks/useSalesQueries";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@portal/lib/supabase";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 interface Props {

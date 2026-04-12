@@ -6,7 +6,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { cn } from "../../../apps/Guide/lib/utils";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@portal/lib/supabase";
 import { CHANNEL_LABEL, type Channel } from "../lib/constants";
 
 const CHART_COLORS = ["#f3ca0f", "#4fc3f7", "#ef5350", "#66bb6a", "#ab47bc", "#ffa726"];

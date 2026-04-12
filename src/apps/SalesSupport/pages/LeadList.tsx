@@ -7,7 +7,7 @@ import { LeadScoreBadge } from "../components/LeadScoreBadge";
 import { LeadDetailDrawer } from "../components/LeadDetailDrawer";
 import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type Channel } from "../lib/constants";
 import type { SalesLead } from "../hooks/useSalesQueries";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@portal/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 
 type SortKey = "lead_score" | "company_name" | "updated_at" | "status";

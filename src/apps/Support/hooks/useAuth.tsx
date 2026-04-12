@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth as usePortalAuth } from '../../../context/AuthContext';
+import { useAuth as usePortalAuth } from '@portal/context/AuthContext';
 
 const AVATAR_COLOURS = [
   '#C0392B', '#1A6FA8', '#2E7D32', '#D4860A',
