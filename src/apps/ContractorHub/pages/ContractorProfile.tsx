@@ -109,7 +109,7 @@ export default function ContractorProfile() {
       <div className="space-y-6 animate-fade-in max-w-4xl">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link to="/hub/contractors" className="hover:text-foreground transition-colors">Contractors</Link>
+          <Link to="/projects/contractors" className="hover:text-foreground transition-colors">Contractors</Link>
           <ChevronRight className="w-3.5 h-3.5" />
           <span className="text-foreground">{contractor.name}</span>
         </nav>
@@ -261,7 +261,7 @@ export default function ContractorProfile() {
                     <tr
                       key={t.id}
                       className="border-b hover:bg-muted/20 cursor-pointer transition-colors"
-                      onClick={() => navigate(`/hub/projects/${t.projects?.id}`)}
+                      onClick={() => navigate(`/projects/list/${t.projects?.id}`)}
                     >
                       <td className="p-3 text-sm">{t.title}</td>
                       <td className="p-3 text-sm text-muted-foreground">{t.projects?.name ?? "—"}</td>

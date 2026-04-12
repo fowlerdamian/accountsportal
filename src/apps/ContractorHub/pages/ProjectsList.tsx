@@ -33,8 +33,8 @@ function ProjectCard({ project }: { project: Project }) {
   return (
     <div
       className="rounded-lg border bg-background p-5 flex flex-col gap-3 cursor-pointer hover:border-primary/40 transition-colors animate-fade-in focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-      onClick={() => navigate(`/hub/projects/${project.id}`)}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/hub/projects/${project.id}`); } }}
+      onClick={() => navigate(`/projects/list/${project.id}`)}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/projects/list/${project.id}`); } }}
       tabIndex={0}
       role="button"
       aria-label={`Open project ${project.name}`}

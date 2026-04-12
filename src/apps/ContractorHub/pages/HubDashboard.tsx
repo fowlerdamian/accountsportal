@@ -86,7 +86,7 @@ function ContractorDashboard({ contractorId }: { contractorId: string }) {
               <div key={pid} className="rounded-lg border bg-background overflow-hidden">
                 <div
                   className="px-4 py-2.5 border-b bg-muted/30 flex items-center justify-between cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/hub/projects/${pid}`)}
+                  onClick={() => navigate(`/projects/list/${pid}`)}
                 >
                   <span className="text-sm font-medium">{group.name}</span>
                   <span className="text-xs text-muted-foreground">{group.tasks.length} task{group.tasks.length !== 1 ? "s" : ""}</span>
@@ -137,7 +137,7 @@ function StaffDashboard() {
           value={metricsLoading ? "—" : metrics?.activeProjects ?? 0}
           icon={<FolderOpen className="w-5 h-5" />}
           className="cursor-pointer hover:border-primary/50 transition-colors"
-          onClick={() => navigate("/hub/projects")}
+          onClick={() => navigate("/projects/list")}
         />
         <StatsCard
           title="Overdue Tasks"
@@ -147,7 +147,7 @@ function StaffDashboard() {
             "cursor-pointer hover:border-primary/50 transition-colors",
             (metrics?.overdueTasks ?? 0) > 0 && "[&_p.text-2xl]:text-red-400",
           )}
-          onClick={() => navigate("/hub/projects")}
+          onClick={() => navigate("/projects/list")}
         />
         <StatsCard
           title="Hours This Week"

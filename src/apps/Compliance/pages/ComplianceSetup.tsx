@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useISO } from '../context/ISOContext';
-import { useAuditAuth } from '../context/AuditAuthContext';
+import { useAuth } from '@guide/contexts/AuthContext';
 import { auditSupabase } from '../client';
 import { CompanyProfile, EMPTY_COMPANY_PROFILE } from '../lib/company-profile';
 import { motion } from 'framer-motion';
@@ -18,7 +18,7 @@ const AUSTRALIAN_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'];
 export default function ComplianceSetup() {
   const navigate = useNavigate();
   const { setCompanyProfile } = useISO();
-  const { session } = useAuditAuth();
+  const { user } = useAuth();
   const [form, setForm] = useState<CompanyProfile>(EMPTY_COMPANY_PROFILE);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -26,8 +26,8 @@ export default function ComplianceSetup() {
   // Check if company already exists for this domain
   useEffect(() => {
     const checkExisting = async () => {
-      if (!session?.user?.email) return;
-      const domain = session.user.email.split('@')[1]?.toLowerCase();
+      if (!user?.email) return;
+      const domain = user.email.split('@')[1]?.toLowerCase();
       if (!domain) return;
 
       const { data: company } = await auditSupabase
@@ -37,12 +37,12 @@ export default function ComplianceSetup() {
         .maybeSingle();
 
       if (company) {
-        await auditSupabase.from('profiles').update({ company_id: company.id } as any).eq('user_id', session.user.id);
+        await auditSupabase.from('profiles').update({ company_id: company.id } as any).eq('user_id', user.id);
         navigate('..', { replace: true });
       }
     };
     checkExisting();
-  }, [session?.user?.email]);
+  }, [user?.email]);
 
   const update = (field: keyof CompanyProfile, value: string) => setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -73,7 +73,6 @@ export default function ComplianceSetup() {
     if (!form.email.trim()) { toast.error('Email is required'); return; }
 
     try {
-      const user = session?.user;
       if (!user) return;
 
       const domain = user.email?.split('@')[1]?.toLowerCase();

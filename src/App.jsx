@@ -17,6 +17,7 @@ import RateCards from './apps/Logistics/components/RateCards.jsx'
 import Disputes from './apps/Logistics/components/Disputes.jsx'
 import SupportApp from './apps/Support/SupportApp'
 import SalesSupport from './apps/SalesSupport/index.jsx'
+import ComplianceApp from './apps/Compliance/index'
 
 // Contractor Hub
 import HubDashboard from './apps/ContractorHub/pages/HubDashboard'
@@ -25,7 +26,6 @@ import ContractorProfile from './apps/ContractorHub/pages/ContractorProfile'
 import ProjectsList from './apps/ContractorHub/pages/ProjectsList'
 import ProjectView from './apps/ContractorHub/pages/ProjectView'
 import HubSettings from './apps/ContractorHub/pages/HubSettings'
-import CompliancePage from './apps/ContractorHub/pages/CompliancePage'
 
 // Guide Portal
 import { AdminLayout } from './apps/Guide/admin/AdminLayout'
@@ -95,7 +95,7 @@ export default function App() {
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
 
-            {/* Support Hub — public, no login required */}
+            {/* Support Hub */}
             <Route path="/support/*" element={<SupportApp />} />
 
             {/* Redirect old /guide/view/:slug viewer URLs → new public /:slug route */}
@@ -104,12 +104,12 @@ export default function App() {
             {/* Guide Portal — public viewer */}
             <Route path="/:slug" element={<GuideAuthProvider><GuideViewer /></GuideAuthProvider>} />
 
-            {/* Guide Portal — protected admin (domain-aware: redirects legacy /guide/:slug QR URLs on viewer subdomains) */}
+            {/* Guide Portal — protected admin */}
             <Route path="/guide/*" element={<GuideAppRouter />} />
 
-            {/* Contractor Hub */}
+            {/* Projects (Contractor Hub) */}
             <Route
-              path="/hub/*"
+              path="/projects/*"
               element={
                 <ProtectedRoute>
                   <GuideAuthProvider>
@@ -117,9 +117,8 @@ export default function App() {
                       <Route index element={<HubDashboard />} />
                       <Route path="contractors" element={<ContractorsList />} />
                       <Route path="contractors/:id" element={<ContractorProfile />} />
-                      <Route path="projects" element={<ProjectsList />} />
-                      <Route path="projects/:id" element={<ProjectView />} />
-                      <Route path="compliance/*" element={<CompliancePage />} />
+                      <Route path="list" element={<ProjectsList />} />
+                      <Route path="list/:id" element={<ProjectView />} />
                       <Route path="settings" element={<HubSettings />} />
                     </Routes>
                   </GuideAuthProvider>
@@ -140,14 +139,15 @@ export default function App() {
               <Route path="dashboard" element={<PortalDashboard />} />
               <Route path="dashboard/settings" element={<TileSettings />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="apps/profit" element={<ProfitProcessor />} />
-              <Route path="apps/logistics" element={<LogisticsDashboard />} />
-              <Route path="apps/purchase-orders" element={<PurchaseOrders />} />
-              <Route path="apps/logistics/invoices" element={<InvoiceList />} />
-              <Route path="apps/logistics/invoices/:id" element={<InvoiceDetail />} />
-              <Route path="apps/logistics/rate-cards" element={<RateCards />} />
-              <Route path="apps/logistics/disputes" element={<Disputes />} />
-              <Route path="apps/sales-support/*" element={<SalesSupport />} />
+              <Route path="accounts" element={<ProfitProcessor />} />
+              <Route path="logistics" element={<LogisticsDashboard />} />
+              <Route path="logistics/invoices" element={<InvoiceList />} />
+              <Route path="logistics/invoices/:id" element={<InvoiceDetail />} />
+              <Route path="logistics/rate-cards" element={<RateCards />} />
+              <Route path="logistics/disputes" element={<Disputes />} />
+              <Route path="purchase-orders" element={<PurchaseOrders />} />
+              <Route path="sales-support/*" element={<SalesSupport />} />
+              <Route path="compliance/*" element={<ComplianceApp />} />
             </Route>
 
             {/* Catch-all */}

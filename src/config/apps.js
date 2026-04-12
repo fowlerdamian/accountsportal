@@ -8,7 +8,7 @@ export const APPS = [
   {
     name:        'Accounts',
     description: 'Process and flag Cin7 Core Profit Summary Report exports',
-    route:       '/apps/profit',
+    route:       '/accounts',
     icon:        'BarChart3',
     status:      'live',
     external:    false,
@@ -16,7 +16,7 @@ export const APPS = [
   {
     name:        'Logistics',
     description: 'Freight invoice management, rate card reconciliation, and dispute letters',
-    route:       '/apps/logistics',
+    route:       '/logistics',
     icon:        'Truck',
     status:      'live',
     external:    false,
@@ -24,7 +24,7 @@ export const APPS = [
   {
     name:        'Purchasing',
     description: 'Monitor PO due dates with live sync from Cin7 Core',
-    route:       '/apps/purchase-orders',
+    route:       '/purchase-orders',
     icon:        'ShoppingCart',
     status:      'live',
     external:    false,
@@ -40,7 +40,7 @@ export const APPS = [
   {
     name:        'Projects',
     description: 'Project and contractor management, time tracking, and AI assistant',
-    route:       '/hub',
+    route:       '/projects',
     icon:        'Wrench',
     status:      'live',
     external:    false,
@@ -56,7 +56,7 @@ export const APPS = [
   {
     name:        'Sales Support',
     description: 'Lead discovery, enrichment, scoring, and daily call list generation across TrailBait, FleetCraft, and AGA channels',
-    route:       '/apps/sales-support',
+    route:       '/sales-support',
     icon:        'TrendingUp',
     status:      'live',
     external:    false,
@@ -64,7 +64,7 @@ export const APPS = [
   {
     name:        'Compliance',
     description: 'ISO 9001:2015 QMS documentation, self-audit, and evidence management',
-    route:       '/hub/compliance',
+    route:       '/compliance',
     icon:        'ShieldCheck',
     status:      'live',
     external:    false,

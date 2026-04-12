@@ -79,7 +79,7 @@ export default function ContractorsList() {
                 <tr
                   key={c.id}
                   className="border-b hover:bg-muted/30 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/hub/contractors/${c.id}`)}
+                  onClick={() => navigate(`/projects/contractors/${c.id}`)}
                 >
                   <td className="p-3">
                     <div className="flex items-center gap-2.5">

@@ -2,21 +2,23 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const ROUTE_LABELS = {
-  '/dashboard':                  null,
-  '/apps/profit':                'Accounts',
-  '/apps/logistics':             'Logistics',
-  '/apps/logistics/invoices':    'Logistics / Invoices',
-  '/apps/logistics/rate-cards':  'Logistics / Rate Cards',
-  '/apps/logistics/disputes':    'Logistics / Disputes',
-  '/apps/purchase-orders':       'Purchasing',
-  '/settings':                   'Settings',
+  '/dashboard':               null,
+  '/accounts':                'Accounts',
+  '/logistics':               'Logistics',
+  '/logistics/invoices':      'Logistics / Invoices',
+  '/logistics/rate-cards':    'Logistics / Rate Cards',
+  '/logistics/disputes':      'Logistics / Disputes',
+  '/purchase-orders':         'Purchasing',
+  '/sales-support':           'Sales Support',
+  '/compliance':              'Compliance',
+  '/settings':                'Settings',
 }
 
 export default function Layout() {
   const { user, signOut } = useAuth()
   const { pathname } = useLocation()
   const breadcrumb = ROUTE_LABELS[pathname]
-    ?? (pathname.startsWith('/apps/logistics/invoices/') ? 'Logistics / Invoice Detail' : null)
+    ?? (pathname.startsWith('/logistics/invoices/') ? 'Logistics / Invoice Detail' : null)
   const guestEmail = !user ? localStorage.getItem('portal_guest_email') : user?.email
 
   return (

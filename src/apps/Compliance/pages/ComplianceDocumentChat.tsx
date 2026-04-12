@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useISO } from '../context/ISOContext';
 import { useActions } from '../context/ActionsContext';
-import { useAuditAuth } from '../context/AuditAuthContext';
+import { useAuth } from '@guide/contexts/AuthContext';
 import { DOCUMENT_QUESTIONS, ChatMessage } from '../lib/iso-documents';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -22,7 +22,7 @@ export default function ComplianceDocumentChat() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { getDocument, updateDocument, addMessage, companyProfile } = useISO();
   const { createAction, closeAction } = useActions();
-  const { profile } = useAuditAuth();
+  const { user } = useAuth();
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -376,7 +376,7 @@ export default function ComplianceDocumentChat() {
           <div className="flex-1">
             <h1 className="text-lg font-bold text-foreground">{doc.title}</h1>
             <p className="text-xs text-muted-foreground font-mono">
-              Clause {doc.clause}{profile?.fullName ? ` · ${profile.fullName}` : ''}
+              Clause {doc.clause}{user?.email ? ` · ${user.email.split('@')[0]}` : ''}
             </p>
           </div>
           {doc.status === 'complete' && (

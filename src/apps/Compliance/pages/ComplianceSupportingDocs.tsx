@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuditAuth } from '../context/AuditAuthContext';
+import { useAuth } from '@guide/contexts/AuthContext';
 import { useISO } from '../context/ISOContext';
 import { auditSupabase } from '../client';
 import { SUPPORTING_DOC_REQUIREMENTS } from '../lib/supporting-docs';
@@ -26,7 +26,7 @@ interface UploadedDoc {
 
 export default function ComplianceSupportingDocs() {
   const navigate = useNavigate();
-  const { session } = useAuditAuth();
+  const { user } = useAuth();
   const { companyProfile } = useISO();
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,14 +53,14 @@ export default function ComplianceSupportingDocs() {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !activeRequirementId || !session?.user?.id) return;
+    if (!file || !activeRequirementId || !user?.id) return;
 
     const requirement = SUPPORTING_DOC_REQUIREMENTS.find((r) => r.id === activeRequirementId);
     if (!requirement) return;
 
     setUploading(activeRequirementId);
     try {
-      const filePath = `${session.user.id}/${activeRequirementId}/${file.name}`;
+      const filePath = `${user!.id}/${activeRequirementId}/${file.name}`;
       const { error: uploadError } = await auditSupabase.storage.from('evidence').upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
 
@@ -75,7 +75,7 @@ export default function ComplianceSupportingDocs() {
         file_name: file.name,
         file_path: filePath,
         file_size: file.size,
-        uploaded_by: session.user.id,
+        uploaded_by: user!.id,
         uploaded_at: new Date().toISOString(),
         status: 'uploaded',
       });

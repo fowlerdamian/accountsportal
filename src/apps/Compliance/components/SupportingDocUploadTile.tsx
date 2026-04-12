@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { auditSupabase } from '../client';
-import { useAuditAuth } from '../context/AuditAuthContext';
+import { useAuth } from '@guide/contexts/AuthContext';
 import { SUPPORTING_DOC_REQUIREMENTS, SupportingDocRequirement } from '../lib/supporting-docs';
 import { Upload, CheckCircle2, Loader2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ interface DocStatus {
 }
 
 export default function SupportingDocUploadTile({ documentId }: SupportingDocUploadTileProps) {
-  const { session } = useAuditAuth();
+  const { user } = useAuth();
   const [docs, setDocs] = useState<DocStatus[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -55,13 +55,13 @@ export default function SupportingDocUploadTile({ documentId }: SupportingDocUpl
   };
 
   const handleUpload = async (reqId: string, file: File) => {
-    if (!session?.user?.id) return;
+    if (!user?.id) return;
     const doc = docs.find((d) => d.id === reqId);
     if (!doc) return;
 
     setUploading(reqId);
     try {
-      const filePath = `${session.user.id}/${documentId}/${reqId}_${file.name}`;
+      const filePath = `${user!.id}/${documentId}/${reqId}_${file.name}`;
 
       if (doc.filePath) {
         await auditSupabase.storage.from('evidence').remove([doc.filePath]);
@@ -79,7 +79,7 @@ export default function SupportingDocUploadTile({ documentId }: SupportingDocUpl
         file_path: filePath,
         file_size: file.size,
         status: 'uploaded',
-        uploaded_by: session.user.id,
+        uploaded_by: user!.id,
         uploaded_at: new Date().toISOString(),
       };
 

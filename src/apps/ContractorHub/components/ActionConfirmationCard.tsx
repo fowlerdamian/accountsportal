@@ -42,7 +42,7 @@ function getCardDetails(
       if (input.due_date) lines.push(`Due ${input.due_date}`);
       return {
         lines,
-        linkTo: task.project_id ? `/hub/projects/${task.project_id}` : undefined,
+        linkTo: task.project_id ? `/projects/list/${task.project_id}` : undefined,
       };
     }
     case "update_task": {
@@ -53,7 +53,7 @@ function getCardDetails(
         .slice(0, 3);
       return {
         lines: [task.title ?? "", ...changes],
-        linkTo: task.project_id ? `/hub/projects/${task.project_id}` : undefined,
+        linkTo: task.project_id ? `/projects/list/${task.project_id}` : undefined,
       };
     }
     case "log_time": {
@@ -64,13 +64,13 @@ function getCardDetails(
       if (input.date) lines.push(`${input.date}`);
       return {
         lines,
-        linkTo: input.project_id ? `/hub/projects/${input.project_id as string}` : undefined,
+        linkTo: input.project_id ? `/projects/list/${input.project_id as string}` : undefined,
       };
     }
     case "post_activity":
       return {
         lines: [(input.content as string)?.substring(0, 80) ?? ""],
-        linkTo: input.project_id ? `/hub/projects/${input.project_id as string}` : undefined,
+        linkTo: input.project_id ? `/projects/list/${input.project_id as string}` : undefined,
       };
     case "create_project": {
       const project = (result as any).project ?? {};
@@ -80,7 +80,7 @@ function getCardDetails(
       if (input.start_date)       lines.push(`Starts ${input.start_date}`);
       return {
         lines,
-        linkTo: project.id ? `/hub/projects/${project.id}` : undefined,
+        linkTo: project.id ? `/projects/list/${project.id}` : undefined,
       };
     }
     case "update_project": {
@@ -91,7 +91,7 @@ function getCardDetails(
         .slice(0, 3);
       return {
         lines: [project.name ?? "", ...changes],
-        linkTo: project.id ? `/hub/projects/${project.id}` : undefined,
+        linkTo: project.id ? `/projects/list/${project.id}` : undefined,
       };
     }
     case "update_contractor": {
@@ -102,7 +102,7 @@ function getCardDetails(
         .slice(0, 3);
       return {
         lines: [contractor.name ?? "", ...changes],
-        linkTo: contractor.id ? `/hub/contractors/${contractor.id}` : undefined,
+        linkTo: contractor.id ? `/projects/contractors/${contractor.id}` : undefined,
       };
     }
     default:

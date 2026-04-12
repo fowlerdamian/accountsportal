@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { auditSupabase } from '../client';
-import { useAuditAuth } from './AuditAuthContext';
+import { useAuth } from '@guide/contexts/AuthContext';
 
 export interface Action {
   id: string;
@@ -29,12 +29,11 @@ interface ActionsContextType {
 const ActionsContext = createContext<ActionsContextType | undefined>(undefined);
 
 export function ActionsProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuditAuth();
+  const { user } = useAuth();
   const [actions, setActions] = useState<Action[]>([]);
   const [loading, setLoading] = useState(false);
 
   const refreshActions = useCallback(async () => {
-    if (!session?.user?.id) return;
     setLoading(true);
     try {
       const { data, error } = await auditSupabase
@@ -48,21 +47,20 @@ export function ActionsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id]);
+  }, []);
 
   useEffect(() => {
     refreshActions();
   }, [refreshActions]);
 
   const createAction = useCallback(async (action: Omit<Action, 'id' | 'status' | 'created_at' | 'closed_at' | 'created_by'>) => {
-    if (!session?.user?.id) return;
     const { error } = await auditSupabase.from('actions').insert({
       ...action,
-      created_by: session.user.id,
+      created_by: user?.id ?? 'unknown',
     });
     if (error) throw error;
     await refreshActions();
-  }, [session?.user?.id, refreshActions]);
+  }, [user?.id, refreshActions]);
 
   const closeAction = useCallback(async (id: string) => {
     const { error } = await auditSupabase

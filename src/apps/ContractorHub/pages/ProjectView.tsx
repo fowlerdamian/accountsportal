@@ -328,7 +328,7 @@ function ProjectViewContent() {
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Link to="/hub/projects" className="hover:text-foreground transition-colors">Projects</Link>
+        <Link to="/projects/list" className="hover:text-foreground transition-colors">Projects</Link>
         <ChevronRight className="w-3.5 h-3.5" />
         <span className="text-foreground">{project.name}</span>
       </nav>

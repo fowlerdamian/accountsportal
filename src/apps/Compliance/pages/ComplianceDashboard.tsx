@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import { useISO } from '../context/ISOContext';
-import { useAuditAuth } from '../context/AuditAuthContext';
 import { useActions } from '../context/ActionsContext';
 import { motion } from 'framer-motion';
 import {
@@ -28,7 +27,6 @@ const statusConfig = {
 
 export default function ComplianceDashboard() {
   const { documents, completedCount, totalCount, auditResults, companyProfile } = useISO();
-  const { isAdmin } = useAuditAuth();
   const { actions, closeAction, deleteAction } = useActions();
   const navigate = useNavigate();
   const overallProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -83,7 +81,7 @@ export default function ComplianceDashboard() {
                 File Manager
               </Button>
             )}
-            {isAdmin && (
+            {(
               <Button variant="secondary" size="sm" onClick={() => navigate('profile')} className="gap-2">
                 <Shield className="h-4 w-4" />
                 Company Profile

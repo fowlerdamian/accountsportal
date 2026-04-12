@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { NavLink, Link, useMatch } from "react-router-dom";
-import { LayoutDashboard, FolderOpen, Users, LogOut, Menu, Plus, Settings, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, FolderOpen, Users, LogOut, Menu, Plus, Settings } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "@guide/contexts/AuthContext";
 import { useIsMobile } from "@guide/hooks/use-mobile";
@@ -37,11 +37,10 @@ export function useHub() {
 // ── Sidebar ───────────────────────────────────────────────────
 
 const navItems = [
-  { label: "Dashboard",   icon: LayoutDashboard, path: "/hub",              end: true },
-  { label: "Projects",    icon: FolderOpen,       path: "/hub/projects",     end: false },
-  { label: "Contractors", icon: Users,            path: "/hub/contractors",  end: false },
-  { label: "Compliance",  icon: ShieldCheck,      path: "/hub/compliance",   end: false },
-  { label: "Settings",    icon: Settings,         path: "/hub/settings",     end: false },
+  { label: "Dashboard",   icon: LayoutDashboard, path: "/projects",             end: true },
+  { label: "Projects",    icon: FolderOpen,       path: "/projects/list",        end: false },
+  { label: "Contractors", icon: Users,            path: "/projects/contractors", end: false },
+  { label: "Settings",    icon: Settings,         path: "/projects/settings",    end: false },
 ];
 
 function SidebarContent({
@@ -92,7 +91,7 @@ function SidebarContent({
           >
             <item.icon className="h-3.5 w-3.5 shrink-0" />
             <span>{item.label}</span>
-            {item.path === "/hub" && overdueCount > 0 && (
+            {item.path === "/projects" && overdueCount > 0 && (
               <span
                 className="ml-auto h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-medium rounded-sm"
                 style={{ background: "rgba(239,68,68,0.2)", color: "#ff1744" }}
@@ -159,7 +158,7 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
   const { signOut }                   = useAuth();
   const overdueCount                  = useOverdueTaskCount();
 
-  const projectMatch    = useMatch("/hub/projects/:id");
+  const projectMatch    = useMatch("/projects/list/:id");
   const currentProjectId = projectMatch?.params?.id ?? null;
 
   // ── Keyboard shortcuts ──────────────────────────────────────

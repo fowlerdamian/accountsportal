@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { ISODocument, ISO_DOCUMENTS, ChatMessage, AuditResult } from '../lib/iso-documents';
 import { CompanyProfile } from '../lib/company-profile';
-import { useAuditAuth } from './AuditAuthContext';
 
 interface ISOContextType {
   documents: ISODocument[];
@@ -19,8 +18,6 @@ interface ISOContextType {
 const ISOContext = createContext<ISOContextType | undefined>(undefined);
 
 export function ISOProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuditAuth();
-
   const [documents, setDocuments] = useState<ISODocument[]>(() =>
     ISO_DOCUMENTS.map((doc) => ({
       ...doc,

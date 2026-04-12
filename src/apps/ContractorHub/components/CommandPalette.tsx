@@ -86,9 +86,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
   function selectItem(item: ResultItem) {
     switch (item.kind) {
-      case "contractor": navigate(`/hub/contractors/${item.id}`); break;
-      case "project":    navigate(`/hub/projects/${item.id}`);    break;
-      case "task":       navigate(`/hub/projects/${item.projectId}`); break;
+      case "contractor": navigate(`/projects/contractors/${item.id}`); break;
+      case "project":    navigate(`/projects/list/${item.id}`);    break;
+      case "task":       navigate(`/projects/list/${item.projectId}`); break;
     }
     onClose();
   }
