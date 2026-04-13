@@ -52,9 +52,18 @@ function getImageDimensions(url: string): Promise<{ width: number; height: numbe
     const img = new Image();
     img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
     img.onerror = () => resolve(null);
-    img.crossOrigin = 'anonymous';
+    // crossOrigin only needed for external URLs, not data URLs
+    if (!url.startsWith('data:')) img.crossOrigin = 'anonymous';
     img.src = url;
   });
+}
+
+function detectImageFormat(url: string): string {
+  if (url.startsWith('data:image/png')) return 'PNG';
+  if (url.startsWith('data:image/jpeg') || url.startsWith('data:image/jpg')) return 'JPEG';
+  if (url.startsWith('data:image/webp')) return 'WEBP';
+  if (url.startsWith('data:image/gif')) return 'GIF';
+  return 'JPEG'; // default for canvas-compressed logos
 }
 
 export async function loadHeaderConfig(): Promise<HeaderConfig> {
@@ -270,7 +279,7 @@ export async function generatePdf(
       const logoX = hc.logo_position === 'right' ? pageWidth - margin - logoWidth
         : hc.logo_position === 'center' ? (pageWidth - logoWidth) / 2
         : margin;
-      pdf.addImage(companyProfile.logoUrl, 'AUTO', logoX, y, logoWidth, logoHeight);
+      pdf.addImage(companyProfile.logoUrl, detectImageFormat(companyProfile.logoUrl), logoX, y, logoWidth, logoHeight);
 
       // Place company name + details next to logo (matching header preview)
       const textX = hc.logo_position === 'right' ? pageWidth - margin - logoWidth - 4
@@ -543,7 +552,10 @@ export async function generatePdf(
 
   const sigName = companyProfile?.contactName || 'Director';
   const sigTitle = companyProfile?.contactTitle || 'Director';
-  const sigDate = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+  const now = new Date();
+  const sigDate = now.toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+  const reviewDate = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())
+    .toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
 
   // Label
   pdf.setFontSize(8);
@@ -591,9 +603,12 @@ export async function generatePdf(
   pdf.text(sigTitle, margin, y);
   y += 4.5;
 
-  // Date
+  // Dates
   pdf.setFontSize(8);
-  pdf.text(`Date: ${sigDate}`, margin, y);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text(`Issue Date: ${sigDate}`, margin, y);
+  y += 4.5;
+  pdf.text(`Review Date: ${reviewDate}`, margin, y);
 
   // ── Add footers to all pages ──
   const totalPages = pdf.getNumberOfPages();
