@@ -32,69 +32,69 @@ Deno.serve(async (req) => {
     for (const doc of documents) {
       const evidence = doc.requiredEvidence || [];
       const missingEvidence = evidence.filter((e) => !e.uploaded);
-      const uploadedEvidence = evidence.filter((e) => e.uploaded);
 
       const evidenceContext = evidence.length > 0
-        ? `\nREQUIRED EVIDENCE STATUS:
-${evidence.map((e) => `- ${e.title}: ${e.uploaded ? '✓ UPLOADED' : '✗ NOT UPLOADED'}`).join('\n')}`
+        ? `\nREQUIRED EVIDENCE STATUS:\n${evidence.map((e) => `- ${e.title}: ${e.uploaded ? '✓ UPLOADED' : '✗ NOT UPLOADED — FAIL'}`).join('\n')}`
         : '';
 
       const docTitlesContext = allDocTitles.length > 0
-        ? `\nEXISTING QMS DOCUMENTS (all created documents in this system):\n${allDocTitles.map((t) => `- ${t}`).join('\n')}`
+        ? `\nEXISTING QMS DOCUMENTS:\n${allDocTitles.map((t) => `- ${t}`).join('\n')}`
         : '';
 
       const message = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1200,
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: `You are a ruthless ISO 9001:2015 lead auditor hired to find every gap before a certification audit. You have NEVER seen a perfect QMS document. Your reputation depends on finding problems that others miss. You are not here to be encouraging — you are here to identify non-conformances and observations that would fail a certification audit. Every document you review has gaps. Your job is to find them all.`,
         messages: [{
           role: 'user',
-          content: `You are a highly experienced ISO 9001:2015 lead auditor conducting a rigorous third-party certification audit. Your job is to find problems — not to be encouraging. You are known for thorough, uncompromising audits that catch what internal teams miss.
+          content: `Review this document against ISO 9001:2015 clause ${doc.clause} requirements.
 
-Document: ${doc.title} (Clause ${doc.clause})
-
-DOCUMENT CONTENT:
-${doc.generatedContent}
+DOCUMENT: ${doc.title}
+CLAUSE: ${doc.clause}
 ${evidenceContext}
 ${docTitlesContext}
 
-Audit this document against ISO 9001:2015 clause ${doc.clause} requirements with maximum scrutiny. You must:
+DOCUMENT CONTENT:
+${doc.generatedContent}
 
-1. Assume the document is a first draft and look for EVERY deficiency
-2. Flag vague, generic, or boilerplate language that lacks company-specific detail
-3. Flag missing mandatory elements required by the clause
-4. Flag undefined roles, undefined frequencies, missing metrics, missing records
-5. Flag anything an external auditor would question during certification
-6. Flag process steps described without measurable criteria or evidence requirements
-7. Only mark "pass" if the element is genuinely complete and audit-ready
+---
 
-MANDATORY CHECKS — these MUST result in a "fail" finding if not satisfied:
+AUDIT INSTRUCTIONS:
 
-A) RECORDS & EVIDENCE: If the document's Records & Evidence section lists items that have NOT been uploaded (marked ✗ NOT UPLOADED above), raise a FAIL for each missing item. The finding must state exactly which record is missing. If there is no evidence status provided but the document references records, flag that evidence has not been provided.
+You MUST produce between 3 and 8 specific findings. Do NOT produce a "pass" result — if something partially meets requirements, it is an "observation". Reserve "fail" for clear non-conformances and missing mandatory elements.
 
-B) RELATED DOCUMENTS: Check the document's Related Documents section. For each document listed there, check whether it exists in the EXISTING QMS DOCUMENTS list above. If a referenced document does NOT exist in that list, raise a FAIL stating which related document has not been created yet.
+Do NOT include any passing items in your response. Only include problems.
 
-Common issues to specifically check for in clause ${doc.clause}:
-- Missing defined responsibilities (who exactly is accountable)
-- Missing timeframes or frequencies for reviews/activities
-- Missing reference to records or evidence that would be produced
-- Vague commitments ("will be monitored") without how, when, or by whom
-- Missing links to other QMS documents/procedures
-- Generic text not tailored to the company's actual operations
-- Missing nonconformance/corrective action triggers
-- Scope not clearly defined
+Check ALL of the following — each unmet item is a finding:
 
-Respond with a JSON array — one finding per issue:
+CONTENT GAPS (fail if missing):
+- Are responsibilities assigned to SPECIFIC named roles/positions (not just "management")?
+- Are frequencies and timeframes defined (not vague like "regularly" or "as needed")?
+- Are records specifically named, with retention periods defined?
+- Is the scope explicitly stated with clear inclusions/exclusions?
+- Are nonconformance triggers and escalation paths defined?
+- Are measurable targets or KPIs included?
+- Are review cycles explicitly scheduled?
+
+LANGUAGE QUALITY (observation if present):
+- Any vague language: "will be monitored", "as appropriate", "where applicable", "regularly", "periodically", "timely" without a defined timeframe
+- Any generic boilerplate not specific to this company's industry or operations
+- Responsibilities stated without naming a specific role/title
+
+EVIDENCE & RELATED DOCS (fail if missing):
+- Each ✗ NOT UPLOADED item above = mandatory fail finding
+- Any document referenced in the Related Documents section that is NOT in the EXISTING QMS DOCUMENTS list = fail
+
+Respond ONLY with a JSON array. No preamble, no explanation:
 [
   {
     "documentId": "${doc.id}",
     "clause": "${doc.clause}",
-    "status": "fail" | "observation" | "pass",
-    "finding": "Specific, detailed finding referencing the exact gap",
-    "recommendation": "Specific corrective action required"
+    "status": "fail" | "observation",
+    "finding": "Precise finding — quote the specific language or name the specific missing element",
+    "recommendation": "Exact corrective action with specific wording or content to add"
   }
-]
-
-Use "fail" for missing mandatory requirements or non-conformances. Use "observation" for improvement opportunities. Only use "pass" for elements that are genuinely complete. Most documents will have multiple findings.`,
+]`,
         }],
       });
 
@@ -104,14 +104,16 @@ Use "fail" for missing mandatory requirements or non-conformances. Use "observat
         const docResults = JSON.parse(jsonMatch[0]);
         for (const r of docResults) {
           r.documentTitle = doc.title;
+          // Normalise status — never allow "pass" through from AI
+          if (r.status === 'pass') r.status = 'observation';
           if (r.status === 'minor') r.status = 'observation';
           if (r.status === 'major') r.status = 'fail';
-          if (!['pass', 'observation', 'fail'].includes(r.status)) r.status = 'observation';
+          if (!['observation', 'fail'].includes(r.status)) r.status = 'observation';
           results.push(r);
         }
       }
 
-      // Inject hard failures for missing evidence (in case the AI missed them)
+      // Hard-inject fails for missing evidence
       for (const missing of missingEvidence) {
         const alreadyFlagged = results.some(
           (r) => r.documentId === doc.id && r.finding?.toLowerCase().includes(missing.title.toLowerCase())
@@ -122,8 +124,8 @@ Use "fail" for missing mandatory requirements or non-conformances. Use "observat
             documentTitle: doc.title,
             clause: doc.clause,
             status: 'fail',
-            finding: `Required evidence not uploaded: "${missing.title}" has been identified as a required record for this document but has not been provided.`,
-            recommendation: `Upload "${missing.title}" as supporting evidence via the Supporting Documentation section of this document.`,
+            finding: `Required evidence not uploaded: "${missing.title}" is listed as a required record but has not been provided.`,
+            recommendation: `Upload "${missing.title}" via the Supporting Documentation section of this document before the audit.`,
           });
         }
       }

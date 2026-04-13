@@ -200,12 +200,7 @@ export default function ComplianceSelfAudit() {
           <div className="space-y-6">
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-6">
               <h2 className="text-lg font-bold text-foreground mb-4">Audit Summary — {totalFindings} finding{totalFindings !== 1 ? 's' : ''}</h2>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-center">
-                  <CheckCircle2 className="mx-auto h-6 w-6 text-success mb-2" />
-                  <p className="text-2xl font-bold text-foreground">{passCount}</p>
-                  <p className="text-xs text-muted-foreground">Pass</p>
-                </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-center">
                   <AlertTriangle className="mx-auto h-6 w-6 text-warning mb-2" />
                   <p className="text-2xl font-bold text-foreground">{obsCount}</p>
