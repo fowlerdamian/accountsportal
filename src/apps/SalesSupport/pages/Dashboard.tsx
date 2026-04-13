@@ -61,8 +61,6 @@ export default function Dashboard() {
   async function runListSync() {
     setActiveSync("list");
     try {
-      setSyncStep("Syncing Cin7…");
-      await supabase.functions.invoke("sales-cin7-sync", { body: {} });
       setSyncStep("Deduplicating leads…");
       await supabase.functions.invoke("sales-lead-dedup", { body: {} });
       setSyncStep("Scoring leads…");
