@@ -17,7 +17,7 @@ interface DocumentInput {
   requiredEvidence: EvidenceItem[];
 }
 
-const GEMINI_MODEL = 'gemini-2.5-pro';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 async function callGemini(apiKey: string, systemInstruction: string, userPrompt: string): Promise<string> {
   const res = await fetch(
