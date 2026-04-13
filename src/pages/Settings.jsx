@@ -527,14 +527,7 @@ function UserManagement() {
 
 export default function Settings() {
   const { user }  = useAuth()
-  const isAdmin   = useIsAdmin()
-  const [adminChecked, setAdminChecked] = useState(false)
-
-  // Give isAdmin one tick to resolve before deciding whether to show the section
-  useEffect(() => {
-    const t = setTimeout(() => setAdminChecked(true), 800)
-    return () => clearTimeout(t)
-  }, [])
+  const { isAdmin, checking } = useIsAdmin()
 
   return (
     <div style={{
@@ -554,7 +547,7 @@ export default function Settings() {
 
       {isAdmin && <UserManagement />}
 
-      {adminChecked && !isAdmin && (
+      {!checking && !isAdmin && (
         <section>
           <SectionHeading>User Management</SectionHeading>
           <div style={{ fontSize: '12px', color: '#555', fontFamily: '"JetBrains Mono", monospace' }}>

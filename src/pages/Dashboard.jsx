@@ -8,7 +8,7 @@ import { useIsAdmin } from '../hooks/useIsAdmin.js'
 export default function PortalDashboard() {
   const { user } = useAuth()
   const { settings } = useTileSettings(user?.id)
-  const isAdmin = useIsAdmin()
+  const { isAdmin } = useIsAdmin()
 
   const visibleApps = APPS.filter(app => {
     if (settings === null) return true

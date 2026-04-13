@@ -44,7 +44,7 @@ function Toggle({ checked, onChange, disabled }) {
 }
 
 export default function TileSettings() {
-  const isAdmin = useIsAdmin()
+  const { isAdmin } = useIsAdmin()
   const { users, settings, saving, error, toggle } = useAllUserTileSettings()
 
   if (!isAdmin) {
