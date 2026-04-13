@@ -370,10 +370,11 @@ export default function ComplianceDocumentChat() {
       return m;
     });
 
-    updateDocument(docId, { messages: newMessages });
+    updateDocument(docId, { messages: newMessages, status: 'in_progress', generatedContent: undefined } as any);
     setReanswerMode(null);
+    setEditingMode(false);
     setInput('');
-    toast.success('Answer updated');
+    toast.success('Answer updated — regenerate document to apply changes');
   };
 
   const handleResetDocument = () => {
