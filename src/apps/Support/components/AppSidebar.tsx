@@ -7,6 +7,7 @@ import { useWarehouseTasksCount } from '@/hooks/useWarehouseTasksCount';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
+import { useTileSettings } from '@portal/hooks/useTileSettings';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/support' },
@@ -22,7 +23,9 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
-  const { isAdmin, signOut } = useAuth();
+  const { user, isAdmin, signOut } = useAuth();
+  const { settings: tileSettings } = useTileSettings(user?.id);
+  const dashboardOnly = tileSettings?.['/support/dashboard-only'] === true;
   const actionCount = useActionItemsCount();
   const warehouseCount = useWarehouseTasksCount();
   const isMobile = useIsMobile();
@@ -60,7 +63,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
       </Link>
 
       <nav className="flex-1 flex flex-col gap-0.5 px-2 pt-3">
-        {navItems.map((item) => (
+        {(dashboardOnly ? navItems.filter(i => i.path === '/support') : navItems).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -97,7 +100,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
           </NavLink>
         ))}
 
-        {isAdmin && (
+        {isAdmin && !dashboardOnly && (
           <>
             <div className="mt-5 mb-1.5 px-3">
               <span

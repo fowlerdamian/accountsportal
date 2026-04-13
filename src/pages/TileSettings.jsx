@@ -20,6 +20,56 @@ function AppIcon({ name }) {
 
 const LIVE_APPS = APPS.filter(a => a.status === 'live' || a.status === 'beta')
 
+// Apps that support sub-access levels (route → [modes])
+const SUPPORT_MODES = {
+  '/support': ['full', 'dashboard', 'off'],
+}
+
+function SupportModeSelector({ userId, settings, toggle, saving }) {
+  const isOff = settings[userId]?.['/support'] === false
+  const isDashOnly = settings[userId]?.['/support/dashboard-only'] === true
+  const mode = isOff ? 'off' : isDashOnly ? 'dashboard' : 'full'
+
+  const setMode = (next) => {
+    if (next === 'off') {
+      toggle(userId, '/support', false)
+      toggle(userId, '/support/dashboard-only', false)
+    } else if (next === 'dashboard') {
+      toggle(userId, '/support', true)
+      toggle(userId, '/support/dashboard-only', true)
+    } else {
+      toggle(userId, '/support', true)
+      toggle(userId, '/support/dashboard-only', false)
+    }
+  }
+
+  const btn = (value, label) => (
+    <button
+      key={value}
+      onClick={() => !saving && setMode(value)}
+      disabled={saving}
+      style={{
+        padding: '2px 6px', fontSize: '9px', border: 'none', cursor: saving ? 'not-allowed' : 'pointer',
+        fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase',
+        background: mode === value ? '#f3ca0f' : '#1a1a1a',
+        color: mode === value ? '#000' : '#555',
+        borderRadius: value === 'full' ? '4px 0 0 4px' : value === 'off' ? '0 4px 4px 0' : '0',
+        opacity: saving ? 0.5 : 1,
+      }}
+    >{label}</button>
+  )
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <div style={{ display: 'inline-flex', border: '1px solid #222', borderRadius: '4px', overflow: 'hidden' }}>
+        {btn('full', 'Full')}
+        {btn('dashboard', 'Dash')}
+        {btn('off', 'Off')}
+      </div>
+    </div>
+  )
+}
+
 function Toggle({ checked, onChange, disabled }) {
   return (
     <button
@@ -140,6 +190,17 @@ export default function TileSettings() {
 
                 {/* Toggle per tile */}
                 {LIVE_APPS.map(app => {
+                  if (app.route === '/support') {
+                    return (
+                      <SupportModeSelector
+                        key={app.route}
+                        userId={user.id}
+                        settings={settings}
+                        toggle={toggle}
+                        saving={saving}
+                      />
+                    )
+                  }
                   const enabled = userSettings[app.route] !== false // default on
                   return (
                     <div key={app.route} style={{ display: 'flex', justifyContent: 'center' }}>
