@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
     const genAI = new GoogleGenerativeAI(Deno.env.get('GEMINI_API_KEY') ?? '');
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-preview-04-17',
+      model: 'gemini-2.5-pro-preview-05-06',
       systemInstruction: `You are a senior ISO 9001:2015 lead auditor preparing an organisation for third-party certification. Your role is to conduct a thorough, honest gap analysis — finding real non-conformances and observations while recognising genuinely compliant content. You are rigorous and precise. You do not invent problems, but you do not miss real ones either. Your findings must be specific and actionable.`,
     });
 
