@@ -55,6 +55,7 @@ async function findHubSpotCompany(domain: string, token: string): Promise<string
   const res = await fetch(`${HS_BASE}/crm/v3/objects/companies/search`, {
     method:  "POST",
     headers: hsHeaders(token),
+    signal:  AbortSignal.timeout(8000),
     body: JSON.stringify({
       filterGroups: [{ filters: [{ propertyName: "domain", operator: "EQ", value: domain }] }],
       limit: 1,
@@ -83,6 +84,7 @@ async function createHubSpotCompany(lead: any, channel: Channel, token: string):
   const res = await fetch(`${HS_BASE}/crm/v3/objects/companies`, {
     method:  "POST",
     headers: hsHeaders(token),
+    signal:  AbortSignal.timeout(8000),
     body: JSON.stringify({ properties }),
   });
   if (!res.ok) return null;
@@ -100,6 +102,7 @@ async function createHubSpotContact(lead: any, companyId: string, token: string)
   const res = await fetch(`${HS_BASE}/crm/v3/objects/contacts`, {
     method:  "POST",
     headers: hsHeaders(token),
+    signal:  AbortSignal.timeout(8000),
     body: JSON.stringify({
       properties: {
         firstname: firstName,
@@ -130,6 +133,7 @@ async function createHubSpotDeal(lead: any, companyId: string, channel: Channel,
   const res = await fetch(`${HS_BASE}/crm/v3/objects/deals`, {
     method:  "POST",
     headers: hsHeaders(token),
+    signal:  AbortSignal.timeout(8000),
     body: JSON.stringify({
       properties: {
         dealname:  dealName,

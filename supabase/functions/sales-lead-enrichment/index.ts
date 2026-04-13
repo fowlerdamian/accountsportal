@@ -150,8 +150,9 @@ Respond with only valid JSON, no markdown.`;
       "x-api-key":         anthropicKey,
       "anthropic-version": "2023-06-01",
     },
+    signal: AbortSignal.timeout(20000),
     body: JSON.stringify({
-      model:      "claude-sonnet-4-5",
+      model:      "claude-haiku-4-5-20251001",
       max_tokens: 512,
       messages:   [{ role: "user", content: prompt }],
     }),
@@ -348,17 +349,13 @@ serve(async (req) => {
         if (scraped.phones.length && !lead.phone) updates.phone = scraped.phones[0];
       }
 
-      // 3. AI summary & contact extraction
+      // 3. AI summary & contact extraction (homepage scan for summary + key products only)
       if (websiteText.length > 100) {
         const ai = await generateSummary(lead.company_name, websiteText, lead.channel, anthropicKey);
         if (ai.summary) updates.website_summary = ai.summary;
-        if (ai.contact_name && !lead.recommended_contact_name) {
-          updates.recommended_contact_name     = ai.contact_name;
-          updates.recommended_contact_position = ai.contact_position ?? null;
-          updates.recommended_contact_source   = "website";
-        }
+        // Don't set contact from homepage here — Apollo in step 4 is more reliable.
+        // Homepage contact stored as low-priority fallback only if Apollo finds nothing.
         if (ai.key_products?.length) updates.key_products_services = ai.key_products;
-        // Store extra AI fields in score context
         if ((ai as any).website_quality) updates.score_breakdown = {
           ...(lead.score_breakdown ?? {}),
           website_quality:   (ai as any).website_quality,
@@ -366,10 +363,16 @@ serve(async (req) => {
           has_own_brand:     (ai as any).has_own_brand,
           currently_imports: (ai as any).currently_imports,
         };
+        // Store homepage contact as fallback — only used if Apollo (step 4) finds nothing
+        if (ai.contact_name) {
+          updates._homepage_contact_name     = ai.contact_name;
+          updates._homepage_contact_position = ai.contact_position ?? null;
+        }
       }
 
-      // 4. Apollo people search — find decision-maker contact (free, no phone reveal)
-      if (apolloKey && !lead.recommended_contact_name && !(updates.recommended_contact_name)) {
+      // 4. Apollo people search — ALWAYS run, regardless of homepage contact found
+      // Apollo is authoritative; homepage scrape is unreliable (finds testimonials, footers, etc.)
+      if (apolloKey) {
         const websiteForApollo = updates.website ?? lead.website ?? "";
         let domain: string | null = null;
         try {
@@ -380,13 +383,15 @@ serve(async (req) => {
         if (domain) {
           try {
             await sleep(300);
-            const apolloRes = await fetch("https://api.apollo.io/v1/mixed_people/search", {
+            // Use /people/search with organization_domains array (correct endpoint + param)
+            const apolloRes = await fetch("https://api.apollo.io/v1/people/search", {
               method:  "POST",
               headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
+              signal:  AbortSignal.timeout(8000),
               body:    JSON.stringify({
                 organization_domains: [domain],
                 person_seniorities:   ["owner", "founder", "c_suite", "vp", "director", "manager"],
-                per_page: 1,
+                per_page: 5,
               }),
             });
             if (apolloRes.ok) {
@@ -402,13 +407,52 @@ serve(async (req) => {
                 if (person.linkedin_url && !lead.social_linkedin) {
                   updates.social_linkedin = person.linkedin_url;
                 }
+              } else {
+                // Fallback: search by company name
+                await sleep(300);
+                const nameRes = await fetch("https://api.apollo.io/v1/people/search", {
+                  method:  "POST",
+                  headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
+                  signal:  AbortSignal.timeout(8000),
+                  body:    JSON.stringify({
+                    q_organization_name: lead.company_name,
+                    person_seniorities:  ["owner", "founder", "c_suite", "vp", "director", "manager"],
+                    per_page: 3,
+                  }),
+                });
+                if (nameRes.ok) {
+                  const nameData = await nameRes.json();
+                  const p        = nameData.people?.[0];
+                  if (p) {
+                    const fullName = `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim();
+                    if (fullName) {
+                      updates.recommended_contact_name     = fullName;
+                      updates.recommended_contact_position = p.title ?? null;
+                      updates.recommended_contact_source   = "apollo";
+                    }
+                  }
+                }
               }
+            } else {
+              const errTxt = await apolloRes.text().catch(() => "");
+              console.warn(`Apollo ${apolloRes.status} for ${lead.company_name}: ${errTxt.slice(0, 200)}`);
             }
           } catch (err) {
             console.warn("Apollo search failed for", lead.company_name, err);
           }
         }
       }
+
+      // If Apollo found nothing, fall back to the homepage contact as last resort
+      if (!updates.recommended_contact_name && !lead.recommended_contact_name) {
+        if (updates._homepage_contact_name) {
+          updates.recommended_contact_name     = updates._homepage_contact_name;
+          updates.recommended_contact_position = updates._homepage_contact_position ?? null;
+          updates.recommended_contact_source   = "website";
+        }
+      }
+      delete updates._homepage_contact_name;
+      delete updates._homepage_contact_position;
 
       // 5. Social media
       if (cseKey && cseCx) {

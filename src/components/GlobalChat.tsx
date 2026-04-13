@@ -327,7 +327,7 @@ export default function GlobalChat() {
                 background: '#111', border: '1px solid #1a1a1a',
                 display: 'flex', alignItems: 'center', gap: '6px',
               }}>
-                <Loader2 style={{ width: '12px', height: '12px', color: '#555', animation: 'spin 1s linear infinite' }} />
+                <Loader2 className="animate-spin" style={{ width: '12px', height: '12px', color: '#555' }} />
                 <span style={{ fontSize: '12px', color: '#555' }}>Thinking…</span>
               </div>
             </div>

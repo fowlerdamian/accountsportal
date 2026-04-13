@@ -16,8 +16,13 @@ async function invoke(name: string, body: object = {}): Promise<boolean> {
         "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
         "Content-Type":  "application/json",
       },
-      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(145000),
+      body:   JSON.stringify(body),
     });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.error(`[sales-list-run] ${name} returned ${res.status}: ${txt.slice(0, 200)}`);
+    }
     return res.ok;
   } catch (err) {
     console.error(`[sales-list-run] ${name} failed:`, err);
