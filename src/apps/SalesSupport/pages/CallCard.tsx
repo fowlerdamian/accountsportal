@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useOutletContext, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Phone, Globe, Star, User, Link,
-  ExternalLink, Loader2, CheckCircle, TrendingDown, TrendingUp, Minus, Save,
+  ExternalLink, Loader2, CheckCircle, TrendingDown, TrendingUp, Minus, Save, MessageSquare,
 } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useCallEntry, useUpdateCallOutcome, useSaveCallNotes } from "../hooks/useSalesQueries";
@@ -165,26 +165,32 @@ export default function CallCard() {
         )}
       </div>
 
-      {/* Pitch */}
-      <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Recommended Opening</div>
-        <p className="text-sm text-foreground/90 leading-relaxed italic">"{brief.recommended_pitch || brief.channel_pitch}"</p>
-      </div>
-
-      {/* Call reason */}
+      {/* Context */}
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-1">Why call today</div>
-        <p className="text-sm text-foreground/90">{call.call_reason}</p>
-        {call.talking_points?.length ? (
-          <ul className="mt-3 space-y-1">
-            {call.talking_points.map((tp, i) => (
-              <li key={i} className="text-sm text-foreground/70 flex gap-2">
-                <span className="text-amber-400 font-bold">·</span>
-                {tp}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-semibold uppercase tracking-wider text-amber-400">Context</div>
+          {brief.hook_tier && (
+            <span className={cn(
+              "text-xs px-2 py-0.5 rounded font-mono font-semibold",
+              brief.hook_tier === 1 ? "bg-red-500/20 text-red-400 border border-red-500/30" :
+              brief.hook_tier === 2 ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+                                      "bg-zinc-500/20 text-zinc-400 border border-zinc-500/30"
+            )}>
+              {brief.hook_tier === 1 ? "T1 · Urgent" : brief.hook_tier === 2 ? "T2 · Pain point" : "T3 · General fit"}
+            </span>
+          )}
+        </div>
+        <ul className="space-y-2">
+          {[
+            brief.recommended_pitch || brief.channel_pitch,
+            ...(call.talking_points ?? []),
+          ].filter(Boolean).slice(0, 3).map((point: string, i: number) => (
+            <li key={i} className="text-sm text-foreground/80 flex gap-2.5 leading-relaxed">
+              <span className="text-amber-400 font-bold flex-shrink-0">·</span>
+              {point}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Contact + Google */}
@@ -225,6 +231,26 @@ export default function CallCard() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* HubSpot previous contact */}
+      <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <MessageSquare className="w-3.5 h-3.5" />
+          Previous Contact
+        </div>
+        {brief.hubspot_notes?.length ? (
+          <div className="space-y-2.5">
+            {brief.hubspot_notes.map((note: { date: string; body: string }, i: number) => (
+              <div key={i} className="text-sm">
+                <span className="text-xs text-muted-foreground/60 font-mono mr-2">{note.date}</span>
+                <span className="text-foreground/70">{note.body}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground/50 italic">No previous contact on record</p>
+        )}
       </div>
 
       {/* Company summary */}

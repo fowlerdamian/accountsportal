@@ -473,7 +473,11 @@ serve(async (req) => {
         }
       }
 
-      updates.status = "enriched";
+      // Only mark fully enriched if we got useful data (website summary or score_breakdown).
+      // Without those, scoring will produce bare minimum scores. Mark as "researched" so
+      // the next enrichment run will retry website scraping for these leads.
+      const hasUsefulData = !!(updates.website_summary || updates.score_breakdown);
+      updates.status = hasUsefulData ? "enriched" : "researched";
 
       await supabase.from("sales_leads").update(updates).eq("id", lead.id);
       enrichedCount++;

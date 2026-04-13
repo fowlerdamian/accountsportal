@@ -8,6 +8,20 @@ const corsHeaders = {
 
 type Channel = "trailbait" | "fleetcraft" | "aga";
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Infer company size from Google review count when AI enrichment didn't produce a size signal.
+ * High review counts are a reasonable proxy for established/larger businesses.
+ */
+function inferCompanySize(lead: any): "large" | "medium" | "small" | "unknown" {
+  const rc = lead.google_review_count ?? 0;
+  if (rc >= 100) return "large";
+  if (rc >= 30)  return "medium";
+  if (rc >= 5)   return "small";
+  return "unknown";
+}
+
 // ─── Scoring logic per channel ────────────────────────────────────────────────
 
 function scoreTrailBait(lead: any, orderHistory: any | null): { score: number; breakdown: Record<string, number> } {
@@ -68,27 +82,39 @@ function scoreTrailBait(lead: any, orderHistory: any | null): { score: number; b
 
 function scoreFleetCraft(lead: any): { score: number; breakdown: Record<string, number> } {
   const bd: Record<string, number> = {};
-  const summary = (lead.website_summary ?? "").toLowerCase();
+  const summary     = (lead.website_summary ?? "").toLowerCase();
+  const keyProducts = (lead.key_products_services ?? []).join(" ").toLowerCase();
+  const companyName = (lead.company_name ?? "").toLowerCase();
+  // Search across all available text signals, not just website_summary
+  const allText     = `${summary} ${keyProducts} ${companyName}`;
 
-  // Is installer/upfitter (20)
-  const installerKeywords = ["fitout", "fit-out", "upfit", "upfitter", "installer", "modification", "vehicle mod"];
-  const confirmedKeywords = ["specialist", "dedicated", "fleet", "commercial vehicle"];
-  const isConfirmed = installerKeywords.some((k) => summary.includes(k)) && confirmedKeywords.some((k) => summary.includes(k));
-  const isLikely    = installerKeywords.some((k) => summary.includes(k));
+  // Is installer/upfitter (20) — broad keyword net across all text signals
+  const installerKeywords = [
+    "fitout", "fit-out", "fit out", "upfit", "upfitter", "upfitting",
+    "installer", "installation", "modification", "vehicle mod",
+    "body builder", "body build", "custom build", "conversion",
+    "fleet conversion", "fleet build", "fleet services", "fleet solution",
+    "emergency vehicle", "police vehicle", "ambulance", "rescue vehicle",
+    "tray body", "canopy", "toolbox fit", "bull bar fit",
+  ];
+  const confirmedKeywords = [
+    "specialist", "dedicated", "fleet", "commercial vehicle",
+    "government vehicle", "emergency", "mining vehicle", "work vehicle",
+  ];
+  const isConfirmed = installerKeywords.some((k) => allText.includes(k)) && confirmedKeywords.some((k) => allText.includes(k));
+  const isLikely    = installerKeywords.some((k) => allText.includes(k));
   bd.is_installer = isConfirmed ? 20 : isLikely ? 10 : 0;
 
-  // Government contracts (15)
-  const hasTender = !!(lead.tender_context || summary.includes("contract") || summary.includes("government"));
+  // Government contracts (15) — tender_context is the primary signal; also check summary
+  const tenderKeywords = [
+    "government", "council", "defence", "police", "ambulance",
+    "tender", "contract", "procurement", "state fleet", "federal",
+  ];
+  const hasTender = !!(lead.tender_context || tenderKeywords.some((k) => allText.includes(k)));
   bd.government_contracts = hasTender ? 15 : 0;
 
-  // Google rating (10)
-  if      (lead.google_rating == null)    bd.google_rating = 0;
-  else if (lead.google_rating >= 4.5)     bd.google_rating = 10;
-  else if (lead.google_rating >= 4.0)     bd.google_rating = 7;
-  else                                     bd.google_rating = 3;
-
-  // Company size (15)
-  const size = lead.score_breakdown?.company_size ?? "unknown";
+  // Company size (15) — AI field preferred; fall back to Google review count as proxy
+  const size = lead.score_breakdown?.company_size ?? inferCompanySize(lead);
   bd.company_size = size === "large" ? 15 : size === "medium" ? 8 : size === "small" ? 3 : 5;
 
   // Website quality (10)
@@ -114,31 +140,42 @@ function scoreFleetCraft(lead: any): { score: number; breakdown: Record<string, 
 
 function scoreAGA(lead: any): { score: number; breakdown: Record<string, number> } {
   const bd: Record<string, number> = {};
+  const summary     = (lead.website_summary ?? "").toLowerCase();
+  const keyProducts = (lead.key_products_services ?? []).join(" ").toLowerCase();
+  const companyName = (lead.company_name ?? "").toLowerCase();
+  const allText     = `${summary} ${keyProducts} ${companyName}`;
 
-  // Has own brand (25)
-  const hasBrand = lead.score_breakdown?.has_own_brand ?? false;
+  // Has own brand (25) — AI field preferred; fall back to text signals
+  const brandKeywords = ["our brand", "brand ", "branded", "own label", "private label", "trademark", "proprietary"];
+  const hasBrand = lead.score_breakdown?.has_own_brand
+    ?? brandKeywords.some((k) => allText.includes(k));
   bd.has_own_brand = hasBrand ? 25 : 0;
 
-  // Currently imports (15)
-  const imports = lead.score_breakdown?.currently_imports;
-  const summary = (lead.website_summary ?? "").toLowerCase();
-  const importEvidence = imports || summary.includes("import") || summary.includes("overseas") || summary.includes("china");
-  const localMfg = summary.includes("manufacture locally") || summary.includes("made in australia");
+  // Currently imports (15) — AI field preferred; fall back to text signals
+  const imports    = lead.score_breakdown?.currently_imports;
+  const importKw   = ["import", "overseas", "china", "taiwan", "sourced from", "offshore", "oem supplier"];
+  const localMfgKw = ["manufacture locally", "made in australia", "australian made", "local manufacture"];
+  const importEvidence = imports ?? importKw.some((k) => allText.includes(k));
+  const localMfg       = localMfgKw.some((k) => allText.includes(k));
   bd.currently_imports = importEvidence && !localMfg ? 15 : localMfg ? 5 : 8;
 
   // Company size (15)
-  const size = lead.score_breakdown?.company_size ?? "unknown";
+  const size = lead.score_breakdown?.company_size ?? inferCompanySize(lead);
   bd.company_size = size === "large" ? 15 : size === "medium" ? 10 : size === "small" ? 5 : 7;
 
   // Website quality (10)
   const wq = lead.score_breakdown?.website_quality ?? (lead.website ? "basic" : "none");
   bd.website_quality = wq === "products" ? 10 : wq === "basic" ? 5 : 0;
 
-  // Product fit for AGA (15)
-  const autoKeywords = ["automotive", "4x4", "4wd", "offroad", "vehicle", "accessories", "lighting", "towing", "bull bar", "suspension"];
-  const adjacentKeywords = ["industrial", "marine", "recreational", "outdoor", "sports"];
-  const isAuto = autoKeywords.some((k) => summary.includes(k));
-  const isAdj  = adjacentKeywords.some((k) => summary.includes(k));
+  // Product fit for AGA (15) — check across all text signals
+  const autoKeywords = [
+    "automotive", "4x4", "4wd", "off-road", "offroad", "vehicle", "accessories",
+    "lighting", "towing", "bull bar", "suspension", "tray", "canopy", "winch",
+    "recovery", "camping gear", "touring", "ute accessories",
+  ];
+  const adjacentKeywords = ["industrial", "marine", "recreational", "outdoor", "sports", "powersports"];
+  const isAuto = autoKeywords.some((k) => allText.includes(k));
+  const isAdj  = adjacentKeywords.some((k) => allText.includes(k));
   bd.product_fit = isAuto ? 15 : isAdj ? 8 : 0;
 
   // Contact found (10)
@@ -182,7 +219,7 @@ serve(async (req) => {
   let query = supabase
     .from("sales_leads")
     .select("*")
-    .in("status", ["enriched", "new"])
+    .in("status", ["enriched", "new", "researched"])
     .order("created_at", { ascending: true })
     .limit(200);
 

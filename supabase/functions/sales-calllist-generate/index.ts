@@ -56,59 +56,64 @@ interface ApolloContact {
 
 async function findContactViaApollo(
   domain: string,
+  companyName: string,
   channel: Channel,
   apiKey: string
 ): Promise<ApolloContact | null> {
-  try {
-    const res = await fetch(`${APOLLO_BASE}/mixed_people/search`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Cache-Control": "no-cache",
-        "X-Api-Key":     apiKey,
-      },
-      body: JSON.stringify({
-        organization_domains: [domain],
-        page:     1,
-        per_page: 15,
-        // No server-side title filter — we rank client-side for flexibility
-      }),
-    });
-
-    if (!res.ok) return null;
-    const data   = await res.json();
-    const people = (data.people ?? []).filter((p: any) => p.first_name && p.last_name);
+  const pickBest = (people: any[]): ApolloContact | null => {
     if (!people.length) return null;
-
     const priorities = CONTACT_PRIORITIES[channel];
     let bestPerson: any = null;
     let bestTier        = priorities.length;
-
     for (const person of people) {
       const title = (person.title ?? "").toLowerCase();
       for (let tier = 0; tier < priorities.length; tier++) {
         if (priorities[tier].some((kw) => title.includes(kw))) {
-          if (tier < bestTier) {
-            bestTier   = tier;
-            bestPerson = person;
-          }
+          if (tier < bestTier) { bestTier = tier; bestPerson = person; }
           break;
         }
       }
     }
-
-    // Apollo returns results roughly by seniority — first result is a safe fallback
-    if (!bestPerson) bestPerson = people[0];
-    if (!bestPerson) return null;
-
+    const p = bestPerson ?? people[0];
     return {
-      name:     bestPerson.name ?? `${bestPerson.first_name} ${bestPerson.last_name}`.trim(),
-      position: bestPerson.title ?? "",
-      email:    bestPerson.email ?? null,
+      name:     p.name ?? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(),
+      position: p.title ?? "",
+      email:    p.email ?? null,
     };
-  } catch {
-    return null;
-  }
+  };
+
+  const apolloSearch = async (body: Record<string, unknown>): Promise<any[]> => {
+    try {
+      const res = await fetch(`${APOLLO_BASE}/people/search`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "X-Api-Key": apiKey },
+        signal:  AbortSignal.timeout(8000),
+        body:    JSON.stringify({ per_page: 15, page: 1, ...body }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        console.error(`Apollo ${res.status}: ${txt.slice(0, 200)}`);
+        return [];
+      }
+      const data = await res.json();
+      return (data.people ?? []).filter((p: any) => p.first_name && p.last_name);
+    } catch (e) {
+      console.error("Apollo fetch error:", e);
+      return [];
+    }
+  };
+
+  // Strategy 1: search by domain (most precise)
+  let people = await apolloSearch({ organization_domains: [domain] });
+  if (people.length) return pickBest(people);
+
+  // Strategy 2: search by organization name (catches companies not indexed by domain)
+  await sleep(300);
+  people = await apolloSearch({
+    q_organization_name: companyName,
+    person_seniorities: ["owner", "founder", "c_suite", "vp", "director", "manager"],
+  });
+  return pickBest(people);
 }
 
 function hsHeaders(token: string) {
@@ -117,33 +122,60 @@ function hsHeaders(token: string) {
 
 // ─── HubSpot communication filters ───────────────────────────────────────────
 
+interface HubSpotNote {
+  date: string;   // formatted e.g. "12 Apr 2026"
+  body: string;   // truncated note text
+}
+
 /**
- * Returns HubSpot company IDs that have had a note created in the last `daysBack` days.
- * Uses a single batch search call — avoids per-company API calls.
+ * Single batch call: fetches all notes in the last `daysBack` days with their company
+ * associations and body text. Returns two things:
+ *   - companyIds: Set of company IDs that had any note (used for suppression)
+ *   - notesMap:   Map of company_id → up to 3 most-recent notes (used for context brief)
  */
-async function fetchRecentlyContactedCompanyIds(token: string, daysBack: number): Promise<Set<string>> {
-  const since = Date.now() - daysBack * 86_400_000;
+async function fetchHubSpotHistory(
+  token: string,
+  daysBack: number
+): Promise<{ companyIds: Set<string>; notesMap: Map<string, HubSpotNote[]> }> {
+  const since      = Date.now() - daysBack * 86_400_000;
   const companyIds = new Set<string>();
+  const notesMap   = new Map<string, HubSpotNote[]>();
+
   try {
     const res = await fetch(`${HS_BASE}/crm/v3/objects/notes/search`, {
       method:  "POST",
       headers: hsHeaders(token),
+      signal:  AbortSignal.timeout(8000),
       body: JSON.stringify({
         filterGroups: [{ filters: [{ propertyName: "hs_timestamp", operator: "GTE", value: since }] }],
-        properties:   ["hs_timestamp"],
+        properties:   ["hs_timestamp", "hs_note_body"],
         associations: ["companies"],
         limit: 100,
+        sorts: [{ propertyName: "hs_timestamp", direction: "DESCENDING" }],
       }),
     });
-    if (!res.ok) return companyIds;
+    if (!res.ok) return { companyIds, notesMap };
     const data = await res.json();
+
     for (const note of data.results ?? []) {
+      const body = (note.properties?.hs_note_body ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const ts   = note.properties?.hs_timestamp ? new Date(note.properties.hs_timestamp) : null;
+      const date = ts ? ts.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "";
+
       for (const assoc of note.associations?.companies?.results ?? []) {
-        companyIds.add(String(assoc.id));
+        const cid = String(assoc.id);
+        companyIds.add(cid);
+        if (body) {
+          const existing = notesMap.get(cid) ?? [];
+          if (existing.length < 3) {
+            notesMap.set(cid, [...existing, { date, body: body.slice(0, 300) }]);
+          }
+        }
       }
     }
   } catch { /* ignore — fail open */ }
-  return companyIds;
+
+  return { companyIds, notesMap };
 }
 
 /**
@@ -215,8 +247,7 @@ async function findContactViaWebsitePages(
   try {
     base = new URL(website.startsWith("http") ? website : `https://${website}`).origin;
   } catch { return null; }
-  // Limit to 3 highest-yield paths with a short timeout — prevents blowing the edge function budget
-  const paths = ["/about-us", "/our-team", "/contact-us"];
+  const paths = ["/about-us", "/our-team", "/team", "/contact-us", "/contact", "/about", "/meet-the-team", "/staff", "/who-we-are", ""];
 
   for (const path of paths) {
     try {
@@ -258,47 +289,92 @@ async function findContactViaWebsitePages(
 async function generateAICallReason(
   lead: any,
   orderHistory: any | null,
+  hsNotes: HubSpotNote[],
   channel: Channel,
   anthropicKey: string
-): Promise<{ call_reason: string; talking_points: string[]; recommended_pitch: string }> {
-  const cin7Context = orderHistory ? `
-- Last order: ${orderHistory.last_order_date ? new Date(orderHistory.last_order_date).toLocaleDateString("en-AU") : "unknown"}
-- Orders in last 30 days: ${orderHistory.order_count_30d}
-- Orders in last 90 days: ${orderHistory.order_count_90d}
-- Average order value: $${Math.round(orderHistory.average_order_value ?? 0).toLocaleString()}
-- Top products: ${(orderHistory.top_products ?? []).slice(0,3).map((p: any) => p.name ?? p.sku).join(", ")}
-- Win-back candidate: ${orderHistory.is_winback_candidate ? "YES" : "no"}` : "";
+): Promise<{ call_reason: string; talking_points: string[]; recommended_pitch: string; hook_tier: number }> {
 
-  const channelContext = channel === "trailbait"
-    ? "TrailBait — we wholesale 4x4/4WD accessories (bull bars, suspension, roof racks, wiring looms, brackets). We sell to independent 4x4 shops and accessory retailers."
+  // ── Channel competitive framing ───────────────────────────────────────────────
+  const channelCompetitive = channel === "trailbait"
+    ? `TrailBait competes in the mid-market 4x4 accessory space. ARB sits above us (premium price, strong brand). Chinese imports sit below (cheap, unreliable, no support). Our angle: ARB-comparable quality at a price point independent shops can actually margin. Shops stocking only ARB are leaving mid-range sales on the table; shops stocking Chinese imports are getting warranty calls.`
     : channel === "fleetcraft"
-    ? "FleetCraft — we supply fleet vehicle accessories and fitout products (wiring looms, brackets, mounting systems, emergency vehicle accessories). We sell to vehicle upfitters and fleet fitout companies."
-    : "AGA — we supply turn-key branded automotive accessories and OEM components. We help brands add products to their range without designing/manufacturing themselves.";
+    ? `FleetCraft supplies fleet vehicle accessories and fitout products (wiring looms, brackets, mounting systems, emergency vehicle accessories). Fleet upfitters need fast, reliable fitout that works first time — vehicle downtime costs their clients money. Our angle: fitout-ready product that reduces install time and callbacks.`
+    : `AGA supplies turn-key branded automotive accessories and OEM components. Our angle: brands can expand their product range and earn margin without the design, tooling, or manufacturing investment. We absorb the product development risk; they keep the brand equity.`;
 
-  const contactLine = lead.recommended_contact_name
-    ? `Contact name: ${lead.recommended_contact_name}${lead.recommended_contact_position ? ` (${lead.recommended_contact_position})` : ""}`
-    : "";
+  // ── Cin7 order history block ──────────────────────────────────────────────────
+  const cin7Lines: string[] = [];
+  if (orderHistory) {
+    const lastOrderDate = orderHistory.last_order_date
+      ? new Date(orderHistory.last_order_date).toLocaleDateString("en-AU")
+      : "unknown";
+    cin7Lines.push(`Last order: ${lastOrderDate}`);
+    cin7Lines.push(`Orders last 30d / 90d: ${orderHistory.order_count_30d} / ${orderHistory.order_count_90d}`);
+    cin7Lines.push(`Average order value: $${Math.round(orderHistory.average_order_value ?? 0).toLocaleString()}`);
+    if ((orderHistory.top_products ?? []).length) {
+      cin7Lines.push(`Top products ordered: ${(orderHistory.top_products ?? []).slice(0,4).map((p: any) => p.name ?? p.sku).join(", ")}`);
+    }
+    if (orderHistory.is_winback_candidate) {
+      cin7Lines.push(`⚠️ WIN-BACK: Has not ordered in ${orderHistory.days_since_last_order ?? "?"} days — previously a regular customer`);
+    }
+  }
 
-  const prompt = `You are writing a personalised sales call brief for a rep about to call this company.
+  // ── Build research data block ─────────────────────────────────────────────────
+  const researchLines: string[] = [];
+  researchLines.push(`Company: ${lead.company_name}`);
+  if (lead.address)                         researchLines.push(`Location: ${lead.address}`);
+  if (lead.recommended_contact_name)        researchLines.push(`Contact: ${lead.recommended_contact_name}${lead.recommended_contact_position ? ` — ${lead.recommended_contact_position}` : ""} (source: ${lead.recommended_contact_source ?? "unknown"})`);
+  if (lead.google_rating)                   researchLines.push(`Google: ${lead.google_rating}/5 from ${lead.google_review_count ?? 0} reviews`);
+  if (lead.website_summary)                 researchLines.push(`About them: ${lead.website_summary}`);
+  if (lead.key_products_services?.length)   researchLines.push(`Their products/services: ${lead.key_products_services.join(", ")}`);
+  if (lead.tender_context)                  researchLines.push(`Recent news / tender: ${lead.tender_context.slice(0, 300)}`);
+  researchLines.push(lead.is_existing_customer ? `Customer status: EXISTING customer` : `Customer status: NEW prospect — no prior relationship`);
+  if (cin7Lines.length)                     researchLines.push(...cin7Lines);
+  researchLines.push(`Lead score: ${lead.lead_score}/100`);
+  if (hsNotes.length) {
+    researchLines.push(`Previous HubSpot contact (${hsNotes.length} note${hsNotes.length > 1 ? "s" : ""}):`);
+    for (const n of hsNotes) researchLines.push(`  [${n.date}] ${n.body}`);
+  } else {
+    researchLines.push(`Previous HubSpot contact: none on record`);
+  }
 
-Our company: ${channelContext}
+  const researchBlock = researchLines.map(l => `  ${l}`).join("\n");
 
-Company being called: ${lead.company_name}
-${lead.address ? `Location: ${lead.address}` : ""}
-${contactLine}
-${lead.google_rating ? `Google rating: ${lead.google_rating}/5 (${lead.google_review_count ?? 0} reviews)` : ""}
-${lead.website_summary ? `About them: ${lead.website_summary}` : ""}
-${lead.key_products_services?.length ? `Their products/services: ${lead.key_products_services.join(", ")}` : ""}
-${lead.tender_context ? `Recent news: ${lead.tender_context.slice(0, 200)}` : ""}
-${lead.is_existing_customer ? "Note: This is an EXISTING customer." : "Note: This is a NEW prospect — first contact."}
-${cin7Context}
+  const prompt = `You are writing a pre-call intelligence brief for a B2B sales rep.
 
-Write a JSON object with:
-- "call_reason": 1-2 sentences — WHY call this specific company today. Be specific and reference their actual business.
-- "recommended_pitch": A natural 2-3 sentence phone opening you'd actually say. ${lead.recommended_contact_name ? `Address ${lead.recommended_contact_name} by name.` : "Use a friendly opener."} Immediately reference something specific about THEIR business that connects to what we sell. Make it feel researched, not cold.
-- "talking_points": Exactly 3 short bullet points — specific conversation hooks relevant to this company (reference their products, location, rating, news, or industry context).
+Your output is a CALL DIRECTION — a strategic compass for the rep, not a phone script.
 
-No fluff. Be specific. Return valid JSON only.`;
+═══ WHAT WE SELL ═══
+${channelCompetitive}
+
+═══ PROSPECT RESEARCH ═══
+${researchBlock}
+
+═══ YOUR TASK ═══
+Write a call direction using this exact 3-sentence structure:
+
+  Sentence 1 — PRESSURE CONTEXT: Who this company/person is and what pressure or dynamic they are operating under right now. Draw on their business type, location, customer base, competitive position, or order pattern. Make it feel like you understand their world.
+
+  Sentence 2 — SPECIFIC HOOK (the reason to call NOW): Use the highest available tier:
+    • Tier 1 (best): Time-sensitive trigger — win-back lapse, tender/contract win, recent news, job posting signals expansion, regulatory deadline
+    • Tier 2: Known pain point — declining orders, competitor gap, downstream customer pressure, product range weakness
+    • Tier 3 (fallback only): General fit — location, product alignment, market position
+
+  Sentence 3 — ANGLE: How our product/solution enters their world as an opportunity FOR THEM. Frame it from their perspective — what they gain or avoid — not as a product description.
+
+═══ RULES ═══
+- Sentences 1 and 2 are entirely about THEM. "We" or our product name must not appear until sentence 3.
+- Be specific. Reference actual data from the research. Never write generic phrases like "they sell accessories", "they value quality", "as a [channel] business".
+- If the contact name is from "apollo" or "website_team_page", you may reference their role but not their name in the call direction (the rep will use the name verbally).
+- The call direction is intelligence for the rep, not words they will read aloud.
+- "talking_points" must each reference a specific detail from the research — not generic advice.
+
+Return ONLY valid JSON, no markdown:
+{
+  "call_direction": "Sentence 1. Sentence 2. Sentence 3.",
+  "call_reason": "One crisp sentence summarising why this lead is on the list today (for the list view — can be blunt).",
+  "talking_points": ["specific hook 1", "specific hook 2", "specific hook 3"],
+  "hook_tier": 1
+}`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -308,27 +384,37 @@ No fluff. Be specific. Return valid JSON only.`;
         "x-api-key":         anthropicKey,
         "anthropic-version": "2023-06-01",
       },
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(25000),
       body: JSON.stringify({
-        model:      "claude-sonnet-4-5",
-        max_tokens: 500,
+        model:      "claude-sonnet-4-6",
+        max_tokens: 600,
         messages:   [{ role: "user", content: prompt }],
       }),
     });
 
-    if (!res.ok) throw new Error("Anthropic API error");
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.error(`[calllist] Anthropic ${res.status}: ${txt.slice(0, 200)}`);
+      throw new Error("Anthropic API error");
+    }
     const data   = await res.json();
-    const parsed = JSON.parse(data.content?.[0]?.text ?? "{}");
+    const raw    = (data.content?.[0]?.text ?? "").trim();
+    // Strip any markdown code fences if present
+    const clean  = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+    const parsed = JSON.parse(clean);
     return {
       call_reason:       parsed.call_reason       ?? generateRuleBasedReason(lead, orderHistory),
-      recommended_pitch: parsed.recommended_pitch ?? CHANNEL_PITCH[channel],
-      talking_points:    parsed.talking_points    ?? [],
+      recommended_pitch: parsed.call_direction     ?? CHANNEL_PITCH[channel],
+      talking_points:    parsed.talking_points     ?? [],
+      hook_tier:         parsed.hook_tier          ?? 3,
     };
-  } catch {
+  } catch (err) {
+    console.error(`[calllist] generateAICallReason failed for ${lead.company_name}:`, err);
     return {
       call_reason:       generateRuleBasedReason(lead, orderHistory),
       recommended_pitch: CHANNEL_PITCH[channel],
       talking_points:    [],
+      hook_tier:         3,
     };
   }
 }
@@ -340,7 +426,9 @@ function buildContextBrief(
   orderHistory: any | null,
   callReason: string,
   recommendedPitch: string,
-  channel: Channel
+  channel: Channel,
+  hookTier: number = 3,
+  hsNotes: HubSpotNote[] = []
 ): object {
   return {
     company_name:        lead.company_name,
@@ -374,6 +462,8 @@ function buildContextBrief(
     channel_pitch:       CHANNEL_PITCH[channel],
     lead_score:          lead.lead_score,
     tender_context:      lead.tender_context,
+    hook_tier:           hookTier,
+    hubspot_notes:       hsNotes.length ? hsNotes : null,
   };
 }
 
@@ -434,6 +524,8 @@ serve(async (req) => {
       // double-call anyone currently in an open sales conversation.
       const hsToken = Deno.env.get("HUBSPOT_ACCESS_TOKEN") ?? "";
       let filteredLeads = leads as any[];
+      // notesMap is populated from HubSpot and attached to each lead for context
+      let hsNotesMap = new Map<string, HubSpotNote[]>();
 
       if (hsToken) {
         const suppressedIds = new Set<string>();
@@ -447,10 +539,20 @@ serve(async (req) => {
           }
         }
 
-        // 2. Suppress companies with a HubSpot note in the last 14 days
-        const recentCompanyIds = await fetchRecentlyContactedCompanyIds(hsToken, 14);
+        // 2. Fetch notes (last 90 days) — used for both suppression and context brief
+        const { companyIds: recentCompanyIds, notesMap } = await fetchHubSpotHistory(hsToken, 90);
+        hsNotesMap = notesMap;
+
+        // Suppress companies with a note in the last 14 days
+        const cutoff14 = Date.now() - 14 * 86_400_000;
         for (const lead of leads as any[]) {
-          if (lead.hubspot_company_id && recentCompanyIds.has(String(lead.hubspot_company_id))) {
+          if (!lead.hubspot_company_id) continue;
+          const cid   = String(lead.hubspot_company_id);
+          const notes = notesMap.get(cid) ?? [];
+          // Suppress if any note is within 14 days (notes are sorted descending, check first)
+          const hasRecent = recentCompanyIds.has(cid) && notes.length > 0 &&
+            new Date(notes[0].date).getTime() > cutoff14;
+          if (hasRecent || (recentCompanyIds.has(cid) && !notes.length)) {
             suppressedIds.add(lead.id);
           }
         }
@@ -515,7 +617,7 @@ serve(async (req) => {
         if (apolloKey && lead.website) {
           const domain = extractDomain(lead.website);
           if (domain) {
-            contact = await findContactViaApollo(domain, channel, apolloKey);
+            contact = await findContactViaApollo(domain, lead.company_name, channel, apolloKey);
             if (contact) contactSource = "apollo";
             await sleep(300);
           }
@@ -552,21 +654,24 @@ serve(async (req) => {
       for (let i = 0; i < top20.length; i++) {
         const lead         = top20[i];
         const orderHistory = (lead as any)._orderHistory ?? null;
+        const hsNotes      = lead.hubspot_company_id ? (hsNotesMap.get(String(lead.hubspot_company_id)) ?? []) : [];
 
         let callReason       = generateRuleBasedReason(lead, orderHistory);
         let recommendedPitch = CHANNEL_PITCH[channel];
         let talkingPoints: string[] = [];
+        let hookTier         = 3;
 
-        // Generate AI pitch for every lead — personalised pitch is the core value
+        // Generate AI call direction for every lead — this is the core value
         if (useAI && anthropicKey) {
-          const ai      = await generateAICallReason(lead, orderHistory, channel, anthropicKey);
+          const ai      = await generateAICallReason(lead, orderHistory, hsNotes, channel, anthropicKey);
           callReason       = ai.call_reason;
           recommendedPitch = ai.recommended_pitch;
           talkingPoints    = ai.talking_points;
+          hookTier         = ai.hook_tier;
           await sleep(200); // brief pause between Claude calls
         }
 
-        const contextBrief = buildContextBrief(lead, orderHistory, callReason, recommendedPitch, channel);
+        const contextBrief = buildContextBrief(lead, orderHistory, callReason, recommendedPitch, channel, hookTier, hsNotes);
 
         inserts.push({
           lead_id:        lead.id,

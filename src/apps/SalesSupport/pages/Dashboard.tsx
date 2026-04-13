@@ -19,16 +19,19 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 }
 
 function JobStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { icon: typeof Clock; class: string; label: string }> = {
-    completed: { icon: CheckCircle, class: "text-green-400",  label: "Completed" },
-    running:   { icon: Loader2,     class: "text-yellow-400 animate-spin", label: "Running" },
-    failed:    { icon: AlertCircle, class: "text-red-400",    label: "Failed" },
-    pending:   { icon: Clock,       class: "text-muted-foreground", label: "Pending" },
+  const map: Record<string, { icon: typeof Clock; textClass: string; iconClass: string; label: string }> = {
+    completed: { icon: CheckCircle, textClass: "text-green-400",        iconClass: "",             label: "Completed" },
+    running:   { icon: Loader2,     textClass: "text-yellow-400",       iconClass: "",             label: "Running"   },
+    failed:    { icon: AlertCircle, textClass: "text-red-400",          iconClass: "",             label: "Failed"    },
+    pending:   { icon: Clock,       textClass: "text-muted-foreground", iconClass: "",             label: "Pending"   },
   };
-  const { icon: Icon, class: cls, label } = map[status] ?? map.pending;
+  const { icon: Icon, textClass, iconClass, label } = map[status] ?? map.pending;
   return (
-    <span className={cn("flex items-center gap-1 text-xs", cls)}>
-      <Icon className="w-3.5 h-3.5" /> {label}
+    <span className={cn("flex items-center gap-1 text-xs", textClass)}>
+      <span className={cn("inline-flex flex-shrink-0", iconClass)}>
+        <Icon className="w-3.5 h-3.5" />
+      </span>
+      {label}
     </span>
   );
 }
