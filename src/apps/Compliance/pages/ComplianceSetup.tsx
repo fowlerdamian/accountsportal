@@ -18,10 +18,10 @@ const AUSTRALIAN_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'];
 
 export default function ComplianceSetup() {
   const navigate = useNavigate();
-  const { setCompanyProfile } = useISO();
+  const { companyProfile, setCompanyProfile } = useISO();
   const { user } = useAuth();
-  const [form, setForm] = useState<CompanyProfile>(EMPTY_COMPANY_PROFILE);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [form, setForm] = useState<CompanyProfile>(companyProfile || EMPTY_COMPANY_PROFILE);
+  const [logoPreview, setLogoPreview] = useState<string | null>(companyProfile?.logoUrl || null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const sigPadRef = useRef<SignatureCanvas>(null);
 
