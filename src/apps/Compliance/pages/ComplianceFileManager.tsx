@@ -3,7 +3,7 @@ import { useISO } from '../contexts/ISOContext';
 import { motion } from 'framer-motion';
 import {
   FileText, Shield, Download, Loader2, Eye, Printer,
-  ArrowLeft, PackageOpen, Paperclip,
+  ArrowLeft, PackageOpen, Paperclip, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -33,9 +33,11 @@ function formatFileSize(bytes: number | null): string {
 }
 
 export default function ComplianceFileManager() {
-  const { documents, companyProfile } = useISO();
+  const { documents, companyProfile, updateDocument } = useISO();
   const navigate = useNavigate();
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [supportingDocs, setSupportingDocs] = useState<SupportingDocRow[]>([]);
   const [loadingSupportingDocs, setLoadingSupportingDocs] = useState(true);
@@ -101,6 +103,28 @@ export default function ComplianceFileManager() {
       URL.revokeObjectURL(link.href);
     } catch { toast.error('Failed to download file'); }
     finally { setLoadingId(null); }
+  };
+
+  const handleDeleteSupportingDoc = async (doc: SupportingDocRow) => {
+    setDeletingId(doc.id);
+    try {
+      if (doc.file_path) {
+        await auditSupabase.storage.from('evidence').remove([doc.file_path]);
+      }
+      await auditSupabase.from('supporting_docs').update({
+        file_name: null, file_path: null, file_size: null, status: 'required',
+        uploaded_by: null, uploaded_at: null,
+      }).eq('id', doc.id);
+      setSupportingDocs((prev) => prev.filter((d) => d.id !== doc.id));
+      toast.success('File deleted');
+    } catch { toast.error('Failed to delete file'); }
+    finally { setDeletingId(null); setConfirmDeleteId(null); }
+  };
+
+  const handleResetDocument = (docId: string) => {
+    updateDocument(docId, { generatedContent: '', status: 'not_started', messages: [] });
+    setConfirmDeleteId(null);
+    toast.success('Document reset');
   };
 
   const handlePreviewSupportingDoc = async (doc: SupportingDocRow) => {
@@ -212,6 +236,16 @@ export default function ComplianceFileManager() {
                     <Button variant="secondary" size="sm" className="gap-1.5 h-8 text-xs" disabled={loadingId === doc.id} onClick={() => handleSave(doc)}>
                       <Download className="h-3.5 w-3.5" /> Save
                     </Button>
+                    {confirmDeleteId === doc.id ? (
+                      <>
+                        <Button variant="destructive" size="sm" className="h-8 text-xs" onClick={() => handleResetDocument(doc.id)}>Confirm</Button>
+                        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
+                      </>
+                    ) : (
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => setConfirmDeleteId(doc.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -257,6 +291,18 @@ export default function ComplianceFileManager() {
                       {loadingId === sd.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                       Save
                     </Button>
+                    {confirmDeleteId === sd.id ? (
+                      <>
+                        <Button variant="destructive" size="sm" className="h-8 text-xs" disabled={deletingId === sd.id} onClick={() => handleDeleteSupportingDoc(sd)}>
+                          {deletingId === sd.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirm'}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
+                      </>
+                    ) : (
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => setConfirmDeleteId(sd.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </motion.div>
               ))}
