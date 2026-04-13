@@ -1,5 +1,3 @@
-import { GoogleGenerativeAI } from 'npm:@google/generative-ai';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -19,17 +17,37 @@ interface DocumentInput {
   requiredEvidence: EvidenceItem[];
 }
 
+const GEMINI_MODEL = 'gemini-2.5-pro-preview-05-06';
+
+async function callGemini(apiKey: string, systemInstruction: string, userPrompt: string): Promise<string> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { maxOutputTokens: 8192, temperature: 1 },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini API error ${res.status}: ${err}`);
+  }
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const { documents, allDocTitles = [] }: { documents: DocumentInput[]; allDocTitles: string[] } = await req.json();
 
-    const genAI = new GoogleGenerativeAI(Deno.env.get('GEMINI_API_KEY') ?? '');
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-pro-preview-05-06',
-      systemInstruction: `You are a senior ISO 9001:2015 lead auditor preparing an organisation for third-party certification. Your role is to conduct a thorough, honest gap analysis — finding real non-conformances and observations while recognising genuinely compliant content. You are rigorous and precise. You do not invent problems, but you do not miss real ones either. Your findings must be specific and actionable.`,
-    });
+    const apiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
+    if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
 
     const results = [];
 
@@ -94,8 +112,11 @@ Respond ONLY with a JSON array. No preamble, no explanation, no markdown fences:
   }
 ]`;
 
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
+      const text = await callGemini(
+        apiKey,
+        `You are a senior ISO 9001:2015 lead auditor preparing an organisation for third-party certification. Your role is to conduct a thorough, honest gap analysis — finding real non-conformances and observations while recognising genuinely compliant content. You are rigorous and precise. You do not invent problems, but you do not miss real ones either. Your findings must be specific and actionable.`,
+        prompt
+      );
 
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
