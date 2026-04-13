@@ -89,18 +89,26 @@ export default function ComplianceSelfAudit() {
         ?.map((r, i) => ({ result: r, index: i }))
         .filter(({ result: r, index: i }) => r.documentId === result.documentId && r.status !== 'pass' && !fixedIds.has(findingKey(r, i))) || [];
 
-      const { data, error } = await supabase.functions.invoke('apply-audit-fix', {
-        body: {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const fixRes = await fetch(`${supabaseUrl}/functions/v1/apply-audit-fix`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({
           documentTitle: doc.title,
           clause: doc.clause,
           currentContent: doc.generatedContent,
           finding: docFindings.map(f => f.result.finding).join('\n\n'),
           recommendation: docFindings.map(f => f.result.recommendation).join('\n\n'),
           companyProfile,
-        },
+        }),
       });
-
-      if (error) throw error;
+      const data = await fixRes.json();
+      if (!fixRes.ok) throw new Error(data?.error || `Fix request failed (${fixRes.status})`);
       if (data?.error) throw new Error(data.error);
 
       if (data?.content) {
