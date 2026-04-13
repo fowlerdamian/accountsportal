@@ -507,7 +507,13 @@ export default function ComplianceDocumentChat() {
                           : 'bg-secondary text-secondary-foreground rounded-bl-md'
                     }`}>
                       <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:m-0">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        <ReactMarkdown components={{
+                          blockquote: ({ children }) => (
+                            <blockquote className="border-l-2 border-primary/50 pl-3 my-1 text-muted-foreground italic">
+                              {children}
+                            </blockquote>
+                          ),
+                        }}>{msg.content}</ReactMarkdown>
                       </div>
                     </div>
                     {msg.role === 'user' && userQuestionIndex !== null && !reanswerMode && !isEvaluating && (

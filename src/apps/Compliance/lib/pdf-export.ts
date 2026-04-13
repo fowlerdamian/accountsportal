@@ -74,7 +74,7 @@ export async function loadHeaderConfig(): Promise<HeaderConfig> {
 // ── Markdown-aware content rendering ──
 
 interface ParsedBlock {
-  type: 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'paragraph' | 'blank' | 'table';
+  type: 'heading1' | 'heading2' | 'heading3' | 'bullet' | 'numbered' | 'paragraph' | 'blank' | 'table' | 'blockquote';
   text: string;
   number?: number;
   tableRows?: string[][];
@@ -157,8 +157,13 @@ function parseMarkdownBlocks(content: string): ParsedBlock[] {
       continue;
     }
 
+    // Blockquote
+    if (/^\s*>\s?/.test(line)) {
+      const text = line.replace(/^\s*>\s?/, '').trim();
+      blocks.push({ type: 'blockquote', text: stripInlineMarkdown(text) });
+      numberedCounter = 0;
     // Headings (handle #### as h3 since PDF only supports 3 levels)
-    if (line.startsWith('#### ')) {
+    } else if (line.startsWith('#### ')) {
       blocks.push({ type: 'heading3', text: stripInlineMarkdown(line.slice(5).trim()) });
       numberedCounter = 0;
     } else if (line.startsWith('### ')) {
@@ -519,6 +524,29 @@ export async function generatePdf(
           y += rowHeight;
         }
 
+        y += 4;
+        break;
+      }
+
+      case 'blockquote': {
+        checkNewPage(8);
+        const bqIndent = margin + 5;
+        const bqWidth = contentWidth - 10;
+        pdf.setFillColor(245, 245, 245);
+        pdf.setDrawColor(r, g, b);
+        pdf.setLineWidth(1.5);
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'italic');
+        pdf.setTextColor(80, 80, 80);
+        const bqLines = pdf.splitTextToSize(block.text, bqWidth);
+        const bqHeight = bqLines.length * 5 + 4;
+        pdf.rect(margin, y - 4, contentWidth, bqHeight, 'F');
+        pdf.line(margin, y - 4, margin, y - 4 + bqHeight);
+        for (const bl of bqLines) {
+          checkNewPage(5);
+          pdf.text(bl, bqIndent, y);
+          y += 5;
+        }
         y += 4;
         break;
       }
