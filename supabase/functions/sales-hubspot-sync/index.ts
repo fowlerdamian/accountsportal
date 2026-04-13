@@ -155,20 +155,30 @@ async function createHubSpotDeal(lead: any, companyId: string, channel: Channel,
 // ─── Get HubSpot deals for pipeline view ─────────────────────────────────────
 
 async function getHubSpotDeals(channel: Channel, token: string): Promise<any[]> {
+  const dealTypeValue = CHANNEL_DEAL_TYPE[channel];
+  // Use two filter groups (OR): match by dealtype OR by dealname containing the channel identifier.
+  // This catches deals where dealtype was rejected/null by HubSpot (e.g. custom values not yet accepted).
   const res = await fetch(`${HS_BASE}/crm/v3/objects/deals/search`, {
     method:  "POST",
     headers: hsHeaders(token),
     body: JSON.stringify({
-      filterGroups: [{
-        filters: [{ propertyName: "dealtype", operator: "EQ", value: CHANNEL_DEAL_TYPE[channel] }],
-      }],
+      filterGroups: [
+        { filters: [{ propertyName: "dealtype",  operator: "EQ",             value: dealTypeValue }] },
+        { filters: [{ propertyName: "dealname",  operator: "CONTAINS_TOKEN", value: dealTypeValue }] },
+      ],
       properties: ["dealname", "dealstage", "amount", "closedate", "hubspot_owner_id", "createdate", "hs_lastmodifieddate", "dealtype"],
       limit: 100,
     }),
   });
   if (!res.ok) return [];
   const data = await res.json();
-  return data.results ?? [];
+  // Deduplicate in case a deal matched both filter groups
+  const seen = new Set<string>();
+  return (data.results ?? []).filter((d: any) => {
+    if (seen.has(d.id)) return false;
+    seen.add(d.id);
+    return true;
+  });
 }
 
 // ─── Sync call note to HubSpot ────────────────────────────────────────────────
