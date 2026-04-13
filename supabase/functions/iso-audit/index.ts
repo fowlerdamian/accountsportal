@@ -36,18 +36,20 @@ Document: ${doc.title} (Clause ${doc.clause})
 DOCUMENT CONTENT:
 ${doc.generatedContent}
 
-Review this document against ISO 9001:2015 requirements for clause ${doc.clause}. Identify any gaps, missing elements, or areas that need improvement.
+Review this document against ISO 9001:2015 requirements for clause ${doc.clause}. Identify any gaps, missing elements, or areas for improvement.
 
-Respond with JSON array only (one item per finding, or one passing item if compliant):
+Respond with a JSON array only — one item per finding (or one passing item if fully compliant):
 [
   {
     "documentId": "${doc.id}",
     "clause": "${doc.clause}",
-    "status": "pass" | "minor" | "major",
-    "finding": "specific finding or 'Meets requirements'",
-    "recommendation": "specific improvement or empty string if passing"
+    "status": "pass" | "observation" | "fail",
+    "finding": "specific finding, or 'Meets ISO 9001:2015 requirements' if passing",
+    "recommendation": "specific improvement action, or empty string if passing"
   }
-]`,
+]
+
+Use "fail" for non-conformances that must be addressed, "observation" for improvement opportunities, "pass" if fully compliant.`,
         }],
       });
 
@@ -55,14 +57,22 @@ Respond with JSON array only (one item per finding, or one passing item if compl
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         const docResults = JSON.parse(jsonMatch[0]);
-        results.push(...docResults);
+        // Enrich with documentTitle and normalise status values
+        for (const r of docResults) {
+          r.documentTitle = doc.title;
+          // Remap any unexpected status values
+          if (r.status === 'minor') r.status = 'observation';
+          if (r.status === 'major') r.status = 'fail';
+          if (!['pass', 'observation', 'fail'].includes(r.status)) r.status = 'observation';
+          results.push(r);
+        }
       }
     }
 
     return new Response(JSON.stringify({ results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (err) {
+  } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

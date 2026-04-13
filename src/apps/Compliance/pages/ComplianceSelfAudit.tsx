@@ -126,7 +126,7 @@ export default function ComplianceSelfAudit() {
   };
 
   return (
-    <div className="min-h-full">
+    <div className="min-h-full overflow-y-auto">
       <header className="border-b border-border px-6 py-5">
         <div className="mx-auto flex max-w-4xl items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/compliance')}>
