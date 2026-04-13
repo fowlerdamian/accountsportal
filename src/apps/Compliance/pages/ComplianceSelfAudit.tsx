@@ -24,10 +24,14 @@ export default function ComplianceSelfAudit() {
     setIsAuditing(true);
     setFixedIds(new Set());
     try {
-      // Fetch all supporting docs so audit can check what's uploaded vs required
-      const { data: supportingDocs } = await auditSupabase
-        .from('supporting_docs')
-        .select('document_id, title, status');
+      // Fetch supporting docs — non-critical, audit continues with empty data if it fails
+      let supportingDocs: { document_id: string; title: string; status: string }[] = [];
+      try {
+        const { data } = await auditSupabase.from('supporting_docs').select('document_id, title, status');
+        supportingDocs = data || [];
+      } catch {
+        // silently ignore — audit still runs without evidence status
+      }
 
       const allDocTitles = documents.map((d) => d.title);
 

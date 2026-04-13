@@ -30,12 +30,13 @@ Deno.serve(async (req) => {
     const results = [];
 
     for (const doc of documents) {
-      const missingEvidence = doc.requiredEvidence.filter((e) => !e.uploaded);
-      const uploadedEvidence = doc.requiredEvidence.filter((e) => e.uploaded);
+      const evidence = doc.requiredEvidence || [];
+      const missingEvidence = evidence.filter((e) => !e.uploaded);
+      const uploadedEvidence = evidence.filter((e) => e.uploaded);
 
-      const evidenceContext = doc.requiredEvidence.length > 0
+      const evidenceContext = evidence.length > 0
         ? `\nREQUIRED EVIDENCE STATUS:
-${doc.requiredEvidence.map((e) => `- ${e.title}: ${e.uploaded ? '✓ UPLOADED' : '✗ NOT UPLOADED'}`).join('\n')}`
+${evidence.map((e) => `- ${e.title}: ${e.uploaded ? '✓ UPLOADED' : '✗ NOT UPLOADED'}`).join('\n')}`
         : '';
 
       const docTitlesContext = allDocTitles.length > 0
