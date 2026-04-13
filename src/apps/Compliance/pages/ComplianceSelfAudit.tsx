@@ -13,6 +13,7 @@ export default function ComplianceSelfAudit() {
   const { documents, auditResults, setAuditResults, updateDocument, companyProfile } = useISO();
   const [isAuditing, setIsAuditing] = useState(false);
   const [fixingIds, setFixingIds] = useState<Set<string>>(new Set());
+  const [fixingDocIds, setFixingDocIds] = useState<Set<string>>(new Set());
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
   const [auditProgress, setAuditProgress] = useState({ current: 0, total: 0 });
 
@@ -84,6 +85,7 @@ export default function ComplianceSelfAudit() {
 
     const key = findingKey(result, index);
     setFixingIds((prev) => new Set(prev).add(key));
+    setFixingDocIds((prev) => new Set(prev).add(result.documentId));
     try {
       const docFindings = auditResults
         ?.map((r, i) => ({ result: r, index: i }))
@@ -126,6 +128,7 @@ export default function ComplianceSelfAudit() {
       toast.error(e.message || 'Failed to apply fix');
     } finally {
       setFixingIds((prev) => { const next = new Set(prev); next.delete(key); return next; });
+      setFixingDocIds((prev) => { const next = new Set(prev); next.delete(result.documentId); return next; });
     }
   };
 
@@ -234,6 +237,7 @@ export default function ComplianceSelfAudit() {
               {auditResults.map((result, i) => {
                 const key = findingKey(result, i);
                 const isFixing = fixingIds.has(key);
+                const isDocFixing = fixingDocIds.has(result.documentId);
                 const isFixed = fixedIds.has(key);
                 const canFix = result.status !== 'pass' && !isFixed;
                 return (
@@ -258,11 +262,17 @@ export default function ComplianceSelfAudit() {
                         </div>
                         <p className="text-sm text-muted-foreground mb-2">{result.finding}</p>
                         <p className="text-sm text-primary"><strong>Recommendation:</strong> {result.recommendation}</p>
+                        {isDocFixing && isFixing && (
+                          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Rewriting document with all fixes — this takes ~60 seconds, please wait…
+                          </p>
+                        )}
                       </div>
                       {canFix && (
-                        <Button variant="secondary" size="sm" className="gap-1.5 shrink-0" disabled={isFixing} onClick={() => handleApplyFix(result, i)}>
-                          {isFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-                          {isFixing ? 'Applying...' : 'Apply Fix'}
+                        <Button variant="secondary" size="sm" className="gap-1.5 shrink-0" disabled={isDocFixing} onClick={() => handleApplyFix(result, i)}>
+                          {isDocFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
+                          {isDocFixing ? 'Rewriting...' : 'Apply Fix'}
                         </Button>
                       )}
                     </div>
