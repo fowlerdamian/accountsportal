@@ -13,40 +13,76 @@ Deno.serve(async (req) => {
 
     const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
 
-    const conversation = messages
-      .map((m: { role: string; content: string }) => `${m.role === 'user' ? 'Company' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
+    // Extract only user answers paired with the preceding assistant question
+    const pairs: { question: string; answer: string }[] = [];
+    let lastQuestion = '';
+    for (const m of messages as { role: string; content: string }[]) {
+      if (m.role === 'assistant') {
+        lastQuestion = m.content.replace(/^.*?\*\*(.+?)\*\*.*$/s, '$1').trim();
+      } else if (m.role === 'user' && lastQuestion) {
+        pairs.push({ question: lastQuestion, answer: m.content });
+        lastQuestion = '';
+      }
+    }
+    const contextFacts = pairs
+      .map((p) => `- ${p.question}: ${p.answer}`)
+      .join('\n');
 
     const company = companyProfile || {};
 
-    const prompt = `You are an ISO 9001:2015 QMS documentation expert. Generate a professional, audit-ready document based on the following information.
+    const prompt = `You are a senior ISO 9001:2015 QMS consultant and technical writer with 20 years of experience producing certification-ready documentation. Your task is to write a complete, professional QMS document from scratch.
 
-COMPANY DETAILS:
+COMPANY:
 - Name: ${company.companyName || 'Company'}
-- ABN: ${company.abn || 'N/A'}
 - Industry: ${company.industry || 'N/A'}
 - Address: ${[company.address, company.suburb, company.state, company.postcode].filter(Boolean).join(', ') || 'N/A'}
-- Contact: ${company.contactName || 'N/A'} — ${company.contactTitle || 'N/A'}
-- Email: ${company.email || 'N/A'}
-- Phone: ${company.phone || 'N/A'}
-- Website: ${company.website || 'N/A'}
-- Employees: ${company.employeeCount || 'N/A'}
+- Contact: ${company.contactName || 'N/A'}, ${company.contactTitle || 'N/A'}
+- Email: ${company.email || 'N/A'} | Phone: ${company.phone || 'N/A'}
+- ABN: ${company.abn || 'N/A'} | Employees: ${company.employeeCount || 'N/A'}
 - Products/Services: ${company.mainProducts || 'N/A'}
 
-DOCUMENT: ${documentTitle}
+DOCUMENT TO WRITE: ${documentTitle}
 ISO 9001:2015 CLAUSE: ${clause}
 
-INFORMATION GATHERED (Q&A):
-${conversation}
+FACTUAL CONTEXT ABOUT THIS COMPANY'S OPERATIONS:
+${contextFacts || '(Use company details above to infer reasonable practices for this industry)'}
 
-Generate the complete document in professional Markdown format. Include:
-1. Document header with company name, document title, clause reference, version (1.0), and date
-2. Purpose and scope section
-3. All relevant procedures, responsibilities, and processes based on the Q&A above
-4. References to relevant ISO 9001:2015 clauses
-5. Document control footer
+INSTRUCTIONS:
+Write this document entirely from scratch as a professional QMS author. Do NOT copy or paraphrase the factual context — use it as background knowledge to inform the content, just as a consultant would after interviewing the client.
 
-Use the company's actual answers to make this document specific and authentic, not generic. Format it as a real QMS document that would satisfy an ISO auditor.`;
+The document must:
+- Be written in formal, authoritative policy/procedure language throughout
+- Use the company's actual details (names, processes, industry context) woven naturally into the text
+- Cover all mandatory elements of ISO 9001:2015 clause ${clause}
+- Include defined roles and responsibilities with named position titles
+- Include measurable criteria, timeframes, and frequencies where applicable
+- Reference the records and evidence that will be produced
+- Link to related QMS documents/procedures where relevant
+- Be structured so a certification auditor would accept it without revision
+
+FORMAT (Markdown):
+# [Document Title]
+
+| | |
+|---|---|
+| **Document No.** | QMS-[clause]-001 |
+| **Clause** | ${clause} |
+| **Version** | 1.0 |
+| **Prepared by** | [contactName] |
+
+---
+
+## 1. Purpose
+## 2. Scope
+## 3. Definitions
+## 4. Responsibilities
+## 5. Procedure / Policy
+## 6. Records & Evidence
+## 7. Related Documents
+## 8. Document Control
+
+Write the full document now. Do not include any preamble or explanation — output only the document content.`;
+
 
     const stream = await client.messages.create({
       model: 'claude-sonnet-4-6',
