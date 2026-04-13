@@ -7,7 +7,7 @@ import { DOCUMENT_QUESTIONS, ChatMessage } from '../lib/iso-documents';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, Download, FileText, Mic, Upload,
-  CheckCircle2, Loader2, Sparkles, Check, Pencil, RotateCcw, AlertTriangle,
+  CheckCircle2, Loader2, Sparkles, Check, Pencil, RotateCcw, RefreshCw,
 } from 'lucide-react';
 import SupportingDocUploadTile from '../components/SupportingDocUploadTile';
 import { Button } from '@/components/ui/button';
@@ -318,6 +318,47 @@ export default function ComplianceDocumentChat() {
     }
   };
 
+  // Direct in-place edit — no AI evaluation, just replace the answer
+  const handleDirectEdit = () => {
+    const content = input.trim();
+    if (!content || !reanswerMode || !docId) return;
+
+    let userCount = 0;
+    const newMessages = doc.messages.map((m) => {
+      if (m.role === 'user') {
+        if (userCount === reanswerMode.questionIndex) {
+          userCount++;
+          return { ...m, content };
+        }
+        userCount++;
+      }
+      return m;
+    });
+
+    updateDocument(docId, { messages: newMessages });
+    setReanswerMode(null);
+    setInput('');
+    toast.success('Answer updated');
+  };
+
+  const handleResetDocument = () => {
+    if (!docId) return;
+    updateDocument(docId, { status: 'not_started', progress: 0, messages: [], generatedContent: undefined } as any);
+    // Re-ask the first question after reset
+    setTimeout(() => {
+      const questions = DOCUMENT_QUESTIONS[docId] || [];
+      if (questions.length > 0) {
+        const q = questions[0];
+        addMessage(docId, {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `Let's start fresh. **${q.question}**${q.hint ? `\n\n_${q.hint}_` : ''}`,
+          timestamp: new Date(),
+        });
+      }
+    }, 50);
+  };
+
   const handleReanswerSend = async () => {
     const content = input.trim();
     if (!content || !reanswerMode || !docId) return;
@@ -380,6 +421,9 @@ export default function ComplianceDocumentChat() {
               Clause {doc.clause}{user?.email ? ` · ${user.email.split('@')[0]}` : ''}
             </p>
           </div>
+          <Button variant="ghost" size="icon" onClick={handleResetDocument} title="Reset chat">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
           {doc.status === 'complete' && (
             <Button onClick={handleDownload} className="gap-2" size="sm">
               <Download className="h-4 w-4" />
@@ -435,18 +479,13 @@ export default function ComplianceDocumentChat() {
                         onClick={() => {
                           const q = questions[userQuestionIndex!];
                           pendingQuestionIndexRef.current = getCurrentQuestionIndex();
+                          setInput(msg.content);
                           setReanswerMode({ questionIndex: userQuestionIndex!, actionId: null, questionText: q.question });
-                          addMessage(docId!, {
-                            id: crypto.randomUUID(),
-                            role: 'assistant',
-                            content: `📝 **Editing Answer**\n\nPlease provide an updated answer for:\n\n**${q.question}**${q.hint ? `\n\n_${q.hint}_` : ''}`,
-                            timestamp: new Date(),
-                          });
                         }}
-                        className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
-                        title="Edit this answer"
+                        className="mt-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-auto"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil className="h-3 w-3" />
+                        Edit
                       </button>
                     )}
                   </div>
@@ -542,24 +581,23 @@ export default function ComplianceDocumentChat() {
               <Button variant="ghost" size="sm" className="text-xs" onClick={() => setEditingMode(false)}>Cancel</Button>
             </div>
             <div className="space-y-1.5 max-h-60 overflow-y-auto">
-              {questions.map((q, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    setReanswerMode({ questionIndex: idx, actionId: null, questionText: q.question });
-                    addMessage(docId!, {
-                      id: crypto.randomUUID(),
-                      role: 'assistant',
-                      content: `📝 **Editing Answer**\n\nPlease provide an updated answer for:\n\n**${q.question}**${q.hint ? `\n\n_${q.hint}_` : ''}`,
-                      timestamp: new Date(),
-                    });
-                  }}
-                  className="w-full text-left rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 px-4 py-2.5 text-sm transition-all"
-                >
-                  <span className="text-muted-foreground text-xs mr-2">Q{idx + 1}.</span>
-                  {q.question}
-                </button>
-              ))}
+              {questions.map((q, idx) => {
+                const existingAnswer = doc.messages.filter((m) => m.role === 'user')[idx]?.content || '';
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setReanswerMode({ questionIndex: idx, actionId: null, questionText: q.question });
+                      setInput(existingAnswer);
+                      setEditingMode(false);
+                    }}
+                    className="w-full text-left rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 px-4 py-2.5 text-sm transition-all"
+                  >
+                    <span className="text-muted-foreground text-xs mr-2">Q{idx + 1}.</span>
+                    {q.question}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -569,10 +607,10 @@ export default function ComplianceDocumentChat() {
       {(reanswerMode || (doc.status !== 'complete' && !isAllAnswered)) && (
         <div className="border-t border-border px-6 py-4">
           {reanswerMode && (
-            <div className="mx-auto max-w-4xl mb-2 flex items-center gap-2 text-xs text-warning">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              <span>Re-answering: <strong>{reanswerMode.questionText}</strong></span>
-              <Button variant="ghost" size="sm" className="ml-auto h-6 text-xs" onClick={() => setReanswerMode(null)}>Cancel</Button>
+            <div className="mx-auto max-w-4xl mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <Pencil className="h-3.5 w-3.5" />
+              <span>Editing Q{reanswerMode.questionIndex + 1}: <span className="text-foreground">{reanswerMode.questionText}</span></span>
+              <Button variant="ghost" size="sm" className="ml-auto h-6 text-xs" onClick={() => { setReanswerMode(null); setInput(''); }}>Cancel</Button>
             </div>
           )}
           <div className="mx-auto flex max-w-4xl items-center gap-2">
@@ -597,7 +635,9 @@ export default function ComplianceDocumentChat() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  reanswerMode ? handleReanswerSend() : handleSend();
+                  if (reanswerMode?.actionId) handleReanswerSend();
+                  else if (reanswerMode) handleDirectEdit();
+                  else handleSend();
                 }
               }}
               placeholder={reanswerMode ? 'Type your improved answer...' : 'Type your answer...'}
@@ -606,7 +646,7 @@ export default function ComplianceDocumentChat() {
               className="flex-1 rounded-xl border border-input bg-secondary px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 resize-none overflow-y-auto"
               style={{ maxHeight: 200 }}
             />
-            <Button onClick={() => reanswerMode ? handleReanswerSend() : handleSend()} size="icon" disabled={!input.trim() || isTyping || isEvaluating}>
+            <Button onClick={() => { if (reanswerMode?.actionId) handleReanswerSend(); else if (reanswerMode) handleDirectEdit(); else handleSend(); }} size="icon" disabled={!input.trim() || isTyping || isEvaluating}>
               <Send className="h-4 w-4" />
             </Button>
           </div>
