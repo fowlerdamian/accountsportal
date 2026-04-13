@@ -165,13 +165,11 @@ export default function CallCard() {
         )}
       </div>
 
-      {/* Recommended pitch */}
-      {brief.recommended_pitch && brief.recommended_pitch !== brief.channel_pitch && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Recommended Opening</div>
-          <p className="text-sm text-foreground/90 leading-relaxed italic">"{brief.recommended_pitch}"</p>
-        </div>
-      )}
+      {/* Pitch */}
+      <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+        <div className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Recommended Opening</div>
+        <p className="text-sm text-foreground/90 leading-relaxed italic">"{brief.recommended_pitch || brief.channel_pitch}"</p>
+      </div>
 
       {/* Call reason */}
       <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
@@ -285,12 +283,6 @@ export default function CallCard() {
           <p className="text-sm text-foreground/80">{brief.tender_context}</p>
         </div>
       )}
-
-      {/* Channel pitch */}
-      <div className="rounded-xl border border-border bg-card/50 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Channel Pitch</div>
-        <p className="text-sm italic text-foreground/70">"{brief.channel_pitch}"</p>
-      </div>
 
       {/* Call notes */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
