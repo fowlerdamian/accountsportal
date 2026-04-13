@@ -30,6 +30,11 @@ Deno.serve(async (req) => {
 
     const company = companyProfile || {};
 
+    const now = new Date();
+    const issueDate = now.toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+    const reviewDate = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())
+      .toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+
     const prompt = `You are a senior ISO 9001:2015 QMS consultant and technical writer with 20 years of experience producing certification-ready documentation. Your task is to write a complete, professional QMS document from scratch.
 
 COMPANY:
@@ -65,10 +70,12 @@ FORMAT (Markdown):
 
 | | |
 |---|---|
-| **Document No.** | QMS-[clause]-001 |
+| **Document No.** | QMS-${clause}-001 |
 | **Clause** | ${clause} |
 | **Version** | 1.0 |
-| **Prepared by** | [contactName] |
+| **Issue Date** | ${issueDate} |
+| **Review Date** | ${reviewDate} |
+| **Prepared by** | ${company.contactName || 'Quality Manager'} |
 
 ---
 
