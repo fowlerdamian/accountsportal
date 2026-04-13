@@ -81,16 +81,14 @@ export default function ComplianceDashboard() {
                 File Manager
               </Button>
             )}
-            {(
-              <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/knowledge-base')} className="gap-2">
-                <BookOpen className="h-4 w-4" />
-                Knowledge Base
-              </Button>
+            <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/knowledge-base')} className="gap-2">
+              <BookOpen className="h-4 w-4" />
+              Knowledge Base
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/setup')} className="gap-2">
-                <Shield className="h-4 w-4" />
-                Company Profile
-              </Button>
-            )}
+              <Shield className="h-4 w-4" />
+              Company Profile
+            </Button>
           </div>
         </motion.div>
 
