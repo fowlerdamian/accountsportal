@@ -10,6 +10,7 @@ import {
   CheckCircle2, Loader2, Sparkles, Check, Pencil, RotateCcw, RefreshCw,
 } from 'lucide-react';
 import SupportingDocUploadTile from '../components/SupportingDocUploadTile';
+import { SUPPORTING_DOC_REQUIREMENTS } from '../lib/supporting-docs';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
@@ -283,6 +284,53 @@ export default function ComplianceDocumentChat() {
     toast.info('Listening... tap mic again to stop');
   };
 
+  const parseAndInsertRequirements = async (content: string) => {
+    if (!docId || !doc) return;
+
+    // ── Records & Evidence → insert as required supporting docs ──
+    const recordsMatch = content.match(
+      /##\s+[\d.]*\s*Records?\s*(?:[&and]+\s*Evidence)?[^\n]*\n([\s\S]*?)(?=\n##|\n---|\n#[^#]|$)/i
+    );
+    const evidenceItems: string[] = [
+      // Hardcoded requirements for this doc
+      ...SUPPORTING_DOC_REQUIREMENTS.filter((r) => r.documentId === docId).map((r) => r.title),
+      // AI-generated items from Records section
+      ...(recordsMatch?.[1].match(/^[-*•]\s+(.+?)(?:\s*[–—-].*)?$/gm) || [])
+        .map((l) => l.replace(/^[-*•]\s+/, '').replace(/\s*[–—-].*$/, '').trim())
+        .filter(Boolean),
+    ];
+    const uniqueEvidence = [...new Set(evidenceItems)];
+
+    for (const title of uniqueEvidence) {
+      const { data: existing } = await auditSupabase
+        .from('supporting_docs').select('id').eq('document_id', docId).eq('title', title).maybeSingle();
+      if (!existing) {
+        await auditSupabase.from('supporting_docs').insert({
+          document_id: docId,
+          title,
+          description: `Required record for ${doc.title} (Clause ${doc.clause})`,
+          clause: doc.clause,
+          status: 'required',
+        });
+      }
+    }
+
+    // ── Related Documents → notify about uncreated ones ──
+    const relatedMatch = content.match(
+      /##\s+[\d.]*\s*Related\s*Documents?[^\n]*\n([\s\S]*?)(?=\n##|\n---|\n#[^#]|$)/i
+    );
+    if (relatedMatch) {
+      const relatedTitles = (relatedMatch[1].match(/^[-*•]\s+(.+?)(?:\s*[–—-].*)?$/gm) || [])
+        .map((l) => l.replace(/^[-*•]\s+/, '').replace(/\s*[–—-].*$/, '').trim())
+        .filter(Boolean);
+
+      // We don't have access to all documents here, so store related docs on the document for audit use
+      if (relatedTitles.length > 0) {
+        updateDocument(docId, { relatedDocuments: relatedTitles } as any);
+      }
+    }
+  };
+
   const handleCreateDocument = async () => {
     setIsGenerating(true);
     try {
@@ -332,6 +380,7 @@ export default function ComplianceDocumentChat() {
 
       if (!content) throw new Error('No content generated');
       updateDocument(docId, { status: 'complete', progress: 100, generatedContent: content });
+      await parseAndInsertRequirements(content);
       toast.success('Document created successfully!');
     } catch (e: any) {
       toast.error(e.message || 'Failed to generate document');

@@ -5,6 +5,7 @@ import { AuditResult } from '../lib/iso-documents';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Shield, CheckCircle2, XCircle, AlertTriangle, Loader2, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { auditSupabase } from '../client';
 import { supabase } from '@portal/lib/supabase';
 import { toast } from 'sonner';
 
@@ -23,6 +24,13 @@ export default function ComplianceSelfAudit() {
     setIsAuditing(true);
     setFixedIds(new Set());
     try {
+      // Fetch all supporting docs so audit can check what's uploaded vs required
+      const { data: supportingDocs } = await auditSupabase
+        .from('supporting_docs')
+        .select('document_id, title, status');
+
+      const allDocTitles = documents.map((d) => d.title);
+
       const BATCH_SIZE = 3;
       const allResults: AuditResult[] = [];
       const batches: typeof completedDocs[] = [];
@@ -33,9 +41,13 @@ export default function ComplianceSelfAudit() {
       for (let b = 0; b < batches.length; b++) {
         const { data, error } = await supabase.functions.invoke('iso-audit', {
           body: {
+            allDocTitles,
             documents: batches[b].map((d) => ({
               id: d.id, title: d.title, clause: d.clause, generatedContent: d.generatedContent,
               messages: d.messages.map((m) => ({ role: m.role, content: m.content })),
+              requiredEvidence: (supportingDocs || [])
+                .filter((sd: any) => sd.document_id === d.id)
+                .map((sd: any) => ({ title: sd.title, uploaded: sd.status === 'uploaded' })),
             })),
           },
         });
