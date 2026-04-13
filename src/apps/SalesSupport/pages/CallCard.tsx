@@ -135,6 +135,12 @@ export default function CallCard() {
                 <ExternalLink className="w-3.5 h-3.5" /> HubSpot
               </a>
             )}
+            {channel === "trailbait" && lead?.cin7_customer_id && (
+              <a href={`https://inventory.dearsystems.com/Customer#guid=${lead.cin7_customer_id}`} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors">
+                <ExternalLink className="w-3.5 h-3.5" /> Cin7
+              </a>
+            )}
           </div>
         </div>
 

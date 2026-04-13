@@ -349,7 +349,7 @@ serve(async (req) => {
         .from("sales_leads")
         .select("*")
         .eq("channel", channel)
-        .in("status", ["queued", "contacted"])
+        .in("status", ["queued", "contacted", "enriched"])
         .gt("lead_score", 0)
         .order("lead_score", { ascending: false })
         .limit(30);
