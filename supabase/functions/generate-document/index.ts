@@ -19,12 +19,7 @@ Deno.serve(async (req) => {
 
     const company = companyProfile || {};
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
-      messages: [{
-        role: 'user',
-        content: `You are an ISO 9001:2015 QMS documentation expert. Generate a professional, audit-ready document based on the following information.
+    const prompt = `You are an ISO 9001:2015 QMS documentation expert. Generate a professional, audit-ready document based on the following information.
 
 COMPANY DETAILS:
 - Name: ${company.companyName || 'Company'}
@@ -51,16 +46,39 @@ Generate the complete document in professional Markdown format. Include:
 4. References to relevant ISO 9001:2015 clauses
 5. Document control footer
 
-Use the company's actual answers to make this document specific and authentic, not generic. Format it as a real QMS document that would satisfy an ISO auditor.`,
-      }],
+Use the company's actual answers to make this document specific and authentic, not generic. Format it as a real QMS document that would satisfy an ISO auditor.`;
+
+    const stream = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      stream: true,
+      messages: [{ role: 'user', content: prompt }],
     });
 
-    const content = message.content[0].type === 'text' ? message.content[0].text : '';
-
-    return new Response(JSON.stringify({ content }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
+            }
+          }
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        } finally {
+          controller.close();
+        }
+      },
     });
-  } catch (err) {
+
+    return new Response(readable, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
+    });
+  } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

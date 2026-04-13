@@ -286,17 +286,52 @@ export default function ComplianceDocumentChat() {
   const handleCreateDocument = async () => {
     setIsGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-document', {
-        body: {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/generate-document`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({
           documentTitle: doc.title,
           clause: doc.clause,
           messages: doc.messages.map((m) => ({ role: m.role, content: m.content })),
           companyProfile,
-        },
+        }),
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      updateDocument(docId, { status: 'complete', progress: 100, generatedContent: data.content });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Generation failed' }));
+        throw new Error(err.error || 'Generation failed');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let content = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') break;
+          try { content += JSON.parse(payload).text ?? ''; } catch { /* ignore */ }
+        }
+      }
+
+      if (!content) throw new Error('No content generated');
+      updateDocument(docId, { status: 'complete', progress: 100, generatedContent: content });
       toast.success('Document created successfully!');
     } catch (e: any) {
       toast.error(e.message || 'Failed to generate document');
