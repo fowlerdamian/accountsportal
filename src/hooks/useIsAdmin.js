@@ -13,6 +13,7 @@ export function useIsAdmin() {
     setChecking(true)
 
     if (user?.id) {
+      // Authenticated: check by user_id first, fall back to email
       supabase
         .from('user_roles')
         .select('role')
@@ -20,23 +21,26 @@ export function useIsAdmin() {
         .in('role', ['admin'])
         .maybeSingle()
         .then(({ data }) => {
-          setIsAdmin(!!data)
-          setChecking(false)
+          if (data) { setIsAdmin(true); setChecking(false); return }
+          // Fallback: check by email (handles dev-user or mismatched IDs)
+          if (user.email) {
+            supabase.rpc('get_role_by_email', { p_email: user.email })
+              .then(({ data: role }) => { setIsAdmin(role === 'admin'); setChecking(false) })
+          } else {
+            setIsAdmin(false); setChecking(false)
+          }
         })
       return
     }
 
-    // Guest (login wall down): check by stored email
+    // No Supabase session — check by stored email
     const guestEmail = localStorage.getItem('portal_guest_email')
     if (!guestEmail) { setIsAdmin(false); setChecking(false); return }
 
     supabase
       .rpc('get_role_by_email', { p_email: guestEmail })
-      .then(({ data }) => {
-        setIsAdmin(data === 'admin')
-        setChecking(false)
-      })
-  }, [user?.id, authLoading])
+      .then(({ data }) => { setIsAdmin(data === 'admin'); setChecking(false) })
+  }, [user?.id, user?.email, authLoading])
 
   return { isAdmin, checking }
 }
