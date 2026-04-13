@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Shield, CheckCircle2, XCircle, AlertTriangle, Loader2, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { auditSupabase } from '../client';
-import { supabase } from '@portal/lib/supabase';
 import { toast } from 'sonner';
 
 export default function ComplianceSelfAudit() {
@@ -42,20 +41,30 @@ export default function ComplianceSelfAudit() {
 
       setAuditProgress({ current: 0, total: completedDocs.length });
 
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
       for (let b = 0; b < batches.length; b++) {
-        const { data, error } = await supabase.functions.invoke('iso-audit', {
-          body: {
+        const res = await fetch(`${supabaseUrl}/functions/v1/iso-audit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey,
+          },
+          body: JSON.stringify({
             allDocTitles,
             documents: batches[b].map((d) => ({
               id: d.id, title: d.title, clause: d.clause, generatedContent: d.generatedContent,
               messages: d.messages.map((m) => ({ role: m.role, content: m.content })),
-              requiredEvidence: (supportingDocs || [])
-                .filter((sd: any) => sd.document_id === d.id)
-                .map((sd: any) => ({ title: sd.title, uploaded: sd.status === 'uploaded' })),
+              requiredEvidence: supportingDocs
+                .filter((sd) => sd.document_id === d.id)
+                .map((sd) => ({ title: sd.title, uploaded: sd.status === 'uploaded' })),
             })),
-          },
+          }),
         });
-        if (error) throw error;
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || `Audit request failed (${res.status})`);
         if (data?.error) throw new Error(data.error);
         allResults.push(...(data.results || []));
         setAuditProgress({ current: Math.min((b + 1) * BATCH_SIZE, completedDocs.length), total: completedDocs.length });
