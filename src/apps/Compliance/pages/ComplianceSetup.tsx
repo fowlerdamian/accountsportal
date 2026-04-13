@@ -74,40 +74,41 @@ export default function ComplianceSetup() {
     if (!form.address.trim()) { toast.error('Address is required'); return; }
     if (!form.email.trim()) { toast.error('Email is required'); return; }
 
-    try {
-      if (!user) return;
+    // Always save to localStorage first — this is the source of truth
+    setCompanyProfile(form);
+    toast.success('Company profile saved!');
+    navigate('/compliance', { replace: true });
 
-      const domain = user.email?.split('@')[1]?.toLowerCase();
-      let companySettingsId: string | null = null;
+    // Best-effort DB sync — failures here don't affect the save
+    if (user) {
+      try {
+        const domain = user.email?.split('@')[1]?.toLowerCase();
+        let companySettingsId: string | null = null;
 
-      if (domain) {
-        const { data: existing } = await auditSupabase.from('company_settings').select('id').eq('allowed_domain', domain).maybeSingle();
-        if (existing) {
-          companySettingsId = existing.id;
-        } else {
-          const { data: newCompany } = await auditSupabase.from('company_settings').insert({ allowed_domain: domain, created_by: user.id }).select('id').single();
-          companySettingsId = newCompany?.id || null;
+        if (domain) {
+          const { data: existing } = await auditSupabase.from('company_settings').select('id').eq('allowed_domain', domain).maybeSingle();
+          if (existing) {
+            companySettingsId = existing.id;
+          } else {
+            const { data: newCompany } = await auditSupabase.from('company_settings').insert({ allowed_domain: domain, created_by: user.id }).select('id').single();
+            companySettingsId = newCompany?.id || null;
+          }
         }
-      }
 
-      const { data: existingRole } = await auditSupabase.from('user_roles').select('id').eq('user_id', user.id).maybeSingle();
-      if (!existingRole) {
-        await auditSupabase.from('user_roles').insert({ user_id: user.id, role: 'admin', company_id: companySettingsId } as any);
-      }
+        const { data: existingRole } = await auditSupabase.from('user_roles').select('id').eq('user_id', user.id).maybeSingle();
+        if (!existingRole) {
+          await auditSupabase.from('user_roles').insert({ user_id: user.id, role: 'admin', company_id: companySettingsId } as any);
+        }
 
-      const profileUpdate: any = {};
-      if (companySettingsId) profileUpdate.company_id = companySettingsId;
-      if (form.contactName.trim()) profileUpdate.full_name = form.contactName.trim();
-      if (Object.keys(profileUpdate).length > 0) {
-        await auditSupabase.from('profiles').update(profileUpdate).eq('user_id', user.id);
+        const profileUpdate: any = {};
+        if (companySettingsId) profileUpdate.company_id = companySettingsId;
+        if (form.contactName.trim()) profileUpdate.full_name = form.contactName.trim();
+        if (Object.keys(profileUpdate).length > 0) {
+          await auditSupabase.from('profiles').update(profileUpdate).eq('user_id', user.id);
+        }
+      } catch (err) {
+        console.warn('[Compliance] DB sync failed (non-critical):', err);
       }
-
-      setCompanyProfile(form);
-      toast.success('Company profile saved!');
-      navigate('/compliance', { replace: true });
-    } catch (err) {
-      console.error('Setup error:', err);
-      toast.error('Failed to save company profile');
     }
   };
 
