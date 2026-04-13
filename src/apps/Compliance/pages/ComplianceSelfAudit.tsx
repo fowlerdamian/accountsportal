@@ -202,9 +202,20 @@ export default function ComplianceSelfAudit() {
           <div className="rounded-xl border border-border card-gradient p-8 text-center">
             <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary mb-6" />
             <h2 className="text-xl font-bold text-foreground mb-4">AI Auditing in Progress...</h2>
-            <p className="text-sm text-muted-foreground mb-3">Evaluating {completedDocs.length} documents against ISO 9001:2015</p>
+            <p className="text-sm text-muted-foreground mb-6">Evaluating {completedDocs.length} documents against ISO 9001:2015</p>
             {auditProgress.total > 0 && (
-              <p className="text-sm font-medium text-primary">{auditProgress.current} / {auditProgress.total} documents audited</p>
+              <div className="mx-auto max-w-sm">
+                <div className="flex justify-between text-xs text-muted-foreground mb-2">
+                  <span>{auditProgress.current} of {auditProgress.total} documents audited</span>
+                  <span>{Math.round((auditProgress.current / auditProgress.total) * 100)}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-500"
+                    style={{ width: `${(auditProgress.current / auditProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
             )}
           </div>
         ) : auditResults ? (
