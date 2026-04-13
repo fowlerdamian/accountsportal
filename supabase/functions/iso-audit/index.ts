@@ -1,4 +1,4 @@
-import Anthropic from 'npm:@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from 'npm:@google/generative-ai';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,7 +25,11 @@ Deno.serve(async (req) => {
   try {
     const { documents, allDocTitles = [] }: { documents: DocumentInput[]; allDocTitles: string[] } = await req.json();
 
-    const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+    const genAI = new GoogleGenerativeAI(Deno.env.get('GEMINI_API_KEY') ?? '');
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash-preview-04-17',
+      systemInstruction: `You are a senior ISO 9001:2015 lead auditor preparing an organisation for third-party certification. Your role is to conduct a thorough, honest gap analysis — finding real non-conformances and observations while recognising genuinely compliant content. You are rigorous and precise. You do not invent problems, but you do not miss real ones either. Your findings must be specific and actionable.`,
+    });
 
     const results = [];
 
@@ -41,13 +45,7 @@ Deno.serve(async (req) => {
         ? `\nEXISTING QMS DOCUMENTS:\n${allDocTitles.map((t) => `- ${t}`).join('\n')}`
         : '';
 
-      const message = await client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-        system: `You are a ruthless ISO 9001:2015 lead auditor hired to find every gap before a certification audit. You have NEVER seen a perfect QMS document. Your reputation depends on finding problems that others miss. You are not here to be encouraging — you are here to identify non-conformances and observations that would fail a certification audit. Every document you review has gaps. Your job is to find them all.`,
-        messages: [{
-          role: 'user',
-          content: `Review this document against ISO 9001:2015 clause ${doc.clause} requirements.
+      const prompt = `Review this document against ISO 9001:2015 clause ${doc.clause} requirements.
 
 DOCUMENT: ${doc.title}
 CLAUSE: ${doc.clause}
@@ -61,11 +59,9 @@ ${doc.generatedContent}
 
 AUDIT INSTRUCTIONS:
 
-You MUST produce between 3 and 8 specific findings. Do NOT produce a "pass" result — if something partially meets requirements, it is an "observation". Reserve "fail" for clear non-conformances and missing mandatory elements.
+Return only genuine findings — real non-conformances or observations. If the document genuinely meets a requirement well, do not fabricate a finding for it. Quality over quantity.
 
-Do NOT include any passing items in your response. Only include problems.
-
-Check ALL of the following — each unmet item is a finding:
+Check ALL of the following and raise a finding only where there is a real gap:
 
 CONTENT GAPS (fail if missing):
 - Are responsibilities assigned to SPECIFIC named roles/positions (not just "management")?
@@ -85,7 +81,9 @@ EVIDENCE & RELATED DOCS (fail if missing):
 - Each ✗ NOT UPLOADED item above = mandatory fail finding
 - Any document referenced in the Related Documents section that is NOT in the EXISTING QMS DOCUMENTS list = fail
 
-Respond ONLY with a JSON array. No preamble, no explanation:
+If there are no genuine findings, return an empty array [].
+
+Respond ONLY with a JSON array. No preamble, no explanation, no markdown fences:
 [
   {
     "documentId": "${doc.id}",
@@ -94,18 +92,17 @@ Respond ONLY with a JSON array. No preamble, no explanation:
     "finding": "Precise finding — quote the specific language or name the specific missing element",
     "recommendation": "Exact corrective action with specific wording or content to add"
   }
-]`,
-        }],
-      });
+]`;
 
-      const text = message.content[0].type === 'text' ? message.content[0].text : '[]';
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         const docResults = JSON.parse(jsonMatch[0]);
         for (const r of docResults) {
           r.documentTitle = doc.title;
-          // Normalise status — never allow "pass" through from AI
-          if (r.status === 'pass') r.status = 'observation';
+          // Normalise status aliases
           if (r.status === 'minor') r.status = 'observation';
           if (r.status === 'major') r.status = 'fail';
           if (!['observation', 'fail'].includes(r.status)) r.status = 'observation';
