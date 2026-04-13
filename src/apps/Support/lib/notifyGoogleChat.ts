@@ -1,6 +1,6 @@
 const SITE_URL = 'https://app.automotivegroup.com.au/support';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
 
 export function buildCaseUrl(caseId: string): string {
   return `${SITE_URL}/cases/${caseId}`;

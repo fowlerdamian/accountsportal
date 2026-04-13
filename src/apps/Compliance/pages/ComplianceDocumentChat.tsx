@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { auditSupabase } from '../client';
 import { supabase } from '@portal/lib/supabase';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function ComplianceDocumentChat() {
   const { docId } = useParams<{ docId: string }>();
@@ -335,7 +336,7 @@ export default function ComplianceDocumentChat() {
     setIsGenerating(true);
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
       const response = await fetch(`${supabaseUrl}/functions/v1/generate-document`, {
         method: 'POST',
@@ -555,8 +556,8 @@ export default function ComplianceDocumentChat() {
                           ? 'bg-warning/10 border border-warning/30 text-foreground rounded-bl-md'
                           : 'bg-secondary text-secondary-foreground rounded-bl-md'
                     }`}>
-                      <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:m-0">
-                        <ReactMarkdown components={{
+                      <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:m-0 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_th]:border [&_th]:border-border [&_th]:bg-secondary/50 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
                           blockquote: ({ children }) => (
                             <blockquote className="border-l-2 border-primary/50 pl-3 my-1 text-muted-foreground italic">
                               {children}

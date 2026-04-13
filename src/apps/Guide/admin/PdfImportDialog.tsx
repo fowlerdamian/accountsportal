@@ -148,7 +148,7 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
   };
 
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
-  const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+  const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
   const invokeFunction = async (name: string, body: any): Promise<any> => {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {

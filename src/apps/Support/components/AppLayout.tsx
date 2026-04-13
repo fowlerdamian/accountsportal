@@ -2,19 +2,16 @@ import { useState, useCallback } from 'react';
 import { Outlet } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
-import { ChatBot } from './ChatBot';
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/useAuth';
 
 export function AppLayout() {
-  const [chatTrigger, setChatTrigger] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const openChat = useCallback(() => setChatTrigger(prev => !prev), []);
   const showShortcuts = useCallback(() => setShortcutsOpen(true), []);
-  useKeyboardShortcuts(openChat, showShortcuts);
+  useKeyboardShortcuts(() => {}, showShortcuts);
   const isMobile = useIsMobile();
   const { isLoading } = useAuth();
 
@@ -38,7 +35,6 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
-      <ChatBot externalOpen={chatTrigger} />
       <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>
   );

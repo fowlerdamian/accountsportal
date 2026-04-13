@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext.jsx'
-import GlobalChat from './components/GlobalChat'
 import { AuthProvider as GuideAuthProvider } from './apps/Guide/contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Layout from './components/Layout.jsx'
@@ -92,7 +91,6 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <GlobalChat />
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />

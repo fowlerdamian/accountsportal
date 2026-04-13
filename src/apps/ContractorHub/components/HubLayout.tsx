@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { NavLink, Link, useMatch } from "react-router-dom";
 import { LayoutDashboard, FolderOpen, Users, LogOut, Menu, Plus, Settings } from "lucide-react";
 import { cn } from "@guide/lib/utils";
@@ -7,7 +7,6 @@ import { useIsMobile } from "@guide/hooks/use-mobile";
 import { useOverdueTaskCount } from "@hub/hooks/use-hub-queries";
 import { Sheet, SheetContent, SheetTitle } from "@guide/ui/sheet";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
-import { AiAssistantPanel, AiToggleButton } from "./AiAssistantPanel";
 import { NewTaskModal } from "./NewTaskModal";
 import { CommandPalette } from "./CommandPalette";
 import { HubTimerButton } from "./HubTimer";
@@ -148,13 +147,11 @@ interface HubLayoutProps {
 }
 
 export function HubLayout({ children, fullScreen }: HubLayoutProps) {
-  const [aiOpen, setAiOpen]           = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskPid, setNewTaskPid]   = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const aiSearchRef                   = useRef<HTMLTextAreaElement>(null);
-  const isMobile                      = useIsMobile();
+const isMobile                      = useIsMobile();
   const { signOut }                   = useAuth();
   const overdueCount                  = useOverdueTaskCount();
 
@@ -167,7 +164,6 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
       // Escape closes panels even when an input is focused
       if (e.key === "Escape") {
         if (paletteOpen) { setPaletteOpen(false); return; }
-        if (aiOpen) { setAiOpen(false); return; }
         setNewTaskOpen(false);
         return;
       }
@@ -180,12 +176,7 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
         openNewTask(currentProjectId ?? undefined);
         return;
       }
-      if (e.key === "/") {
-        e.preventDefault();
-        aiOpen ? aiSearchRef.current?.focus() : setAiOpen(true);
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
         return;
@@ -193,7 +184,7 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [aiOpen, paletteOpen, currentProjectId]);
+  }, [paletteOpen, currentProjectId]);
 
   const openNewTask = useCallback((projectId?: string) => {
     setNewTaskPid(projectId ?? null);
@@ -288,21 +279,6 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
                 <span style={{ fontSize: "9px", opacity: 0.6 }}>⌘K</span>
               </button>
 
-              {/* AI assistant */}
-              <button
-                onClick={() => setAiOpen(v => !v)}
-                style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  fontSize: "11px", fontFamily: '"JetBrains Mono", monospace',
-                  color: aiOpen ? "#f3ca0f" : "#555", background: "none",
-                  border: `1px solid ${aiOpen ? "rgba(243,202,15,0.4)" : "#222222"}`,
-                  borderRadius: "4px", padding: "4px 10px", cursor: "pointer",
-                  transition: "color 120ms, border-color 120ms",
-                }}
-              >
-                Ask AI
-                <span style={{ fontSize: "9px", opacity: 0.6 }}>/</span>
-              </button>
             </div>
           </header>
 
@@ -325,8 +301,6 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
         {/* Command palette — Cmd+K */}
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
-        {/* AI panel */}
-        <AiAssistantPanel open={aiOpen} onClose={() => setAiOpen(false)} searchInputRef={aiSearchRef} />
       </div>
     </HubContext.Provider>
   );

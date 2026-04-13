@@ -56,7 +56,7 @@ export default function LoginPage() {
           msg.toLowerCase().includes('json') ||
           msg.toLowerCase().includes('token')
         ) {
-          setError('Could not reach the authentication server. Verify that VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are correctly set in Vercel.')
+          setError('Could not reach the authentication server. Verify that VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are correctly set in Vercel.')
         } else {
           setError(msg || 'An unexpected error occurred.')
         }

@@ -43,7 +43,7 @@ export default function ComplianceSelfAudit() {
       setAuditProgress({ current: 0, total: completedDocs.length });
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
       for (let b = 0; b < batches.length; b++) {
         const res = await fetch(`${supabaseUrl}/functions/v1/iso-audit`, {
@@ -92,7 +92,7 @@ export default function ComplianceSelfAudit() {
         .filter(({ result: r, index: i }) => r.documentId === result.documentId && r.status !== 'pass' && !fixedIds.has(findingKey(r, i))) || [];
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const fixRes = await fetch(`${supabaseUrl}/functions/v1/apply-audit-fix`, {
         method: 'POST',
         headers: {
