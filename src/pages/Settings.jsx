@@ -127,7 +127,6 @@ function AccountSection({ user }) {
       <Card>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-          {/* Email — read only */}
           <div>
             <label style={labelStyle}>Email</label>
             <input
@@ -137,7 +136,6 @@ function AccountSection({ user }) {
             />
           </div>
 
-          {/* Full name */}
           <div>
             <label style={labelStyle}>Full Name</label>
             <input
@@ -148,7 +146,6 @@ function AccountSection({ user }) {
             />
           </div>
 
-          {/* Phone */}
           <div>
             <label style={labelStyle}>Phone</label>
             <input
@@ -165,7 +162,6 @@ function AccountSection({ user }) {
             </div>
           )}
 
-          {/* Actions */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', paddingTop: '4px' }}>
             <button
               onClick={signOut}
@@ -206,24 +202,133 @@ function AccountSection({ user }) {
   )
 }
 
+// ─── Invite user form ─────────────────────────────────────────────────────────
+
+function InviteUserForm({ onInvited }) {
+  const [open,    setOpen]    = useState(false)
+  const [email,   setEmail]   = useState('')
+  const [name,    setName]    = useState('')
+  const [role,    setRole]    = useState('user')
+  const [sending, setSending] = useState(false)
+  const [sent,    setSent]    = useState(false)
+  const [error,   setError]   = useState(null)
+
+  const send = async () => {
+    if (!email.trim()) return
+    setSending(true); setError(null)
+    const { error } = await supabase.functions.invoke('invite-user', {
+      body: { email: email.trim(), full_name: name.trim(), role },
+    })
+    setSending(false)
+    if (error) { setError(error.message); return }
+    setSent(true)
+    setEmail(''); setName(''); setRole('user')
+    setTimeout(() => { setSent(false); setOpen(false) }, 2500)
+    onInvited?.()
+  }
+
+  if (!open) return (
+    <button
+      onClick={() => setOpen(true)}
+      style={{
+        fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: '#f3ca0f', background: 'none',
+        border: '1px solid rgba(243,202,15,0.3)', borderRadius: '4px',
+        padding: '6px 14px', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace',
+      }}
+    >
+      + Invite User
+    </button>
+  )
+
+  return (
+    <Card style={{ marginBottom: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, color: '#a0a0a0', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: '"JetBrains Mono", monospace' }}>
+            Invite New User
+          </span>
+          <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <label style={labelStyle}>Email *</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="user@example.com" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Full Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" style={inputStyle} />
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Role</label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {ROLE_OPTIONS.map(r => {
+              const cfg = ROLE_LABELS[r]
+              const active = role === r
+              return (
+                <button key={r} onClick={() => setRole(r)} style={{
+                  fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
+                  fontFamily: '"JetBrains Mono", monospace', padding: '5px 14px', borderRadius: '4px', cursor: 'pointer',
+                  border: `1px solid ${active ? cfg.color + '66' : '#222222'}`,
+                  background: active ? cfg.color + '18' : 'transparent',
+                  color: active ? cfg.color : '#555',
+                }}>
+                  {cfg.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {error && <div style={{ fontSize: '12px', color: '#ff1744', fontFamily: '"JetBrains Mono", monospace' }}>{error}</div>}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={send}
+            disabled={sending || !email.trim()}
+            style={{
+              fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
+              fontFamily: '"JetBrains Mono", monospace',
+              color: (sending || !email.trim()) ? '#444' : '#f3ca0f',
+              background: 'none', border: '1px solid',
+              borderColor: (sending || !email.trim()) ? '#222' : 'rgba(243,202,15,0.4)',
+              borderRadius: '4px', padding: '6px 16px',
+              cursor: (sending || !email.trim()) ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {sent ? '✓ Invite sent' : sending ? 'Sending…' : 'Send Invite'}
+          </button>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 // ─── User management (admin only) ────────────────────────────────────────────
 
 function UserManagement() {
-  const [users, setUsers]         = useState(null)
+  const [users,        setUsers]        = useState(null)
+  const [loading,      setLoading]      = useState(true)
   const [tileSettings, setTileSettings] = useState({})
-  const [saving, setSaving]       = useState(false)
-  const [error, setError]         = useState(null)
-  const [expanded, setExpanded]   = useState(null) // user_id of expanded row
+  const [saving,       setSaving]       = useState(false)
+  const [error,        setError]        = useState(null)
+  const [expanded,     setExpanded]     = useState(null)
+  const [resetSent,    setResetSent]    = useState({})
 
   const load = useCallback(async () => {
+    setLoading(true); setError(null)
     const [{ data: u, error: uErr }, { data: t, error: tErr }] = await Promise.all([
       supabase.rpc('list_portal_users'),
       supabase.from('user_tile_settings').select('user_id, tile_route, enabled'),
     ])
-    if (uErr || tErr) { setError((uErr || tErr).message); return }
-    setUsers(u)
+    setLoading(false)
+    if (uErr || tErr) { setError((uErr || tErr).message); setUsers([]); return }
+    setUsers(u ?? [])
     const map = {}
-    t.forEach(r => {
+    ;(t ?? []).forEach(r => {
       if (!map[r.user_id]) map[r.user_id] = {}
       map[r.user_id][r.tile_route] = r.enabled
     })
@@ -235,7 +340,6 @@ function UserManagement() {
   const setRole = async (userId, role) => {
     setSaving(true)
     if (role === 'user') {
-      // Remove any existing role row
       await supabase.from('user_roles').delete().eq('user_id', userId)
     } else {
       await supabase.from('user_roles').upsert({ user_id: userId, role }, { onConflict: 'user_id' })
@@ -255,90 +359,99 @@ function UserManagement() {
     }))
   }
 
-  if (!users) return (
-    <div style={{ color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>Loading…</div>
-  )
+  const sendPasswordReset = async (userId, email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/settings`,
+    })
+    if (!error) setResetSent(prev => ({ ...prev, [userId]: true }))
+  }
 
   return (
     <section>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <SectionHeading>User Management</SectionHeading>
-        {saving && (
-          <span style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace' }}>Saving…</span>
-        )}
+        {saving && <span style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace' }}>Saving…</span>}
       </div>
+
       {error && (
-        <div style={{ marginBottom: '12px', padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ff1744', fontSize: '12px' }}>
+        <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ff1744', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace' }}>
           {error}
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {users.map(u => {
-          const isExpanded = expanded === u.id
-          const userTiles = tileSettings[u.id] || {}
-          const roleLabel = ROLE_LABELS[u.role] || ROLE_LABELS.user
 
-          return (
-            <Card key={u.id} style={{ padding: '0' }}>
-              {/* User row header */}
-              <div
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '16px',
-                  padding: '14px 20px', cursor: 'pointer',
-                }}
-                onClick={() => setExpanded(isExpanded ? null : u.id)}
-              >
-                {/* Avatar */}
-                <div style={{
-                  width: '32px', height: '32px', borderRadius: '50%',
-                  background: '#222222', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: '12px', color: '#a0a0a0',
-                  flexShrink: 0, fontFamily: '"JetBrains Mono", monospace', fontWeight: 600,
-                }}>
-                  {u.email[0].toUpperCase()}
-                </div>
+      <InviteUserForm onInvited={load} />
 
-                {/* Email */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {u.email}
+      {loading ? (
+        <div style={{ color: '#555', fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', padding: '16px 0' }}>Loading users…</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' }}>
+          {(users ?? []).length === 0 && !error && (
+            <div style={{ color: '#555', fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', padding: '8px 0' }}>No users found.</div>
+          )}
+          {(users ?? []).map(u => {
+            const isExpanded  = expanded === u.id
+            const userTiles   = tileSettings[u.id] || {}
+            const roleLabel   = ROLE_LABELS[u.role] || ROLE_LABELS.user
+            const displayName = u.full_name || u.raw_user_meta_data?.full_name || null
+
+            return (
+              <Card key={u.id} style={{ padding: '0' }}>
+                {/* Header row */}
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 20px', cursor: 'pointer' }}
+                  onClick={() => setExpanded(isExpanded ? null : u.id)}
+                >
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '50%',
+                    background: '#222222', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', fontSize: '12px', color: '#a0a0a0',
+                    flexShrink: 0, fontFamily: '"JetBrains Mono", monospace', fontWeight: 600,
+                  }}>
+                    {(displayName || u.email)[0].toUpperCase()}
                   </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {displayName && (
+                      <div style={{ fontSize: '13px', color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {displayName}
+                      </div>
+                    )}
+                    <div style={{
+                      fontSize: displayName ? '11px' : '13px',
+                      color: displayName ? '#666' : '#ffffff',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      fontFamily: displayName ? '"JetBrains Mono", monospace' : 'inherit',
+                    }}>
+                      {u.email}
+                    </div>
+                  </div>
+
+                  <span style={{
+                    fontSize: '10px', fontWeight: 500, letterSpacing: '0.08em',
+                    textTransform: 'uppercase', color: roleLabel.color,
+                    fontFamily: '"JetBrains Mono", monospace',
+                    padding: '2px 8px', border: `1px solid ${roleLabel.color}33`,
+                    borderRadius: '3px', background: `${roleLabel.color}11`, flexShrink: 0,
+                  }}>
+                    {roleLabel.label}
+                  </span>
+
+                  <span style={{ color: '#444', fontSize: '12px', transition: 'transform 150ms', transform: isExpanded ? 'rotate(180deg)' : 'none', flexShrink: 0 }}>▾</span>
                 </div>
 
-                {/* Role badge */}
-                <span style={{
-                  fontSize: '10px', fontWeight: 500, letterSpacing: '0.08em',
-                  textTransform: 'uppercase', color: roleLabel.color,
-                  fontFamily: '"JetBrains Mono", monospace',
-                  padding: '2px 8px', border: `1px solid ${roleLabel.color}33`,
-                  borderRadius: '3px', background: `${roleLabel.color}11`, flexShrink: 0,
-                }}>
-                  {roleLabel.label}
-                </span>
+                {/* Expanded panel */}
+                {isExpanded && (
+                  <div style={{ borderTop: '1px solid #1a1a1a', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-                {/* Chevron */}
-                <span style={{ color: '#444', fontSize: '12px', transition: 'transform 150ms', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>▾</span>
-              </div>
-
-              {/* Expanded panel */}
-              {isExpanded && (
-                <div style={{ borderTop: '1px solid #222222', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-                  {/* Role picker */}
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
-                      Role
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {ROLE_OPTIONS.map(role => {
-                        const cfg = ROLE_LABELS[role]
-                        const active = u.role === role
-                        return (
-                          <button
-                            key={role}
-                            onClick={() => setRole(u.id, role)}
-                            disabled={saving}
-                            style={{
+                    {/* Role */}
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>Role</div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {ROLE_OPTIONS.map(role => {
+                          const cfg    = ROLE_LABELS[role]
+                          const active = u.role === role
+                          return (
+                            <button key={role} onClick={() => setRole(u.id, role)} disabled={saving} style={{
                               fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
                               textTransform: 'uppercase', fontFamily: '"JetBrains Mono", monospace',
                               padding: '6px 16px', borderRadius: '4px', cursor: saving ? 'not-allowed' : 'pointer',
@@ -346,50 +459,66 @@ function UserManagement() {
                               background: active ? cfg.color + '18' : 'transparent',
                               color: active ? cfg.color : '#555',
                               transition: 'all 120ms',
-                            }}
-                          >
-                            {cfg.label}
-                          </button>
-                        )
-                      })}
+                            }}>
+                              {cfg.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '11px', color: '#444', fontFamily: '"JetBrains Mono", monospace' }}>
+                        {u.role === 'admin' ? 'Full access — can manage users, roles, and tile access' :
+                         u.role === 'editor' ? 'Can access Guide Portal and Contractor Hub' :
+                         'Standard access — dashboard and assigned tiles only'}
+                      </div>
                     </div>
-                    <div style={{ marginTop: '8px', fontSize: '11px', color: '#444', fontFamily: '"JetBrains Mono", monospace' }}>
-                      {u.role === 'admin' ? 'Full access — can manage users, roles, and tile access' :
-                       u.role === 'editor' ? 'Can access Guide Portal and Contractor Hub' :
-                       'Standard access — dashboard and assigned tiles only'}
-                    </div>
-                  </div>
 
-                  {/* Tile access */}
-                  <div>
-                    <div style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
-                      Tile Access
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {LIVE_APPS.map(app => {
-                        const enabled = userTiles[app.route] !== false
-                        return (
-                          <div key={app.route} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <AppIcon name={app.icon} />
-                              <span style={{ fontSize: '12px', color: '#ffffff' }}>{app.name}</span>
+                    {/* Tile access */}
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>Tile Access</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {LIVE_APPS.map(app => {
+                          const enabled = userTiles[app.route] !== false
+                          return (
+                            <div key={app.route} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <AppIcon name={app.icon} />
+                                <span style={{ fontSize: '12px', color: '#ffffff' }}>{app.name}</span>
+                              </div>
+                              <Toggle checked={enabled} disabled={saving} onChange={val => toggleTile(u.id, app.route, val)} />
                             </div>
-                            <Toggle
-                              checked={enabled}
-                              disabled={saving}
-                              onChange={val => toggleTile(u.id, app.route, val)}
-                            />
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
+
+                    {/* Login management */}
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>Login</div>
+                      <button
+                        onClick={() => sendPasswordReset(u.id, u.email)}
+                        disabled={!!resetSent[u.id]}
+                        style={{
+                          fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          fontFamily: '"JetBrains Mono", monospace',
+                          padding: '6px 14px', borderRadius: '4px',
+                          cursor: resetSent[u.id] ? 'default' : 'pointer',
+                          border: `1px solid ${resetSent[u.id] ? '#333' : 'rgba(96,165,250,0.3)'}`,
+                          background: 'transparent',
+                          color: resetSent[u.id] ? '#555' : '#60A5FA',
+                          transition: 'all 120ms',
+                        }}
+                      >
+                        {resetSent[u.id] ? '✓ Reset email sent' : 'Send password reset'}
+                      </button>
+                    </div>
+
                   </div>
-                </div>
-              )}
-            </Card>
-          )
-        })}
-      </div>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }
@@ -397,8 +526,15 @@ function UserManagement() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Settings() {
-  const { user } = useAuth()
-  const isAdmin  = useIsAdmin()
+  const { user }  = useAuth()
+  const isAdmin   = useIsAdmin()
+  const [adminChecked, setAdminChecked] = useState(false)
+
+  // Give isAdmin one tick to resolve before deciding whether to show the section
+  useEffect(() => {
+    const t = setTimeout(() => setAdminChecked(true), 800)
+    return () => clearTimeout(t)
+  }, [])
 
   return (
     <div style={{
@@ -417,6 +553,15 @@ export default function Settings() {
       {user && <AccountSection user={user} />}
 
       {isAdmin && <UserManagement />}
+
+      {adminChecked && !isAdmin && (
+        <section>
+          <SectionHeading>User Management</SectionHeading>
+          <div style={{ fontSize: '12px', color: '#555', fontFamily: '"JetBrains Mono", monospace' }}>
+            Admin access required.
+          </div>
+        </section>
+      )}
     </div>
   )
 }
