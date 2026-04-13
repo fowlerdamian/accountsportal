@@ -4,6 +4,7 @@ import { Loader2, Phone, RefreshCw, ChevronRight, Star, Globe, User, RotateCcw }
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useCallList } from "../hooks/useSalesQueries";
 import { type Channel } from "../lib/constants";
+import { LeadScoreBadge } from "../components/LeadScoreBadge";
 import { supabase } from "@portal/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -41,7 +42,8 @@ export default function CallList() {
     }
   }
 
-  const pending   = calls.filter((c) => !c.is_complete);
+  const pending   = calls.filter((c) => !c.is_complete)
+    .sort((a, b) => ((b.context_brief?.lead_score ?? 0) - (a.context_brief?.lead_score ?? 0)));
   const completed = calls.filter((c) => c.is_complete);
 
   return (
@@ -133,7 +135,10 @@ export default function CallList() {
                                 </a>
                               )}
                             </div>
-                            <ChevronRight className="w-5 h-5 text-muted-foreground/40 group-hover:text-muted-foreground flex-shrink-0 mt-0.5 transition-colors" />
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {brief.lead_score != null && <LeadScoreBadge score={brief.lead_score} size="sm" />}
+                              <ChevronRight className="w-5 h-5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                            </div>
                           </div>
 
                           {/* Call reason */}
