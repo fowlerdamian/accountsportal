@@ -4,7 +4,7 @@ import { useActions } from '../contexts/ActionsContext';
 import { motion } from 'framer-motion';
 import {
   FileText, CheckCircle2, Clock, Circle, Shield, ArrowRight,
-  AlertTriangle, X, FolderOpen, FolderArchive,
+  AlertTriangle, X, FolderOpen, FolderArchive, BookOpen,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,7 @@ export default function ComplianceDashboard() {
   };
 
   return (
-    <div className="min-h-full">
+    <div className="min-h-full overflow-y-auto">
       <main className="mx-auto max-w-6xl px-6 py-8">
         {/* Header */}
         <div className="mb-8 flex items-center gap-3">
@@ -82,7 +82,11 @@ export default function ComplianceDashboard() {
               </Button>
             )}
             {(
-              <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/setup')} className="gap-2">
+              <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/knowledge-base')} className="gap-2">
+                <BookOpen className="h-4 w-4" />
+                Knowledge Base
+              </Button>
+            <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/setup')} className="gap-2">
                 <Shield className="h-4 w-4" />
                 Company Profile
               </Button>

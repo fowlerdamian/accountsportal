@@ -218,7 +218,7 @@ export function useDashboardMetrics() {
       const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
       const [leadsRes, callsRes, winbackRes, jobsRes] = await Promise.all([
-        supabase.from("sales_leads").select("id, channel, lead_score, status, created_at"),
+        supabase.from("sales_leads").select("id, channel, lead_score, status, created_at, company_name"),
         supabase.from("call_list").select("id, channel, is_complete, scheduled_date").eq("scheduled_date", today),
         supabase.from("trailbait_order_history").select("id").eq("is_winback_candidate", true),
         supabase.from("research_jobs").select("*").order("created_at", { ascending: false }).limit(6),

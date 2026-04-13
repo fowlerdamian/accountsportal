@@ -65,7 +65,18 @@ export function ISOProvider({ children }: { children: ReactNode }) {
 
   const setCompanyProfile = useCallback((profile: CompanyProfile) => {
     setCompanyProfileState(profile);
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    } catch (e) {
+      // Quota exceeded — retry without large binary fields
+      try {
+        const slim = { ...profile, logoUrl: null, signatureDataUrl: null };
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(slim));
+        console.warn('[Compliance] Saved profile without logo/signature due to storage quota');
+      } catch {
+        console.error('[Compliance] Could not persist profile to localStorage');
+      }
+    }
   }, []);
 
   const updateDocument = useCallback((id: string, updates: Partial<ISODocument>) => {

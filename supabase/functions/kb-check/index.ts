@@ -17,6 +17,34 @@ Deno.serve(async (req) => {
       ? `\nPrevious answers provided:\n${Object.entries(previousAnswers).map(([q, a]) => `Q: ${q}\nA: ${a}`).join('\n\n')}`
       : '';
 
+    // Fetch relevant KB items for this company
+    let kbContext = '';
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const companyDomain = companyProfile?.email?.split('@')[1]?.toLowerCase();
+
+    if (companyDomain && supabaseUrl && supabaseKey) {
+      try {
+        const kbRes = await fetch(
+          `${supabaseUrl}/rest/v1/compliance_kb_items?company_domain=eq.${encodeURIComponent(companyDomain)}&select=title,content&limit=8`,
+          {
+            headers: {
+              apikey: supabaseKey,
+              Authorization: `Bearer ${supabaseKey}`,
+            },
+          }
+        );
+        const items: { title: string; content: string }[] = await kbRes.json();
+        if (Array.isArray(items) && items.length > 0) {
+          kbContext = `\n\nCompany Knowledge Base (use this context to give a more tailored answer):\n${
+            items.map((i) => `[${i.title}]\n${i.content.slice(0, 2000)}`).join('\n\n---\n\n')
+          }`;
+        }
+      } catch {
+        // Non-critical — continue without KB context
+      }
+    }
+
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 500,
@@ -27,7 +55,7 @@ Deno.serve(async (req) => {
 Company: ${companyProfile?.companyName || 'Unknown'}
 Industry: ${companyProfile?.industry || 'Unknown'}
 Document: ${documentTitle} (Clause ${clause})
-${previousContext}
+${previousContext}${kbContext}
 
 Based on the company context above, suggest a specific, practical answer for:
 Question: ${question}
@@ -42,7 +70,7 @@ Provide a concise, tailored answer (2-4 sentences) that this company could use o
     return new Response(JSON.stringify({ answer }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (err) {
+  } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

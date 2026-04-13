@@ -8,6 +8,7 @@ import ComplianceDocumentChat from './pages/ComplianceDocumentChat';
 import ComplianceSelfAudit from './pages/ComplianceSelfAudit';
 import ComplianceSupportingDocs from './pages/ComplianceSupportingDocs';
 import ComplianceFileManager from './pages/ComplianceFileManager';
+import ComplianceKnowledgeBase from './pages/ComplianceKnowledgeBase';
 
 function ComplianceRoutes() {
   const { companyProfile } = useISO();
@@ -28,6 +29,7 @@ function ComplianceRoutes() {
       <Route path="audit" element={<ComplianceSelfAudit />} />
       <Route path="supporting-docs" element={<ComplianceSupportingDocs />} />
       <Route path="files" element={<ComplianceFileManager />} />
+      <Route path="knowledge-base" element={<ComplianceKnowledgeBase />} />
       <Route path="setup" element={<ComplianceSetup />} />
       <Route path="*" element={<Navigate to="/compliance" replace />} />
     </Routes>

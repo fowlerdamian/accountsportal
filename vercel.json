@@ -1,12 +1,14 @@
 {
   "functions": {
-    "api/cin7-lookup.js":        { "maxDuration": 60 },
+    "api/cin7-lookup.js":         { "maxDuration": 60 },
+    "api/sales-sync-cin7.js":     { "maxDuration": 10 },
     "api/sales-sync-research.js": { "maxDuration": 10 },
     "api/sales-sync-list.js":     { "maxDuration": 10 }
   },
   "crons": [
-    { "path": "/api/sales-sync-research", "schedule": "0 13 * * 1-5" },
-    { "path": "/api/sales-sync-list",     "schedule": "0 14 * * 1-5" }
+    { "path": "/api/sales-sync-cin7",      "schedule": "0 12 * * 1-5" },
+    { "path": "/api/sales-sync-research",  "schedule": "0 13 * * 1-5" },
+    { "path": "/api/sales-sync-list",      "schedule": "0 14 * * 1-5" }
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },

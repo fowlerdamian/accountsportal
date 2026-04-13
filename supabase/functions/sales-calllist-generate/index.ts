@@ -203,12 +203,64 @@ function generateRuleBasedReason(lead: any, orderHistory: any | null): string {
 
 // ─── Claude Sonnet: AI-enhanced call reason + talking points ─────────────────
 
+// ─── Website team/about page contact scraper ─────────────────────────────────
+
+async function findContactViaWebsitePages(
+  website: string,
+  channel: Channel,
+  anthropicKey: string
+): Promise<{ name: string; position: string } | null> {
+  if (!anthropicKey) return null;
+  let base: string;
+  try {
+    base = new URL(website.startsWith("http") ? website : `https://${website}`).origin;
+  } catch { return null; }
+  // Limit to 3 highest-yield paths with a short timeout — prevents blowing the edge function budget
+  const paths = ["/about-us", "/our-team", "/contact-us"];
+
+  for (const path of paths) {
+    try {
+      const res = await fetch(`${base}${path}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; ResearchBot/1.0)" },
+        signal:  AbortSignal.timeout(6000),
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const text = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 3000);
+      if (text.length < 150) continue;
+
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
+        signal:  AbortSignal.timeout(10000),
+        body: JSON.stringify({
+          model:      "claude-haiku-4-5-20251001",
+          max_tokens: 120,
+          messages:   [{ role: "user", content: `Find the most senior decision-maker's name and title on this ${channel === "trailbait" ? "retail/wholesale" : channel === "fleetcraft" ? "fleet fitout" : "automotive brand"} company page. Return ONLY valid JSON: {"name":"Full Name","position":"Title"} or null if no person found.\n\nPage text:\n${text}` }],
+        }),
+      });
+      if (!aiRes.ok) continue;
+      const aiData = await aiRes.json();
+      const raw    = aiData.content?.[0]?.text?.trim() ?? "";
+      const parsed = JSON.parse(raw === "null" ? "null" : raw);
+      if (parsed?.name && parsed.name.length > 3) return parsed;
+    } catch { /* try next path */ }
+  }
+  return null;
+}
+
 async function generateAICallReason(
   lead: any,
   orderHistory: any | null,
   channel: Channel,
   anthropicKey: string
-): Promise<{ call_reason: string; talking_points: string[] }> {
+): Promise<{ call_reason: string; talking_points: string[]; recommended_pitch: string }> {
   const cin7Context = orderHistory ? `
 - Last order: ${orderHistory.last_order_date ? new Date(orderHistory.last_order_date).toLocaleDateString("en-AU") : "unknown"}
 - Orders in last 30 days: ${orderHistory.order_count_30d}
@@ -217,24 +269,36 @@ async function generateAICallReason(
 - Top products: ${(orderHistory.top_products ?? []).slice(0,3).map((p: any) => p.name ?? p.sku).join(", ")}
 - Win-back candidate: ${orderHistory.is_winback_candidate ? "YES" : "no"}` : "";
 
-  const prompt = `You are preparing a sales call brief for ${channel === "trailbait" ? "TrailBait (4x4/4WD wholesale)" : channel === "fleetcraft" ? "FleetCraft (fleet vehicle accessories)" : "AGA (bespoke automotive manufacturing)"}.
+  const channelContext = channel === "trailbait"
+    ? "TrailBait — we wholesale 4x4/4WD accessories (bull bars, suspension, roof racks, wiring looms, brackets). We sell to independent 4x4 shops and accessory retailers."
+    : channel === "fleetcraft"
+    ? "FleetCraft — we supply fleet vehicle accessories and fitout products (wiring looms, brackets, mounting systems, emergency vehicle accessories). We sell to vehicle upfitters and fleet fitout companies."
+    : "AGA — we supply turn-key branded automotive accessories and OEM components. We help brands add products to their range without designing/manufacturing themselves.";
 
-Company: ${lead.company_name}
-Score: ${lead.lead_score}/100
-Channel: ${channel}
-Summary: ${lead.website_summary ?? "No summary available"}
-Existing customer: ${lead.is_existing_customer ? "YES" : "no"}
-Tender context: ${lead.tender_context ?? "none"}
+  const contactLine = lead.recommended_contact_name
+    ? `Contact name: ${lead.recommended_contact_name}${lead.recommended_contact_position ? ` (${lead.recommended_contact_position})` : ""}`
+    : "";
+
+  const prompt = `You are writing a personalised sales call brief for a rep about to call this company.
+
+Our company: ${channelContext}
+
+Company being called: ${lead.company_name}
+${lead.address ? `Location: ${lead.address}` : ""}
+${contactLine}
+${lead.google_rating ? `Google rating: ${lead.google_rating}/5 (${lead.google_review_count ?? 0} reviews)` : ""}
+${lead.website_summary ? `About them: ${lead.website_summary}` : ""}
+${lead.key_products_services?.length ? `Their products/services: ${lead.key_products_services.join(", ")}` : ""}
+${lead.tender_context ? `Recent news: ${lead.tender_context.slice(0, 200)}` : ""}
+${lead.is_existing_customer ? "Note: This is an EXISTING customer." : "Note: This is a NEW prospect — first contact."}
 ${cin7Context}
 
-Our pitch: "${CHANNEL_PITCH[channel]}"
+Write a JSON object with:
+- "call_reason": 1-2 sentences — WHY call this specific company today. Be specific and reference their actual business.
+- "recommended_pitch": A natural 2-3 sentence phone opening you'd actually say. ${lead.recommended_contact_name ? `Address ${lead.recommended_contact_name} by name.` : "Use a friendly opener."} Immediately reference something specific about THEIR business that connects to what we sell. Make it feel researched, not cold.
+- "talking_points": Exactly 3 short bullet points — specific conversation hooks relevant to this company (reference their products, location, rating, news, or industry context).
 
-Generate a JSON object with:
-- "call_reason": 1-2 sentences explaining WHY to call this specific company TODAY (be specific and actionable)
-- "talking_points": Array of exactly 3 short, punchy conversation starters tailored to this company
-
-Be specific, reference their actual business details. No generic phrases.
-Return valid JSON only.`;
+No fluff. Be specific. Return valid JSON only.`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -244,9 +308,10 @@ Return valid JSON only.`;
         "x-api-key":         anthropicKey,
         "anthropic-version": "2023-06-01",
       },
+      signal: AbortSignal.timeout(20000),
       body: JSON.stringify({
         model:      "claude-sonnet-4-5",
-        max_tokens: 400,
+        max_tokens: 500,
         messages:   [{ role: "user", content: prompt }],
       }),
     });
@@ -255,13 +320,15 @@ Return valid JSON only.`;
     const data   = await res.json();
     const parsed = JSON.parse(data.content?.[0]?.text ?? "{}");
     return {
-      call_reason:    parsed.call_reason ?? generateRuleBasedReason(lead, orderHistory),
-      talking_points: parsed.talking_points ?? [],
+      call_reason:       parsed.call_reason       ?? generateRuleBasedReason(lead, orderHistory),
+      recommended_pitch: parsed.recommended_pitch ?? CHANNEL_PITCH[channel],
+      talking_points:    parsed.talking_points    ?? [],
     };
   } catch {
     return {
-      call_reason:    generateRuleBasedReason(lead, orderHistory),
-      talking_points: [],
+      call_reason:       generateRuleBasedReason(lead, orderHistory),
+      recommended_pitch: CHANNEL_PITCH[channel],
+      talking_points:    [],
     };
   }
 }
@@ -272,6 +339,7 @@ function buildContextBrief(
   lead: any,
   orderHistory: any | null,
   callReason: string,
+  recommendedPitch: string,
   channel: Channel
 ): object {
   return {
@@ -293,15 +361,16 @@ function buildContextBrief(
     },
     is_existing_customer: lead.is_existing_customer,
     cin7_data: orderHistory ? {
-      last_order:           orderHistory.last_order_date ? new Date(orderHistory.last_order_date).toLocaleDateString("en-AU") : null,
+      last_order:            orderHistory.last_order_date ? new Date(orderHistory.last_order_date).toLocaleDateString("en-AU") : null,
       days_since_last_order: orderHistory.days_since_last_order,
-      order_count_90d:      orderHistory.order_count_90d,
-      order_count_30d:      orderHistory.order_count_30d,
-      avg_order_value:      orderHistory.average_order_value,
-      top_products:         (orderHistory.top_products ?? []).map((p: any) => p.sku ?? p.name),
-      is_winback:           orderHistory.is_winback_candidate,
+      order_count_90d:       orderHistory.order_count_90d,
+      order_count_30d:       orderHistory.order_count_30d,
+      avg_order_value:       orderHistory.average_order_value,
+      top_products:          (orderHistory.top_products ?? []).map((p: any) => p.sku ?? p.name),
+      is_winback:            orderHistory.is_winback_candidate,
     } : null,
     call_reason:         callReason,
+    recommended_pitch:   recommendedPitch,
     channel_pitch:       CHANNEL_PITCH[channel],
     lead_score:          lead.lead_score,
     tender_context:      lead.tender_context,
@@ -426,41 +495,55 @@ serve(async (req) => {
         ranked = filteredLeads.map((l: any) => ({ ...l, _orderHistory: null }));
       }
 
-      // Take top 20
-      const top20 = ranked.slice(0, 20);
+      // Take top 15 — keeps total AI time well within Supabase's 150s limit
+      const top20 = ranked.slice(0, 15);
 
-      // Resolve contacts via Apollo.io for leads that still need one
+      // Resolve contacts — Apollo first, then website team/about pages as fallback
       const apolloKey = Deno.env.get("APOLLO_API_KEY") ?? "";
-      if (apolloKey) {
-        for (const lead of top20) {
-          // Look up if no contact yet, or only have a website-scraped name (often unreliable)
-          const needsContact = !lead.recommended_contact_name
-            || lead.recommended_contact_source === "website";
+      for (const lead of top20) {
+        // Try if: no contact at all, or contact was scraped from homepage (often just company name), or source unknown
+        const needsContact = !lead.recommended_contact_name
+          || lead.recommended_contact_source === "website"
+          || !lead.recommended_contact_source;
 
-          if (!needsContact || !lead.website) continue;
+        if (!needsContact) continue;
 
+        let contact: ApolloContact | null = null;
+        let contactSource = "website_team_page";
+
+        // 1. Apollo (fastest and most reliable when available)
+        if (apolloKey && lead.website) {
           const domain = extractDomain(lead.website);
-          if (!domain) continue;
-
-          const contact = await findContactViaApollo(domain, channel, apolloKey);
-          if (contact) {
-            const contactUpdate: Record<string, any> = {
-              recommended_contact_name:     contact.name,
-              recommended_contact_position: contact.position,
-              recommended_contact_source:   "apollo",
-            };
-            if (contact.email && !lead.email) contactUpdate.email = contact.email;
-
-            await supabase.from("sales_leads").update(contactUpdate).eq("id", lead.id);
-
-            // Merge into local object so the context brief uses fresh data
-            lead.recommended_contact_name     = contact.name;
-            lead.recommended_contact_position = contact.position;
-            lead.recommended_contact_source   = "apollo";
-            if (contact.email && !lead.email) lead.email = contact.email;
+          if (domain) {
+            contact = await findContactViaApollo(domain, channel, apolloKey);
+            if (contact) contactSource = "apollo";
+            await sleep(300);
           }
+        }
 
-          await sleep(300); // stay within Apollo rate limits
+        // 2. Fallback: scrape team/about/contact pages with Claude Haiku
+        if (!contact && lead.website && anthropicKey) {
+          const scraped = await findContactViaWebsitePages(lead.website, channel, anthropicKey);
+          if (scraped) {
+            contact = { name: scraped.name, position: scraped.position, email: null };
+            // contactSource remains "website_team_page"
+          }
+        }
+
+        if (contact) {
+          const contactUpdate: Record<string, any> = {
+            recommended_contact_name:     contact.name,
+            recommended_contact_position: contact.position,
+            recommended_contact_source:   contactSource,
+          };
+          if (contact.email && !lead.email) contactUpdate.email = contact.email;
+
+          await supabase.from("sales_leads").update(contactUpdate).eq("id", lead.id);
+
+          lead.recommended_contact_name     = contact.name;
+          lead.recommended_contact_position = contact.position;
+          lead.recommended_contact_source   = contactUpdate.recommended_contact_source;
+          if (contact.email && !lead.email) lead.email = contact.email;
         }
       }
 
@@ -470,16 +553,20 @@ serve(async (req) => {
         const lead         = top20[i];
         const orderHistory = (lead as any)._orderHistory ?? null;
 
-        let callReason    = generateRuleBasedReason(lead, orderHistory);
+        let callReason       = generateRuleBasedReason(lead, orderHistory);
+        let recommendedPitch = CHANNEL_PITCH[channel];
         let talkingPoints: string[] = [];
 
-        if (useAI && anthropicKey && lead.lead_score >= 60) {
-          const ai  = await generateAICallReason(lead, orderHistory, channel, anthropicKey);
-          callReason    = ai.call_reason;
-          talkingPoints = ai.talking_points;
+        // Generate AI pitch for every lead — personalised pitch is the core value
+        if (useAI && anthropicKey) {
+          const ai      = await generateAICallReason(lead, orderHistory, channel, anthropicKey);
+          callReason       = ai.call_reason;
+          recommendedPitch = ai.recommended_pitch;
+          talkingPoints    = ai.talking_points;
+          await sleep(200); // brief pause between Claude calls
         }
 
-        const contextBrief = buildContextBrief(lead, orderHistory, callReason, channel);
+        const contextBrief = buildContextBrief(lead, orderHistory, callReason, recommendedPitch, channel);
 
         inserts.push({
           lead_id:        lead.id,

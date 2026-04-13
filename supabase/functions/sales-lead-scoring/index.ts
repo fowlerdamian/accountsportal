@@ -177,11 +177,12 @@ serve(async (req) => {
   let body: { lead_id?: string; channel?: Channel } = {};
   try { body = await req.json(); } catch { /* no body */ }
 
-  // Build leads query
+  // Build leads query — include "new" so leads that were discovered but not yet enriched
+  // (e.g. FleetCraft/AGA stuck at "new" due to old batch-limit bug) still get scored and promoted.
   let query = supabase
     .from("sales_leads")
     .select("*")
-    .eq("status", "enriched")
+    .in("status", ["enriched", "new"])
     .order("created_at", { ascending: true })
     .limit(200);
 

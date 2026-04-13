@@ -30,9 +30,6 @@ serve(async (req) => {
 
   console.log("[sales-list-run] Starting list chain");
 
-  await invoke("sales-cin7-sync");
-  console.log("[sales-list-run] Cin7 sync done");
-
   await invoke("sales-lead-dedup");
   console.log("[sales-list-run] Dedup done");
 
