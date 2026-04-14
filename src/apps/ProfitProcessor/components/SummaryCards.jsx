@@ -104,7 +104,7 @@ export default function SummaryCards({ totals }) {
             label="Flagged COGS"
             value={fmtCurrency(flaggedCogs)}
             valueColor="#f3ca0f"
-            sub={`${fmtPercent(totalCogs > 0 ? (flaggedCogs / totalCogs) * 100 : 0)} of total COGS`}
+            sub={`${fmtPercent(revenue > 0 ? (flaggedCogs / revenue) * 100 : 0)} of total revenue`}
             accent
           />
         </div>
