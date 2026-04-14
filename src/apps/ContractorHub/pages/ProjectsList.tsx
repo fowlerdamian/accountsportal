@@ -28,7 +28,13 @@ function ProjectCard({ project }: { project: Project }) {
     ? Math.min((budget.budget_spent / budget.budget_allocated) * 100, 100)
     : 0;
 
-  const TYPE_LABELS: Record<string, string> = { product: "Product", website: "Website", other: "Other" };
+  const TYPE_LABELS: Record<string, string> = {
+    web:         "Web",
+    new_product: "New Product",
+    product:     "Product",
+    website:     "Website",
+    other:       "Other",
+  };
 
   return (
     <div

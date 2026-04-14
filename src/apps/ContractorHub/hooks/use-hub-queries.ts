@@ -8,7 +8,7 @@ import { supabase } from "@guide/integrations/supabase/client";
 
 export type ContractorStatus = "active" | "paused" | "ended";
 export type ContractorSource = "upwork" | "direct";
-export type ProjectType      = "product" | "website" | "other";
+export type ProjectType      = "product" | "website" | "other" | "web" | "new_product";
 export type ProjectStatus    = "planning" | "active" | "on_hold" | "complete";
 export type TaskStatus       = "backlog" | "in_progress" | "review" | "done";
 export type TaskPriority     = "low" | "medium" | "high" | "urgent";
@@ -115,6 +115,26 @@ export interface ProjectBudgetSummary {
   budget_remaining: number | null;
   total_hours:      number;
 }
+
+export interface ProjectStage {
+  id:         string;
+  project_id: string;
+  name:       string;
+  position:   number;
+  start_date: string | null;
+  end_date:   string | null;
+  is_active:  boolean;
+  created_at: string;
+}
+
+export const NEW_PRODUCT_STAGES = [
+  "Idea",
+  "Drawing",
+  "CAD Drawing",
+  "Prototype",
+  "Final Test",
+  "Complete",
+] as const;
 
 export interface AiChatMessage {
   id:         string;
@@ -705,6 +725,62 @@ export function useOverdueTaskCount() {
   }, []);
 
   return count;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Project stages (new_product type)
+// ─────────────────────────────────────────────────────────────
+
+export function useProjectStages(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["hub_project_stages", projectId],
+    enabled:  !!projectId,
+    queryFn:  async () => {
+      const { data, error } = await supabase
+        .from("project_stages")
+        .select("*")
+        .eq("project_id", projectId!)
+        .order("position");
+      if (error) throw error;
+      return data as ProjectStage[];
+    },
+  });
+}
+
+export function useCreateProjectStages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ projectId, stages }: { projectId: string; stages: Omit<ProjectStage, "id" | "created_at">[] }) => {
+      const { data, error } = await supabase
+        .from("project_stages")
+        .insert(stages)
+        .select();
+      if (error) throw error;
+      return data as ProjectStage[];
+    },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["hub_project_stages", variables.projectId] });
+    },
+  });
+}
+
+export function useUpdateProjectStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, project_id, ...updates }: Partial<ProjectStage> & { id: string; project_id: string }) => {
+      const { data, error } = await supabase
+        .from("project_stages")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ProjectStage;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["hub_project_stages", data.project_id] });
+    },
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
