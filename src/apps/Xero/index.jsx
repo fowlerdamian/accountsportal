@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, Component } from 'react'
-import { Send, Loader2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
+import { Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Link2, ExternalLink } from 'lucide-react'
 import { supabase } from '@portal/lib/supabase'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -287,9 +287,101 @@ class XeroChatErrorBoundary extends Component {
   }
 }
 
+// ─── Not-connected screen ─────────────────────────────────────────────────────
+
+function NotConnectedScreen({ onConnect, onCheckConnection, connecting, error }) {
+  return (
+    <div style={{
+      height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: '#000', flexDirection: 'column', gap: '0',
+    }}>
+      <div style={{ textAlign: 'center', maxWidth: '400px', padding: '0 24px' }}>
+        {/* Xero logo-ish indicator */}
+        <div style={{
+          width: '56px', height: '56px', borderRadius: '14px',
+          background: '#0d0d0d', border: '1px solid #1a1a1a',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 24px',
+        }}>
+          <Link2 size={24} color="#555" />
+        </div>
+
+        <h2 style={{
+          fontSize: '16px', fontWeight: 600, color: '#fff',
+          margin: '0 0 8px', letterSpacing: '0.02em',
+        }}>
+          Connect to Xero
+        </h2>
+        <p style={{
+          fontSize: '13px', color: '#555', lineHeight: '1.6', margin: '0 0 28px',
+          fontFamily: '"Inter", system-ui, sans-serif',
+        }}>
+          Authorise the AGA portal to access your Xero organisation. You'll be redirected to Xero to grant permission.
+        </p>
+
+        {error && (
+          <div style={{
+            marginBottom: '20px', padding: '10px 14px',
+            background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)',
+            borderRadius: '6px', fontSize: '12px', color: '#f87171',
+            fontFamily: '"JetBrains Mono", monospace', textAlign: 'left',
+          }}>
+            {error}
+          </div>
+        )}
+
+        <button
+          onClick={onConnect}
+          disabled={connecting}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            padding: '10px 20px', fontSize: '13px', fontWeight: 600,
+            background: connecting ? '#0d0d0d' : '#13b5ea',
+            color: connecting ? '#555' : '#000',
+            border: 'none', borderRadius: '7px',
+            cursor: connecting ? 'not-allowed' : 'pointer',
+            transition: 'background 150ms',
+            fontFamily: '"Inter", system-ui, sans-serif',
+          }}
+        >
+          {connecting
+            ? <><Loader2 size={14} style={{ animation: 'xero-spin 1s linear infinite' }} /> Opening Xero…</>
+            : <><ExternalLink size={14} /> Connect with Xero</>
+          }
+        </button>
+
+        <p style={{
+          marginTop: '16px', fontSize: '11px', color: '#333',
+          fontFamily: '"JetBrains Mono", monospace', lineHeight: '1.5',
+        }}>
+          A new tab will open for Xero authorisation.<br />
+          Return here once you've approved access, then click below.
+        </p>
+
+        <button
+          onClick={onCheckConnection}
+          style={{
+            marginTop: '12px', fontSize: '11px', color: '#444', background: 'none',
+            border: '1px solid #222', borderRadius: '4px', padding: '5px 12px',
+            cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace',
+          }}
+        >
+          I've approved — check connection
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main chat component ──────────────────────────────────────────────────────
 
 function XeroChatInner() {
+  // Connection state: 'checking' | 'connected' | 'not_connected'
+  const [connectionStatus, setConnectionStatus] = useState('checking')
+  const [connectError, setConnectError] = useState(null)
+  const [connecting, setConnecting] = useState(false)
+  const [tenantName, setTenantName] = useState(null)
+
   // Display messages (what we render)
   const [messages, setMessages] = useState([])
   // Full Anthropic-format history for carry-forward (includes tool_use / tool_result blocks)
@@ -299,6 +391,84 @@ function XeroChatInner() {
   const [error, setError] = useState(null)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+
+  // On mount: check URL params and then check connection
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const xeroConnected = params.get('xero_connected')
+    const xeroError = params.get('xero_error')
+
+    // Clear OAuth params from URL without a page reload
+    if (xeroConnected || xeroError) {
+      const clean = window.location.pathname
+      window.history.replaceState(null, '', clean)
+    }
+
+    if (xeroError) {
+      setConnectError(decodeURIComponent(xeroError))
+      setConnectionStatus('not_connected')
+      return
+    }
+
+    if (xeroConnected === '1') {
+      // Just came back from OAuth — mark connected, check to get tenant name
+      checkConnection(true)
+      return
+    }
+
+    checkConnection(false)
+  }, [])
+
+  async function getValidSession() {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session
+  }
+
+  async function checkConnection(justConnected = false) {
+    try {
+      const session = await getValidSession()
+      if (!session) {
+        setConnectError('Your portal session has expired. Please refresh the page and sign in again.')
+        setConnectionStatus('not_connected')
+        return
+      }
+      const res = await supabase.functions.invoke('xero-chat', {
+        body: { action: 'check_connection' },
+      })
+      if (res.data?.not_connected) {
+        setConnectionStatus('not_connected')
+      } else if (!res.error) {
+        setTenantName(res.data?.tenant_name ?? null)
+        setConnectionStatus('connected')
+        if (justConnected) setConnectError(null)
+      } else {
+        setConnectionStatus('not_connected')
+      }
+    } catch {
+      setConnectionStatus('not_connected')
+    }
+  }
+
+  async function handleConnect() {
+    setConnecting(true)
+    setConnectError(null)
+    try {
+      const session = await getValidSession()
+      if (!session) {
+        setConnectError('Your portal session has expired. Please refresh the page and sign in again.')
+        return
+      }
+      const res = await supabase.functions.invoke('xero-oauth-init')
+      if (res.error) throw new Error(res.error.message)
+      const { url } = res.data
+      if (!url) throw new Error('No authorisation URL returned.')
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      setConnectError(err.message || 'Failed to initiate Xero connection.')
+    } finally {
+      setConnecting(false)
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -322,6 +492,13 @@ function XeroChatInner() {
       })
 
       if (res.error) throw new Error(res.error.message)
+
+      if (res.data?.not_connected) {
+        setConnectionStatus('not_connected')
+        setConnectError('Xero token expired or was revoked. Please reconnect.')
+        setLoading(false)
+        return
+      }
 
       const responseText = res.data?.text ?? res.data?.error ?? 'No response received.'
       const returnedHistory = res.data?.history
@@ -376,6 +553,35 @@ function XeroChatInner() {
 
   const hasMessages = messages.length > 0
 
+  // Render: checking state
+  if (connectionStatus === 'checking') {
+    return (
+      <div style={{
+        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#000',
+      }}>
+        <Loader2 size={20} color="#333" style={{ animation: 'xero-spin 1s linear infinite' }} />
+        <style>{`@keyframes xero-spin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    )
+  }
+
+  // Render: not connected
+  if (connectionStatus === 'not_connected') {
+    return (
+      <>
+        <NotConnectedScreen
+          onConnect={handleConnect}
+          onCheckConnection={() => checkConnection(true)}
+          connecting={connecting}
+          error={connectError}
+        />
+        <style>{`@keyframes xero-spin { to { transform: rotate(360deg) } }`}</style>
+      </>
+    )
+  }
+
+  // Render: connected — full chat UI
   return (
     <div style={{
       height: '100%',
@@ -402,23 +608,39 @@ function XeroChatInner() {
           XERO ASSISTANT
         </span>
         <span style={{ fontSize: '11px', color: '#444', fontFamily: '"JetBrains Mono", monospace' }}>
-          Automotive Group Australia
+          {tenantName ?? 'Automotive Group Australia'}
         </span>
-        {hasMessages && (
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' }}>
+          {hasMessages && (
+            <button
+              onClick={handleNewConversation}
+              style={{
+                fontSize: '11px', color: '#444', background: 'none',
+                border: '1px solid #1e1e1e', borderRadius: '4px', padding: '3px 8px',
+                cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace',
+                transition: 'color 120ms, border-color 120ms',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#333' }}
+              onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1e1e1e' }}
+            >
+              New conversation
+            </button>
+          )}
           <button
-            onClick={handleNewConversation}
+            onClick={() => { setConnectionStatus('not_connected'); setConnectError(null) }}
+            title="Reconnect Xero"
             style={{
-              marginLeft: 'auto', fontSize: '11px', color: '#444', background: 'none',
-              border: '1px solid #1e1e1e', borderRadius: '4px', padding: '3px 8px',
+              fontSize: '11px', color: '#333', background: 'none',
+              border: '1px solid #1a1a1a', borderRadius: '4px', padding: '3px 8px',
               cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace',
               transition: 'color 120ms, border-color 120ms',
             }}
-            onMouseEnter={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#333' }}
-            onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1e1e1e' }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#666'; e.currentTarget.style.borderColor = '#2a2a2a' }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#333'; e.currentTarget.style.borderColor = '#1a1a1a' }}
           >
-            New conversation
+            Reconnect
           </button>
-        )}
+        </div>
       </div>
 
       {/* Messages */}
