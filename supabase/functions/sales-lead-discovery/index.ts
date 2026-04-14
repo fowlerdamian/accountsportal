@@ -47,6 +47,104 @@ const DISCOVERY_QUERIES: Record<Channel, string[]> = {
   ],
 };
 
+// ─── Market research query sets (5 new sources per channel) ──────────────────
+
+type MarketQuery = { query: string; source: string };
+
+const MARKET_QUERIES: Record<Channel, MarketQuery[]> = {
+  trailbait: [
+    // LinkedIn — company pages for 4wd retailers
+    { query: 'site:linkedin.com/company "4wd accessories" OR "4x4 accessories" australia',  source: "linkedin" },
+    // Seek — companies hiring = active 4x4 shops
+    { query: "site:seek.com.au \"4x4 accessories\" OR \"4wd accessories\" australia",        source: "seek_jobs" },
+    // Yellow Pages — business directory
+    { query: "site:yellowpages.com.au \"4wd accessories\" OR \"4x4 accessories\"",           source: "yellow_pages" },
+    // Market news — new stores, expansions, acquisitions
+    { query: "4x4 accessories store opening expansion new location australia 2024 2025",     source: "market_news" },
+    // AAAA trade directory — Australian Automotive Aftermarket Association members
+    { query: "site:aaaa.com.au 4wd accessories retail member",                               source: "trade_directory" },
+  ],
+  fleetcraft: [
+    // LinkedIn — fleet upfit / fitout companies
+    { query: 'site:linkedin.com/company "fleet fitout" OR "vehicle upfit" australia',        source: "linkedin" },
+    // Seek — companies hiring fleet tech roles
+    { query: "site:seek.com.au \"fleet vehicle\" fitout upfitter technician australia",      source: "seek_jobs" },
+    // Yellow Pages — fleet modification shops
+    { query: "site:yellowpages.com.au \"fleet fitout\" OR \"vehicle upfit\" australia",      source: "yellow_pages" },
+    // Market news — contract wins, expansions
+    { query: "fleet fitout company contract win new facility expansion australia 2024 2025", source: "market_news" },
+    // AusTender — government contract award notices
+    { query: "site:tenders.gov.au fleet vehicle fitout modification contract awarded",       source: "austender" },
+  ],
+  aga: [
+    // LinkedIn — automotive accessories brands
+    { query: 'site:linkedin.com/company "automotive accessories" brand manufacturer australia', source: "linkedin" },
+    // Seek — brand/product manager roles at accessories companies
+    { query: "site:seek.com.au \"automotive accessories\" brand manager australia",             source: "seek_jobs" },
+    // Yellow Pages — accessories manufacturers and importers
+    { query: "site:yellowpages.com.au \"automotive accessories\" manufacturer importer",        source: "yellow_pages" },
+    // Market news — new brands, product launches, distribution deals
+    { query: "automotive accessories brand launch distribution deal australia 2024 2025",       source: "market_news" },
+    // AAAA trade directory — accessories brand members
+    { query: "site:aaaa.com.au automotive accessories brand manufacturer member",               source: "trade_directory" },
+  ],
+};
+
+// ─── Extract company name from a web result based on source ──────────────────
+
+function extractCompanyFromMarketResult(
+  item: { title: string; link: string; snippet: string },
+  source: string,
+): { name: string; website: string | null } {
+  const title   = item.title   ?? "";
+  const link    = item.link    ?? "";
+  const snippet = item.snippet ?? "";
+  const domain  = extractDomain(link);
+
+  switch (source) {
+    case "linkedin": {
+      // "Company Name | LinkedIn" or "Company Name: Overview | LinkedIn"
+      const name = title.split("|")[0].split(":")[0].trim();
+      return { name: name || domain, website: null }; // don't store a linkedin URL as the company website
+    }
+    case "seek_jobs": {
+      // "Job Title at Company Name | SEEK" or "Job Title - Company Name"
+      const atMatch   = title.match(/\bat\s+([^|–\-]+)/i);
+      const dashMatch = title.match(/–\s*([^|]+)/);
+      const name = atMatch?.[1]?.trim() ?? dashMatch?.[1]?.trim() ?? domain;
+      return { name, website: null };
+    }
+    case "yellow_pages": {
+      // "Company Name - Yellow Pages Australia"
+      const name = title.split(" - ")[0].split(" | ")[0].trim();
+      return { name: name || domain, website: link };
+    }
+    case "trade_directory": {
+      const name = title.split("|")[0].split(" - ")[0].trim();
+      return { name: name || domain, website: link };
+    }
+    case "austender": {
+      // Snippet often has "awarded to CompanyName" or company in title
+      const patterns = [
+        /awarded\s+to\s+([A-Z][A-Za-z\s&]+(?:Pty|Ltd|Services|Solutions|Group)?)/i,
+        /([A-Z][A-Za-z\s&]+(?:Pty|Ltd|Services|Solutions|Group)?)\s+awarded/i,
+      ];
+      for (const pat of patterns) {
+        const m = (snippet + " " + title).match(pat);
+        if (m) return { name: m[1].trim(), website: null };
+      }
+      // Fallback: first capitalised phrase from title
+      const name = title.split(" - ")[0].split("|")[0].trim();
+      return { name: name || domain, website: null };
+    }
+    default: {
+      // market_news: extract first meaningful entity
+      const name = title.split(" - ")[0].split("|")[0].trim();
+      return { name: name || domain, website: null };
+    }
+  }
+}
+
 // ─── Supabase helpers ─────────────────────────────────────────────────────────
 
 async function isDuplicate(
@@ -302,6 +400,44 @@ serve(async (req) => {
           }
         } catch (queryErr) {
           errors.push(`Query "${query}": ${queryErr}`);
+        }
+      }
+
+      // ── Market research sources (LinkedIn, Seek, Yellow Pages, news, trade dir) ──
+      for (const { query, source } of MARKET_QUERIES[channel]) {
+        await sleep(600);
+        try {
+          const webResults = await googleSearch(query, cseKey, cseCx, 10);
+          for (const item of webResults.slice(0, 10)) {
+            const { name: companyName, website } = extractCompanyFromMarketResult(
+              { title: item.title ?? "", link: item.link ?? "", snippet: item.snippet ?? "" },
+              source,
+            );
+            if (!companyName || companyName.length < 3) continue;
+            // Skip generic / noise titles
+            const noiseWords = ["linkedin", "seek", "yellow pages", "aaaa", "tenders.gov", "indeed", "glassdoor"];
+            if (noiseWords.some((w) => companyName.toLowerCase().includes(w))) continue;
+
+            if (channel === "trailbait") {
+              const chains = ["ARB", "TJM", "Ironman", "Opposite Lock", "Repco", "AutoBarn", "SuperCheap", "Bapcor"];
+              if (chains.some((c) => companyName.toLowerCase().includes(c.toLowerCase()))) continue;
+            }
+
+            const isDup = await isDuplicate(supabase, companyName, website, channel);
+            if (isDup) continue;
+
+            await supabase.from("sales_leads").insert({
+              channel,
+              company_name:     companyName,
+              website:          website ?? null,
+              discovery_source: source,
+              discovery_query:  query,
+              status:           "new",
+            });
+            found++;
+          }
+        } catch (queryErr) {
+          errors.push(`[market:${source}] "${query}": ${queryErr}`);
         }
       }
 
