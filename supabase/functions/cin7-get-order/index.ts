@@ -7,10 +7,21 @@ const corsHeaders = {
 
 const CIN7_BASE = "https://inventory.dearsystems.com/ExternalApi/v2";
 
-/** Normalize SO numbers for loose matching: strip leading zeros after prefix.
- *  "SO-00123" → "so-123", "SO-123" → "so-123" */
+/** Normalize SO numbers for loose matching.
+ *  - Trims whitespace
+ *  - Lowercases
+ *  - Adds "so-" prefix if the input is digits-only (missing prefix)
+ *  - Strips leading zeros from the numeric part
+ *  Examples: "SO-00123" → "so-123", " 123 " → "so-123", "so123" → "so-123" */
 function normalizeOrderNum(s: string): string {
-  return s.toLowerCase().replace(/^([a-z]+-?)0+(\d)/, "$1$2");
+  let v = s.trim().toLowerCase();
+  // If entirely digits (no prefix at all), add "so-"
+  if (/^\d+$/.test(v)) v = "so-" + v;
+  // Normalise prefix separator: "so123" → "so-123"
+  v = v.replace(/^([a-z]+)(\d)/, "$1-$2");
+  // Strip leading zeros after the prefix
+  v = v.replace(/^([a-z]+-?)0+(\d)/, "$1$2");
+  return v;
 }
 
 serve(async (req) => {
@@ -29,7 +40,8 @@ serve(async (req) => {
       );
     }
 
-    const { orderNumber } = await req.json();
+    const { orderNumber: rawOrderNumber } = await req.json();
+    const orderNumber = (rawOrderNumber ?? "").trim();
     if (!orderNumber) {
       return new Response(
         JSON.stringify({ error: "orderNumber is required" }),
