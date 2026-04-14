@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 const ROUTE_LABELS = {
   '/dashboard':               null,
   '/accounts':                'Accounts',
+  '/accounts/xero':           'Accounts / Xero',
   '/logistics':               'Logistics',
   '/logistics/invoices':      'Logistics / Invoices',
   '/logistics/rate-cards':    'Logistics / Rate Cards',
@@ -11,7 +12,6 @@ const ROUTE_LABELS = {
   '/purchase-orders':         'Purchasing',
   '/sales-support':           'Sales Support',
   '/compliance':              'Compliance',
-  '/xero':                    'Xero',
   '/settings':                'Settings',
 }
 

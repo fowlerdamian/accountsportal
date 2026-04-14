@@ -1,5 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
+.accounts-nav-link:hover {
+  color: #aaa !important;
+  background: #0d0d0d !important;
+}
+.accounts-nav-link[aria-current="page"] {
+  color: #fff !important;
+  background: #141414 !important;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

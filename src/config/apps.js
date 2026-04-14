@@ -12,10 +12,6 @@ export const APPS = [
     icon:        'BarChart3',
     status:      'live',
     external:    false,
-    submenu: [
-      { label: 'Invoice Profit Analysis', route: '/accounts' },
-      { label: 'Xero Chatbot',            route: '/xero' },
-    ],
   },
   {
     name:        'Logistics',

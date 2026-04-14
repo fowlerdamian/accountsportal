@@ -19,6 +19,7 @@ import SupportApp from './apps/Support/SupportApp'
 import SalesSupport from './apps/SalesSupport/index.jsx'
 import ComplianceApp from './apps/Compliance/index'
 import XeroChat from './apps/Xero/index'
+import AccountsLayout from './apps/Accounts/AccountsLayout'
 
 // Contractor Hub
 import HubDashboard from './apps/ContractorHub/pages/HubDashboard'
@@ -140,7 +141,10 @@ export default function App() {
               <Route path="dashboard" element={<PortalDashboard />} />
               <Route path="dashboard/settings" element={<TileSettings />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="accounts" element={<ProfitProcessor />} />
+              <Route path="accounts" element={<AccountsLayout />}>
+                <Route index element={<ProfitProcessor />} />
+                <Route path="xero" element={<XeroChat />} />
+              </Route>
               <Route path="logistics" element={<LogisticsDashboard />} />
               <Route path="logistics/invoices" element={<InvoiceList />} />
               <Route path="logistics/invoices/:id" element={<InvoiceDetail />} />
@@ -149,7 +153,6 @@ export default function App() {
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
               <Route path="compliance/*" element={<GuideAuthProvider><ComplianceApp /></GuideAuthProvider>} />
-              <Route path="xero" element={<XeroChat />} />
             </Route>
 
             {/* Catch-all */}
