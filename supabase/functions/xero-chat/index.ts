@@ -1,11 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { buildSystemPrompt } from "./systemPrompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ─── Xero client (client_credentials) ────────────────────────────────────────
+// ─── Xero client ──────────────────────────────────────────────────────────────
 
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
@@ -25,7 +26,7 @@ async function getXeroToken(): Promise<string> {
     },
     body: new URLSearchParams({
       grant_type: "client_credentials",
-      scope: "accounting.transactions accounting.reports.read accounting.settings accounting.contacts",
+      scope: "accounting.transactions accounting.reports.read accounting.settings accounting.contacts accounting.journals.read",
     }),
   });
 
@@ -64,15 +65,35 @@ async function xeroRequest(endpoint: string): Promise<unknown> {
   return res.json();
 }
 
+async function xeroWrite(endpoint: string, body: unknown, method = "POST"): Promise<unknown> {
+  const token = await getXeroToken();
+  const tenantId = await getXeroTenantId();
+  const url = `https://api.xero.com/api.xro/2.0${endpoint}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Xero-Tenant-Id": tenantId,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Xero API error (${res.status}): ${await res.text()}`);
+  return res.json();
+}
+
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
 const tools = [
+  // ── Read tools ───────────────────────────────────────────────────────────────
   {
     name: "list_invoices",
     description: "List invoices from Xero with optional filters",
     input_schema: {
       type: "object",
       properties: {
+        type: { type: "string", enum: ["ACCREC", "ACCPAY"], description: "ACCREC = sales invoices, ACCPAY = bills" },
         status: { type: "string", enum: ["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED", "DELETED"] },
         contact_name: { type: "string", description: "Partial contact name match" },
         date_from: { type: "string", description: "YYYY-MM-DD" },
@@ -83,7 +104,7 @@ const tools = [
   },
   {
     name: "get_invoice",
-    description: "Get full details of a specific invoice",
+    description: "Get full details of a specific invoice including line items",
     input_schema: {
       type: "object",
       properties: {
@@ -222,16 +243,102 @@ const tools = [
       },
     },
   },
+
+  // ── Write tools ───────────────────────────────────────────────────────────────
+  {
+    name: "create_invoice",
+    description: "Create a new sales invoice (ACCREC) or bill (ACCPAY) in Xero. WRITE OPERATION — only call after explicit user confirmation.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["ACCREC", "ACCPAY"], description: "ACCREC = Sales Invoice, ACCPAY = Bill" },
+        contact_id: { type: "string", description: "Xero ContactID (preferred)" },
+        contact_name: { type: "string", description: "Contact name — used if contact_id is not known" },
+        date: { type: "string", description: "YYYY-MM-DD, defaults to today" },
+        due_date: { type: "string", description: "YYYY-MM-DD" },
+        reference: { type: "string" },
+        status: { type: "string", enum: ["DRAFT", "SUBMITTED", "AUTHORISED"], description: "Defaults to DRAFT" },
+        line_items: {
+          type: "array",
+          description: "At least one line item required",
+          items: {
+            type: "object",
+            properties: {
+              description: { type: "string" },
+              quantity: { type: "number" },
+              unit_amount: { type: "number", description: "Price per unit (AUD)" },
+              account_code: { type: "string", description: "Xero account code e.g. 200" },
+              tax_type: { type: "string", description: "e.g. OUTPUT, INPUT, NONE — default OUTPUT for ACCREC, INPUT for ACCPAY" },
+            },
+            required: ["description", "quantity", "unit_amount", "account_code"],
+          },
+        },
+      },
+      required: ["type", "line_items"],
+    },
+  },
+  {
+    name: "void_invoice",
+    description: "Void an existing invoice or bill. WRITE OPERATION — only call after explicit user confirmation. Cannot be undone.",
+    input_schema: {
+      type: "object",
+      properties: {
+        invoice_id: { type: "string", description: "Xero InvoiceID or InvoiceNumber" },
+      },
+      required: ["invoice_id"],
+    },
+  },
+  {
+    name: "approve_invoice",
+    description: "Approve (authorise) a draft invoice or bill. WRITE OPERATION — only call after explicit user confirmation.",
+    input_schema: {
+      type: "object",
+      properties: {
+        invoice_id: { type: "string", description: "Xero InvoiceID or InvoiceNumber" },
+      },
+      required: ["invoice_id"],
+    },
+  },
+  {
+    name: "create_manual_journal",
+    description: "Create a manual journal entry in Xero. WRITE OPERATION — only call after explicit user confirmation. Lines must balance to zero.",
+    input_schema: {
+      type: "object",
+      properties: {
+        narration: { type: "string", description: "Journal description / narration" },
+        date: { type: "string", description: "YYYY-MM-DD, defaults to today" },
+        journal_lines: {
+          type: "array",
+          description: "Minimum two lines. Must balance to zero (debits = credits).",
+          items: {
+            type: "object",
+            properties: {
+              account_code: { type: "string" },
+              description: { type: "string" },
+              net_amount: { type: "number", description: "Positive = debit, negative = credit" },
+              tax_type: { type: "string", description: "e.g. NONE, OUTPUT, INPUT" },
+            },
+            required: ["account_code", "net_amount"],
+          },
+        },
+      },
+      required: ["narration", "journal_lines"],
+    },
+  },
 ];
 
 // ─── Tool execution ───────────────────────────────────────────────────────────
 
+const WRITE_TOOLS = new Set(["create_invoice", "void_invoice", "approve_invoice", "create_manual_journal"]);
+
 async function executeTool(name: string, input: Record<string, unknown>): Promise<unknown> {
   try {
     switch (name) {
+      // ── Read ───────────────────────────────────────────────────────────────
       case "list_invoices": {
-        const { status, contact_name, date_from, date_to, page = 1 } = input as any;
+        const { type, status, contact_name, date_from, date_to, page = 1 } = input as any;
         const where: string[] = [];
+        if (type) where.push(`Type=="${type}"`);
         if (status) where.push(`Status=="${status}"`);
         if (contact_name) where.push(`Contact.Name.Contains("${contact_name}")`);
         if (date_from) where.push(`Date>=DateTime(${String(date_from).replace(/-/g, ",")})`);
@@ -240,7 +347,9 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
         if (where.length) params.set("where", where.join("&&"));
         const data = await xeroRequest(`/Invoices?${params}`) as any;
         return data.Invoices?.map((inv: any) => ({
+          invoiceId: inv.InvoiceID,
           invoiceNumber: inv.InvoiceNumber,
+          type: inv.Type,
           contact: inv.Contact?.Name,
           date: inv.DateString,
           dueDate: inv.DueDateString,
@@ -248,15 +357,20 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
           total: inv.Total,
           amountDue: inv.AmountDue,
           amountPaid: inv.AmountPaid,
+          isOverdue: inv.IsOverdue,
         }));
       }
 
       case "get_invoice": {
         const data = await xeroRequest(`/Invoices/${input.invoice_id}`) as any;
         const inv = data.Invoices?.[0];
+        if (!inv) return { error: "Invoice not found" };
         return {
+          invoiceId: inv.InvoiceID,
           invoiceNumber: inv.InvoiceNumber,
+          type: inv.Type,
           contact: inv.Contact?.Name,
+          contactId: inv.Contact?.ContactID,
           date: inv.DateString,
           dueDate: inv.DueDateString,
           status: inv.Status,
@@ -264,10 +378,14 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
           tax: inv.TotalTax,
           total: inv.Total,
           amountDue: inv.AmountDue,
+          amountPaid: inv.AmountPaid,
+          reference: inv.Reference,
           lineItems: inv.LineItems?.map((li: any) => ({
             description: li.Description,
             quantity: li.Quantity,
             unitAmount: li.UnitAmount,
+            accountCode: li.AccountCode,
+            taxType: li.TaxType,
             lineAmount: li.LineAmount,
           })),
           payments: inv.Payments?.map((p: any) => ({
@@ -354,8 +472,10 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
         if (where.length) params.set("where", where.join("&&"));
         const data = await xeroRequest(`/Contacts?${params}`) as any;
         return data.Contacts?.map((c: any) => ({
+          contactId: c.ContactID,
           name: c.Name,
           email: c.EmailAddress,
+          phone: c.Phones?.find((p: any) => p.PhoneType === "DEFAULT")?.PhoneNumber,
           isSupplier: c.IsSupplier,
           isCustomer: c.IsCustomer,
           arOutstanding: c.Balances?.AccountsReceivable?.Outstanding,
@@ -434,6 +554,112 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
         return { bankAccounts: summary };
       }
 
+      // ── Write ──────────────────────────────────────────────────────────────
+      case "create_invoice": {
+        const { type, contact_id, contact_name, date, due_date, reference, status = "DRAFT", line_items } = input as any;
+
+        let contact: any = {};
+        if (contact_id) {
+          contact = { ContactID: contact_id };
+        } else if (contact_name) {
+          const searchData = await xeroRequest(`/Contacts?where=Name.Contains("${contact_name}")`) as any;
+          const found = searchData.Contacts?.[0];
+          contact = found ? { ContactID: found.ContactID } : { Name: contact_name };
+        }
+
+        const defaultTaxType = type === "ACCREC" ? "OUTPUT" : "INPUT";
+        const invoiceBody = {
+          Type: type,
+          Contact: contact,
+          Date: date || new Date().toISOString().split("T")[0],
+          DueDate: due_date,
+          Reference: reference,
+          Status: status,
+          LineItems: line_items.map((li: any) => ({
+            Description: li.description,
+            Quantity: li.quantity,
+            UnitAmount: li.unit_amount,
+            AccountCode: li.account_code,
+            TaxType: li.tax_type || defaultTaxType,
+          })),
+        };
+
+        const data = await xeroWrite("/Invoices", { Invoices: [invoiceBody] }) as any;
+        const inv = data.Invoices?.[0];
+        if (!inv) throw new Error("Invoice creation returned no data");
+        return {
+          invoiceId: inv.InvoiceID,
+          invoiceNumber: inv.InvoiceNumber,
+          contact: inv.Contact?.Name,
+          status: inv.Status,
+          subtotal: inv.SubTotal,
+          tax: inv.TotalTax,
+          total: inv.Total,
+          date: inv.DateString,
+          dueDate: inv.DueDateString,
+        };
+      }
+
+      case "void_invoice": {
+        const { invoice_id } = input as any;
+        const data = await xeroWrite(`/Invoices/${invoice_id}`, {
+          Invoices: [{ InvoiceID: invoice_id, Status: "VOIDED" }],
+        }) as any;
+        const inv = data.Invoices?.[0];
+        return {
+          invoiceId: inv.InvoiceID,
+          invoiceNumber: inv.InvoiceNumber,
+          status: inv.Status,
+        };
+      }
+
+      case "approve_invoice": {
+        const { invoice_id } = input as any;
+        const data = await xeroWrite(`/Invoices/${invoice_id}`, {
+          Invoices: [{ InvoiceID: invoice_id, Status: "AUTHORISED" }],
+        }) as any;
+        const inv = data.Invoices?.[0];
+        return {
+          invoiceId: inv.InvoiceID,
+          invoiceNumber: inv.InvoiceNumber,
+          status: inv.Status,
+          total: inv.Total,
+        };
+      }
+
+      case "create_manual_journal": {
+        const { narration, date, journal_lines } = input as any;
+
+        // Validate balance
+        const netSum = journal_lines.reduce((s: number, jl: any) => s + (jl.net_amount || 0), 0);
+        if (Math.abs(netSum) > 0.01) {
+          return { error: `Journal lines do not balance. Net sum: ${netSum.toFixed(2)}. Must equal zero.` };
+        }
+
+        const body = {
+          ManualJournals: [{
+            Narration: narration,
+            Date: date || new Date().toISOString().split("T")[0],
+            JournalLines: journal_lines.map((jl: any) => ({
+              AccountCode: jl.account_code,
+              Description: jl.description || narration,
+              NetAmount: jl.net_amount,
+              TaxType: jl.tax_type || "NONE",
+            })),
+          }],
+        };
+        const data = await xeroWrite("/ManualJournals", body) as any;
+        const journal = data.ManualJournals?.[0];
+        if (!journal) throw new Error("Journal creation returned no data");
+        return {
+          manualJournalId: journal.ManualJournalID,
+          narration: journal.Narration,
+          date: journal.DateString,
+          status: journal.Status,
+          lineCount: journal.JournalLines?.length,
+        };
+      }
+
       default:
         return { error: `Unknown tool: ${name}` };
     }
@@ -444,24 +670,17 @@ async function executeTool(name: string, input: Record<string, unknown>): Promis
 
 // ─── Agent loop ───────────────────────────────────────────────────────────────
 
+type ContentBlock = { type: string; [key: string]: unknown };
+type Message = { role: string; content: string | ContentBlock[] };
+
 async function runAgentLoop(
-  messages: { role: string; content: unknown }[],
+  messages: Message[],
   apiKey: string,
   today: string,
-): Promise<string> {
-  const systemPrompt = `You are a financial assistant for Automotive Group Australia with direct access to their Xero accounting data.
-
-Today's date: ${today}
-
-Use the available tools to look up live data before answering. Be concise and professional.
-- Format currency as $X,XXX (AUD unless otherwise noted)
-- Format dates as "14 Apr 2026" style
-- Use bullet points for lists of 3+ items
-- Keep prose to 2–4 sentences
-- If a question requires multiple lookups, do them all before responding`;
-
+): Promise<{ text: string; history: Message[] }> {
+  const systemPrompt = buildSystemPrompt(today);
   const loopMessages = [...messages];
-  const MAX_ITERATIONS = 8;
+  const MAX_ITERATIONS = 10;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -473,40 +692,59 @@ Use the available tools to look up live data before answering. Be concise and pr
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2048,
+        max_tokens: 4096,
         system: systemPrompt,
         tools,
         messages: loopMessages,
       }),
     });
 
-    if (!res.ok) throw new Error(`Anthropic error: ${res.status} ${await res.text()}`);
+    if (res.status === 429) {
+      // Rate limited — wait and retry once
+      await new Promise(r => setTimeout(r, 3000));
+      continue;
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Anthropic error ${res.status}: ${errText}`);
+    }
 
     const result = await res.json();
-    const content = result.content ?? [];
+    const content: ContentBlock[] = result.content ?? [];
     loopMessages.push({ role: "assistant", content });
 
     if (result.stop_reason !== "tool_use") {
-      return content
-        .filter((b: any) => b.type === "text")
-        .map((b: any) => b.text)
+      const text = content
+        .filter(b => b.type === "text")
+        .map(b => b.text as string)
         .join("\n")
         .trim() || "Done.";
+      return { text, history: loopMessages };
     }
 
-    const toolUseBlocks = content.filter((b: any) => b.type === "tool_use");
+    const toolUseBlocks = content.filter(b => b.type === "tool_use");
     const toolResults = await Promise.all(
-      toolUseBlocks.map(async (block: any) => ({
-        type: "tool_result",
-        tool_use_id: block.id,
-        content: JSON.stringify(await executeTool(block.name, block.input)),
-      }))
+      toolUseBlocks.map(async (block: any) => {
+        const isWrite = WRITE_TOOLS.has(block.name);
+        const resultData = await executeTool(block.name, block.input);
+        return {
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify(resultData),
+          // Tag write tool results so the model knows it was executed
+          ...(isWrite ? { is_error: (resultData as any)?.error != null } : {}),
+        };
+      })
     );
 
     loopMessages.push({ role: "user", content: toolResults });
   }
 
-  return "I ran into an issue completing that — please try again.";
+  return {
+    text: "I reached the maximum number of steps for this request. Please try a more specific question.",
+    history: loopMessages,
+  };
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
@@ -519,7 +757,6 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
   }
 
-  // Verify user is authenticated
   const anonClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
@@ -531,26 +768,29 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { message, conversation_history = [] } = await req.json();
+    const body = await req.json();
+    const message: string = body.message;
+    const conversationHistory: Message[] = body.conversation_history ?? [];
+
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const today = new Date().toISOString().split("T")[0];
-    const messages = [
-      ...(conversation_history as { role: string; content: string }[]).map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
+
+    // Build messages: existing history + new user message
+    const messages: Message[] = [
+      ...conversationHistory,
       { role: "user", content: message },
     ];
 
-    const text = await runAgentLoop(messages, apiKey, today);
-    return new Response(JSON.stringify({ text }), {
+    const { text, history } = await runAgentLoop(messages, apiKey, today);
+
+    return new Response(JSON.stringify({ text, history }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("[xero-chat]", err);
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    const message = (err as Error).message;
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
