@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { ArrowUpDown, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@portal/lib/supabase'
 
@@ -50,14 +50,18 @@ function DueDateCell({ poId, due, onSaved }) {
   const [editing, setEditing] = useState(false)
   const [value,   setValue]   = useState(due ?? '')
   const [saving,  setSaving]  = useState(false)
+  const saveInProgress = useRef(false)
 
   async function save(newVal) {
+    if (saveInProgress.current) return
+    saveInProgress.current = true
     setSaving(true)
     const { error } = await supabase
       .from('purchase_orders')
       .update({ due_date: newVal || null })
       .eq('id', poId)
     setSaving(false)
+    saveInProgress.current = false
     if (!error) onSaved(poId, newVal || null)
     setEditing(false)
   }

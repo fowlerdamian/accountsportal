@@ -19,6 +19,7 @@ import { ContractorAvatar } from "@hub/components/ContractorAvatar";
 import { ActivityFeed } from "@hub/components/ActivityFeed";
 import { TaskDrawer } from "@hub/components/TaskDrawer";
 import { LogTimeForm } from "@hub/components/LogTimeForm";
+import { ProductStagesView } from "@hub/components/ProductStagesView";
 import { cn } from "@guide/lib/utils";
 import {
   useProject, useTasks, useProjectBudgetSummary, useActivityLog,
@@ -220,7 +221,7 @@ function ProjectViewContent() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upwork-outbound-message`,
-          { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY) },
             body: JSON.stringify({ project_id: id, content: activityInput.trim() }) }
         ).catch(() => {});
       }
@@ -290,7 +291,7 @@ function ProjectViewContent() {
       if (!session) return;
       fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/contractor-hub-notifications`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY) },
         body: JSON.stringify(payload),
       }).catch(() => {});
     });
@@ -371,7 +372,7 @@ function ProjectViewContent() {
             </Select>
 
             <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
-              {project.type}
+              {{ web: "Web", new_product: "New Product", product: "Product", website: "Website", other: "Other" }[project.type] ?? project.type}
             </span>
 
             <Button size="sm" variant="outline" onClick={() => setLogTimeOpen(v => !v)}>
@@ -421,7 +422,12 @@ function ProjectViewContent() {
         />
       </div>
 
-      {/* ── Tasks ── */}
+      {/* ── Stages (new_product) or Tasks (web / other) ── */}
+      {project.type === "new_product" ? (
+        <ProductStagesView projectId={project.id} />
+      ) : null}
+
+      {project.type !== "new_product" && (
       <div className="rounded-lg border bg-background overflow-hidden">
         <div className="px-5 py-3 border-b bg-muted/30 flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-sm font-semibold shrink-0">Tasks</h2>
@@ -621,6 +627,7 @@ function ProjectViewContent() {
           </div>
         )}
       </div>
+      )}
 
       {/* ── Files ── */}
       <div className="rounded-lg border bg-background overflow-hidden">

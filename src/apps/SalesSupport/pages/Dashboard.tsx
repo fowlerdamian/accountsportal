@@ -42,19 +42,26 @@ export default function Dashboard() {
   const { data, isLoading } = useDashboardMetrics();
   const [activeSync, setActiveSync] = useState<string | null>(null);
   const [syncStep, setSyncStep]     = useState<string>("");
+  const [syncError, setSyncError]   = useState<string | null>(null);
 
   async function runResearch() {
     setActiveSync("research");
+    setSyncError(null);
     try {
       setSyncStep("Discovering leads…");
-      await supabase.functions.invoke("sales-lead-discovery", { body: {} });
+      const r1 = await supabase.functions.invoke("sales-lead-discovery", { body: {} });
+      if (r1.error) throw new Error(r1.error.message);
       for (const channel of ["trailbait", "fleetcraft", "aga"] as const) {
         setSyncStep(`Enriching ${channel}…`);
-        await supabase.functions.invoke("sales-lead-enrichment", { body: { channel } });
+        const r2 = await supabase.functions.invoke("sales-lead-enrichment", { body: { channel } });
+        if (r2.error) throw new Error(r2.error.message);
         setSyncStep(`Scoring ${channel}…`);
-        await supabase.functions.invoke("sales-lead-scoring", { body: { channel } });
+        const r3 = await supabase.functions.invoke("sales-lead-scoring", { body: { channel } });
+        if (r3.error) throw new Error(r3.error.message);
       }
       qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
+    } catch (err: unknown) {
+      setSyncError((err as Error).message ?? "Research sync failed");
     } finally {
       setActiveSync(null);
       setSyncStep("");
@@ -63,17 +70,24 @@ export default function Dashboard() {
 
   async function runListSync() {
     setActiveSync("list");
+    setSyncError(null);
     try {
       setSyncStep("Deduplicating leads…");
-      await supabase.functions.invoke("sales-lead-dedup", { body: {} });
+      const r1 = await supabase.functions.invoke("sales-lead-dedup", { body: {} });
+      if (r1.error) throw new Error(r1.error.message);
       setSyncStep("Scoring leads…");
-      await supabase.functions.invoke("sales-lead-scoring", { body: {} });
+      const r2 = await supabase.functions.invoke("sales-lead-scoring", { body: {} });
+      if (r2.error) throw new Error(r2.error.message);
       setSyncStep("Enriching HubSpot records…");
-      await supabase.functions.invoke("sales-hubspot-sync", { body: { action: "back_sync" } });
+      const r3 = await supabase.functions.invoke("sales-hubspot-sync", { body: { action: "back_sync" } });
+      if (r3.error) throw new Error(r3.error.message);
       setSyncStep("Generating call list…");
-      await supabase.functions.invoke("sales-calllist-generate", { body: {} });
+      const r4 = await supabase.functions.invoke("sales-calllist-generate", { body: {} });
+      if (r4.error) throw new Error(r4.error.message);
       qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
       qc.invalidateQueries({ queryKey: ["sales_leads"] });
+    } catch (err: unknown) {
+      setSyncError((err as Error).message ?? "List sync failed");
     } finally {
       setActiveSync(null);
       setSyncStep("");
@@ -120,6 +134,13 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {syncError && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded bg-destructive/10 border border-destructive/30 text-destructive text-xs">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {syncError}
+        </div>
+      )}
 
       {/* Channel columns */}
       <div className="grid grid-cols-3 gap-5">

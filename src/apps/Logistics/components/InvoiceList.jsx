@@ -46,6 +46,9 @@ export default function InvoiceList() {
     ]).then(([invRes, carRes]) => {
       if (invRes.data) setInvoices(invRes.data)
       if (carRes.data) setCarriers(carRes.data)
+    }).catch(() => {
+      // Queries failed — leave lists empty, still exit loading state
+    }).finally(() => {
       setLoading(false)
     })
   }, [])

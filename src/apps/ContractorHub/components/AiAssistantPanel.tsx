@@ -81,7 +81,7 @@ export function AiAssistantPanel({ open, onClose, searchInputRef }: AiAssistantP
         headers: {
           "Content-Type":  "application/json",
           Authorization:   `Bearer ${session.access_token}`,
-          apikey:          import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          apikey:          (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY),
         },
         body: JSON.stringify(body),
       },
@@ -184,7 +184,7 @@ export function AiAssistantPanel({ open, onClose, searchInputRef }: AiAssistantP
         headers: {
           "Content-Type": "application/json",
           Authorization:  `Bearer ${session.access_token}`,
-          apikey:         import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          apikey:         (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY),
         },
         body: JSON.stringify(payload),
       },
