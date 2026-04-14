@@ -73,8 +73,7 @@ const MARKET_QUERIES: Record<Channel, MarketQuery[]> = {
     { query: "site:yellowpages.com.au \"fleet fitout\" OR \"vehicle upfit\" australia",      source: "yellow_pages" },
     // Market news — contract wins, expansions
     { query: "fleet fitout company contract win new facility expansion australia 2024 2025", source: "market_news" },
-    // AusTender — government contract award notices
-    { query: "site:tenders.gov.au fleet vehicle fitout modification contract awarded",       source: "austender" },
+    // AusTender is handled separately via the OCDS API (not a CSE query)
   ],
   aga: [
     // LinkedIn — automotive accessories brands
@@ -123,26 +122,228 @@ function extractCompanyFromMarketResult(
       const name = title.split("|")[0].split(" - ")[0].trim();
       return { name: name || domain, website: link };
     }
-    case "austender": {
-      // Snippet often has "awarded to CompanyName" or company in title
-      const patterns = [
-        /awarded\s+to\s+([A-Z][A-Za-z\s&]+(?:Pty|Ltd|Services|Solutions|Group)?)/i,
-        /([A-Z][A-Za-z\s&]+(?:Pty|Ltd|Services|Solutions|Group)?)\s+awarded/i,
-      ];
-      for (const pat of patterns) {
-        const m = (snippet + " " + title).match(pat);
-        if (m) return { name: m[1].trim(), website: null };
-      }
-      // Fallback: first capitalised phrase from title
-      const name = title.split(" - ")[0].split("|")[0].trim();
-      return { name: name || domain, website: null };
-    }
     default: {
       // market_news: extract first meaningful entity
       const name = title.split(" - ")[0].split("|")[0].trim();
       return { name: name || domain, website: null };
     }
   }
+}
+
+// ─── AusTender OCDS API ───────────────────────────────────────────────────────
+// Base: https://api.tenders.gov.au/ocds/
+// No auth required — public API, OCDS-compliant JSON
+
+const AUSTENDER_BASE = "https://api.tenders.gov.au/ocds";
+
+// ─── FleetCraft product relevance — what we actually sell ────────────────────
+// A contract is relevant if it involves work where our products would be used.
+// Grouped by product category so we can also surface WHICH products are relevant.
+
+const FLEETCRAFT_PRODUCT_KEYWORDS: Record<string, string[]> = {
+  "emergency vehicle fitout": [
+    "ambulance", "emergency vehicle", "rescue vehicle", "fire appliance",
+    "fire truck", "police vehicle", "police car", "highway patrol",
+    "paramedic vehicle", "first responder", "incident response vehicle",
+  ],
+  "fleet vehicle accessories": [
+    "fleet fitout", "fleet fit-out", "vehicle fitout", "vehicle fit-out",
+    "fleet upfit", "vehicle upfit", "fleet modification", "fleet conversion",
+    "vehicle conversion", "fleet build", "fleet services",
+    "commercial vehicle fitout", "work vehicle fitout",
+  ],
+  "canopy & tray systems": [
+    "canopy", "tray body", "ute tray", "service body", "utility body",
+    "alloy tray", "steel tray", "tray fitout",
+  ],
+  "storage & toolbox": [
+    "toolbox", "tool storage", "underbody storage", "drawer system",
+    "cargo management", "equipment storage",
+  ],
+  "bull bars & protection": [
+    "bull bar", "nudge bar", "protection bar", "roo bar", "winch bar",
+    "underbody protection", "side steps", "running boards",
+  ],
+  "lighting & electrical": [
+    "lightbar", "light bar", "emergency lighting", "vehicle lighting",
+    "wiring loom", "electrical fitout", "beacon", "strobe",
+    "led bar", "warning lights",
+  ],
+  "towing & recovery": [
+    "tow bar", "towbar", "towing equipment", "recovery equipment",
+    "winch", "snatch block", "recovery gear",
+  ],
+  "government fleet": [
+    "government fleet", "council fleet", "defence fleet", "state fleet",
+    "federal fleet", "municipal fleet", "public sector fleet",
+  ],
+};
+
+function getRelevantProductCategories(text: string): string[] {
+  const lower = text.toLowerCase();
+  return Object.entries(FLEETCRAFT_PRODUCT_KEYWORDS)
+    .filter(([, keywords]) => keywords.some((kw) => lower.includes(kw)))
+    .map(([category]) => category);
+}
+
+// What the supplier will need from us, per product category
+const CATEGORY_SALES_ANGLE: Record<string, string> = {
+  "emergency vehicle fitout":  "will need lightbars, beacons, wiring looms, and emergency vehicle accessories for each build",
+  "fleet vehicle accessories": "will need bull bars, underbody protection, tow bars, and fleet fitout components across the contract",
+  "canopy & tray systems":     "will need canopy and tray fitout components for utility vehicles in the contract",
+  "storage & toolbox":         "will need toolboxes, drawer systems, and cargo storage solutions",
+  "bull bars & protection":    "will need bull bars and vehicle protection equipment fitted to contract vehicles",
+  "lighting & electrical":     "will need lightbars, beacons, wiring looms, and vehicle electrical fitout",
+  "towing & recovery":         "will need tow bars and recovery equipment across the fleet",
+  "government fleet":          "as a government fleet supplier will need accessories and fitout components across multiple vehicle types",
+};
+
+// Returns true if the string looks like a bare contract reference number, not a title
+function isContractNumber(s: string): boolean {
+  return /^(CN|ATM|SON|RFT|RFQ|EOI|PANEL)[\s\-]?\d+/i.test(s.trim()) || /^\d{4,}$/.test(s.trim());
+}
+
+interface AusTenderSupplier {
+  name:           string;
+  abn:            string | null;
+  address:        string | null;
+  state:          string | null;
+  tender_context: string;
+}
+
+async function fetchAusTenderSuppliers(daysBack = 30): Promise<AusTenderSupplier[]> {
+  const now  = new Date();
+  const from = new Date(now);
+  from.setDate(now.getDate() - daysBack);
+
+  const startTs = from.toISOString().split(".")[0] + "Z";
+  const endTs   = now.toISOString().split(".")[0]  + "Z";
+
+  const url = `${AUSTENDER_BASE}/findByDates/contractPublished/${startTs}/${endTs}`;
+
+  let data: any;
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal:  AbortSignal.timeout(30000),
+    });
+    if (!res.ok) {
+      console.error(`[austender] HTTP ${res.status}`);
+      return [];
+    }
+    data = await res.json();
+  } catch (err) {
+    console.error("[austender] fetch failed:", err);
+    return [];
+  }
+
+  const releases: any[] = data.releases ?? [];
+  console.log(`[austender] ${releases.length} releases in window`);
+
+  const seen = new Set<string>();
+  const suppliers: AusTenderSupplier[] = [];
+
+  for (const release of releases) {
+    // ── Extract the best available descriptive title ─────────────────────────
+    // AusTender sometimes puts the CN number in tender.title — fall through to
+    // better fields in that case.
+    const rawTitle = [
+      release.tender?.title,
+      release.tender?.description,
+      release.awards?.[0]?.title,
+      release.awards?.[0]?.description,
+      release.contracts?.[0]?.description,
+      release.tender?.items?.[0]?.classification?.description,
+    ]
+      .map((v) => (typeof v === "string" ? v.trim() : ""))
+      .find((v) => v.length > 4 && !isContractNumber(v)) ?? "";
+
+    // ── Build full text for relevance check (all available fields) ───────────
+    const allText = [
+      release.tender?.title        ?? "",
+      release.tender?.description  ?? "",
+      ...(release.tender?.items ?? []).map((i: any) => i.classification?.description ?? ""),
+      release.awards?.[0]?.title       ?? "",
+      release.awards?.[0]?.description ?? "",
+      release.contracts?.[0]?.description ?? "",
+    ].join(" ");
+
+    // ── Product relevance gate ───────────────────────────────────────────────
+    const relevantCategories = getRelevantProductCategories(allText);
+    if (relevantCategories.length === 0) continue;
+
+    // ── Procuring entity ─────────────────────────────────────────────────────
+    const parties: any[] = release.parties ?? [];
+    const procuringEntity = parties.find(
+      (p: any) => Array.isArray(p.roles) && p.roles.includes("procuringEntity")
+    );
+    const agencyName = procuringEntity?.name ?? null;
+
+    // ── Contract value ───────────────────────────────────────────────────────
+    const contractValue =
+      release.awards?.[0]?.value?.amount ??
+      release.contracts?.[0]?.value?.amount ??
+      null;
+
+    // ── Contract period — check awards.contractPeriod and contracts.period ───
+    const period =
+      release.awards?.[0]?.contractPeriod ??
+      release.contracts?.[0]?.period ??
+      null;
+    const periodStart = period?.startDate?.split("T")[0] ?? null;
+    const periodEnd   = period?.endDate?.split("T")[0]   ?? null;
+
+    // ── Build a readable sales-context sentence ──────────────────────────────
+    // Format: "Awarded [title] by [Agency] ($X, YYYY-YYYY) — as fitout contractor
+    //          they [will need our products]."
+    const titlePart  = rawTitle ? `"${rawTitle}"` : "a fleet/vehicle contract";
+    const agencyPart = agencyName ? ` by ${agencyName}` : "";
+    const valuePart  = contractValue
+      ? ` ($${Number(contractValue).toLocaleString()})`
+      : "";
+    const periodPart =
+      periodStart && periodEnd
+        ? `, ${periodStart.slice(0, 7)} – ${periodEnd.slice(0, 7)}`
+        : "";
+
+    // Use the primary matched category's sales angle
+    const primaryAngle = CATEGORY_SALES_ANGLE[relevantCategories[0]] ?? "will need fleet accessories";
+    const extraCategories =
+      relevantCategories.length > 1
+        ? ` Also relevant: ${relevantCategories.slice(1).join(", ")}.`
+        : "";
+
+    const tenderContext =
+      `Awarded ${titlePart}${agencyPart}${valuePart}${periodPart}. ` +
+      `As the awarded contractor they ${primaryAngle}.${extraCategories}`;
+
+    // ── Extract suppliers ────────────────────────────────────────────────────
+    for (const party of parties) {
+      if (!Array.isArray(party.roles) || !party.roles.includes("supplier")) continue;
+
+      const name = (party.name ?? "").trim();
+      if (!name || name.length < 3) continue;
+      if (agencyName && nameSimilarity(name, agencyName) > 0.8) continue;
+      if (seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+
+      const abn = party.additionalIdentifiers?.find(
+        (id: any) => id.scheme === "AU-ABN"
+      )?.id ?? null;
+
+      const addr    = party.address;
+      const address = addr
+        ? [addr.streetAddress, addr.locality, addr.region, addr.postalCode]
+            .filter(Boolean).join(", ")
+        : null;
+      const state = addr?.region ?? null;
+
+      suppliers.push({ name, abn, address, state, tender_context: tenderContext });
+    }
+  }
+
+  console.log(`[austender] ${suppliers.length} relevant suppliers extracted`);
+  return suppliers;
 }
 
 // ─── Supabase helpers ─────────────────────────────────────────────────────────
@@ -400,6 +601,32 @@ serve(async (req) => {
           }
         } catch (queryErr) {
           errors.push(`Query "${query}": ${queryErr}`);
+        }
+      }
+
+      // ── AusTender OCDS API (fleetcraft only) ─────────────────────────────────
+      if (channel === "fleetcraft") {
+        try {
+          const atSuppliers = await fetchAusTenderSuppliers(6);
+          console.log(`[austender] ${atSuppliers.length} relevant suppliers found`);
+          for (const supplier of atSuppliers) {
+            const isDup = await isDuplicate(supabase, supplier.name, null, channel);
+            if (isDup) continue;
+            await supabase.from("sales_leads").insert({
+              channel,
+              company_name:     supplier.name,
+              website:          null,
+              address:          supplier.address,
+              state:            supplier.state,
+              discovery_source: "austender",
+              discovery_query:  "ocds_api_contract_published",
+              tender_context:   supplier.tender_context,
+              status:           "new",
+            });
+            found++;
+          }
+        } catch (atErr) {
+          errors.push(`[austender] ${atErr}`);
         }
       }
 

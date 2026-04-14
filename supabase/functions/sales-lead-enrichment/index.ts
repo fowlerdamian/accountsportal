@@ -363,6 +363,25 @@ serve(async (req) => {
           has_own_brand:     (ai as any).has_own_brand,
           currently_imports: (ai as any).currently_imports,
         };
+
+        // ── AGA hard gate: must have own brand ──────────────────────────────
+        // has_own_brand must be explicitly true — false or unknown = disqualified
+        if (lead.channel === "aga" && (ai as any).has_own_brand === false) {
+          await supabase.from("sales_leads").update({
+            status:                  "disqualified",
+            disqualification_reason: "no own brand",
+            score_breakdown: {
+              ...(lead.score_breakdown ?? {}),
+              website_quality:   (ai as any).website_quality,
+              company_size:      (ai as any).company_size,
+              has_own_brand:     false,
+              currently_imports: (ai as any).currently_imports,
+            },
+          }).eq("id", lead.id);
+          enrichedCount++;
+          continue;
+        }
+
         // Store homepage contact as fallback — only used if Apollo (step 4) finds nothing
         if (ai.contact_name) {
           updates._homepage_contact_name     = ai.contact_name;
