@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 const ROUTE_LABELS = {
   '/dashboard':               null,
@@ -18,6 +19,7 @@ const ROUTE_LABELS = {
 export default function Layout() {
   const { user, signOut } = useAuth()
   const { pathname } = useLocation()
+  const isMobile = useIsMobile()
   const breadcrumb = ROUTE_LABELS[pathname]
     ?? (pathname.startsWith('/logistics/invoices/') ? 'Logistics / Invoice Detail' : null)
   const guestEmail = !user ? localStorage.getItem('portal_guest_email') : user?.email
@@ -29,14 +31,15 @@ export default function Layout() {
       <header
         style={{
           flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 24px', height: '48px', background: '#0a0a0a', borderBottom: '1px solid #222222',
+          padding: isMobile ? '0 14px' : '0 24px',
+          height: '48px', background: '#0a0a0a', borderBottom: '1px solid #222222',
         }}
       >
         {/* Left: back to dashboard + breadcrumb */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <Link
             to="/dashboard"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', flexShrink: 0 }}
           >
             <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#f3ca0f' }} />
             <span style={{
@@ -47,10 +50,13 @@ export default function Layout() {
             </span>
           </Link>
 
-          {breadcrumb && (
+          {breadcrumb && !isMobile && (
             <>
               <span style={{ color: '#333', fontSize: '14px' }}>/</span>
-              <span style={{ fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace' }}>
+              <span style={{
+                fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
                 {breadcrumb}
               </span>
             </>
@@ -58,11 +64,11 @@ export default function Layout() {
         </div>
 
         {/* Right: user + sign out */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {guestEmail && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+          {guestEmail && !isMobile && (
             <span style={{
               fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0',
-              maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
               {guestEmail}
             </span>

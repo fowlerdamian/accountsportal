@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
 import { aud, invoiceTotal, invoiceOvercharge } from '../utils/helpers.js'
+import { useIsMobile } from '../../../hooks/useIsMobile.js'
 
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
@@ -38,6 +39,7 @@ export default function InvoiceList() {
   const [carrierFilter, setCarrierFilter] = useState('all')
   const [loading,       setLoading]       = useState(true)
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     Promise.all([
@@ -68,7 +70,7 @@ export default function InvoiceList() {
   }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 24px', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
 
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0 }}>Invoices</h1>
@@ -95,8 +97,8 @@ export default function InvoiceList() {
         </span>
       </div>
 
-      <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
               {['Invoice #', 'Carrier', 'Date', 'Due', 'Charged', 'Overcharge', 'Status', ''].map((h, i) => (

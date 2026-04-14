@@ -4,11 +4,13 @@ import { APPS } from '../config/apps.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTileSettings } from '../hooks/useTileSettings.js'
 import { useIsAdmin } from '../hooks/useIsAdmin.js'
+import { useIsMobile } from '../hooks/useIsMobile.js'
 
 export default function PortalDashboard() {
   const { user } = useAuth()
   const { settings } = useTileSettings(user?.id)
   const { isAdmin } = useIsAdmin()
+  const isMobile = useIsMobile()
 
   const visibleApps = APPS.filter(app => {
     if (settings === null) return true
@@ -20,7 +22,7 @@ export default function PortalDashboard() {
   return (
     <div style={{
       flex: 1, overflowY: 'auto',
-      padding: '32px 24px',
+      padding: isMobile ? '20px 16px' : '32px 24px',
       maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box',
     }}>
 

@@ -106,7 +106,7 @@ export default function Dashboard() {
     <div className="p-6">
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Sales Support</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Lead research, enrichment, and call planning</p>
@@ -143,7 +143,7 @@ export default function Dashboard() {
       )}
 
       {/* Channel columns */}
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {CHANNELS.map((ch) => {
           const colors  = CHANNEL_COLOR[ch];
           const metrics = data?.[ch] as any;
@@ -204,8 +204,8 @@ export default function Dashboard() {
       {/* Research job status */}
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Recent Research Jobs</h2>
-        <div className="rounded-xl border border-border bg-card/50 overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-xl border border-border bg-card/50 overflow-x-auto">
+          <table className="w-full text-sm" style={{ minWidth: '480px' }}>
             <thead>
               <tr className="border-b border-border">
                 {["Channel", "Type", "Status", "Leads Found", "Started"].map((h) => (

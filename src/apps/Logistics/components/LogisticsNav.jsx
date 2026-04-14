@@ -38,7 +38,7 @@ export default function LogisticsNav() {
 
   return (
     <div
-      className="flex flex-shrink-0"
+      className="flex flex-shrink-0 logistics-nav"
       style={{ borderBottom: '1px solid #222222', marginBottom: '24px' }}
     >
       {tabs.map((tab) => {

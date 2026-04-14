@@ -1,5 +1,27 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
+/* ── Mobile globals ──────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Tables scroll horizontally instead of crunching */
+  .mobile-scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Logistics tab nav scrolls if needed */
+  .logistics-nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .logistics-nav::-webkit-scrollbar { display: none; }
+
+  /* Xero quick actions wrap */
+  .xero-quick-actions {
+    flex-wrap: wrap !important;
+  }
+}
+
 .accounts-nav-link:hover {
   color: #aaa !important;
   background: #0d0d0d !important;

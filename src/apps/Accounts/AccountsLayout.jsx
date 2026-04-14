@@ -1,12 +1,51 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import { BarChart3, MessageSquare } from 'lucide-react'
+import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 const NAV = [
-  { label: 'Invoice Profit Analysis', route: '/accounts',      icon: BarChart3,     end: true },
-  { label: 'Xero Chatbot',            route: '/accounts/xero', icon: MessageSquare, end: false },
+  { label: 'Invoice Profit Analysis', shortLabel: 'P&L',  route: '/accounts',      icon: BarChart3,     end: true },
+  { label: 'Xero Chatbot',            shortLabel: 'Xero', route: '/accounts/xero', icon: MessageSquare, end: false },
 ]
 
 export default function AccountsLayout() {
+  const isMobile = useIsMobile()
+
+  if (isMobile) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        {/* Top tab bar */}
+        <nav style={{
+          display: 'flex', flexShrink: 0,
+          background: '#050505', borderBottom: '1px solid #1a1a1a',
+        }}>
+          {NAV.map(({ shortLabel, route, icon: Icon, end }) => (
+            <NavLink
+              key={route}
+              to={route}
+              end={end}
+              style={({ isActive }) => ({
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: '4px', padding: '10px 8px', textDecoration: 'none',
+                fontSize: '11px', fontFamily: '"JetBrains Mono", monospace',
+                color: isActive ? '#fff' : '#555',
+                borderBottom: isActive ? '2px solid #f3ca0f' : '2px solid transparent',
+                background: isActive ? 'rgba(243,202,15,0.04)' : 'transparent',
+                transition: 'color 120ms, border-color 120ms',
+              })}
+            >
+              <Icon size={15} strokeWidth={1.5} />
+              <span>{shortLabel}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Outlet />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
 
