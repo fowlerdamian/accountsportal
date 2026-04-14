@@ -38,7 +38,7 @@ export default function XeroChat() {
       })
 
       if (res.error) throw new Error(res.error.message)
-      setMessages(prev => [...prev, { role: 'assistant', content: res.data.text }])
+      setMessages(prev => [...prev, { role: 'assistant', content: res.data?.text ?? res.data?.error ?? 'No response received.' }])
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',

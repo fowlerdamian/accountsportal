@@ -95,10 +95,12 @@ function SubmenuTile({ app }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div style={{ position: 'relative', height: '100%' }}>
+    <div
+      style={{ position: 'relative', height: '100%' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
         onClick={() => setOpen(o => !o)}
         style={{ textDecoration: 'none', display: 'block', height: '100%', cursor: 'pointer' }}
       >

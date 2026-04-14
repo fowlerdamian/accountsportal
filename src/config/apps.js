@@ -8,6 +8,7 @@ export const APPS = [
   {
     name:        'Accounts',
     description: 'Invoice profit analysis and Xero financial data',
+    route:       '/accounts',
     icon:        'BarChart3',
     status:      'live',
     external:    false,

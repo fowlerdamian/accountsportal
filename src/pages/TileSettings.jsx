@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings,
-  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck, ShieldCheck,
 } from 'lucide-react'
 import { APPS } from '../config/apps.js'
 import { useAllUserTileSettings } from '../hooks/useTileSettings.js'
@@ -9,7 +9,7 @@ import { useIsAdmin } from '../hooks/useIsAdmin.js'
 
 const ICON_MAP = {
   BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings,
-  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck, ShieldCheck,
 }
 
 function AppIcon({ name }) {
