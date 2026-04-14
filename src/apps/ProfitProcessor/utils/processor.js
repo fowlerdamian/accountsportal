@@ -61,6 +61,8 @@ export function processOrders(rawRows) {
   const totalProfit = revenue - totalCogs
   const avgGp       = isZero(revenue) ? 0 : (totalProfit / revenue) * 100
 
+  const flaggedOrders = orders.filter((o) => o.flags.length > 0)
+
   const flagBreakdown = {
     zeroCogs: orders.filter((o) => o.flags.includes(FLAG.ZERO_COGS)).length,
     zeroInv:  orders.filter((o) => o.flags.includes(FLAG.ZERO_INV)).length,
@@ -75,7 +77,9 @@ export function processOrders(rawRows) {
       totalCogs,
       totalProfit,
       avgGp,
-      flaggedCount: orders.filter((o) => o.flags.length > 0).length,
+      flaggedCount:    flaggedOrders.length,
+      flaggedRevenue:  flaggedOrders.reduce((s, o) => s + o.invoiceExGst, 0),
+      flaggedCogs:     flaggedOrders.reduce((s, o) => s + o.cogsAdj,      0),
       flagBreakdown,
     },
   }

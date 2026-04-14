@@ -48,7 +48,7 @@ function Card({ label, value, sub, valueColor = '#ffffff', accent = false }) {
 // ─── Cards row ───────────────────────────────────────────────────────────────
 
 export default function SummaryCards({ totals }) {
-  const { revenue, totalCogs, totalProfit, avgGp, flaggedCount, flagBreakdown } = totals
+  const { revenue, totalCogs, totalProfit, avgGp, flaggedCount, flaggedRevenue, flaggedCogs, flagBreakdown } = totals
 
   const profitColor = totalProfit > 0 ? '#60a57e' : totalProfit < 0 ? '#ff1744' : '#888'
   const gpColor     = avgGp >= 20 ? '#60a57e' : '#ff1744'
@@ -62,33 +62,53 @@ export default function SummaryCards({ totals }) {
   ].filter(Boolean)
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-      <Card
-        label="Revenue (ex GST)"
-        value={fmtCurrency(revenue)}
-      />
-      <Card
-        label="Total COGS"
-        value={fmtCurrency(totalCogs)}
-      />
-      <Card
-        label="Gross Profit"
-        value={fmtCurrency(totalProfit)}
-        valueColor={profitColor}
-      />
-      <Card
-        label="Avg GP%"
-        value={fmtPercent(avgGp)}
-        valueColor={gpColor}
-        sub={avgGp >= 20 ? 'Above 20% target' : 'Below 20% target'}
-      />
-      <Card
-        label="Flagged Orders"
-        value={String(flaggedCount)}
-        valueColor={flagColor}
-        sub={flagParts.length > 0 ? flagParts.join(' · ') : 'No anomalies detected'}
-        accent={flaggedCount > 0}
-      />
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <Card
+          label="Revenue (ex GST)"
+          value={fmtCurrency(revenue)}
+        />
+        <Card
+          label="Total COGS"
+          value={fmtCurrency(totalCogs)}
+        />
+        <Card
+          label="Gross Profit"
+          value={fmtCurrency(totalProfit)}
+          valueColor={profitColor}
+        />
+        <Card
+          label="Avg GP%"
+          value={fmtPercent(avgGp)}
+          valueColor={gpColor}
+          sub={avgGp >= 20 ? 'Above 20% target' : 'Below 20% target'}
+        />
+        <Card
+          label="Flagged Orders"
+          value={String(flaggedCount)}
+          valueColor={flagColor}
+          sub={flagParts.length > 0 ? flagParts.join(' · ') : 'No anomalies detected'}
+          accent={flaggedCount > 0}
+        />
+      </div>
+      {flaggedCount > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <Card
+            label="Flagged Revenue"
+            value={fmtCurrency(flaggedRevenue)}
+            valueColor="#f3ca0f"
+            sub={`${fmtPercent(revenue > 0 ? (flaggedRevenue / revenue) * 100 : 0)} of total revenue`}
+            accent
+          />
+          <Card
+            label="Flagged COGS"
+            value={fmtCurrency(flaggedCogs)}
+            valueColor="#f3ca0f"
+            sub={`${fmtPercent(totalCogs > 0 ? (flaggedCogs / totalCogs) * 100 : 0)} of total COGS`}
+            accent
+          />
+        </div>
+      )}
     </div>
   )
 }
