@@ -11,6 +11,7 @@ const ROUTE_LABELS = {
   '/purchase-orders':         'Purchasing',
   '/sales-support':           'Sales Support',
   '/compliance':              'Compliance',
+  '/xero':                    'Xero',
   '/settings':                'Settings',
 }
 

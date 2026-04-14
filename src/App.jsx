@@ -18,6 +18,7 @@ import Disputes from './apps/Logistics/components/Disputes.jsx'
 import SupportApp from './apps/Support/SupportApp'
 import SalesSupport from './apps/SalesSupport/index.jsx'
 import ComplianceApp from './apps/Compliance/index'
+import XeroChat from './apps/Xero/index'
 
 // Contractor Hub
 import HubDashboard from './apps/ContractorHub/pages/HubDashboard'
@@ -148,6 +149,7 @@ export default function App() {
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
               <Route path="compliance/*" element={<GuideAuthProvider><ComplianceApp /></GuideAuthProvider>} />
+              <Route path="xero" element={<XeroChat />} />
             </Route>
 
             {/* Catch-all */}

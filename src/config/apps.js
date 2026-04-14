@@ -70,6 +70,14 @@ export const APPS = [
     external:    false,
   },
   {
+    name:        'Xero',
+    description: 'Chat with your Xero accounting data — invoices, payments, reconciliation, and financial reports',
+    route:       '/xero',
+    icon:        'DollarSign',
+    status:      'live',
+    external:    false,
+  },
+  {
     name:        'Settings',
     description: 'Account details, login links, and user role & tile access management',
     route:       '/settings',
