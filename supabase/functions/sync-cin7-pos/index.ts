@@ -50,13 +50,12 @@ serve(async (req) => {
     let synced  = 0;
     const errors: string[] = [];
 
-    // Fetch each active status separately so we never page through all POs
+    // Fetch each active status separately, paginating until Cin7 returns fewer than limit
     const allActivePOs: any[] = [];
     for (const status of ACTIVE_STATUSES) {
-      let statusPage = 1;
-      let statusTotal = Infinity;
-      while ((statusPage - 1) * limit < statusTotal) {
-        const url = `${CIN7_BASE}/purchaseList?Limit=${limit}&Page=${statusPage}&Status=${status}`;
+      let page = 1;
+      while (true) {
+        const url = `${CIN7_BASE}/purchaseList?Limit=${limit}&Page=${page}&Status=${status}`;
         const res = await fetch(url, { headers: cin7Headers });
         const rawText = await res.text();
 
@@ -77,31 +76,38 @@ serve(async (req) => {
           );
         }
 
-        statusTotal = json.Total ?? 0;
         const list: any[] = json.PurchaseList ?? [];
         allActivePOs.push(...list);
-        statusPage++;
+        // Stop when we receive fewer results than the page size — no more pages
         if (list.length < limit) break;
+        page++;
       }
     }
 
     if (allActivePOs.length > 0) {
-      const rows = await Promise.all(allActivePOs.map(async (po) => {
-        const hasAttachment = await checkAttachment(po.ID, cin7Headers);
-        return {
-          cin7_id:        po.ID,
-          po_number:      po.OrderNumber,
-          supplier_name:  po.Supplier ?? "Unknown",
-          status:         toDbStatus(po.Status),
-          order_date:     po.OrderDate ? po.OrderDate.substring(0, 10) : null,
-          due_date:       po.ID in existingDueDates ? existingDueDates[po.ID] : null,
-          total_amount:   po.InvoiceAmount ?? 0,
-          currency:       po.BaseCurrency ?? "AUD",
-          line_items:     [],
-          has_attachment: hasAttachment,
-          synced_at:      new Date().toISOString(),
-        };
-      }));
+      // Check attachments in batches of 10 to avoid Cin7 rate limits
+      const BATCH = 10;
+      const rows: any[] = [];
+      for (let i = 0; i < allActivePOs.length; i += BATCH) {
+        const batch = allActivePOs.slice(i, i + BATCH);
+        const batchRows = await Promise.all(batch.map(async (po) => {
+          const hasAttachment = await checkAttachment(po.ID, cin7Headers);
+          return {
+            cin7_id:        po.ID,
+            po_number:      po.OrderNumber,
+            supplier_name:  po.Supplier ?? "Unknown",
+            status:         toDbStatus(po.Status),
+            order_date:     po.OrderDate ? po.OrderDate.substring(0, 10) : null,
+            due_date:       po.ID in existingDueDates ? existingDueDates[po.ID] : null,
+            total_amount:   po.InvoiceAmount ?? 0,
+            currency:       po.BaseCurrency ?? "AUD",
+            line_items:     [],
+            has_attachment: hasAttachment,
+            synced_at:      new Date().toISOString(),
+          };
+        }));
+        rows.push(...batchRows);
+      }
 
       const { error } = await supabase
         .from("purchase_orders")

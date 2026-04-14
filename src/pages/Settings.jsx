@@ -339,10 +339,12 @@ function UserManagement() {
 
   const setRole = async (userId, role) => {
     setSaving(true)
-    if (role === 'user') {
-      await supabase.from('user_roles').delete().eq('user_id', userId)
-    } else {
-      await supabase.from('user_roles').upsert({ user_id: userId, role }, { onConflict: 'user_id' })
+    setError(null)
+    const { error: delErr } = await supabase.from('user_roles').delete().eq('user_id', userId)
+    if (delErr) { setError(delErr.message); setSaving(false); return }
+    if (role !== 'user') {
+      const { error: insErr } = await supabase.from('user_roles').insert({ user_id: userId, role, is_approved: true })
+      if (insErr) { setError(insErr.message); setSaving(false); return }
     }
     setSaving(false)
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u))

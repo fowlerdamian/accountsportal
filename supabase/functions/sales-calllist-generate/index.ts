@@ -128,54 +128,83 @@ interface HubSpotNote {
 }
 
 /**
- * Single batch call: fetches all notes in the last `daysBack` days with their company
- * associations and body text. Returns two things:
- *   - companyIds: Set of company IDs that had any note (used for suppression)
- *   - notesMap:   Map of company_id → up to 3 most-recent notes (used for context brief)
+ * Fetches ALL notes for the given HubSpot company IDs via the associations batch API.
+ * No date window — returns every note ever logged against those companies.
+ * Returns: Map of company_id → notes sorted newest-first (max 5 per company).
  */
-async function fetchHubSpotHistory(
+async function fetchHubSpotNotesForCompanies(
   token: string,
-  daysBack: number
-): Promise<{ companyIds: Set<string>; notesMap: Map<string, HubSpotNote[]> }> {
-  const since      = Date.now() - daysBack * 86_400_000;
-  const companyIds = new Set<string>();
-  const notesMap   = new Map<string, HubSpotNote[]>();
+  companyIds: string[]
+): Promise<Map<string, HubSpotNote[]>> {
+  const notesMap = new Map<string, HubSpotNote[]>();
+  if (!companyIds.length) return notesMap;
 
   try {
-    const res = await fetch(`${HS_BASE}/crm/v3/objects/notes/search`, {
+    // Step 1: batch-read note associations for all companies
+    const assocRes = await fetch(`${HS_BASE}/crm/v4/associations/companies/notes/batch/read`, {
       method:  "POST",
       headers: hsHeaders(token),
-      signal:  AbortSignal.timeout(8000),
-      body: JSON.stringify({
-        filterGroups: [{ filters: [{ propertyName: "hs_timestamp", operator: "GTE", value: since }] }],
-        properties:   ["hs_timestamp", "hs_note_body"],
-        associations: ["companies"],
-        limit: 100,
-        sorts: [{ propertyName: "hs_timestamp", direction: "DESCENDING" }],
-      }),
+      signal:  AbortSignal.timeout(10000),
+      body: JSON.stringify({ inputs: companyIds.map((id) => ({ id })) }),
     });
-    if (!res.ok) return { companyIds, notesMap };
-    const data = await res.json();
+    if (!assocRes.ok) return notesMap;
+    const assocData = await assocRes.json();
 
-    for (const note of data.results ?? []) {
-      const body = (note.properties?.hs_note_body ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      const ts   = note.properties?.hs_timestamp ? new Date(note.properties.hs_timestamp) : null;
-      const date = ts ? ts.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "";
-
-      for (const assoc of note.associations?.companies?.results ?? []) {
-        const cid = String(assoc.id);
-        companyIds.add(cid);
-        if (body) {
-          const existing = notesMap.get(cid) ?? [];
-          if (existing.length < 3) {
-            notesMap.set(cid, [...existing, { date, body: body.slice(0, 300) }]);
-          }
-        }
+    // Build company → noteIds map and collect all unique note IDs
+    const companyNoteIds: Record<string, string[]> = {};
+    const allNoteIds = new Set<string>();
+    for (const result of assocData.results ?? []) {
+      const cid     = String(result.from.id);
+      const noteIds = (result.to ?? []).map((t: any) => String(t.toObjectId));
+      if (noteIds.length) {
+        companyNoteIds[cid] = noteIds;
+        noteIds.forEach((id: string) => allNoteIds.add(id));
       }
     }
-  } catch { /* ignore — fail open */ }
+    if (!allNoteIds.size) return notesMap;
 
-  return { companyIds, notesMap };
+    // Step 2: batch-read note bodies (cap at 200)
+    const noteList = [...allNoteIds].slice(0, 200);
+    const notesRes = await fetch(`${HS_BASE}/crm/v3/objects/notes/batch/read`, {
+      method:  "POST",
+      headers: hsHeaders(token),
+      signal:  AbortSignal.timeout(10000),
+      body: JSON.stringify({
+        inputs:     noteList.map((id) => ({ id })),
+        properties: ["hs_timestamp", "hs_note_body"],
+      }),
+    });
+    if (!notesRes.ok) return notesMap;
+    const notesData = await notesRes.json();
+
+    // Build noteId → HubSpotNote
+    const noteById: Record<string, HubSpotNote> = {};
+    for (const note of notesData.results ?? []) {
+      const body = (note.properties?.hs_note_body ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (!body) continue;
+      const ts   = note.properties?.hs_timestamp ? new Date(note.properties.hs_timestamp) : null;
+      const date = ts ? ts.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "";
+      noteById[note.id] = { date, body: body.slice(0, 300) };
+    }
+
+    // Assemble per-company note list sorted newest-first, max 5
+    for (const [cid, noteIds] of Object.entries(companyNoteIds)) {
+      const notes = noteIds
+        .map((id) => noteById[id])
+        .filter(Boolean)
+        .sort((a, b) => {
+          const ta = a.date ? new Date(a.date).getTime() : 0;
+          const tb = b.date ? new Date(b.date).getTime() : 0;
+          return tb - ta;
+        })
+        .slice(0, 5);
+      if (notes.length) notesMap.set(cid, notes);
+    }
+  } catch (e) {
+    console.error("[calllist] fetchHubSpotNotesForCompanies error:", e);
+  }
+
+  return notesMap;
 }
 
 /**
@@ -539,20 +568,21 @@ serve(async (req) => {
           }
         }
 
-        // 2. Fetch notes (last 90 days) — used for both suppression and context brief
-        const { companyIds: recentCompanyIds, notesMap } = await fetchHubSpotHistory(hsToken, 90);
-        hsNotesMap = notesMap;
+        // 2. Fetch all notes for leads that have a hubspot_company_id (no date limit)
+        const leadCompanyIds = (leads as any[])
+          .filter((l: any) => l.hubspot_company_id)
+          .map((l: any) => String(l.hubspot_company_id));
+        if (leadCompanyIds.length) {
+          hsNotesMap = await fetchHubSpotNotesForCompanies(hsToken, leadCompanyIds);
+        }
 
-        // Suppress companies with a note in the last 14 days
+        // 3. Suppress companies with a note in the last 14 days
         const cutoff14 = Date.now() - 14 * 86_400_000;
         for (const lead of leads as any[]) {
           if (!lead.hubspot_company_id) continue;
           const cid   = String(lead.hubspot_company_id);
-          const notes = notesMap.get(cid) ?? [];
-          // Suppress if any note is within 14 days (notes are sorted descending, check first)
-          const hasRecent = recentCompanyIds.has(cid) && notes.length > 0 &&
-            new Date(notes[0].date).getTime() > cutoff14;
-          if (hasRecent || (recentCompanyIds.has(cid) && !notes.length)) {
+          const notes = hsNotesMap.get(cid) ?? [];
+          if (notes.some((n) => n.date && new Date(n.date).getTime() > cutoff14)) {
             suppressedIds.add(lead.id);
           }
         }

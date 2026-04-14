@@ -33,11 +33,15 @@ export function processOrders(rawRows) {
     const gpPercent = isZero(invoiceExGst) ? 0 : (profit / invoiceExGst) * 100
 
     // 5. Flag anomalies
+    // Suppress trivial zero-value flags: zero invoice + COGS < $20, or zero COGS + invoice < $20
+    const trivialZeroInv  = isZero(invoiceExGst) && cogsAdj  < 20
+    const trivialZeroCogs = isZero(cogsAdj)      && invoiceExGst < 20
+
     const flags = []
-    if (isZero(cogsAdj))                              flags.push(FLAG.ZERO_COGS)
-    if (isZero(invoiceExGst))                         flags.push(FLAG.ZERO_INV)
-    if (!isZero(invoiceExGst) && gpPercent < 20)      flags.push(FLAG.LOW_GP)
-    if (gpPercent > 90)                               flags.push(FLAG.HIGH_GP)
+    if (isZero(cogsAdj)      && !trivialZeroCogs) flags.push(FLAG.ZERO_COGS)
+    if (isZero(invoiceExGst) && !trivialZeroInv)  flags.push(FLAG.ZERO_INV)
+    if (!isZero(invoiceExGst) && gpPercent < 20)  flags.push(FLAG.LOW_GP)
+    if (gpPercent > 90)                           flags.push(FLAG.HIGH_GP)
 
     orders.push({
       orderNum: row.orderNum,

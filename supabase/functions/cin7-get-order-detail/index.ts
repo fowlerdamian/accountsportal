@@ -48,7 +48,7 @@ serve(async (req) => {
     if (isSONumber) {
       // Search by order number via saleList endpoint
       const searchRes = await fetch(
-        `${CIN7_BASE}/saleList?Search=${encodeURIComponent(input)}&Limit=5`,
+        `${CIN7_BASE}/saleList?Search=${encodeURIComponent(input)}&Limit=20`,
         { headers: cin7Headers },
       );
 
@@ -63,10 +63,17 @@ serve(async (req) => {
       const searchData = await searchRes.json();
       const saleList = searchData.SaleList ?? [];
 
-      // Find exact match by order number
-      const match = saleList.find((s: any) =>
-        s.OrderNumber === input || s.OrderNumber === input.toUpperCase()
-      );
+      // Normalize for loose matching (strip leading zeros: SO-00123 → SO-123)
+      const normalize = (v: string) => v.toLowerCase().replace(/^([a-z]+-?)0+(\d)/, "$1$2");
+      const normalInput = normalize(input);
+
+      const match = saleList.find((s: any) => {
+        const on = s.OrderNumber ?? s.SaleOrderNumber ?? "";
+        return (
+          on.toLowerCase() === input.toLowerCase() ||
+          normalize(on) === normalInput
+        );
+      });
 
       if (!match) {
         return new Response(
