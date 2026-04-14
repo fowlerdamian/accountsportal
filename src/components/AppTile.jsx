@@ -81,8 +81,74 @@ function TileCard({ app, hovered }) {
           color: hovered ? 'var(--accent)' : 'var(--text-disabled)',
           transition: 'color 150ms',
         }}>
-          {app.external ? 'Open ↗' : 'Open →'}
+          {app.submenu ? 'Choose ↓' : app.external ? 'Open ↗' : 'Open →'}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Submenu tile ─────────────────────────────────────────────────────────────
+
+function SubmenuTile({ app }) {
+  const [hovered, setHovered] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div style={{ position: 'relative', height: '100%' }}>
+      <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => setOpen(o => !o)}
+        style={{ textDecoration: 'none', display: 'block', height: '100%', cursor: 'pointer' }}
+      >
+        <TileCard app={{ ...app, external: false }} hovered={hovered} />
+      </div>
+
+      {open && (
+        <>
+          {/* Backdrop to close on outside click */}
+          <div
+            onClick={() => setOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+          />
+          {/* Submenu panel */}
+          <div style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            marginTop: '6px',
+            zIndex: 20,
+            background: '#0d0d0d',
+            border: '1px solid #222',
+            borderRadius: '8px',
+            padding: '6px',
+            minWidth: '220px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+          }}>
+            {app.submenu.map(item => (
+              <Link
+                key={item.route}
+                to={item.route}
+                onClick={() => setOpen(false)}
+                style={{
+                  display: 'block',
+                  padding: '10px 14px',
+                  borderRadius: '5px',
+                  fontSize: '13px',
+                  color: '#ccc',
+                  textDecoration: 'none',
+                  transition: 'background 120ms, color 120ms',
+                  fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; e.currentTarget.style.color = '#fff' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#ccc' }}
+              >
+                {item.label} →
+              </Link>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )
@@ -100,6 +166,7 @@ export default function AppTile({ app }) {
     style: { textDecoration: 'none', display: 'block', height: '100%' },
   }
 
+  if (app.submenu) return <SubmenuTile app={app} />
   if (isComingSoon) return <div {...wrapperProps} style={{ ...wrapperProps.style, height: '100%' }}>{card}</div>
   if (app.external) return <a href={app.route} target="_blank" rel="noopener noreferrer" {...wrapperProps}>{card}</a>
   return <Link to={app.route} {...wrapperProps}>{card}</Link>

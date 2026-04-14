@@ -7,19 +7,14 @@
 export const APPS = [
   {
     name:        'Accounts',
-    description: 'Process and flag Cin7 Core Profit Summary Report exports',
-    route:       '/accounts',
+    description: 'Invoice profit analysis and Xero financial data',
     icon:        'BarChart3',
     status:      'live',
     external:    false,
-  },
-  {
-    name:        'Xero',
-    description: 'Chat with your Xero accounting data — invoices, payments, reconciliation, and financial reports',
-    route:       '/xero',
-    icon:        'DollarSign',
-    status:      'live',
-    external:    false,
+    submenu: [
+      { label: 'Invoice Profit Analysis', route: '/accounts' },
+      { label: 'Xero Chatbot',            route: '/xero' },
+    ],
   },
   {
     name:        'Logistics',
