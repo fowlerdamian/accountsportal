@@ -31,12 +31,10 @@ export default function XeroChat() {
     setLoading(true)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
       const history = messages.map(m => ({ role: m.role, content: m.content }))
 
       const res = await supabase.functions.invoke('xero-chat', {
         body: { message: userText, conversation_history: history },
-        headers: { Authorization: `Bearer ${session?.access_token}` },
       })
 
       if (res.error) throw new Error(res.error.message)
