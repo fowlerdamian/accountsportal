@@ -29,14 +29,24 @@ export default function CallList() {
 
   const [date, setDate]         = useState(new Date().toISOString().split("T")[0]);
   const [generating, setGen]    = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
 
   const { data: calls = [], isLoading, refetch } = useCallList(channel, date);
 
   async function generateList() {
     setGen(true);
+    setGenError(null);
     try {
-      await supabase.functions.invoke("sales-calllist-generate", { body: { channel, date } });
-      qc.invalidateQueries({ queryKey: ["call_list", channel, date] });
+      const { error } = await supabase.functions.invoke("sales-calllist-generate", { body: { channel, date } });
+      if (error) {
+        let detail = error.message ?? "Unknown error";
+        try { const body = await (error as any).context?.json?.(); detail = body?.message ?? JSON.stringify(body); } catch {}
+        setGenError(detail);
+        return;
+      }
+      await refetch();
+    } catch (err: any) {
+      setGenError(err?.message ?? "Failed to generate call list");
     } finally {
       setGen(false);
     }
@@ -68,6 +78,13 @@ export default function CallList() {
           </button>
         </div>
       </div>
+
+      {/* Generation error */}
+      {genError && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          {genError}
+        </div>
+      )}
 
       {/* Progress bar */}
       {calls.length > 0 && (
