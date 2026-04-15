@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        "anthropic-version": "2024-06-01",
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -112,8 +112,10 @@ Deno.serve(async (req) => {
 
     if (!claudeRes.ok) {
       const errText = await claudeRes.text();
+      let errDetail = errText.substring(0, 300);
+      try { errDetail = JSON.parse(errText)?.error?.message ?? errDetail; } catch {}
       return new Response(
-        JSON.stringify({ error: `Claude API error: ${claudeRes.status}`, detail: errText.substring(0, 300) }),
+        JSON.stringify({ error: `Claude API error: ${claudeRes.status} — ${errDetail}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
