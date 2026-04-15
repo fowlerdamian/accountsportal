@@ -521,20 +521,22 @@ function XeroChatInner() {
 
   async function getValidSession() {
     const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return null
+    // Force refresh if the access token expires within the next 60 seconds
+    const expiresAt = (session.expires_at ?? 0) * 1000
+    if (Date.now() > expiresAt - 60_000) {
+      const { data: { session: fresh }, error } = await supabase.auth.refreshSession()
+      if (error || !fresh) return null
+      return fresh
+    }
     return session
   }
 
   async function checkConnection(justConnected = false) {
     try {
-      const session = await getValidSession()
-      if (!session) {
-        setConnectError('Your portal session has expired. Please refresh the page and sign in again.')
-        setConnectionStatus('not_connected')
-        return
-      }
+      // check_connection is unauthenticated on the edge function — no JWT needed
       const res = await supabase.functions.invoke('xero-chat', {
         body: { action: 'check_connection' },
-        headers: { Authorization: `Bearer ${session.access_token}` },
       })
       if (res.data?.not_connected) {
         setConnectionStatus('not_connected')
