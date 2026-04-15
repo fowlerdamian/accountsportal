@@ -50,14 +50,15 @@ serve(async (req) => {
       existingDueDates[row.cin7_id] = row.due_date;
     }
 
-    // Fetch ALL purchase orders from Cin7 with no status filter.
+    // Fetch ALL purchase orders from Cin7 with no status filter, limited to the last 6 months.
     // This avoids guessing what Cin7 calls each status — the frontend filter
     // controls what's shown. Paginate until the API returns a partial page.
+    const sixMonthsAgo = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     const limit = 100;
     const allPOs: any[] = [];
     let page = 1;
     while (true) {
-      const url = `${CIN7_BASE}/purchaseList?Limit=${limit}&Page=${page}`;
+      const url = `${CIN7_BASE}/purchaseList?Limit=${limit}&Page=${page}&CreatedSince=${sixMonthsAgo}`;
       const res = await fetch(url, { headers: cin7Headers });
       const rawText = await res.text();
 
