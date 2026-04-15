@@ -117,6 +117,16 @@ serve(async (req) => {
       else synced += rows.length;
     }
 
+    // Remove any DB rows no longer returned by Cin7 (voided, deleted, or status-changed POs)
+    const activeCin7Ids = allActivePOs.map((po) => po.ID);
+    if (activeCin7Ids.length > 0) {
+      const { error: delError } = await supabase
+        .from("purchase_orders")
+        .delete()
+        .not("cin7_id", "in", `(${activeCin7Ids.map((id) => `'${id}'`).join(",")})`);
+      if (delError) errors.push(`cleanup: ${delError.message}`);
+    }
+
     return new Response(
       JSON.stringify({ synced, errors }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
