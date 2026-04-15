@@ -534,6 +534,7 @@ function XeroChatInner() {
       }
       const res = await supabase.functions.invoke('xero-chat', {
         body: { action: 'check_connection' },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       })
       if (res.data?.not_connected) {
         setConnectionStatus('not_connected')
@@ -559,7 +560,9 @@ function XeroChatInner() {
         setConnectError('Your portal session has expired. Please refresh the page and sign in again.')
         return
       }
-      const res = await supabase.functions.invoke('xero-oauth-init')
+      const res = await supabase.functions.invoke('xero-oauth-init', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
       if (res.error) throw new Error(res.error.message)
       const { url } = res.data
       if (!url) throw new Error('No authorisation URL returned.')
@@ -666,11 +669,13 @@ function XeroChatInner() {
     const currentSid = sessionId
 
     try {
+      const session = await getValidSession()
       const res = await supabase.functions.invoke('xero-chat', {
         body: {
           message: userText,
           conversation_history: apiHistory,
         },
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
       })
 
       if (res.error) {

@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const PORTAL_URL = "https://accounts.automotivegroup.com.au";
+const PORTAL_URL = "https://app.automotivegroup.com.au";
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);

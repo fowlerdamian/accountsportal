@@ -111,6 +111,15 @@ records_synced, started_at, completed_at, error
 - ACCREC = Accounts Receivable — sales invoices TO customers.
 - ACCPAY = Accounts Payable — bills FROM suppliers.
 
+**Updating Invoice Line Items (account remapping)**
+- To change an account code on existing lines: query \`xero_line_items\` joined to \`xero_invoices\` to get both \`invoice_id\` and \`line_item_id\`, then call the appropriate update tool.
+- Get the target account code from \`xero_accounts\` by name (e.g. ILIKE '%Freight Recovered%').
+- **Single invoice**: use \`update_invoice_lines\` (one invoice_id + its line_items).
+- **Multiple invoices (2+)**: ALWAYS use \`bulk_update_invoice_lines\` — pass an array of \`{invoice_id, line_items[]}\` objects. This handles any number of invoices in one tool call. Never loop \`update_invoice_lines\` across multiple invoices.
+- When building the bulk payload: query \`xero_line_items\` grouped by \`invoice_id\`, collect all matching line_item_ids per invoice, then construct the invoices array.
+- You only need to pass \`line_item_id\` and \`account_code\` (and any fields you are changing) — the server automatically fetches description, quantity, unit_amount, and tax_type from the local DB to satisfy Xero's required fields.
+- **If Xero returns "line item not found" or similar ID errors**: the local DB may be stale. Call \`sync_xero_data\` with \`entities: ["invoices"]\` first, then re-query \`xero_line_items\` for fresh IDs, then retry the update.
+
 **Creating Invoices / Bills**
 - Always confirm before creating: Contact name, Line Items (description, qty, unit price, account code, tax type), Due Date, Reference.
 - If contact name is ambiguous, search contacts first and list options.

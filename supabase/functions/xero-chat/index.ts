@@ -413,16 +413,28 @@ async function executeTool(name: string, input: Record<string, unknown>, sc: SC,
 
       case "update_invoice_lines": {
         const { invoice_id, line_items } = input as any;
+        // Fetch existing line item data from DB so Xero gets all required fields
+        // even when the agent only provides account_code for a remap operation.
+        const lineItemIds = line_items.map((li: any) => li.line_item_id);
+        const { data: dbRows } = await sc
+          .from("xero_line_items")
+          .select("line_item_id, description, quantity, unit_amount, tax_type, account_code")
+          .in("line_item_id", lineItemIds);
+        const dbMap: Record<string, any> = {};
+        for (const row of (dbRows ?? [])) dbMap[row.line_item_id] = row;
         const data = await xeroWrite(`/Invoices/${invoice_id}`, {
           InvoiceID: invoice_id,
-          LineItems: line_items.map((li: any) => ({
-            LineItemID: li.line_item_id,
-            ...(li.account_code  !== undefined ? { AccountCode: li.account_code }   : {}),
-            ...(li.description   !== undefined ? { Description: li.description }     : {}),
-            ...(li.quantity      !== undefined ? { Quantity: li.quantity }           : {}),
-            ...(li.unit_amount   !== undefined ? { UnitAmount: li.unit_amount }      : {}),
-            ...(li.tax_type      !== undefined ? { TaxType: li.tax_type }            : {}),
-          })),
+          LineItems: line_items.map((li: any) => {
+            const db = dbMap[li.line_item_id] ?? {};
+            return {
+              LineItemID: li.line_item_id,
+              Description: li.description   ?? db.description   ?? "",
+              Quantity:    li.quantity      ?? db.quantity      ?? 1,
+              UnitAmount:  li.unit_amount   ?? db.unit_amount   ?? 0,
+              AccountCode: li.account_code  ?? db.account_code,
+              TaxType:     li.tax_type      ?? db.tax_type,
+            };
+          }),
         }, sc) as any;
         const inv = data.Invoices?.[0];
         if (!inv) throw new Error("Update returned no data");
@@ -436,19 +448,30 @@ async function executeTool(name: string, input: Record<string, unknown>, sc: SC,
 
       case "bulk_update_invoice_lines": {
         const { invoices } = input as any;
+        // Collect all line_item_ids across all invoices for a single DB lookup.
+        const allLineItemIds = invoices.flatMap((inv: any) => inv.line_items.map((li: any) => li.line_item_id));
+        const { data: dbRows } = await sc
+          .from("xero_line_items")
+          .select("line_item_id, description, quantity, unit_amount, tax_type, account_code")
+          .in("line_item_id", allLineItemIds);
+        const dbMap: Record<string, any> = {};
+        for (const row of (dbRows ?? [])) dbMap[row.line_item_id] = row;
         const results: Array<{ invoiceId: string; invoiceNumber?: string; updatedLines: number; error?: string }> = [];
         for (const inv of invoices) {
           try {
             const data = await xeroWrite(`/Invoices/${inv.invoice_id}`, {
               InvoiceID: inv.invoice_id,
-              LineItems: inv.line_items.map((li: any) => ({
-                LineItemID: li.line_item_id,
-                ...(li.account_code !== undefined ? { AccountCode: li.account_code } : {}),
-                ...(li.description  !== undefined ? { Description: li.description }  : {}),
-                ...(li.quantity     !== undefined ? { Quantity: li.quantity }         : {}),
-                ...(li.unit_amount  !== undefined ? { UnitAmount: li.unit_amount }    : {}),
-                ...(li.tax_type     !== undefined ? { TaxType: li.tax_type }          : {}),
-              })),
+              LineItems: inv.line_items.map((li: any) => {
+                const db = dbMap[li.line_item_id] ?? {};
+                return {
+                  LineItemID: li.line_item_id,
+                  Description: li.description   ?? db.description   ?? "",
+                  Quantity:    li.quantity      ?? db.quantity      ?? 1,
+                  UnitAmount:  li.unit_amount   ?? db.unit_amount   ?? 0,
+                  AccountCode: li.account_code  ?? db.account_code,
+                  TaxType:     li.tax_type      ?? db.tax_type,
+                };
+              }),
             }, sc) as any;
             const updated = data.Invoices?.[0];
             results.push({ invoiceId: inv.invoice_id, invoiceNumber: updated?.InvoiceNumber, updatedLines: inv.line_items.length });
@@ -475,13 +498,14 @@ type ContentBlock = { type: string; [key: string]: unknown };
 type Message = { role: string; content: string | ContentBlock[] };
 
 // Trim history to prevent Anthropic context overflow.
-// Keeps the last N message pairs and truncates large tool results.
+// Truncates large tool results and drops oldest complete exchanges when still over limit.
+// Always trims to a clean exchange boundary (plain user message, never a tool_result).
 function trimHistory(messages: Message[], maxBytes = 200_000): Message[] {
-  // Truncate oversized tool_result content inline
+  // Step 1: Truncate oversized tool_result content inline
   const trimmed = messages.map(m => {
     if (!Array.isArray(m.content)) return m;
     const content = m.content.map((b: any) => {
-      if (b.type === "tool_result" && typeof b.content === "string" && b.content.length > 8000) {
+      if (b.type === "tool_result" && typeof b.content === "string" && b.content.length > 40000) {
         const parsed = (() => { try { return JSON.parse(b.content); } catch { return null; } })();
         const summary = parsed?.count != null
           ? `[Truncated — ${parsed.count} rows returned. Ask a more specific query to see results.]`
@@ -493,12 +517,52 @@ function trimHistory(messages: Message[], maxBytes = 200_000): Message[] {
     return { ...m, content };
   });
 
-  // If still too large, drop oldest message pairs until under limit
+  // Step 2: Drop oldest complete exchanges until under size limit.
+  // An exchange boundary is a plain user message (not a tool_result message).
   let result = trimmed;
   while (JSON.stringify(result).length > maxBytes && result.length > 2) {
-    // Remove oldest pair (first two messages: user + assistant)
-    result = result.slice(2);
+    let nextStart = -1;
+    for (let i = 1; i < result.length; i++) {
+      const m = result[i];
+      if (m.role !== "user") continue;
+      const isToolResult = Array.isArray(m.content) &&
+        (m.content as any[]).some((b: any) => b.type === "tool_result");
+      if (!isToolResult) { nextStart = i; break; }
+    }
+    if (nextStart <= 0) break; // can't trim further without breaking structure
+    result = result.slice(nextStart);
   }
+  return result;
+}
+
+// Sanitize incoming history — guards against orphaned tool_use/tool_result blocks
+// caused by previously bad trims or interrupted saves.
+function sanitizeHistory(messages: Message[]): Message[] {
+  if (!messages.length) return messages;
+
+  // 1. Drop leading messages until we reach a plain user message (not tool_result)
+  let start = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role !== "user") continue;
+    const isToolResult = Array.isArray(m.content) &&
+      (m.content as any[]).some((b: any) => b.type === "tool_result");
+    if (!isToolResult) { start = i; break; }
+  }
+  let result = messages.slice(start);
+
+  // 2. Drop a trailing assistant message that has tool_use with no following tool_result
+  while (result.length > 0) {
+    const last = result[result.length - 1];
+    if (
+      last.role === "assistant" &&
+      Array.isArray(last.content) &&
+      (last.content as any[]).some((b: any) => b.type === "tool_use")
+    ) {
+      result = result.slice(0, -1);
+    } else break;
+  }
+
   return result;
 }
 
@@ -634,7 +698,7 @@ Deno.serve(async (req) => {
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const today = new Date().toISOString().split("T")[0];
-    const messages: Message[] = [...conversationHistory, { role: "user", content: message }];
+    const messages: Message[] = [...sanitizeHistory(conversationHistory), { role: "user", content: message }];
 
     const { text, history } = await runAgentLoop(messages, apiKey, today, serviceClient, authHeader);
 
