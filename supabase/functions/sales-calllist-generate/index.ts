@@ -415,7 +415,7 @@ Return ONLY valid JSON, no markdown:
       },
       signal: AbortSignal.timeout(25000),
       body: JSON.stringify({
-        model:      "claude-sonnet-4-6",
+        model:      "claude-sonnet-4-20250514",
         max_tokens: 600,
         messages:   [{ role: "user", content: prompt }],
       }),

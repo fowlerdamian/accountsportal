@@ -190,6 +190,69 @@ const tools = [
     },
   },
   {
+    name: "update_invoice_lines",
+    description: "Update one or more line items on an existing Xero invoice — change account code, description, quantity, or unit amount. Use this to remap account codes on shipping/freight lines. WRITE OPERATION — only call after explicit user confirmation.",
+    input_schema: {
+      type: "object",
+      properties: {
+        invoice_id: { type: "string", description: "Xero InvoiceID (get from query_xero_db using xero_line_items.invoice_id)" },
+        line_items: {
+          type: "array",
+          description: "Line items to update. Each must include line_item_id plus the fields to change.",
+          items: {
+            type: "object",
+            properties: {
+              line_item_id: { type: "string", description: "Xero LineItemID from xero_line_items table" },
+              account_code: { type: "string", description: "New account code (e.g. '400', '200'). Get valid codes from xero_accounts." },
+              description: { type: "string" },
+              quantity: { type: "number" },
+              unit_amount: { type: "number" },
+              tax_type: { type: "string" },
+            },
+            required: ["line_item_id"],
+          },
+        },
+      },
+      required: ["invoice_id", "line_items"],
+    },
+  },
+  {
+    name: "bulk_update_invoice_lines",
+    description: "Update line items across MULTIPLE invoices in one operation — e.g. remap account codes on shipping lines across 10, 50, or 200 invoices at once. Use this instead of calling update_invoice_lines repeatedly. WRITE OPERATION — only call after explicit user confirmation.",
+    input_schema: {
+      type: "object",
+      properties: {
+        invoices: {
+          type: "array",
+          description: "List of invoices to update. Each entry has an invoice_id and the line_items to change within that invoice.",
+          items: {
+            type: "object",
+            properties: {
+              invoice_id: { type: "string", description: "Xero InvoiceID" },
+              line_items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    line_item_id: { type: "string", description: "Xero LineItemID from xero_line_items table" },
+                    account_code: { type: "string" },
+                    description: { type: "string" },
+                    quantity: { type: "number" },
+                    unit_amount: { type: "number" },
+                    tax_type: { type: "string" },
+                  },
+                  required: ["line_item_id"],
+                },
+              },
+            },
+            required: ["invoice_id", "line_items"],
+          },
+        },
+      },
+      required: ["invoices"],
+    },
+  },
+  {
     name: "create_manual_journal",
     description: "Create a manual journal entry in Xero. WRITE OPERATION — only call after explicit user confirmation. Lines must balance to zero.",
     input_schema: {
@@ -218,7 +281,7 @@ const tools = [
 
 // ─── Tool execution ───────────────────────────────────────────────────────────
 
-const WRITE_TOOLS = new Set(["create_invoice", "void_invoice", "approve_invoice", "create_manual_journal"]);
+const WRITE_TOOLS = new Set(["create_invoice", "void_invoice", "approve_invoice", "create_manual_journal", "update_invoice_lines", "bulk_update_invoice_lines"]);
 
 async function executeTool(name: string, input: Record<string, unknown>, sc: SC, userToken: string): Promise<unknown> {
   try {
@@ -348,6 +411,56 @@ async function executeTool(name: string, input: Record<string, unknown>, sc: SC,
         };
       }
 
+      case "update_invoice_lines": {
+        const { invoice_id, line_items } = input as any;
+        const data = await xeroWrite(`/Invoices/${invoice_id}`, {
+          InvoiceID: invoice_id,
+          LineItems: line_items.map((li: any) => ({
+            LineItemID: li.line_item_id,
+            ...(li.account_code  !== undefined ? { AccountCode: li.account_code }   : {}),
+            ...(li.description   !== undefined ? { Description: li.description }     : {}),
+            ...(li.quantity      !== undefined ? { Quantity: li.quantity }           : {}),
+            ...(li.unit_amount   !== undefined ? { UnitAmount: li.unit_amount }      : {}),
+            ...(li.tax_type      !== undefined ? { TaxType: li.tax_type }            : {}),
+          })),
+        }, sc) as any;
+        const inv = data.Invoices?.[0];
+        if (!inv) throw new Error("Update returned no data");
+        return {
+          invoiceId: inv.InvoiceID,
+          invoiceNumber: inv.InvoiceNumber,
+          status: inv.Status,
+          updatedLines: line_items.length,
+        };
+      }
+
+      case "bulk_update_invoice_lines": {
+        const { invoices } = input as any;
+        const results: Array<{ invoiceId: string; invoiceNumber?: string; updatedLines: number; error?: string }> = [];
+        for (const inv of invoices) {
+          try {
+            const data = await xeroWrite(`/Invoices/${inv.invoice_id}`, {
+              InvoiceID: inv.invoice_id,
+              LineItems: inv.line_items.map((li: any) => ({
+                LineItemID: li.line_item_id,
+                ...(li.account_code !== undefined ? { AccountCode: li.account_code } : {}),
+                ...(li.description  !== undefined ? { Description: li.description }  : {}),
+                ...(li.quantity     !== undefined ? { Quantity: li.quantity }         : {}),
+                ...(li.unit_amount  !== undefined ? { UnitAmount: li.unit_amount }    : {}),
+                ...(li.tax_type     !== undefined ? { TaxType: li.tax_type }          : {}),
+              })),
+            }, sc) as any;
+            const updated = data.Invoices?.[0];
+            results.push({ invoiceId: inv.invoice_id, invoiceNumber: updated?.InvoiceNumber, updatedLines: inv.line_items.length });
+          } catch (err) {
+            results.push({ invoiceId: inv.invoice_id, updatedLines: 0, error: (err as Error).message });
+          }
+        }
+        const succeeded = results.filter(r => !r.error).length;
+        const failed = results.filter(r => r.error).length;
+        return { totalInvoices: invoices.length, succeeded, failed, results };
+      }
+
       default:
         return { error: `Unknown tool: ${name}` };
     }
@@ -361,6 +474,34 @@ async function executeTool(name: string, input: Record<string, unknown>, sc: SC,
 type ContentBlock = { type: string; [key: string]: unknown };
 type Message = { role: string; content: string | ContentBlock[] };
 
+// Trim history to prevent Anthropic context overflow.
+// Keeps the last N message pairs and truncates large tool results.
+function trimHistory(messages: Message[], maxBytes = 200_000): Message[] {
+  // Truncate oversized tool_result content inline
+  const trimmed = messages.map(m => {
+    if (!Array.isArray(m.content)) return m;
+    const content = m.content.map((b: any) => {
+      if (b.type === "tool_result" && typeof b.content === "string" && b.content.length > 8000) {
+        const parsed = (() => { try { return JSON.parse(b.content); } catch { return null; } })();
+        const summary = parsed?.count != null
+          ? `[Truncated — ${parsed.count} rows returned. Ask a more specific query to see results.]`
+          : `[Truncated — result was ${b.content.length} chars. Ask a more specific query.]`;
+        return { ...b, content: summary };
+      }
+      return b;
+    });
+    return { ...m, content };
+  });
+
+  // If still too large, drop oldest message pairs until under limit
+  let result = trimmed;
+  while (JSON.stringify(result).length > maxBytes && result.length > 2) {
+    // Remove oldest pair (first two messages: user + assistant)
+    result = result.slice(2);
+  }
+  return result;
+}
+
 async function runAgentLoop(
   messages: Message[],
   apiKey: string,
@@ -369,8 +510,8 @@ async function runAgentLoop(
   userToken: string,
 ): Promise<{ text: string; history: Message[] }> {
   const systemPrompt = buildSystemPrompt(today);
-  const loopMessages = [...messages];
-  const MAX_ITERATIONS = 15;
+  const loopMessages = trimHistory([...messages]);
+  const MAX_ITERATIONS = 25;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -381,7 +522,7 @@ async function runAgentLoop(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 4096,
         system: systemPrompt,
         tools,
@@ -445,9 +586,9 @@ Deno.serve(async (req) => {
   const anonClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-    { global: { headers: { Authorization: authHeader } } },
   );
-  const { data: { user }, error: authError } = await anonClient.auth.getUser();
+  const token = authHeader.replace("Bearer ", "");
+  const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
   if (authError || !user) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
   }
