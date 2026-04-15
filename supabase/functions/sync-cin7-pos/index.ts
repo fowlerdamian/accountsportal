@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ACTIVE_STATUSES = ["DRAFT", "ORDERED", "INVOICED"];
+const ACTIVE_STATUSES = ["Draft", "Ordered", "Invoiced"];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -119,8 +119,11 @@ serve(async (req) => {
 
     // Remove any DB rows no longer returned by Cin7 (voided, deleted, or status-changed POs).
     // existingDueDates already has every cin7_id currently in the DB — diff against what Cin7 returned.
+    // Safety: only clean up if Cin7 returned at least some results — prevents wiping DB on API errors.
     const activeCin7IdSet = new Set(allActivePOs.map((po) => String(po.ID)));
-    const staleIds = Object.keys(existingDueDates).filter((id) => !activeCin7IdSet.has(id));
+    const staleIds = activeCin7IdSet.size > 0
+      ? Object.keys(existingDueDates).filter((id) => !activeCin7IdSet.has(id))
+      : [];
     if (staleIds.length > 0) {
       const { error: delError } = await supabase
         .from("purchase_orders")
