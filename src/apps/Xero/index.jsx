@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, Component } from 'react'
-import { Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Link2, ExternalLink } from 'lucide-react'
+import { Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Link2, ExternalLink, Trash2 } from 'lucide-react'
 import { supabase } from '@portal/lib/supabase'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -63,7 +63,6 @@ const MD_COMPONENTS = {
 // ─── Action Confirmation Card ─────────────────────────────────────────────────
 
 function ConfirmationCard({ content, onConfirm, onCancel, confirmed, cancelled }) {
-  // Split off the confirm phrase to render the preview separately
   const previewText = content.replace(CONFIRM_PHRASE, '').trim()
 
   if (confirmed) {
@@ -99,8 +98,6 @@ function ConfirmationCard({ content, onConfirm, onCancel, confirmed, cancelled }
   return (
     <div style={{ color: '#e0e0e0', fontSize: '14px', lineHeight: '1.65' }}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{previewText}</ReactMarkdown>
-
-      {/* Confirmation prompt */}
       <div style={{
         marginTop: '14px',
         border: '1px solid rgba(243,202,15,0.3)',
@@ -251,6 +248,117 @@ function QuickActionsBar({ onAction, disabled }) {
   )
 }
 
+// ─── Sessions sidebar ─────────────────────────────────────────────────────────
+
+function SessionsSidebar({ sessions, currentId, onSelect, onNew, onDelete, loading }) {
+  const [hoveredId, setHoveredId] = useState(null)
+
+  return (
+    <div style={{
+      width: '220px',
+      flexShrink: 0,
+      borderRight: '1px solid #1a1a1a',
+      display: 'flex',
+      flexDirection: 'column',
+      background: '#050505',
+      overflow: 'hidden',
+    }}>
+      {/* New conversation button */}
+      <div style={{ padding: '10px', borderBottom: '1px solid #111', flexShrink: 0 }}>
+        <button
+          onClick={onNew}
+          disabled={loading}
+          style={{
+            width: '100%', padding: '7px 10px',
+            background: '#0d0d0d', border: '1px solid #1e1e1e',
+            borderRadius: '5px', color: loading ? '#333' : '#666',
+            fontSize: '12px', cursor: loading ? 'not-allowed' : 'pointer',
+            fontFamily: '"JetBrains Mono", monospace',
+            transition: 'color 120ms, border-color 120ms',
+            textAlign: 'left',
+          }}
+          onMouseEnter={e => { if (!loading) { e.currentTarget.style.color = '#aaa'; e.currentTarget.style.borderColor = '#333' } }}
+          onMouseLeave={e => { if (!loading) { e.currentTarget.style.color = '#666'; e.currentTarget.style.borderColor = '#1e1e1e' } }}
+        >
+          + New conversation
+        </button>
+      </div>
+
+      {/* Session list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+        {sessions.length === 0 && (
+          <div style={{
+            fontSize: '11px', color: '#2a2a2a', padding: '10px 8px',
+            fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.5,
+          }}>
+            No history yet
+          </div>
+        )}
+        {sessions.map(s => {
+          const isActive = s.id === currentId
+          const isHovered = s.id === hoveredId
+          return (
+            <div
+              key={s.id}
+              style={{ position: 'relative', marginBottom: '2px' }}
+              onMouseEnter={() => setHoveredId(s.id)}
+              onMouseLeave={() => setHoveredId(null)}
+            >
+              <button
+                onClick={() => onSelect(s)}
+                style={{
+                  width: '100%', textAlign: 'left',
+                  padding: '8px 28px 8px 10px',
+                  background: isActive ? 'rgba(243,202,15,0.06)' : isHovered ? 'rgba(255,255,255,0.02)' : 'transparent',
+                  border: `1px solid ${isActive ? 'rgba(243,202,15,0.2)' : 'transparent'}`,
+                  borderRadius: '5px', cursor: 'pointer',
+                  transition: 'background 120ms',
+                }}
+              >
+                <div style={{
+                  fontSize: '12px',
+                  color: isActive ? '#e0e0e0' : '#666',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  lineHeight: '1.4',
+                }}>
+                  {s.title}
+                </div>
+                <div style={{
+                  fontSize: '10px', color: '#2a2a2a', marginTop: '2px',
+                  fontFamily: '"JetBrains Mono", monospace',
+                }}>
+                  {new Date(s.updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                </div>
+              </button>
+
+              {/* Delete button — visible on hover */}
+              {isHovered && (
+                <button
+                  onClick={e => { e.stopPropagation(); onDelete(s.id) }}
+                  title="Delete conversation"
+                  style={{
+                    position: 'absolute', right: '4px', top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: '#444', padding: '3px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: '3px',
+                    transition: 'color 120ms',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#f87171' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#444' }}
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Error boundary ───────────────────────────────────────────────────────────
 
 class XeroChatErrorBoundary extends Component {
@@ -296,7 +404,6 @@ function NotConnectedScreen({ onConnect, onCheckConnection, connecting, error })
       background: '#000', flexDirection: 'column', gap: '0',
     }}>
       <div style={{ textAlign: 'center', maxWidth: '400px', padding: '0 24px' }}>
-        {/* Xero logo-ish indicator */}
         <div style={{
           width: '56px', height: '56px', borderRadius: '14px',
           background: '#0d0d0d', border: '1px solid #1a1a1a',
@@ -376,32 +483,31 @@ function NotConnectedScreen({ onConnect, onCheckConnection, connecting, error })
 // ─── Main chat component ──────────────────────────────────────────────────────
 
 function XeroChatInner() {
-  // Connection state: 'checking' | 'connected' | 'not_connected'
   const [connectionStatus, setConnectionStatus] = useState('checking')
   const [connectError, setConnectError] = useState(null)
   const [connecting, setConnecting] = useState(false)
   const [tenantName, setTenantName] = useState(null)
 
-  // Display messages (what we render)
   const [messages, setMessages] = useState([])
-  // Full Anthropic-format history for carry-forward (includes tool_use / tool_result blocks)
   const [apiHistory, setApiHistory] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  // Session management
+  const [sessions, setSessions] = useState([])
+  const [sessionId, setSessionId] = useState(null)
+
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
-  // On mount: check URL params and then check connection
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const xeroConnected = params.get('xero_connected')
     const xeroError = params.get('xero_error')
 
-    // Clear OAuth params from URL without a page reload
     if (xeroConnected || xeroError) {
-      const clean = window.location.pathname
-      window.history.replaceState(null, '', clean)
+      window.history.replaceState(null, '', window.location.pathname)
     }
 
     if (xeroError) {
@@ -410,13 +516,7 @@ function XeroChatInner() {
       return
     }
 
-    if (xeroConnected === '1') {
-      // Just came back from OAuth — mark connected, check to get tenant name
-      checkConnection(true)
-      return
-    }
-
-    checkConnection(false)
+    checkConnection(xeroConnected === '1')
   }, [])
 
   async function getValidSession() {
@@ -441,6 +541,7 @@ function XeroChatInner() {
         setTenantName(res.data?.tenant_name ?? null)
         setConnectionStatus('connected')
         if (justConnected) setConnectError(null)
+        loadSessions()
       } else {
         setConnectionStatus('not_connected')
       }
@@ -470,6 +571,83 @@ function XeroChatInner() {
     }
   }
 
+  // ─── Session helpers ───────────────────────────────────────────────────────
+
+  async function loadSessions() {
+    const { data } = await supabase
+      .from('xero_chat_sessions')
+      .select('id, title, created_at, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(50)
+    if (data) setSessions(data)
+  }
+
+  async function saveSession(msgs, hist, currentSid) {
+    const authSession = await getValidSession()
+    if (!authSession) return
+
+    const title = msgs.find(m => m.role === 'user')?.content?.slice(0, 60) ?? 'Conversation'
+    const now = new Date().toISOString()
+    const payload = { title, messages: msgs, api_history: hist, updated_at: now }
+
+    if (currentSid) {
+      await supabase.from('xero_chat_sessions').update(payload).eq('id', currentSid)
+      setSessions(prev =>
+        prev
+          .map(s => s.id === currentSid ? { ...s, title, updated_at: now } : s)
+          .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+      )
+    } else {
+      const { data } = await supabase
+        .from('xero_chat_sessions')
+        .insert({ ...payload, user_id: authSession.user.id })
+        .select('id, title, created_at, updated_at')
+        .single()
+      if (data) {
+        setSessionId(data.id)
+        setSessions(prev => [data, ...prev])
+        return data.id
+      }
+    }
+    return currentSid
+  }
+
+  async function handleSelectSession(s) {
+    if (s.id === sessionId) return
+    const { data } = await supabase
+      .from('xero_chat_sessions')
+      .select('id, messages, api_history')
+      .eq('id', s.id)
+      .single()
+    if (data) {
+      setSessionId(data.id)
+      setMessages(data.messages ?? [])
+      setApiHistory(data.api_history ?? [])
+      setError(null)
+    }
+  }
+
+  async function handleDeleteSession(id) {
+    await supabase.from('xero_chat_sessions').delete().eq('id', id)
+    setSessions(prev => prev.filter(s => s.id !== id))
+    if (id === sessionId) {
+      setSessionId(null)
+      setMessages([])
+      setApiHistory([])
+      setError(null)
+    }
+  }
+
+  function handleNewConversation() {
+    setSessionId(null)
+    setMessages([])
+    setApiHistory([])
+    setError(null)
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
+  // ─── Messaging ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
@@ -478,10 +656,14 @@ function XeroChatInner() {
     const userText = (text ?? input).trim()
     if (!userText || loading) return
 
+    const newMessages = [...messages, { role: 'user', content: userText }]
     setInput('')
     setError(null)
-    setMessages(prev => [...prev, { role: 'user', content: userText }])
+    setMessages(newMessages)
     setLoading(true)
+
+    // Capture sessionId at call time to avoid closure issues
+    const currentSid = sessionId
 
     try {
       const res = await supabase.functions.invoke('xero-chat', {
@@ -509,15 +691,14 @@ function XeroChatInner() {
 
       const responseText = res.data?.text ?? res.data?.error ?? 'No response received.'
       const returnedHistory = res.data?.history
+      const finalMessages = [...newMessages, { role: 'assistant', content: responseText }]
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: responseText,
-      }])
+      setMessages(finalMessages)
 
-      // Update the full API history for next turn
       if (returnedHistory) {
         setApiHistory(returnedHistory)
+        // Fire and forget — don't block the UI
+        saveSession(finalMessages, returnedHistory, currentSid)
       }
     } catch (err) {
       const errMsg = err.message || 'An unexpected error occurred.'
@@ -533,9 +714,7 @@ function XeroChatInner() {
   }
 
   function handleConfirm(msgIndex) {
-    // Mark the message as confirmed (shows "Executing…" state)
     setMessages(prev => prev.map((m, i) => i === msgIndex ? { ...m, confirmed: true } : m))
-    // Send confirmation to continue the agent
     send('Yes, execute.')
   }
 
@@ -551,16 +730,8 @@ function XeroChatInner() {
     }
   }
 
-  function handleNewConversation() {
-    setMessages([])
-    setApiHistory([])
-    setError(null)
-    setTimeout(() => inputRef.current?.focus(), 50)
-  }
+  // ─── Render ────────────────────────────────────────────────────────────────
 
-  const hasMessages = messages.length > 0
-
-  // Render: checking state
   if (connectionStatus === 'checking') {
     return (
       <div style={{
@@ -573,7 +744,6 @@ function XeroChatInner() {
     )
   }
 
-  // Render: not connected
   if (connectionStatus === 'not_connected') {
     return (
       <>
@@ -588,7 +758,8 @@ function XeroChatInner() {
     )
   }
 
-  // Render: connected — full chat UI
+  const hasMessages = messages.length > 0
+
   return (
     <div style={{
       height: '100%',
@@ -618,21 +789,6 @@ function XeroChatInner() {
           {tenantName ?? 'Automotive Group Australia'}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' }}>
-          {hasMessages && (
-            <button
-              onClick={handleNewConversation}
-              style={{
-                fontSize: '11px', color: '#444', background: 'none',
-                border: '1px solid #1e1e1e', borderRadius: '4px', padding: '3px 8px',
-                cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace',
-                transition: 'color 120ms, border-color 120ms',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#333' }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1e1e1e' }}
-            >
-              New conversation
-            </button>
-          )}
           <button
             onClick={() => { setConnectionStatus('not_connected'); setConnectError(null) }}
             title="Reconnect Xero"
@@ -650,110 +806,127 @@ function XeroChatInner() {
         </div>
       </div>
 
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-        {!hasMessages ? (
-          <div style={{ maxWidth: '620px', margin: '0 auto' }}>
-            <p style={{ fontSize: '13px', color: '#444', marginBottom: '24px', lineHeight: 1.6 }}>
-              Ask anything about AGA's Xero data — invoices, payments, reconciliation, reports, or create and manage records.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {[
-                'Give me the reconciliation summary across all bank accounts',
-                'Show me the P&L for this financial year',
-                'List all overdue invoices',
-                'What payments were received this month?',
-              ].map(s => (
-                <button
-                  key={s}
-                  onClick={() => send(s)}
+      {/* Body: sidebar + chat */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+        {/* Sessions sidebar */}
+        <SessionsSidebar
+          sessions={sessions}
+          currentId={sessionId}
+          onSelect={handleSelectSession}
+          onNew={handleNewConversation}
+          onDelete={handleDeleteSession}
+          loading={loading}
+        />
+
+        {/* Chat column */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+            {!hasMessages ? (
+              <div style={{ maxWidth: '620px', margin: '0 auto' }}>
+                <p style={{ fontSize: '13px', color: '#444', marginBottom: '24px', lineHeight: 1.6 }}>
+                  Ask anything about AGA's Xero data — invoices, payments, reconciliation, reports, or create and manage records.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {[
+                    'Give me the reconciliation summary across all bank accounts',
+                    'Show me the P&L for this financial year',
+                    'List all overdue invoices',
+                    'What payments were received this month?',
+                  ].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => send(s)}
+                      style={{
+                        textAlign: 'left', background: '#080808',
+                        border: '1px solid #1a1a1a', borderRadius: '6px',
+                        padding: '10px 14px', color: '#555', fontSize: '13px',
+                        cursor: 'pointer', transition: 'border-color 150ms, color 150ms',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(243,202,15,0.3)'; e.currentTarget.style.color = '#ccc' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#555' }}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{ maxWidth: '720px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                {messages.map((msg, i) => {
+                  const isConfirmMsg = !msg.isError && msg.role === 'assistant' && msg.content?.includes(CONFIRM_PHRASE)
+                  return (
+                    <MessageBubble
+                      key={i}
+                      msg={msg}
+                      onConfirm={isConfirmMsg ? () => handleConfirm(i) : undefined}
+                      onCancel={isConfirmMsg ? () => handleCancel(i) : undefined}
+                    />
+                  )
+                })}
+                {loading && <ThinkingIndicator />}
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Input area */}
+          <div style={{
+            flexShrink: 0,
+            padding: '12px 24px 16px',
+            borderTop: '1px solid #1a1a1a',
+          }}>
+            <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKey}
+                  placeholder="Ask about invoices, payments, reconciliation…"
+                  rows={1}
+                  disabled={loading}
                   style={{
-                    textAlign: 'left', background: '#080808',
-                    border: '1px solid #1a1a1a', borderRadius: '6px',
-                    padding: '10px 14px', color: '#555', fontSize: '13px',
-                    cursor: 'pointer', transition: 'border-color 150ms, color 150ms',
+                    flex: 1, background: '#080808', border: '1px solid #1e1e1e',
+                    borderRadius: '6px', padding: '10px 14px', color: '#fff',
+                    fontSize: '14px', fontFamily: 'inherit', resize: 'none',
+                    outline: 'none', lineHeight: '1.5', minHeight: '40px',
+                    maxHeight: '120px', overflow: 'auto',
+                    transition: 'border-color 150ms',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(243,202,15,0.3)'; e.currentTarget.style.color = '#ccc' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#555' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#2a2a2a' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#1e1e1e' }}
+                />
+                <button
+                  onClick={() => send()}
+                  disabled={!input.trim() || loading}
+                  style={{
+                    width: '40px', height: '40px', borderRadius: '6px', flexShrink: 0,
+                    background: input.trim() && !loading ? '#f3ca0f' : '#0d0d0d',
+                    border: '1px solid #222',
+                    color: input.trim() && !loading ? '#000' : '#333',
+                    cursor: input.trim() && !loading ? 'pointer' : 'default',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 150ms, color 150ms',
+                  }}
                 >
-                  {s}
+                  {loading ? <Loader2 size={14} style={{ animation: 'xero-spin 1s linear infinite' }} /> : <Send size={14} />}
                 </button>
-              ))}
+              </div>
+
+              <QuickActionsBar onAction={send} disabled={loading} />
+
+              <p style={{
+                margin: '8px 0 0',
+                fontSize: '10px', color: '#2a2a2a',
+                fontFamily: '"JetBrains Mono", monospace',
+              }}>
+                Enter to send · Shift+Enter for new line · Write operations require confirmation
+              </p>
             </div>
           </div>
-        ) : (
-          <div style={{ maxWidth: '720px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            {messages.map((msg, i) => {
-              const isConfirmMsg = !msg.isError && msg.role === 'assistant' && msg.content?.includes(CONFIRM_PHRASE)
-              return (
-                <MessageBubble
-                  key={i}
-                  msg={msg}
-                  onConfirm={isConfirmMsg ? () => handleConfirm(i) : undefined}
-                  onCancel={isConfirmMsg ? () => handleCancel(i) : undefined}
-                />
-              )
-            })}
-
-            {loading && <ThinkingIndicator />}
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input area */}
-      <div style={{
-        flexShrink: 0,
-        padding: '12px 24px 16px',
-        borderTop: '1px solid #1a1a1a',
-      }}>
-        <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              placeholder="Ask about invoices, payments, reconciliation…"
-              rows={1}
-              disabled={loading}
-              style={{
-                flex: 1, background: '#080808', border: '1px solid #1e1e1e',
-                borderRadius: '6px', padding: '10px 14px', color: '#fff',
-                fontSize: '14px', fontFamily: 'inherit', resize: 'none',
-                outline: 'none', lineHeight: '1.5', minHeight: '40px',
-                maxHeight: '120px', overflow: 'auto',
-                transition: 'border-color 150ms',
-              }}
-              onFocus={e => { e.currentTarget.style.borderColor = '#2a2a2a' }}
-              onBlur={e => { e.currentTarget.style.borderColor = '#1e1e1e' }}
-            />
-            <button
-              onClick={() => send()}
-              disabled={!input.trim() || loading}
-              style={{
-                width: '40px', height: '40px', borderRadius: '6px', flexShrink: 0,
-                background: input.trim() && !loading ? '#f3ca0f' : '#0d0d0d',
-                border: '1px solid #222',
-                color: input.trim() && !loading ? '#000' : '#333',
-                cursor: input.trim() && !loading ? 'pointer' : 'default',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background 150ms, color 150ms',
-              }}
-            >
-              {loading ? <Loader2 size={14} style={{ animation: 'xero-spin 1s linear infinite' }} /> : <Send size={14} />}
-            </button>
-          </div>
-
-          <QuickActionsBar onAction={send} disabled={loading} />
-
-          <p style={{
-            margin: '8px 0 0',
-            fontSize: '10px', color: '#2a2a2a',
-            fontFamily: '"JetBrains Mono", monospace',
-          }}>
-            Enter to send · Shift+Enter for new line · Write operations require confirmation
-          </p>
         </div>
       </div>
 
