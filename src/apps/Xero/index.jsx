@@ -491,7 +491,14 @@ function XeroChatInner() {
         },
       })
 
-      if (res.error) throw new Error(res.error.message)
+      if (res.error) {
+        let detail = res.error.message
+        try {
+          const body = await res.error.context?.json?.()
+          if (body?.error) detail = body.error
+        } catch {}
+        throw new Error(detail)
+      }
 
       if (res.data?.not_connected) {
         setConnectionStatus('not_connected')
