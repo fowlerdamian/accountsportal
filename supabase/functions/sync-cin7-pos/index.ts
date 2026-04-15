@@ -117,13 +117,15 @@ serve(async (req) => {
       else synced += rows.length;
     }
 
-    // Remove any DB rows no longer returned by Cin7 (voided, deleted, or status-changed POs)
-    const activeCin7Ids = allActivePOs.map((po) => po.ID);
-    if (activeCin7Ids.length > 0) {
+    // Remove any DB rows no longer returned by Cin7 (voided, deleted, or status-changed POs).
+    // existingDueDates already has every cin7_id currently in the DB — diff against what Cin7 returned.
+    const activeCin7IdSet = new Set(allActivePOs.map((po) => String(po.ID)));
+    const staleIds = Object.keys(existingDueDates).filter((id) => !activeCin7IdSet.has(id));
+    if (staleIds.length > 0) {
       const { error: delError } = await supabase
         .from("purchase_orders")
         .delete()
-        .not("cin7_id", "in", `(${activeCin7Ids.map((id) => `'${id}'`).join(",")})`);
+        .in("cin7_id", staleIds);
       if (delError) errors.push(`cleanup: ${delError.message}`);
     }
 
