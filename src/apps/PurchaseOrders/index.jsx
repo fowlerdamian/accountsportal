@@ -247,9 +247,8 @@ export default function PurchaseOrders() {
     setSyncing(true)
     setSyncMsg(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
       const { data, error } = await supabase.functions.invoke('sync-cin7-pos', {
-        headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+        headers: { Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
       })
       if (error) {
         let detail = error.message ?? 'Unknown error'
