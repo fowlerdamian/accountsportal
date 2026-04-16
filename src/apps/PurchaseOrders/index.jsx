@@ -247,7 +247,10 @@ export default function PurchaseOrders() {
     setSyncing(true)
     setSyncMsg(null)
     try {
-      const { data, error } = await supabase.functions.invoke('sync-cin7-pos')
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data, error } = await supabase.functions.invoke('sync-cin7-pos', {
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+      })
       if (error) {
         let detail = error.message ?? 'Unknown error'
         try { const body = await error.context?.json?.(); detail = JSON.stringify(body) } catch {}
