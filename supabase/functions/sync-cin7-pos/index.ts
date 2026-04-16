@@ -18,6 +18,18 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Diagnostic route — call with ?debug=1 to see raw Cin7 status values
+  const url = new URL(req.url);
+  if (url.searchParams.get("debug") === "1") {
+    const cin7AccountId = Deno.env.get("CIN7_ACCOUNT_ID");
+    const cin7ApiKey    = Deno.env.get("CIN7_API_KEY");
+    const cin7Headers   = { "api-auth-accountid": cin7AccountId!, "api-auth-applicationkey": cin7ApiKey!, "Content-Type": "application/json" };
+    const res = await fetch(`${CIN7_BASE}/purchaseList?Limit=50&Page=1`, { headers: cin7Headers });
+    const json = await res.json();
+    const statuses = [...new Set((json.PurchaseList ?? []).map((p: any) => p.Status))];
+    return new Response(JSON.stringify({ statuses, sample: (json.PurchaseList ?? []).slice(0, 3).map((p: any) => ({ ID: p.ID, OrderNumber: p.OrderNumber, Status: p.Status, OrderStatus: p.OrderStatus, StockReceivedStatus: p.StockReceivedStatus, InvoiceStatus: p.InvoiceStatus })) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
   try {
     const cin7AccountId = Deno.env.get("CIN7_ACCOUNT_ID");
     const cin7ApiKey    = Deno.env.get("CIN7_API_KEY");
@@ -40,13 +52,15 @@ serve(async (req) => {
       "Content-Type":            "application/json",
     };
 
-    // Preserve manually-set due dates — don't overwrite them on sync.
+    // Load existing rows: preserve manually-set due dates and skip attachment
+    // re-checks for POs already known to have an attachment (once attached, always attached).
     const { data: existing } = await supabase
       .from("purchase_orders")
-      .select("cin7_id, due_date");
-    const existingDueDates: Record<string, string | null> = {};
+      .select("cin7_id, due_date, has_attachment");
+
+    const existingByKey: Record<string, { due_date: string | null; has_attachment: boolean }> = {};
     for (const row of existing ?? []) {
-      existingDueDates[row.cin7_id] = row.due_date;
+      existingByKey[row.cin7_id] = { due_date: row.due_date, has_attachment: row.has_attachment };
     }
 
     // Paginate through all pages of a Cin7 purchaseList query.
@@ -70,14 +84,16 @@ serve(async (req) => {
     // Two passes:
     // 1. Unfiltered with a 6-month window — gets all authorized/active history.
     //    Cin7 excludes Draft POs from unfiltered results by default.
-    // 2. Explicit Status=draft — catches POs not yet authorized.
+    // 2. Explicit OrderStatus=DRAFT — catches POs not yet authorized.
+    //    The purchaseList Status field is derived from OrderStatus+StockReceivedStatus+InvoiceStatus.
+    //    Filtering by OrderStatus=DRAFT is the correct way to get draft POs.
     //    No date filter so we don't miss recently-created drafts.
     const sixMonthsAgo = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000)
       .toISOString().split("T")[0];
 
     const [activePOs, draftPOs] = await Promise.all([
       fetchPages(`&CreatedSince=${sixMonthsAgo}`).catch(() => [] as any[]),
-      fetchPages(`&Status=draft`).catch(() => [] as any[]),
+      fetchPages(`&OrderStatus=DRAFT`).catch(() => [] as any[]),
     ]);
 
     // Merge and deduplicate by ID.
@@ -97,17 +113,29 @@ serve(async (req) => {
       for (let i = 0; i < allPOs.length; i += BATCH) {
         const batch = allPOs.slice(i, i + BATCH);
         const batchRows = await Promise.all(batch.map(async (po) => {
-          const upperStatus   = (po.Status ?? "").toUpperCase();
-          const hasAttachment = ATTACHMENT_CHECK_STATUSES.has(upperStatus)
-            ? await checkAttachment(po.ID, cin7Headers)
-            : false;
+          // Use the combined Status field — it reflects the full PO lifecycle
+          // (Draft → Authorised → Ordered → Invoiced → Receiving → Received).
+          // OrderStatus is only DRAFT or AUTHORISED and must NOT override Status.
+          const effectiveStatus = po.Status ?? po.OrderStatus ?? "";
+          const upperStatus     = effectiveStatus.toUpperCase();
+          const poId            = String(po.ID);
+          const existingRow     = existingByKey[poId];
+
+          // Skip the Cin7 attachment API call if we already know this PO has one.
+          // Once a PO has an attachment it stays — this avoids N+1 calls on every sync.
+          const hasAttachment = existingRow?.has_attachment === true
+            ? true
+            : ATTACHMENT_CHECK_STATUSES.has(upperStatus)
+              ? await checkAttachment(poId, cin7Headers)
+              : false;
+
           return {
-            cin7_id:        po.ID,
+            cin7_id:        poId,
             po_number:      po.OrderNumber,
             supplier_name:  po.Supplier ?? "Unknown",
-            status:         toDbStatus(po.Status),
+            status:         toDbStatus(effectiveStatus),
             order_date:     po.OrderDate ? po.OrderDate.substring(0, 10) : null,
-            due_date:       po.ID in existingDueDates ? existingDueDates[po.ID] : null,
+            due_date:       existingRow ? existingRow.due_date : null,
             total_amount:   po.InvoiceAmount ?? 0,
             currency:       po.BaseCurrency ?? "AUD",
             line_items:     [],
@@ -129,7 +157,7 @@ serve(async (req) => {
     // Remove DB rows for POs that no longer exist in Cin7 at all (truly deleted).
     if (allPOs.length > 0) {
       const allCin7Ids = new Set(allPOs.map((po) => String(po.ID)));
-      const staleIds   = Object.keys(existingDueDates).filter((id) => !allCin7Ids.has(id));
+      const staleIds   = Object.keys(existingByKey).filter((id) => !allCin7Ids.has(id));
       if (staleIds.length > 0) {
         const { error: delError } = await supabase
           .from("purchase_orders")

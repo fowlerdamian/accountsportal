@@ -4,8 +4,8 @@ import { supabase } from '@portal/lib/supabase'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ALL_STATUSES   = ['Draft', 'Ordered', 'Invoiced']
-const DEFAULT_FILTER = ['Draft', 'Ordered']
+const ALL_STATUSES   = ['Draft', 'Authorised', 'Ordered', 'Invoiced']
+const DEFAULT_FILTER = ['Draft', 'Authorised', 'Ordered']
 
 const STATUS_STYLE = {
   Draft:      { color: '#a0a0a0',    background: '#0a0a0a',                  border: '1px solid #222222' },
@@ -218,7 +218,10 @@ export default function PurchaseOrders() {
       .order('due_date', { ascending: true, nullsFirst: false })
     if (!error && data) {
       setOrders(data)
-      if (data.length > 0) setLastSync(data[0].synced_at)
+      if (data.length > 0) {
+        const latest = data.reduce((best, o) => o.synced_at > best ? o.synced_at : best, data[0].synced_at)
+        setLastSync(latest)
+      }
     }
     setLoading(false)
   }, [])
