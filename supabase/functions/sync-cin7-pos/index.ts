@@ -80,12 +80,12 @@ serve(async (req) => {
     // Use a high limit — PostgREST defaults to 1000 rows which would silently truncate.
     const { data: existing } = await supabase
       .from("purchase_orders")
-      .select("cin7_id, due_date, has_attachment, status")
+      .select("cin7_id, due_date, has_attachment, status, notes")
       .limit(50000);
 
-    const existingByKey: Record<string, { due_date: string | null; has_attachment: boolean; status: string }> = {};
+    const existingByKey: Record<string, { due_date: string | null; has_attachment: boolean; status: string; notes: string | null }> = {};
     for (const row of existing ?? []) {
-      existingByKey[row.cin7_id] = { due_date: row.due_date, has_attachment: row.has_attachment, status: row.status };
+      existingByKey[row.cin7_id] = { due_date: row.due_date, has_attachment: row.has_attachment, status: row.status, notes: row.notes };
     }
 
     // Paginate through all pages of a Cin7 purchaseList query.
@@ -119,12 +119,19 @@ serve(async (req) => {
       fetchPages(`&Status=DRAFT&CreatedSince=${sixMonthsAgo}`).catch(() => [] as any[]),
     ]);
 
-    // Merge and deduplicate by ID.
+    // Merge, deduplicate by ID, and drop POs whose OrderDate is older than
+    // the 6-month window. Cin7's CreatedSince filters by record-creation date
+    // (not OrderDate), so imported historical POs can still come through.
+    const cutoff = sixMonthsAgo; // YYYY-MM-DD
     const seen  = new Set<string>();
     const allPOs: any[] = [];
     for (const po of [...draftPOs, ...activePOs]) {
       const id = String(po.ID);
-      if (!seen.has(id)) { seen.add(id); allPOs.push(po); }
+      if (seen.has(id)) continue;
+      const od = typeof po.OrderDate === "string" ? po.OrderDate.substring(0, 10) : null;
+      if (od && od < cutoff) continue;
+      seen.add(id);
+      allPOs.push(po);
     }
 
     const errors: string[] = [];
@@ -159,6 +166,7 @@ serve(async (req) => {
             status:         toDbStatus(effectiveStatus, errors),
             order_date:     po.OrderDate ? po.OrderDate.substring(0, 10) : null,
             due_date:       existingRow ? existingRow.due_date : null,
+            notes:          existingRow ? existingRow.notes : null,
             total_amount:   po.InvoiceAmount ?? 0,
             currency:       po.BaseCurrency ?? "AUD",
             line_items:     [],
@@ -182,7 +190,7 @@ serve(async (req) => {
     // that are just older than the window — only remove Received/Cancelled ones that
     // have fallen out of Cin7's results (truly gone or archived).
     if (allPOs.length > 0) {
-      const TERMINAL = new Set(["Received", "Cancelled"]);
+      const TERMINAL = new Set(["Completed", "Cancelled"]);
       const allCin7Ids = new Set(allPOs.map((po) => String(po.ID)));
       const staleIds   = Object.keys(existingByKey).filter((id) => {
         if (allCin7Ids.has(id)) return false;
@@ -221,20 +229,25 @@ async function checkAttachment(poId: string, headers: Record<string, string>): P
 }
 
 function toDbStatus(s: string, errors: string[]): string {
+  // Cin7's Status field can be a combined label like "COMPLETED / CREDIT NOTE CLOSED".
+  // Normalize (uppercase, collapse whitespace) and match the leading token.
+  const normalized = (s ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+  const head = normalized.split(" / ")[0];
   const map: Record<string, string> = {
     DRAFT:      "Draft",
     AUTHORISED: "Authorised",
     BACKORDER:  "Authorised",
     ORDERED:    "Ordered",
-    INVOICED:   "Received",
+    ORDERING:   "Ordered",
+    INVOICED:   "Completed",
     RECEIVING:  "Receiving",
-    RECEIVED:   "Received",
-    COMPLETED:  "Received",
+    RECEIVED:   "Completed",
+    COMPLETED:  "Completed",
+    CREDITED:   "Completed",
     CANCELLED:  "Cancelled",
     VOIDED:     "Cancelled",
-    CREDITED:   "Cancelled",
   };
-  const mapped = map[(s ?? "").toUpperCase()];
+  const mapped = map[head] ?? map[normalized];
   if (!mapped) errors.push(`unknown Cin7 status: "${s}" — stored as Draft`);
   return mapped ?? "Draft";
 }

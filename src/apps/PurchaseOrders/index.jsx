@@ -4,29 +4,28 @@ import { supabase } from '@portal/lib/supabase'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FILTER_CHIPS   = ['Draft', 'Authorised', 'Receiving', 'Received', 'Cancelled']
+const FILTER_CHIPS   = ['Draft', 'Authorised', 'Receiving', 'Completed', 'Cancelled']
 const DEFAULT_FILTER = ['Draft', 'Authorised', 'Receiving']
 // 'Authorised' chip covers both Authorised and Ordered DB statuses.
-// 'Received' covers Received + legacy Invoiced (edge function now maps Cin7 INVOICED → Received).
+// 'Completed' covers Completed + legacy Received/Invoiced.
 const FILTER_MATCH   = {
   Authorised: ['Authorised', 'Ordered'],
-  Received:   ['Received', 'Invoiced'],
+  Completed:  ['Completed', 'Received', 'Invoiced'],
 }
 
 const STATUS_STYLE = {
-  Draft:      { color: '#a0a0a0',    background: '#0a0a0a',                  border: '1px solid #222222' },
+  Draft:      { color: '#a0a0a0', background: '#0a0a0a',               border: '1px solid #222222' },
   Authorised: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)',  border: '1px solid rgba(96,165,250,0.3)' },
   Ordered:    { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)' },
-  Invoiced:   { color: '#34d399', background: 'rgba(52,211,153,0.1)',  border: '1px solid rgba(52,211,153,0.3)' },
   Receiving:  { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)',  border: '1px solid rgba(243,202,15,0.3)' },
-  Received:   { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
-  Cancelled:  { color: '#888',    background: '#0a0a0a',                  border: '1px solid #222' },
+  Completed:  { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
+  Cancelled:  { color: '#888',    background: '#0a0a0a',               border: '1px solid #222' },
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Legacy Invoiced rows display as Received until next sync rewrites them.
-const displayStatus = (s) => (s === 'Invoiced' ? 'Received' : s)
+// Legacy Invoiced/Received rows display as Completed until next sync rewrites them.
+const displayStatus = (s) => (s === 'Invoiced' || s === 'Received' ? 'Completed' : s)
 
 function dueDiffDays(due) {
   if (!due) return null
@@ -108,6 +107,68 @@ function DueDateCell({ poId, due, onSaved }) {
   )
 }
 
+// ─── Inline editable notes ────────────────────────────────────────────────────
+
+function NotesCell({ poId, notes, onSaved }) {
+  const [editing, setEditing] = useState(false)
+  const [value,   setValue]   = useState(notes ?? '')
+  const [saving,  setSaving]  = useState(false)
+  const saveInProgress = useRef(false)
+
+  async function save(newVal) {
+    if (saveInProgress.current) return
+    saveInProgress.current = true
+    setSaving(true)
+    const trimmed = newVal.trim()
+    const { error } = await supabase
+      .from('purchase_orders')
+      .update({ notes: trimmed || null })
+      .eq('id', poId)
+    setSaving(false)
+    saveInProgress.current = false
+    if (error) {
+      alert(`Failed to save note: ${error.message}`)
+      return
+    }
+    onSaved(poId, trimmed || null)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        type="text"
+        autoFocus
+        value={value}
+        placeholder="Add a note…"
+        onChange={e => setValue(e.target.value)}
+        onBlur={() => save(value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') save(value)
+          if (e.key === 'Escape') { setValue(notes ?? ''); setEditing(false) }
+        }}
+        style={{
+          background: '#1a1a1a', border: '1px solid rgba(243,202,15,0.5)',
+          borderRadius: '4px', color: '#ffffff', fontSize: '13px',
+          padding: '6px 8px', outline: 'none',
+          fontFamily: 'inherit', width: '100%',
+          opacity: saving ? 0.5 : 1, boxSizing: 'border-box',
+        }}
+      />
+    )
+  }
+
+  return (
+    <div onClick={() => { setValue(notes ?? ''); setEditing(true) }} title={notes || 'Tap to add a note'}
+      style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', minHeight: '32px', minWidth: '120px' }}>
+      {notes
+        ? <span style={{ color: '#ccc', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px' }}>{notes}</span>
+        : <span style={{ color: '#444', fontSize: '12px', fontStyle: 'italic' }}>add note…</span>}
+      <span style={{ fontSize: '10px', color: '#333', flexShrink: 0 }}>✎</span>
+    </div>
+  )
+}
+
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({ label, value, valueStyle }) {
@@ -150,7 +211,7 @@ function FilterToggle({ status, active, onToggle }) {
 
 // ─── Mobile card ──────────────────────────────────────────────────────────────
 
-function PoCard({ po, onSaved }) {
+function PoCard({ po, onDueSaved, onNoteSaved }) {
   const diff = dueDiffDays(po.due_date)
   const isOverdue = diff !== null && diff < 0
   const shownStatus = displayStatus(po.status)
@@ -195,7 +256,13 @@ function PoCard({ po, onSaved }) {
       {/* Row 3: due date */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Due</span>
-        <DueDateCell poId={po.id} due={po.due_date} onSaved={onSaved} />
+        <DueDateCell poId={po.id} due={po.due_date} onSaved={onDueSaved} />
+      </div>
+
+      {/* Row 4: note */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Note</span>
+        <NotesCell poId={po.id} notes={po.notes} onSaved={onNoteSaved} />
       </div>
     </div>
   )
@@ -253,6 +320,10 @@ export default function PurchaseOrders() {
 
   function handleDueSaved(poId, newDate) {
     setOrders(prev => prev.map(o => o.id === poId ? { ...o, due_date: newDate } : o))
+  }
+
+  function handleNoteSaved(poId, newNote) {
+    setOrders(prev => prev.map(o => o.id === poId ? { ...o, notes: newNote } : o))
   }
 
   function toggleFilter(status) {
@@ -414,7 +485,7 @@ export default function PurchaseOrders() {
               No orders match the current filter.
             </p>
           ) : (
-            visible.map(po => <PoCard key={po.id} po={po} onSaved={handleDueSaved} />)
+            visible.map(po => <PoCard key={po.id} po={po} onDueSaved={handleDueSaved} onNoteSaved={handleNoteSaved} />)
           )}
         </div>
       ) : (
@@ -430,6 +501,7 @@ export default function PurchaseOrders() {
                   { label: 'Supplier',    key: 'supplier_name', align: 'left' },
                   { label: 'Status',      key: 'status',        align: 'left' },
                   { label: 'Due Date',    key: 'due_date',      align: 'left' },
+                  { label: 'Note',        key: 'notes',         align: 'left' },
                   { label: 'Order Sent',  key: 'has_attachment', align: 'center' },
                 ].map(col => {
                   const active = sortCol === col.key
@@ -458,7 +530,7 @@ export default function PurchaseOrders() {
             <tbody>
               {visible.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: '#444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
+                  <td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: '#444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
                     No orders match the current filter.
                   </td>
                 </tr>
@@ -494,6 +566,9 @@ export default function PurchaseOrders() {
                       </td>
                       <td style={{ padding: '11px 14px', fontSize: '13px' }}>
                         <DueDateCell poId={po.id} due={po.due_date} onSaved={handleDueSaved} />
+                      </td>
+                      <td style={{ padding: '11px 14px', fontSize: '13px' }}>
+                        <NotesCell poId={po.id} notes={po.notes} onSaved={handleNoteSaved} />
                       </td>
                       <td style={{ padding: '11px 14px', textAlign: 'center' }}>
                         {po.has_attachment && <CheckCircle2 size={16} strokeWidth={1.5} style={{ color: 'var(--status-success)' }} />}
