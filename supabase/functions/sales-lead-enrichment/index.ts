@@ -52,29 +52,155 @@ async function enrichFromPlaces(placeId: string | null, companyName: string, pla
 
 // ─── Website scraping ─────────────────────────────────────────────────────────
 
+/** Extract meaningful text from raw HTML. Pulls meta descriptions first (always
+ *  server-rendered), then falls back to stripped body text. This handles JS-heavy
+ *  sites (Shopify, React) where the body is mostly script tags. */
+function extractText(html: string): string {
+  // Pull meta description + og:description before stripping — these are always
+  // present in the <head> even on Shopify/React sites.
+  const metaMatches = [
+    html.match(/<meta\s[^>]*name=["']description["'][^>]*content=["']([^"']{10,})["']/i),
+    html.match(/<meta\s[^>]*content=["']([^"']{10,})["'][^>]*name=["']description["']/i),
+    html.match(/<meta\s[^>]*property=["']og:description["'][^>]*content=["']([^"']{10,})["']/i),
+    html.match(/<meta\s[^>]*content=["']([^"']{10,})["'][^>]*property=["']og:description["']/i),
+    html.match(/<meta\s[^>]*name=["']twitter:description["'][^>]*content=["']([^"']{10,})["']/i),
+    html.match(/<meta\s[^>]*content=["']([^"']{10,})["'][^>]*name=["']twitter:description["']/i),
+  ].filter(Boolean).map((m) => m![1].trim());
+
+  // Also extract <title>
+  const titleMatch = html.match(/<title[^>]*>([^<]{3,})<\/title>/i);
+  const title = titleMatch ? titleMatch[1].trim() : "";
+
+  const metaText = [...new Set([title, ...metaMatches])].filter(Boolean).join(" — ");
+
+  // Strip scripts/styles/tags for body text
+  const bodyText = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 5000);
+
+  // Combine: meta descriptions first (most reliable), then body text
+  const combined = `${metaText} ${bodyText}`.trim().slice(0, 6000);
+  return combined;
+}
+
+async function fetchPage(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; AGAResearchBot/1.0)" },
+    signal:  AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return "";
+  return res.text();
+}
+
 async function scrapeWebsite(url: string): Promise<{ text: string; emails: string[]; phones: string[] }> {
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; AGAResearchBot/1.0)" },
-      signal:  AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return { text: "", emails: [], phones: [] };
+    const base = url.startsWith("http") ? url : `https://${url}`;
+    const origin = new URL(base).origin;
 
-    const html  = await res.text();
-    // Strip tags
-    const text  = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-                      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-                      .replace(/<[^>]+>/g, " ")
-                      .replace(/\s+/g, " ")
-                      .trim()
-                      .slice(0, 6000);
+    // Homepage plus a handful of high-value pages — /about, /contact and /team
+    // are where most small-business sites put the owner name + direct phone/email.
+    const paths = [
+      "",                 // homepage
+      "/about", "/about-us", "/pages/about", "/pages/about-us", "/our-story",
+      "/contact", "/contact-us", "/pages/contact",
+      "/team", "/our-team", "/people", "/staff",
+    ];
 
-    const emails = [...new Set((text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? []))].slice(0, 3);
-    const phones = [...new Set((text.match(/(?:\+61|0)[2-9]\d{8}|\b1[38]\d{2}\b/g) ?? []))].slice(0, 3);
+    const texts: string[] = [];
+    let primaryText = "";
+    for (const path of paths) {
+      try {
+        const html = await fetchPage(path ? `${origin}${path}` : base);
+        if (!html) continue;
+        const t = extractText(html);
+        if (!t) continue;
+        texts.push(t);
+        if (path === "" || !primaryText) primaryText = t;
+        // Stop once we've accumulated enough signal — keeps total runtime bounded
+        if (texts.join(" ").length >= 8000) break;
+      } catch { /* skip this path */ }
+    }
+
+    // Combine all pages for contact extraction; keep the homepage/about text as
+    // the "primary" body so AI summarisation stays on-topic.
+    const combinedForExtraction = texts.join(" ");
+    const text = primaryText || texts[0] || "";
+
+    const emails = [...new Set((combinedForExtraction.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) ?? []))].slice(0, 5);
+    const phones = [...new Set((combinedForExtraction.match(/(?:\+61|0)[2-9]\d{8}|\b1[38]\d{2}\b/g) ?? []))].slice(0, 5);
 
     return { text, emails, phones };
   } catch {
     return { text: "", emails: [], phones: [] };
+  }
+}
+
+// ─── Wayback Machine: first-seen date ─────────────────────────────────────────
+// Public CDX API, no auth. Returns the earliest archived snapshot for a domain
+// so we can tell how long the company has been online — a strong credibility
+// signal (established 2018 ≠ opened last month).
+
+async function enrichFromWayback(domain: string | null): Promise<{
+  first_seen: string | null;
+  age_years:  number | null;
+} | null> {
+  if (!domain) return null;
+  try {
+    const url = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}&output=json&limit=1&from=19960101&fl=timestamp&filter=statuscode:200`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Response: [["timestamp"], ["20180315123456"]]
+    const ts = Array.isArray(data) && data.length >= 2 ? data[1]?.[0] : null;
+    if (!ts || typeof ts !== "string" || ts.length < 8) return null;
+    const firstSeen = `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
+    const firstYear = Number(ts.slice(0, 4));
+    const currentYear = new Date().getUTCFullYear();
+    const ageYears = Number.isFinite(firstYear) ? currentYear - firstYear : null;
+    return { first_seen: firstSeen, age_years: ageYears };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Google PageSpeed Insights: site health ──────────────────────────────────
+// Free API — reuses the existing GOOGLE_PLACES_API_KEY (same GCP project key).
+// A modern, fast, mobile-friendly site is a signal of an active business.
+
+async function enrichFromPageSpeed(url: string | null, apiKey: string): Promise<{
+  performance_score: number | null;
+  seo_score:         number | null;
+  mobile_friendly:   boolean | null;
+} | null> {
+  if (!url) return null;
+  try {
+    const base = url.startsWith("http") ? url : `https://${url}`;
+    const params = new URLSearchParams({
+      url:      base,
+      strategy: "mobile",
+      category: "performance",
+    });
+    params.append("category", "seo");
+    if (apiKey) params.set("key", apiKey);
+    const res = await fetch(
+      `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params}`,
+      { signal: AbortSignal.timeout(20000) },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const cats = data?.lighthouseResult?.categories ?? {};
+    const toPct = (v: unknown) => (typeof v === "number" ? Math.round(v * 100) : null);
+    return {
+      performance_score: toPct(cats.performance?.score),
+      seo_score:         toPct(cats.seo?.score),
+      mobile_friendly:   typeof cats.performance?.score === "number" ? cats.performance.score >= 0.5 : null,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -112,72 +238,265 @@ async function findSocials(companyName: string, cseKey: string, cseCx: string) {
   return result;
 }
 
-// ─── Claude Sonnet: company summary & contact extraction ─────────────────────
+// ─── Claude Haiku: company summary & qualification signals ───────────────────
+
+interface AIResult {
+  summary: string;
+  contact_name: string | null;
+  contact_position: string | null;
+  key_products: string[];
+  website_quality: string | undefined;
+  company_size: string | undefined;
+  has_own_brand: boolean | undefined;
+  currently_imports: boolean | undefined;
+}
 
 async function generateSummary(
   companyName: string,
+  websiteUrl: string | null,
   websiteText: string,
+  reviewsText: string,
+  existingKeyProducts: string[],
   channel: string,
-  anthropicKey: string
-): Promise<{ summary: string; contact_name: string | null; contact_position: string | null; key_products: string[] }> {
+  anthropicKey: string,
+): Promise<AIResult> {
+  const empty: AIResult = {
+    summary: "", contact_name: null, contact_position: null, key_products: [],
+    website_quality: undefined, company_size: undefined, has_own_brand: undefined, currently_imports: undefined,
+  };
+  if (!anthropicKey) return empty;
+
   const channelContext: Record<string, string> = {
     trailbait:  "4x4/4WD accessories retail",
     fleetcraft: "fleet vehicle fitout and upfitting",
     aga:        "automotive brand/OEM manufacturing",
   };
 
+  // Build context from whatever signals we have
+  const contextParts: string[] = [];
+  if (websiteUrl) contextParts.push(`Website: ${websiteUrl}`);
+  if (websiteText.length > 20) contextParts.push(`Website content (truncated):\n${websiteText.slice(0, 2500)}`);
+  if (reviewsText) contextParts.push(`Google Reviews:\n${reviewsText}`);
+  if (existingKeyProducts.length) contextParts.push(`Known products/services: ${existingKeyProducts.join(", ")}`);
+  // Always have at least the company name — Claude can infer industry from name + URL
+  const contextBlock = contextParts.length ? contextParts.join("\n\n") : "(No additional data available — infer from company name and website URL only)";
+
   const prompt = `You are analysing a company for sales lead qualification in ${channelContext[channel] ?? "automotive"}.
 
 Company: ${companyName}
-Website content (truncated): ${websiteText.slice(0, 3000)}
 
-Return a JSON object with these exact fields:
-- "summary": 2-3 sentence description of the business (what they do, who they serve, notable products/services)
-- "contact_name": The most senior person's full name found in the text, or null if not found
-- "contact_position": Their job title or position, or null if not found
-- "key_products": Array of up to 5 key products or services they offer
-- "website_quality": One of "products" (has product listings), "basic" (informational site), or "none" (no meaningful site)
-- "company_size": One of "large" (50+ employees or multiple locations), "medium" (10-50 employees), "small" (<10 employees), or "unknown"
-- "has_own_brand": true if they sell products under their own brand name, false otherwise
-- "currently_imports": true if there's evidence they import products from overseas, false otherwise
+${contextBlock}
 
-Respond with only valid JSON, no markdown.`;
+Return a JSON object with these exact fields (use null/false/unknown when genuinely uncertain — do not hallucinate):
+- "summary": 1-2 sentence description of what the business does and who they serve. If data is very limited, base it on the company name and website URL only.
+- "contact_name": Most senior person's full name found in the text, or null
+- "contact_position": Their job title, or null
+- "key_products": Array of up to 5 key products or services (empty array if unknown)
+- "website_quality": "products" (has product listings/store), "basic" (informational only), or "none" (no site or error page)
+- "company_size": "large" (50+ employees or multiple locations), "medium" (10-50 employees), "small" (<10 employees), or "unknown"
+- "has_own_brand": true if they sell under their own brand name, false if they only resell others, null if truly unclear
+- "currently_imports": true if evidence of importing from overseas, false if purely local, null if unclear
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method:  "POST",
-    headers: {
-      "Content-Type":      "application/json",
-      "x-api-key":         anthropicKey,
-      "anthropic-version": "2023-06-01",
-    },
-    signal: AbortSignal.timeout(20000),
-    body: JSON.stringify({
-      model:      "claude-haiku-4-5-20251001",
-      max_tokens: 512,
-      messages:   [{ role: "user", content: prompt }],
-    }),
-  });
+Respond with ONLY a valid JSON object. No markdown, no code fences, no explanation.`;
 
-  if (!res.ok) {
-    return { summary: "", contact_name: null, contact_position: null, key_products: [] };
-  }
-
-  const data = await res.json();
   try {
-    const parsed = JSON.parse(data.content?.[0]?.text ?? "{}");
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:  "POST",
+      headers: {
+        "Content-Type":      "application/json",
+        "x-api-key":         anthropicKey,
+        "anthropic-version": "2023-06-01",
+      },
+      signal: AbortSignal.timeout(25000),
+      body: JSON.stringify({
+        model:      "claude-haiku-4-5-20251001",
+        max_tokens: 600,
+        messages:   [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      console.warn(`[ai] generateSummary failed: HTTP ${res.status}`);
+      return empty;
+    }
+
+    const data = await res.json();
+    // Strip markdown code fences Claude sometimes adds despite instructions
+    const rawText = (data.content?.[0]?.text ?? "").trim();
+    const jsonText = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+    const parsed = JSON.parse(jsonText || "{}");
     return {
-      summary:          parsed.summary ?? "",
-      contact_name:     parsed.contact_name ?? null,
-      contact_position: parsed.contact_position ?? null,
-      key_products:     parsed.key_products ?? [],
-      website_quality:  parsed.website_quality,
-      company_size:     parsed.company_size,
-      has_own_brand:    parsed.has_own_brand,
-      currently_imports: parsed.currently_imports,
-    } as any;
-  } catch {
-    return { summary: "", contact_name: null, contact_position: null, key_products: [] };
+      summary:           parsed.summary ?? "",
+      contact_name:      parsed.contact_name ?? null,
+      contact_position:  parsed.contact_position ?? null,
+      key_products:      Array.isArray(parsed.key_products) ? parsed.key_products : [],
+      website_quality:   typeof parsed.website_quality === "string" ? parsed.website_quality : undefined,
+      company_size:      typeof parsed.company_size === "string" ? parsed.company_size : undefined,
+      has_own_brand:     typeof parsed.has_own_brand === "boolean" ? parsed.has_own_brand : undefined,
+      currently_imports: typeof parsed.currently_imports === "boolean" ? parsed.currently_imports : undefined,
+    };
+  } catch (err) {
+    console.warn("[ai] generateSummary parse error:", err);
+    return empty;
   }
+}
+
+// ─── Lusha contact enrichment ────────────────────────────────────────────────
+// Docs: https://docs.lusha.com
+// Auth: api_key header (not Bearer)
+// Person lookup:  GET  /v2/person?firstName=...&lastName=...&companyName=...
+// Contact search: POST /prospecting/contact/search → POST /prospecting/contact/enrich
+
+const LUSHA_BASE = "https://api.lusha.com";
+
+function lushaHeaders(key: string): Record<string, string> {
+  return { "api_key": key, "Content-Type": "application/json" };
+}
+
+function parsePhone(phones: any[]): string | null {
+  if (!phones?.length) return null;
+  // phoneType values from Lusha: "Mobile", "Direct", "Phone" (capitalized)
+  const mobile = phones.find((p: any) => p.phoneType?.toLowerCase() === "mobile" || p.type?.toLowerCase() === "mobile");
+  const direct = phones.find((p: any) => p.phoneType?.toLowerCase() === "direct" || p.type?.toLowerCase() === "direct");
+  const first  = phones[0];
+  const raw = (mobile ?? direct ?? first)?.number ?? (mobile ?? direct ?? first)?.sanitizedNumber ?? null;
+  return raw ?? null;
+}
+
+function parseEmail(emails: any[]): string | null {
+  if (!emails?.length) return null;
+  // Prefer work email
+  const work = emails.find((e: any) => e.emailType === "work" || e.type === "work");
+  return work?.email ?? emails[0]?.email ?? (typeof emails[0] === "string" ? emails[0] : null);
+}
+
+async function enrichFromLusha(
+  domain: string | null,
+  companyName: string,
+  contactName: string | null,
+  lushaKey: string,
+): Promise<{ contact_name: string | null; contact_position: string | null; phone: string | null; email: string | null; linkedin: string | null } | null> {
+  if (!lushaKey) return null;
+
+  const hdrs = lushaHeaders(lushaKey);
+
+  // ── Path A: we have a name → GET /v2/person ──────────────────────────────
+  if (contactName && (domain || companyName)) {
+    const parts     = contactName.trim().split(/\s+/);
+    const firstName = parts[0] ?? "";
+    const lastName  = parts.slice(1).join(" ");
+
+    const params = new URLSearchParams();
+    if (firstName)   params.set("firstName",     firstName);
+    if (lastName)    params.set("lastName",      lastName);
+    if (companyName) params.set("companyName",   companyName);
+    if (domain)      params.set("companyDomain", domain);    // confirmed Lusha param name
+
+    try {
+      const res = await fetch(`${LUSHA_BASE}/v2/person?${params}`, {
+        headers: hdrs,
+        signal:  AbortSignal.timeout(8000),
+      });
+
+      if (res.ok) {
+        const data   = await res.json();
+        // GET /v2/person response: { contact: { data: { fullName, firstName, ... } } }
+        const person = data?.contact?.data;
+        if (person?.fullName || person?.firstName) {
+          return {
+            contact_name:     (person.fullName ?? `${person.firstName ?? ""} ${person.lastName ?? ""}`.trim()) || null,
+            contact_position: person.jobTitle?.title ?? person.jobTitle ?? null,
+            phone:            parsePhone(person.phoneNumbers ?? person.phones ?? []),
+            email:            parseEmail(person.emailAddresses ?? person.emails ?? []),
+            linkedin:         person.linkedinUrl ?? null,
+          };
+        }
+      } else {
+        console.warn(`[lusha] GET /v2/person → ${res.status} for ${companyName}`);
+      }
+    } catch (err) {
+      console.warn("[lusha] person lookup error:", err);
+    }
+  }
+
+  // ── Path B: no name → POST /prospecting/contact/search then /enrich ──────
+  if (!domain) return null;
+
+  try {
+    const searchRes = await fetch(`${LUSHA_BASE}/prospecting/contact/search`, {
+      method:  "POST",
+      headers: hdrs,
+      signal:  AbortSignal.timeout(10000),
+      body: JSON.stringify({
+        pages: { page: 0, size: 5 },
+        includePartialContact: true,
+        excludeDnc: true,
+        filters: {
+          contacts: {
+            include: {
+              seniority: [1, 2, 3, 4],          // senior levels — exact IDs from /prospecting/filters/contacts/seniority
+              existing_data_points: ["phone"],   // only contacts Lusha has phone data for
+            },
+          },
+          companies: {
+            include: {
+              domains: [domain],                 // confirmed field name from Lusha docs
+            },
+          },
+        },
+      }),
+    });
+
+    if (!searchRes.ok) {
+      console.warn(`[lusha] POST /prospecting/contact/search → ${searchRes.status} for ${domain}`);
+      return null;
+    }
+
+    const searchData = await searchRes.json();
+    const requestId  = searchData?.requestId;
+    const contacts: any[] = searchData?.contacts ?? [];
+
+    if (!contacts.length) return null;
+    const first = contacts[0];
+
+    // Always enrich to get phone/email — search only returns metadata
+    // Search response uses `contactId` (string UUID), not `id`
+    if (!requestId || !first?.contactId) return null;
+
+    await sleep(200);
+    const enrichRes = await fetch(`${LUSHA_BASE}/prospecting/contact/enrich`, {
+      method:  "POST",
+      headers: hdrs,
+      signal:  AbortSignal.timeout(10000),
+      body: JSON.stringify({
+        requestId,
+        contactIds:   [first.contactId],
+        revealPhones: true,
+        revealEmails: true,
+      }),
+    });
+
+    if (!enrichRes.ok) {
+      console.warn(`[lusha] POST /prospecting/contact/enrich → ${enrichRes.status}`);
+      return null;
+    }
+
+    const enrichData = await enrichRes.json();
+    const enriched   = (enrichData?.contacts ?? [])[0];
+    if (!enriched) return null;
+
+    return {
+      contact_name:     enriched.name ?? first.name ?? null,
+      contact_position: enriched.jobTitle ?? first.jobTitle ?? null,
+      phone:            parsePhone(enriched.phoneNumbers ?? enriched.phones ?? []),
+      email:            parseEmail(enriched.emailAddresses ?? enriched.emails ?? []),
+      linkedin:         enriched.linkedinUrl ?? first.linkedinUrl ?? null,
+    };
+  } catch (err) {
+    console.warn("[lusha] prospecting search error:", err);
+  }
+
+  return null;
 }
 
 // ─── Cin7 customer cross-reference ───────────────────────────────────────────
@@ -231,33 +550,46 @@ serve(async (req) => {
   const cseCx     = Deno.env.get("GOOGLE_CSE_CX") ?? "";
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
   const apolloKey    = Deno.env.get("APOLLO_API_KEY") ?? "";
+  const lushaKey     = Deno.env.get("LUSHA_API_KEY") ?? "";
   const cin7Account  = Deno.env.get("CIN7_ACCOUNT_ID") ?? "";
   const cin7Key      = Deno.env.get("CIN7_API_KEY") ?? "";
 
   let body: { action?: string; lead_id?: string; channel?: string } = {};
   try { body = await req.json(); } catch { /* no body */ }
 
-  // ── On-demand Apollo phone reveal ─────────────────────────────────────────
+  // ── On-demand phone reveal (Lusha primary, Apollo fallback) ──────────────
   if (body.action === "reveal_phone" && body.lead_id) {
-    const apolloKey = Deno.env.get("APOLLO_API_KEY") ?? "";
-    if (!apolloKey) {
-      return new Response(JSON.stringify({ error: "APOLLO_API_KEY not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
     const { data: lead } = await supabase.from("sales_leads").select("*").eq("id", body.lead_id).single();
     if (!lead) {
       return new Response(JSON.stringify({ error: "Lead not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Use Apollo people/match to find + reveal phone for the specific contact
+    let domain: string | null = null;
+    try {
+      if (lead.website) domain = new URL(lead.website.startsWith("http") ? lead.website : `https://${lead.website}`).hostname.replace(/^www\./, "");
+    } catch { /* ignore */ }
+
+    // 1. Try Lusha first
+    if (lushaKey) {
+      try {
+        const lusha = await enrichFromLusha(domain, lead.company_name, lead.recommended_contact_name, lushaKey);
+        if (lusha?.phone) {
+          await supabase.from("sales_leads").update({ phone: lusha.phone }).eq("id", body.lead_id);
+          return new Response(JSON.stringify({ ok: true, phone: lusha.phone, source: "lusha" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      } catch { /* fall through to Apollo */ }
+    }
+
+    // 2. Apollo fallback
+    if (!apolloKey) {
+      return new Response(JSON.stringify({ ok: true, phone: null, source: "none" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const nameParts = (lead.recommended_contact_name ?? "").trim().split(" ");
-    const matchPayload: Record<string, any> = {
-      organization_name:     lead.company_name,
-      reveal_phone_number:   true,
-    };
+    const matchPayload: Record<string, any> = { organization_name: lead.company_name, reveal_phone_number: true };
     if (nameParts[0]) matchPayload.first_name = nameParts[0];
     if (nameParts[1]) matchPayload.last_name  = nameParts.slice(1).join(" ");
-    if (lead.website)  matchPayload.domain    = new URL(lead.website.startsWith("http") ? lead.website : `https://${lead.website}`).hostname.replace(/^www\./, "");
+    if (domain)        matchPayload.domain    = domain;
 
     try {
       const res = await fetch("https://api.apollo.io/v1/people/match", {
@@ -265,38 +597,25 @@ serve(async (req) => {
         headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
         body:    JSON.stringify(matchPayload),
       });
-
-      if (!res.ok) {
-        return new Response(JSON.stringify({ error: "Apollo API error", status: res.status }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-
-      const data   = await res.json();
+      const data   = res.ok ? await res.json() : {};
       const person = data.person;
-
       const phones: any[] = person?.phone_numbers ?? [];
       const phone =
         phones.find((p: any) => p.type === "mobile")?.sanitized_number ??
         phones.find((p: any) => p.type === "direct_phone")?.sanitized_number ??
         phones[0]?.sanitized_number ?? null;
-
-      if (phone) {
-        await supabase.from("sales_leads").update({ phone }).eq("id", body.lead_id);
-      }
-
-      return new Response(
-        JSON.stringify({ ok: true, phone, found: !!person }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (phone) await supabase.from("sales_leads").update({ phone }).eq("id", body.lead_id);
+      return new Response(JSON.stringify({ ok: true, phone, source: "apollo", found: !!person }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     } catch (err) {
       return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
   }
 
-  // Build query for leads to enrich
+  // Build query for leads to enrich — prioritise unprocessed (new/queued) over retries (researched)
   let query = supabase
     .from("sales_leads")
     .select("*")
-    .in("status", ["new", "researched"])
+    .in("status", ["new", "queued"])
     .order("created_at", { ascending: true })
     .limit(50);
 
@@ -323,13 +642,14 @@ serve(async (req) => {
   let enrichedCount = 0;
 
   for (const lead of leads ?? []) {
-    await sleep(800); // respect rate limits
+    await sleep(300); // reduced from 800ms — external API rate limits are per-key, not per-lead
 
     try {
       const updates: Record<string, any> = {};
 
       // 1. Google Places
       const places = await enrichFromPlaces(lead.google_place_id, lead.company_name, placesKey);
+      let recentReviewsText = "";
       if (places) {
         if (places.google_rating)       updates.google_rating       = places.google_rating;
         if (places.google_review_count) updates.google_review_count = places.google_review_count;
@@ -337,72 +657,129 @@ serve(async (req) => {
         if (places.website && !lead.website) updates.website = places.website;
         if (places.address && !lead.address) updates.address = places.address;
         if (places.google_place_id)     updates.google_place_id     = places.google_place_id;
+        // Compile review text for AI context
+        if (places.recent_reviews?.length) {
+          recentReviewsText = (places.recent_reviews as any[])
+            .filter((r: any) => r.text?.length > 10)
+            .map((r: any) => r.text)
+            .join(" | ")
+            .slice(0, 800);
+        }
       }
 
-      // 2. Website scrape
+      // 2. Website scrape (now includes /contact and /team pages)
       const websiteUrl = updates.website ?? lead.website;
       let websiteText  = "";
+      let websiteDomain: string | null = null;
       if (websiteUrl) {
+        try {
+          websiteDomain = new URL(
+            websiteUrl.startsWith("http") ? websiteUrl : `https://${websiteUrl}`,
+          ).hostname.replace(/^www\./, "");
+        } catch { /* ignore */ }
+
         const scraped = await scrapeWebsite(websiteUrl);
         websiteText   = scraped.text;
         if (scraped.emails.length && !lead.email) updates.email = scraped.emails[0];
         if (scraped.phones.length && !lead.phone) updates.phone = scraped.phones[0];
       }
 
-      // 3. AI summary & contact extraction (homepage scan for summary + key products only)
-      if (websiteText.length > 100) {
-        const ai = await generateSummary(lead.company_name, websiteText, lead.channel, anthropicKey);
+      // 2a. Wayback Machine + PageSpeed Insights — run in parallel, both cheap
+      // and both stash results into score_breakdown (no schema changes needed).
+      if (websiteUrl) {
+        const [wayback, pagespeed] = await Promise.all([
+          enrichFromWayback(websiteDomain),
+          enrichFromPageSpeed(websiteUrl, placesKey),
+        ]);
+        const sbEnrich: Record<string, any> = { ...(lead.score_breakdown ?? {}) };
+        if (wayback?.first_seen) sbEnrich.website_first_seen = wayback.first_seen;
+        if (wayback?.age_years !== null && wayback?.age_years !== undefined) sbEnrich.website_age_years = wayback.age_years;
+        if (pagespeed?.performance_score !== null && pagespeed?.performance_score !== undefined) sbEnrich.website_performance = pagespeed.performance_score;
+        if (pagespeed?.seo_score !== null && pagespeed?.seo_score !== undefined) sbEnrich.website_seo = pagespeed.seo_score;
+        if (pagespeed?.mobile_friendly !== null && pagespeed?.mobile_friendly !== undefined) sbEnrich.website_mobile_friendly = pagespeed.mobile_friendly;
+        updates.score_breakdown = sbEnrich;
+      }
+
+      // 3. AI summary — always run if we have an API key; pass all available context.
+      // Even when website scraping fails, company name + URL + reviews give Claude enough signal.
+      if (anthropicKey) {
+        const existingProducts = lead.key_products_services ?? [];
+        const ai = await generateSummary(
+          lead.company_name,
+          websiteUrl ?? null,
+          websiteText,
+          recentReviewsText,
+          existingProducts,
+          lead.channel,
+          anthropicKey,
+        );
         if (ai.summary) updates.website_summary = ai.summary;
-        // Don't set contact from homepage here — Apollo in step 4 is more reliable.
-        // Homepage contact stored as low-priority fallback only if Apollo finds nothing.
         if (ai.key_products?.length) updates.key_products_services = ai.key_products;
-        if ((ai as any).website_quality) updates.score_breakdown = {
-          ...(lead.score_breakdown ?? {}),
-          website_quality:   (ai as any).website_quality,
-          company_size:      (ai as any).company_size,
-          has_own_brand:     (ai as any).has_own_brand,
-          currently_imports: (ai as any).currently_imports,
-        };
+
+        // Merge AI signals into score_breakdown — start from whatever step 2a
+        // (Wayback / PageSpeed) already put into updates, falling back to the
+        // DB row if this is the first write this enrichment pass.
+        const sbUpdate: Record<string, any> = { ...(updates.score_breakdown ?? lead.score_breakdown ?? {}) };
+        if (ai.website_quality !== undefined) sbUpdate.website_quality   = ai.website_quality;
+        if (ai.company_size    !== undefined) sbUpdate.company_size      = ai.company_size;
+        if (ai.has_own_brand   !== undefined) sbUpdate.has_own_brand     = ai.has_own_brand;
+        if (ai.currently_imports !== undefined) sbUpdate.currently_imports = ai.currently_imports;
+        updates.score_breakdown = sbUpdate;
 
         // ── AGA hard gate: must have own brand ──────────────────────────────
-        // has_own_brand must be explicitly true — false or unknown = disqualified
-        if (lead.channel === "aga" && (ai as any).has_own_brand === false) {
+        if (lead.channel === "aga" && ai.has_own_brand === false) {
           await supabase.from("sales_leads").update({
             status:                  "disqualified",
             disqualification_reason: "no own brand",
-            score_breakdown: {
-              ...(lead.score_breakdown ?? {}),
-              website_quality:   (ai as any).website_quality,
-              company_size:      (ai as any).company_size,
-              has_own_brand:     false,
-              currently_imports: (ai as any).currently_imports,
-            },
+            score_breakdown:         sbUpdate,
           }).eq("id", lead.id);
           enrichedCount++;
           continue;
         }
 
-        // Store homepage contact as fallback — only used if Apollo (step 4) finds nothing
+        // Store homepage contact as fallback — only used if Lusha/Apollo (step 4) finds nothing
         if (ai.contact_name) {
           updates._homepage_contact_name     = ai.contact_name;
           updates._homepage_contact_position = ai.contact_position ?? null;
         }
       }
 
-      // 4. Apollo people search — ALWAYS run, regardless of homepage contact found
-      // Apollo is authoritative; homepage scrape is unreliable (finds testimonials, footers, etc.)
-      if (apolloKey) {
-        const websiteForApollo = updates.website ?? lead.website ?? "";
+      // 4. Contact enrichment — Lusha primary, Apollo fallback, website homepage last resort
+      {
+        const websiteUrl = updates.website ?? lead.website ?? "";
         let domain: string | null = null;
         try {
-          domain = new URL(websiteForApollo.startsWith("http") ? websiteForApollo : `https://${websiteForApollo}`)
+          domain = new URL(websiteUrl.startsWith("http") ? websiteUrl : `https://${websiteUrl}`)
             .hostname.replace(/^www\./, "");
         } catch { /* skip */ }
 
-        if (domain) {
+        let contactFound = false;
+
+        // 4a. Lusha (primary)
+        if (lushaKey && domain) {
           try {
-            await sleep(300);
-            // Use /people/search with organization_domains array (correct endpoint + param)
+            await sleep(200);
+            const lusha = await enrichFromLusha(domain, lead.company_name, updates._homepage_contact_name ?? lead.recommended_contact_name ?? null, lushaKey);
+            if (lusha) {
+              if (lusha.contact_name) {
+                updates.recommended_contact_name     = lusha.contact_name;
+                updates.recommended_contact_position = lusha.contact_position ?? null;
+                updates.recommended_contact_source   = "lusha";
+                contactFound = true;
+              }
+              if (lusha.phone && !lead.phone) updates.phone = lusha.phone;
+              if (lusha.email && !lead.email) updates.email = lusha.email;
+              if (lusha.linkedin && !lead.social_linkedin) updates.social_linkedin = lusha.linkedin;
+            }
+          } catch (err) {
+            console.warn("Lusha search failed for", lead.company_name, err);
+          }
+        }
+
+        // 4b. Apollo fallback
+        if (!contactFound && apolloKey && domain) {
+          try {
+            await sleep(200);
             const apolloRes = await fetch("https://api.apollo.io/v1/people/search", {
               method:  "POST",
               headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
@@ -422,13 +799,12 @@ serve(async (req) => {
                   updates.recommended_contact_name     = fullName;
                   updates.recommended_contact_position = person.title ?? null;
                   updates.recommended_contact_source   = "apollo";
+                  contactFound = true;
                 }
-                if (person.linkedin_url && !lead.social_linkedin) {
-                  updates.social_linkedin = person.linkedin_url;
-                }
+                if (person.linkedin_url && !lead.social_linkedin) updates.social_linkedin = person.linkedin_url;
               } else {
-                // Fallback: search by company name
-                await sleep(300);
+                // Apollo fallback by company name
+                await sleep(200);
                 const nameRes = await fetch("https://api.apollo.io/v1/people/search", {
                   method:  "POST",
                   headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
@@ -448,34 +824,30 @@ serve(async (req) => {
                       updates.recommended_contact_name     = fullName;
                       updates.recommended_contact_position = p.title ?? null;
                       updates.recommended_contact_source   = "apollo";
+                      contactFound = true;
                     }
                   }
                 }
               }
-            } else {
-              const errTxt = await apolloRes.text().catch(() => "");
-              console.warn(`Apollo ${apolloRes.status} for ${lead.company_name}: ${errTxt.slice(0, 200)}`);
             }
           } catch (err) {
             console.warn("Apollo search failed for", lead.company_name, err);
           }
         }
-      }
 
-      // If Apollo found nothing, fall back to the homepage contact as last resort
-      if (!updates.recommended_contact_name && !lead.recommended_contact_name) {
-        if (updates._homepage_contact_name) {
+        // 4c. Website homepage last resort
+        if (!contactFound && !lead.recommended_contact_name && updates._homepage_contact_name) {
           updates.recommended_contact_name     = updates._homepage_contact_name;
           updates.recommended_contact_position = updates._homepage_contact_position ?? null;
           updates.recommended_contact_source   = "website";
         }
+        delete updates._homepage_contact_name;
+        delete updates._homepage_contact_position;
       }
-      delete updates._homepage_contact_name;
-      delete updates._homepage_contact_position;
 
       // 5. Social media
       if (cseKey && cseCx) {
-        await sleep(400);
+        await sleep(200);
         const socials = await findSocials(lead.company_name, cseKey, cseCx);
         if (socials.facebook)  updates.social_facebook  = socials.facebook;
         if (socials.instagram) updates.social_instagram = socials.instagram;
@@ -492,11 +864,7 @@ serve(async (req) => {
         }
       }
 
-      // Only mark fully enriched if we got useful data (website summary or score_breakdown).
-      // Without those, scoring will produce bare minimum scores. Mark as "researched" so
-      // the next enrichment run will retry website scraping for these leads.
-      const hasUsefulData = !!(updates.website_summary || updates.score_breakdown);
-      updates.status = hasUsefulData ? "enriched" : "researched";
+      updates.status = "enriched";
 
       await supabase.from("sales_leads").update(updates).eq("id", lead.id);
       enrichedCount++;
