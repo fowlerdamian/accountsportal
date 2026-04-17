@@ -5,7 +5,7 @@ import { supabase } from '@portal/lib/supabase'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES   = ['Draft', 'Authorised', 'Ordered', 'Invoiced', 'Receiving', 'Received', 'Cancelled']
-const DEFAULT_FILTER = ['Draft', 'Authorised', 'Ordered', 'Invoiced', 'Receiving', 'Received', 'Cancelled']
+const DEFAULT_FILTER = ['Draft', 'Authorised', 'Ordered', 'Invoiced', 'Receiving']
 
 const STATUS_STYLE = {
   Draft:      { color: '#a0a0a0',    background: '#0a0a0a',                  border: '1px solid #222222' },
@@ -221,6 +221,7 @@ export default function PurchaseOrders() {
       .select('*')
       .in('status', ALL_STATUSES)
       .order('due_date', { ascending: true, nullsFirst: false })
+      .limit(10000)
     if (error) {
       setFetchError(error.message ?? 'Failed to load orders')
     } else if (data) {
