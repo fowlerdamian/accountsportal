@@ -202,6 +202,7 @@ function useIsMobile() {
 export default function PurchaseOrders() {
   const [orders,        setOrders]        = useState([])
   const [loading,       setLoading]       = useState(true)
+  const [fetchError,    setFetchError]    = useState(null)
   const [syncing,       setSyncing]       = useState(false)
   const [syncMsg,       setSyncMsg]       = useState(null)
   const [lastSync,      setLastSync]      = useState(null)
@@ -216,7 +217,10 @@ export default function PurchaseOrders() {
       .select('*')
       .in('status', ALL_STATUSES)
       .order('due_date', { ascending: true, nullsFirst: false })
-    if (!error && data) {
+    if (error) {
+      setFetchError(error.message ?? 'Failed to load orders')
+    } else if (data) {
+      setFetchError(null)
       setOrders(data)
       if (data.length > 0) {
         const latest = data.reduce((best, o) => o.synced_at > best ? o.synced_at : best, data[0].synced_at)
@@ -300,6 +304,16 @@ export default function PurchaseOrders() {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid #f3ca0f', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: '#ff1744', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>
+          Failed to load orders: {fetchError}
+        </p>
       </div>
     )
   }

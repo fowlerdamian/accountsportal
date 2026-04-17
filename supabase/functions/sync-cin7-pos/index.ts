@@ -54,13 +54,15 @@ serve(async (req) => {
 
     // Load existing rows: preserve manually-set due dates and skip attachment
     // re-checks for POs already known to have an attachment (once attached, always attached).
+    // Use a high limit — PostgREST defaults to 1000 rows which would silently truncate.
     const { data: existing } = await supabase
       .from("purchase_orders")
-      .select("cin7_id, due_date, has_attachment");
+      .select("cin7_id, due_date, has_attachment, status")
+      .limit(50000);
 
-    const existingByKey: Record<string, { due_date: string | null; has_attachment: boolean }> = {};
+    const existingByKey: Record<string, { due_date: string | null; has_attachment: boolean; status: string }> = {};
     for (const row of existing ?? []) {
-      existingByKey[row.cin7_id] = { due_date: row.due_date, has_attachment: row.has_attachment };
+      existingByKey[row.cin7_id] = { due_date: row.due_date, has_attachment: row.has_attachment, status: row.status };
     }
 
     // Paginate through all pages of a Cin7 purchaseList query.
@@ -154,10 +156,17 @@ serve(async (req) => {
       else synced += rows.length;
     }
 
-    // Remove DB rows for POs that no longer exist in Cin7 at all (truly deleted).
+    // Remove DB rows for POs that no longer appear in Cin7 AND have a terminal status.
+    // We only fetch the last 6 months of active POs, so we must not delete active POs
+    // that are just older than the window — only remove Received/Cancelled ones that
+    // have fallen out of Cin7's results (truly gone or archived).
     if (allPOs.length > 0) {
+      const TERMINAL = new Set(["Received", "Cancelled"]);
       const allCin7Ids = new Set(allPOs.map((po) => String(po.ID)));
-      const staleIds   = Object.keys(existingByKey).filter((id) => !allCin7Ids.has(id));
+      const staleIds   = Object.keys(existingByKey).filter((id) => {
+        if (allCin7Ids.has(id)) return false;
+        return TERMINAL.has(existingByKey[id].status);
+      });
       if (staleIds.length > 0) {
         const { error: delError } = await supabase
           .from("purchase_orders")
