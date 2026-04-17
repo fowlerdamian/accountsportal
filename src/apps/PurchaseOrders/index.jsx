@@ -4,11 +4,14 @@ import { supabase } from '@portal/lib/supabase'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ALL_STATUSES   = ['Draft', 'Authorised', 'Ordered', 'Invoiced', 'Receiving', 'Received', 'Cancelled']
-const FILTER_CHIPS   = ['Draft', 'Authorised', 'Invoiced', 'Receiving', 'Received', 'Cancelled']
-const DEFAULT_FILTER = ['Draft', 'Authorised', 'Invoiced', 'Receiving']
-// 'Authorised' chip covers both Authorised and Ordered DB statuses
-const FILTER_MATCH   = { Authorised: ['Authorised', 'Ordered'] }
+const FILTER_CHIPS   = ['Draft', 'Authorised', 'Receiving', 'Received', 'Cancelled']
+const DEFAULT_FILTER = ['Draft', 'Authorised', 'Receiving']
+// 'Authorised' chip covers both Authorised and Ordered DB statuses.
+// 'Received' covers Received + legacy Invoiced (edge function now maps Cin7 INVOICED → Received).
+const FILTER_MATCH   = {
+  Authorised: ['Authorised', 'Ordered'],
+  Received:   ['Received', 'Invoiced'],
+}
 
 const STATUS_STYLE = {
   Draft:      { color: '#a0a0a0',    background: '#0a0a0a',                  border: '1px solid #222222' },
@@ -21,6 +24,9 @@ const STATUS_STYLE = {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// Legacy Invoiced rows display as Received until next sync rewrites them.
+const displayStatus = (s) => (s === 'Invoiced' ? 'Received' : s)
 
 function dueDiffDays(due) {
   if (!due) return null
@@ -147,7 +153,8 @@ function FilterToggle({ status, active, onToggle }) {
 function PoCard({ po, onSaved }) {
   const diff = dueDiffDays(po.due_date)
   const isOverdue = diff !== null && diff < 0
-  const ss = STATUS_STYLE[po.status] ?? STATUS_STYLE.Draft
+  const shownStatus = displayStatus(po.status)
+  const ss = STATUS_STYLE[shownStatus] ?? STATUS_STYLE.Draft
 
   return (
     <div style={{
@@ -167,7 +174,7 @@ function PoCard({ po, onSaved }) {
         </a>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ ...ss, display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>
-            {po.status}
+            {shownStatus}
           </span>
           {po.has_attachment && (
             <CheckCircle2 size={16} strokeWidth={1.5} style={{ color: 'var(--status-success)' }} />
@@ -459,7 +466,8 @@ export default function PurchaseOrders() {
                 visible.map(po => {
                   const diff = dueDiffDays(po.due_date)
                   const isOverdue = diff !== null && diff < 0
-                  const ss = STATUS_STYLE[po.status] ?? STATUS_STYLE.Draft
+                  const shownStatus = displayStatus(po.status)
+                  const ss = STATUS_STYLE[shownStatus] ?? STATUS_STYLE.Draft
                   return (
                     <tr
                       key={po.id}
@@ -481,7 +489,7 @@ export default function PurchaseOrders() {
                       <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{po.supplier_name}</td>
                       <td style={{ padding: '11px 14px' }}>
                         <span style={{ ...ss, display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>
-                          {po.status}
+                          {shownStatus}
                         </span>
                       </td>
                       <td style={{ padding: '11px 14px', fontSize: '13px' }}>

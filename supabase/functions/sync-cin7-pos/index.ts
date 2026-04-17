@@ -96,11 +96,8 @@ serve(async (req) => {
     // Two passes:
     // 1. Unfiltered with a 6-month window — gets all authorized/active history.
     //    Cin7 excludes Draft POs from unfiltered results by default.
-    // 2. Explicit OrderStatus=DRAFT with the same 6-month window — catches POs
-    //    not yet authorized. The purchaseList Status field is derived from
-    //    OrderStatus+StockReceivedStatus+InvoiceStatus. Filtering by
-    //    OrderStatus=DRAFT is the correct way to get draft POs.
-    //    Using the same date window prevents fetching all historical drafts.
+    // 2. Explicit Status=DRAFT with the same 6-month window — catches POs not yet
+    //    authorized. Using the same date window prevents fetching all historical drafts.
     const sixMonthsAgo = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000)
       .toISOString().split("T")[0];
 
@@ -216,7 +213,7 @@ function toDbStatus(s: string, errors: string[]): string {
     AUTHORISED: "Authorised",
     BACKORDER:  "Authorised",
     ORDERED:    "Ordered",
-    INVOICED:   "Invoiced",
+    INVOICED:   "Received",
     RECEIVING:  "Receiving",
     RECEIVED:   "Received",
     COMPLETED:  "Received",
