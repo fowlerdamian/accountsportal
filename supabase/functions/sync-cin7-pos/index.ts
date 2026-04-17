@@ -18,8 +18,21 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Diagnostic route — call with ?debug=1 to see raw Cin7 status values
+  // Diagnostic route — ?debug=1 for status overview, ?po_id=xxx for a single PO's raw Cin7 data
   const url = new URL(req.url);
+  const debugPoId = url.searchParams.get("po_id");
+  if (debugPoId) {
+    const cin7AccountId = Deno.env.get("CIN7_ACCOUNT_ID");
+    const cin7ApiKey    = Deno.env.get("CIN7_API_KEY");
+    const cin7Headers   = { "api-auth-accountid": cin7AccountId!, "api-auth-applicationkey": cin7ApiKey!, "Content-Type": "application/json" };
+    const res = await fetch(`${CIN7_BASE}/purchase?ID=${debugPoId}`, { headers: cin7Headers });
+    const raw = await res.json();
+    return new Response(JSON.stringify({
+      ID: raw.ID, OrderNumber: raw.OrderNumber, Status: raw.Status, OrderStatus: raw.OrderStatus,
+      StockReceivedStatus: raw.StockReceivedStatus, InvoiceStatus: raw.InvoiceStatus,
+      Supplier: raw.Supplier, OrderDate: raw.OrderDate,
+    }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
   if (url.searchParams.get("debug") === "1") {
     const cin7AccountId = Deno.env.get("CIN7_ACCOUNT_ID");
     const cin7ApiKey    = Deno.env.get("CIN7_API_KEY");
@@ -219,6 +232,7 @@ function toDbStatus(s: string, errors: string[]): string {
     COMPLETED:  "Received",
     CANCELLED:  "Cancelled",
     VOIDED:     "Cancelled",
+    CREDITED:   "Cancelled",
   };
   const mapped = map[(s ?? "").toUpperCase()];
   if (!mapped) errors.push(`unknown Cin7 status: "${s}" — stored as Draft`);
