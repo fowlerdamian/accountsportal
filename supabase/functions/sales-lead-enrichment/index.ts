@@ -560,6 +560,40 @@ async function findCin7Customer(
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // ── Apollo debug: ?apollo_debug=autocable.com.au ─────────────────────────
+  // Calls /v1/mixed_people/search and /v1/people/match against the given
+  // domain and returns both raw HTTP status + body so we can see exactly
+  // what Apollo's free plan actually allows.
+  const reqUrl = new URL(req.url);
+  const apolloDebugDomain = reqUrl.searchParams.get("apollo_debug");
+  if (apolloDebugDomain) {
+    const apolloKey = Deno.env.get("APOLLO_API_KEY") ?? "";
+    if (!apolloKey) return new Response(JSON.stringify({ error: "APOLLO_API_KEY not set" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    const searchRes = await fetch("https://api.apollo.io/v1/mixed_people/api_search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
+      body: JSON.stringify({
+        q_organization_domains_list: [apolloDebugDomain],
+        person_seniorities: ["owner", "founder", "c_suite", "vp", "director", "manager"],
+        per_page: 5,
+      }),
+    });
+    const searchBody = await searchRes.text();
+
+    const matchRes = await fetch("https://api.apollo.io/v1/people/match", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
+      body: JSON.stringify({ domain: apolloDebugDomain, reveal_personal_emails: true }),
+    });
+    const matchBody = await matchRes.text();
+
+    return new Response(JSON.stringify({
+      search: { status: searchRes.status, body: searchBody.slice(0, 1500) },
+      match:  { status: matchRes.status,  body: matchBody.slice(0, 1500) },
+    }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -816,62 +850,109 @@ serve(async (req) => {
           }
         }
 
-        // 4b. Apollo fallback
+        // 4b. Apollo fallback — try /v1/people/match first (works on more plans
+        // when we already know a name), then /v1/mixed_people/search for bulk.
         if (!contactFound && apolloKey && domain) {
+          const knownName = updates._homepage_contact_name ?? lead.recommended_contact_name ?? null;
           try {
-            await sleep(200);
-            const apolloRes = await fetch("https://api.apollo.io/v1/people/search", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
-              signal:  AbortSignal.timeout(8000),
-              body:    JSON.stringify({
-                organization_domains: [domain],
-                person_seniorities:   ["owner", "founder", "c_suite", "vp", "director", "manager"],
-                per_page: 5,
-              }),
-            });
-            if (apolloRes.ok) {
-              const apolloData = await apolloRes.json();
-              const person     = apolloData.people?.[0];
-              if (person) {
-                const fullName = `${person.first_name ?? ""} ${person.last_name ?? ""}`.trim();
-                if (fullName) {
-                  updates.recommended_contact_name     = fullName;
-                  updates.recommended_contact_position = person.title ?? null;
-                  updates.recommended_contact_source   = "apollo";
-                  contactFound = true;
-                }
-                if (person.linkedin_url && !lead.social_linkedin) updates.social_linkedin = person.linkedin_url;
+            // 4b-i. /v1/people/match — person enrichment by name+domain.
+            // This is available on more Apollo plans than bulk search.
+            if (knownName) {
+              const parts = knownName.trim().split(/\s+/);
+              const matchBody: Record<string, any> = {
+                organization_name: lead.company_name,
+                domain,
+                reveal_personal_emails: true,
+              };
+              if (parts[0]) matchBody.first_name = parts[0];
+              if (parts[1]) matchBody.last_name  = parts.slice(1).join(" ");
+
+              await sleep(200);
+              const matchRes = await fetch("https://api.apollo.io/v1/people/match", {
+                method:  "POST",
+                headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
+                signal:  AbortSignal.timeout(8000),
+                body:    JSON.stringify(matchBody),
+              });
+              if (!matchRes.ok) {
+                const txt = await matchRes.text().catch(() => "");
+                console.warn(`[apollo] /people/match ${matchRes.status} for ${lead.company_name}: ${txt.slice(0, 200)}`);
               } else {
-                // Apollo fallback by company name
-                await sleep(200);
-                const nameRes = await fetch("https://api.apollo.io/v1/people/search", {
-                  method:  "POST",
-                  headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
-                  signal:  AbortSignal.timeout(8000),
-                  body:    JSON.stringify({
-                    q_organization_name: lead.company_name,
-                    person_seniorities:  ["owner", "founder", "c_suite", "vp", "director", "manager"],
-                    per_page: 3,
-                  }),
-                });
-                if (nameRes.ok) {
-                  const nameData = await nameRes.json();
-                  const p        = nameData.people?.[0];
-                  if (p) {
-                    const fullName = `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim();
-                    if (fullName) {
-                      updates.recommended_contact_name     = fullName;
-                      updates.recommended_contact_position = p.title ?? null;
-                      updates.recommended_contact_source   = "apollo";
-                      contactFound = true;
-                    }
+                const matchData = await matchRes.json();
+                const person    = matchData?.person;
+                if (person) {
+                  const fullName = `${person.first_name ?? ""} ${person.last_name ?? ""}`.trim();
+                  if (fullName) {
+                    updates.recommended_contact_name     = fullName;
+                    updates.recommended_contact_position = person.title ?? null;
+                    updates.recommended_contact_source   = "apollo";
+                    contactFound = true;
                   }
+                  if (person.email && !lead.email) updates.email = person.email;
+                  if (person.linkedin_url && !lead.social_linkedin) updates.social_linkedin = person.linkedin_url;
+                  const phoneNum = (person.phone_numbers ?? []).find((p: any) => p?.sanitized_number)?.sanitized_number;
+                  if (phoneNum && !lead.phone) updates.phone = phoneNum;
+                }
+              }
+            }
+
+            // 4b-ii. mixed_people/api_search by domain — the current (non-deprecated)
+            // endpoint. On the free plan, last names come back as
+            // "last_name_obfuscated" (e.g. "Pa***s") and email/phone are gated
+            // behind credit-based reveals (/v1/people/bulk_match). We still
+            // extract what's visible: first name + title + org-level data.
+            if (!contactFound) {
+              await sleep(200);
+              const searchRes = await fetch("https://api.apollo.io/v1/mixed_people/api_search", {
+                method:  "POST",
+                headers: { "Content-Type": "application/json", "X-Api-Key": apolloKey },
+                signal:  AbortSignal.timeout(10000),
+                body:    JSON.stringify({
+                  q_organization_domains_list: [domain],
+                  person_seniorities:          ["owner", "founder", "c_suite", "vp", "director", "manager"],
+                  per_page: 5,
+                }),
+              });
+              if (!searchRes.ok) {
+                const txt = await searchRes.text().catch(() => "");
+                console.warn(`[apollo] /mixed_people/api_search ${searchRes.status} for ${lead.company_name}: ${txt.slice(0, 200)}`);
+              } else {
+                const searchData = await searchRes.json();
+                const person     = searchData?.people?.[0];
+                if (!person) {
+                  console.log(`[apollo] api_search → 0 people for ${domain} (total_entries=${searchData?.total_entries ?? 0})`);
+                } else {
+                  const first      = person.first_name ?? "";
+                  const lastObf    = person.last_name_obfuscated ?? "";
+                  const lastClear  = person.last_name ?? "";
+                  // Prefer clear last name; fall back to obfuscated for free-plan results.
+                  const lastName   = lastClear || lastObf;
+                  const partial    = `${first} ${lastName}`.trim();
+                  if (partial) {
+                    updates.recommended_contact_name     = partial;
+                    updates.recommended_contact_position = person.title ?? null;
+                    updates.recommended_contact_source   = lastClear ? "apollo" : "apollo_partial";
+                    contactFound = true;
+                  }
+                  if (person.linkedin_url && !lead.social_linkedin) updates.social_linkedin = person.linkedin_url;
+
+                  // Stash what we can from the org-level data (free plan gives
+                  // rich org info even when person details are gated).
+                  const org = person.organization ?? {};
+                  const sbApollo: Record<string, any> = { ...(updates.score_breakdown ?? lead.score_breakdown ?? {}) };
+                  sbApollo.apollo_total_senior_contacts = searchData.total_entries ?? null;
+                  if (searchData.total_entries) sbApollo.apollo_has_senior_contacts = true;
+                  if (org.industry)         sbApollo.apollo_org_industry       = org.industry;
+                  if (org.estimated_num_employees) sbApollo.apollo_org_employees = org.estimated_num_employees;
+                  if (org.organization_revenue_printed) sbApollo.apollo_org_revenue = org.organization_revenue_printed;
+                  if (org.primary_phone?.number) sbApollo.apollo_org_phone      = org.primary_phone.number;
+                  if (org.linkedin_url)      sbApollo.apollo_org_linkedin       = org.linkedin_url;
+                  updates.score_breakdown = sbApollo;
                 }
               }
             }
           } catch (err) {
-            console.warn("Apollo search failed for", lead.company_name, err);
+            console.warn("[apollo] search failed for", lead.company_name, err);
           }
         }
 
