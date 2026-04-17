@@ -5,7 +5,10 @@ import { supabase } from '@portal/lib/supabase'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES   = ['Draft', 'Authorised', 'Ordered', 'Invoiced', 'Receiving', 'Received', 'Cancelled']
-const DEFAULT_FILTER = ['Draft', 'Authorised', 'Ordered', 'Invoiced', 'Receiving']
+const FILTER_CHIPS   = ['Draft', 'Authorised', 'Invoiced', 'Receiving', 'Received', 'Cancelled']
+const DEFAULT_FILTER = ['Draft', 'Authorised', 'Invoiced', 'Receiving']
+// 'Authorised' chip covers both Authorised and Ordered DB statuses
+const FILTER_MATCH   = { Authorised: ['Authorised', 'Ordered'] }
 
 const STATUS_STYLE = {
   Draft:      { color: '#a0a0a0',    background: '#0a0a0a',                  border: '1px solid #222222' },
@@ -287,7 +290,8 @@ export default function PurchaseOrders() {
   }
 
   const visible = useMemo(() => {
-    const filtered = orders.filter(o => activeFilters.includes(o.status))
+    const matchStatuses = activeFilters.flatMap(f => FILTER_MATCH[f] ?? [f])
+    const filtered = orders.filter(o => matchStatuses.includes(o.status))
     if (!sortCol) return filtered
     return [...filtered].sort((a, b) => {
       let av = a[sortCol], bv = b[sortCol]
@@ -378,7 +382,7 @@ export default function PurchaseOrders() {
         <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           Show:
         </span>
-        {ALL_STATUSES.map(s => (
+        {FILTER_CHIPS.map(s => (
           <FilterToggle key={s} status={s} active={activeFilters.includes(s)} onToggle={toggleFilter} />
         ))}
       </div>
