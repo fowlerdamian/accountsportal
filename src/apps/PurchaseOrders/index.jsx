@@ -62,7 +62,11 @@ function DueDateCell({ poId, due, onSaved }) {
       .eq('id', poId)
     setSaving(false)
     saveInProgress.current = false
-    if (!error) onSaved(poId, newVal || null)
+    if (error) {
+      alert(`Failed to save due date: ${error.message}`)
+      return
+    }
+    onSaved(poId, newVal || null)
     setEditing(false)
   }
 
@@ -259,7 +263,11 @@ export default function PurchaseOrders() {
         try { const body = await error.context?.json?.(); detail = JSON.stringify(body) } catch {}
         throw new Error(detail)
       }
-      setSyncMsg({ type: 'ok', text: `${data?.synced ?? 0} orders updated` })
+      const errCount = data?.errors?.length ?? 0
+      const text = errCount > 0
+        ? `${data?.synced ?? 0} updated, ${errCount} error${errCount > 1 ? 's' : ''}`
+        : `${data?.synced ?? 0} orders updated`
+      setSyncMsg({ type: errCount > 0 ? 'err' : 'ok', text })
       await fetchOrders()
     } catch (err) {
       setSyncMsg({ type: 'err', text: err.message ?? 'Sync failed' })
@@ -310,10 +318,16 @@ export default function PurchaseOrders() {
 
   if (fetchError) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: '#ff1744', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+        <p style={{ color: '#ff1744', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px', margin: 0 }}>
           Failed to load orders: {fetchError}
         </p>
+        <button
+          onClick={() => { setFetchError(null); setLoading(true); fetchOrders() }}
+          style={{ padding: '6px 14px', fontSize: '12px', color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent', borderRadius: '6px', cursor: 'pointer' }}
+        >
+          Retry
+        </button>
       </div>
     )
   }

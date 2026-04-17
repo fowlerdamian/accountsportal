@@ -86,16 +86,17 @@ serve(async (req) => {
     // Two passes:
     // 1. Unfiltered with a 6-month window — gets all authorized/active history.
     //    Cin7 excludes Draft POs from unfiltered results by default.
-    // 2. Explicit OrderStatus=DRAFT — catches POs not yet authorized.
-    //    The purchaseList Status field is derived from OrderStatus+StockReceivedStatus+InvoiceStatus.
-    //    Filtering by OrderStatus=DRAFT is the correct way to get draft POs.
-    //    No date filter so we don't miss recently-created drafts.
+    // 2. Explicit OrderStatus=DRAFT with the same 6-month window — catches POs
+    //    not yet authorized. The purchaseList Status field is derived from
+    //    OrderStatus+StockReceivedStatus+InvoiceStatus. Filtering by
+    //    OrderStatus=DRAFT is the correct way to get draft POs.
+    //    Using the same date window prevents fetching all historical drafts.
     const sixMonthsAgo = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000)
       .toISOString().split("T")[0];
 
     const [activePOs, draftPOs] = await Promise.all([
       fetchPages(`&CreatedSince=${sixMonthsAgo}`).catch(() => [] as any[]),
-      fetchPages(`&OrderStatus=DRAFT`).catch(() => [] as any[]),
+      fetchPages(`&OrderStatus=DRAFT&CreatedSince=${sixMonthsAgo}`).catch(() => [] as any[]),
     ]);
 
     // Merge and deduplicate by ID.
@@ -135,7 +136,7 @@ serve(async (req) => {
             cin7_id:        poId,
             po_number:      po.OrderNumber,
             supplier_name:  po.Supplier ?? "Unknown",
-            status:         toDbStatus(effectiveStatus),
+            status:         toDbStatus(effectiveStatus, errors),
             order_date:     po.OrderDate ? po.OrderDate.substring(0, 10) : null,
             due_date:       existingRow ? existingRow.due_date : null,
             total_amount:   po.InvoiceAmount ?? 0,
@@ -199,7 +200,7 @@ async function checkAttachment(poId: string, headers: Record<string, string>): P
   }
 }
 
-function toDbStatus(s: string): string {
+function toDbStatus(s: string, errors: string[]): string {
   const map: Record<string, string> = {
     DRAFT:      "Draft",
     AUTHORISED: "Authorised",
@@ -212,5 +213,7 @@ function toDbStatus(s: string): string {
     CANCELLED:  "Cancelled",
     VOIDED:     "Cancelled",
   };
-  return map[(s ?? "").toUpperCase()] ?? "Cancelled";
+  const mapped = map[(s ?? "").toUpperCase()];
+  if (!mapped) errors.push(`unknown Cin7 status: "${s}" — stored as Draft`);
+  return mapped ?? "Draft";
 }
