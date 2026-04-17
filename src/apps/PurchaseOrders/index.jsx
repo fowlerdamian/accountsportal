@@ -218,13 +218,12 @@ export default function PurchaseOrders() {
   const [sortDir, setSortDir] = useState('asc')
   const isMobile = useIsMobile()
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (dbStatuses) => {
     const { data, error } = await supabase
       .from('purchase_orders')
       .select('*')
-      .in('status', ALL_STATUSES)
+      .in('status', dbStatuses)
       .order('due_date', { ascending: true, nullsFirst: false })
-      .limit(10000)
     if (error) {
       setFetchError(error.message ?? 'Failed to load orders')
     } else if (data) {
@@ -238,7 +237,10 @@ export default function PurchaseOrders() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchOrders() }, [fetchOrders])
+  useEffect(() => {
+    const dbStatuses = activeFilters.flatMap(f => FILTER_MATCH[f] ?? [f])
+    fetchOrders(dbStatuses)
+  }, [activeFilters, fetchOrders])
 
   function handleDueSaved(poId, newDate) {
     setOrders(prev => prev.map(o => o.id === poId ? { ...o, due_date: newDate } : o))
@@ -272,7 +274,7 @@ export default function PurchaseOrders() {
         ? `${data?.synced ?? 0} updated, ${errCount} error${errCount > 1 ? 's' : ''}`
         : `${data?.synced ?? 0} orders updated`
       setSyncMsg({ type: errCount > 0 ? 'err' : 'ok', text })
-      await fetchOrders()
+      await fetchOrders(activeFilters.flatMap(f => FILTER_MATCH[f] ?? [f]))
     } catch (err) {
       setSyncMsg({ type: 'err', text: err.message ?? 'Sync failed' })
     } finally {
@@ -328,7 +330,7 @@ export default function PurchaseOrders() {
           Failed to load orders: {fetchError}
         </p>
         <button
-          onClick={() => { setFetchError(null); setLoading(true); fetchOrders() }}
+          onClick={() => { setFetchError(null); setLoading(true); fetchOrders(activeFilters.flatMap(f => FILTER_MATCH[f] ?? [f])) }}
           style={{ padding: '6px 14px', fontSize: '12px', color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent', borderRadius: '6px', cursor: 'pointer' }}
         >
           Retry
