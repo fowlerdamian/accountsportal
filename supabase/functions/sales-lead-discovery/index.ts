@@ -51,6 +51,10 @@ const DISCOVERY_QUERIES: Record<Channel, string[]> = {
 
 type MarketQuery = { query: string; source: string };
 
+// Australian automotive trade-press domains — grouped so one CSE query covers all.
+const TRADE_PRESS_SITES =
+  "site:autotalk.com.au OR site:tradetruck.com.au OR site:fleetnews.com.au OR site:motormag.com.au OR site:4wdaction.com.au";
+
 const MARKET_QUERIES: Record<Channel, MarketQuery[]> = {
   trailbait: [
     // LinkedIn — company pages for 4wd retailers
@@ -63,6 +67,12 @@ const MARKET_QUERIES: Record<Channel, MarketQuery[]> = {
     { query: "4x4 accessories store opening expansion new location australia 2024 2025",     source: "market_news" },
     // AAAA trade directory — Australian Automotive Aftermarket Association members
     { query: "site:aaaa.com.au 4wd accessories retail member",                               source: "trade_directory" },
+    // Facebook business pages — small independent 4x4 shops
+    { query: 'site:facebook.com "4wd accessories" OR "4x4 accessories" australia',           source: "facebook" },
+    // Instagram business — modern 4x4 shops with active social
+    { query: 'site:instagram.com "4wd accessories" OR "4x4 shop" australia',                 source: "instagram" },
+    // Australian automotive trade press — dealer news, new ranges, store openings
+    { query: `${TRADE_PRESS_SITES} 4x4 accessories retailer`,                                source: "trade_press" },
   ],
   fleetcraft: [
     // LinkedIn — fleet upfit / fitout companies
@@ -74,6 +84,12 @@ const MARKET_QUERIES: Record<Channel, MarketQuery[]> = {
     // Market news — contract wins, expansions
     { query: "fleet fitout company contract win new facility expansion australia 2024 2025", source: "market_news" },
     // AusTender is handled separately via the OCDS API (not a CSE query)
+    // Facebook business pages — fleet upfitters
+    { query: 'site:facebook.com "fleet fitout" OR "vehicle upfit" australia',                source: "facebook" },
+    // Instagram business — upfitters with social presence
+    { query: 'site:instagram.com "fleet fitout" OR "vehicle upfit" australia',               source: "instagram" },
+    // Australian automotive trade press — contract wins, fleet news
+    { query: `${TRADE_PRESS_SITES} fleet fitout OR vehicle upfit`,                           source: "trade_press" },
   ],
   aga: [
     // LinkedIn — automotive accessories brands
@@ -86,6 +102,12 @@ const MARKET_QUERIES: Record<Channel, MarketQuery[]> = {
     { query: "automotive accessories brand launch distribution deal australia 2024 2025",       source: "market_news" },
     // AAAA trade directory — accessories brand members
     { query: "site:aaaa.com.au automotive accessories brand manufacturer member",               source: "trade_directory" },
+    // Facebook business pages — accessories brands
+    { query: 'site:facebook.com "automotive accessories" brand manufacturer australia',         source: "facebook" },
+    // Instagram business — accessories brands
+    { query: 'site:instagram.com "automotive accessories" brand australia',                     source: "instagram" },
+    // Australian automotive trade press — brand launches, distribution deals
+    { query: `${TRADE_PRESS_SITES} automotive accessories brand OR manufacturer`,               source: "trade_press" },
   ],
 };
 
@@ -121,6 +143,31 @@ function extractCompanyFromMarketResult(
     case "trade_directory": {
       const name = title.split("|")[0].split(" - ")[0].trim();
       return { name: name || domain, website: link };
+    }
+    case "facebook": {
+      // Facebook titles: "Company Name - Home | Facebook" or "Company Name | Facebook"
+      // or "Company Name - About | Facebook"
+      const name = title
+        .split(/\s[|\-–]\s/)[0]
+        .replace(/\s*-\s*(Home|About|Posts|Reviews|Photos|Videos)\s*$/i, "")
+        .trim();
+      return { name: name || domain, website: null };
+    }
+    case "instagram": {
+      // Instagram titles: "Name (@handle) • Instagram photos and videos"
+      const parenMatch = title.match(/^([^(]+?)\s*\(@/);
+      const name = parenMatch?.[1]?.trim()
+        ?? title.split("•")[0].split("|")[0].split("-")[0].trim();
+      return { name: name || domain, website: null };
+    }
+    case "trade_press": {
+      // News article — the title is a headline, not a company name. Try to pull
+      // a company from the snippet (look for a capitalised name before a verb
+      // like "announced", "launches", "wins"); otherwise fall back to headline lead.
+      const verbMatch = snippet.match(/([A-Z][A-Za-z0-9&'\.\-]*(?:\s+[A-Z][A-Za-z0-9&'\.\-]*){0,4})\s+(?:announced|announces|launches?|launched|wins?|won|secured|unveiled|opened|opens|named)/);
+      const name = verbMatch?.[1]?.trim()
+        ?? title.split(/\s[|\-–]\s/)[0].trim();
+      return { name: name || domain, website: null };
     }
     default: {
       // market_news: extract first meaningful entity
@@ -352,23 +399,68 @@ async function isDuplicate(
   supabase: ReturnType<typeof createClient>,
   companyName: string,
   website: string | null,
-  channel: Channel
+  channel: Channel,
+  phone?: string | null,
+  placeId?: string | null,
 ): Promise<boolean> {
-  // Check existing leads — fuzzy match on name
-  const { data: leads } = await supabase
-    .from("sales_leads")
-    .select("id, company_name, website")
-    .eq("channel", channel)
-    .ilike("company_name", `%${companyName.split(" ")[0]}%`)
-    .limit(5);
+  // Hard match: Google Place ID (same physical location = same business)
+  if (placeId) {
+    const { data } = await supabase
+      .from("sales_leads")
+      .select("id")
+      .eq("channel", channel)
+      .eq("google_place_id", placeId)
+      .limit(1);
+    if (data?.length) return true;
+  }
 
-  if (leads?.length) {
-    for (const lead of leads) {
-      const nameSim = nameSimilarity(lead.company_name, companyName);
-      if (nameSim > 0.75) return true;
-      if (website && lead.website && extractDomain(lead.website) === extractDomain(website)) return true;
+  // Hard match: website domain
+  const domain = website ? extractDomain(website) : null;
+  if (domain) {
+    const { data } = await supabase
+      .from("sales_leads")
+      .select("id, company_name, website")
+      .eq("channel", channel)
+      .ilike("website", `%${domain}%`)
+      .limit(5);
+    if (data?.length) {
+      for (const lead of data) {
+        if (lead.website && extractDomain(lead.website) === domain) return true;
+      }
     }
   }
+
+  // Hard match: phone number (normalised digits)
+  if (phone) {
+    const normPhone = phone.replace(/\D/g, "");
+    if (normPhone.length >= 8) {
+      const { data } = await supabase
+        .from("sales_leads")
+        .select("id")
+        .eq("channel", channel)
+        .ilike("phone", `%${normPhone.slice(-8)}%`)
+        .limit(1);
+      if (data?.length) return true;
+    }
+  }
+
+  // Fuzzy match: name similarity (first word lookup to narrow DB scan)
+  const firstWord = companyName.split(" ")[0];
+  if (firstWord.length >= 3) {
+    const { data: leads } = await supabase
+      .from("sales_leads")
+      .select("id, company_name")
+      .eq("channel", channel)
+      .ilike("company_name", `%${firstWord}%`)
+      .limit(10);
+
+    if (leads?.length) {
+      for (const lead of leads) {
+        if (nameSimilarity(lead.company_name, companyName) >= 0.80) return true;
+      }
+    }
+  }
+
   return false;
 }
 
@@ -576,7 +668,7 @@ serve(async (req) => {
             }
 
             const website = place.website ?? null;
-            const isDup   = await isDuplicate(supabase, companyName, website, channel);
+            const isDup   = await isDuplicate(supabase, companyName, website, channel, place.formatted_phone_number ?? null, place.place_id ?? null);
             if (isDup) continue;
 
             const address      = place.formatted_address ?? place.vicinity ?? null;
@@ -641,8 +733,12 @@ serve(async (req) => {
               source,
             );
             if (!companyName || companyName.length < 3) continue;
-            // Skip generic / noise titles
-            const noiseWords = ["linkedin", "seek", "yellow pages", "aaaa", "tenders.gov", "indeed", "glassdoor"];
+            // Skip generic / noise titles — platform names, publication mastheads
+            const noiseWords = [
+              "linkedin", "seek", "yellow pages", "aaaa", "tenders.gov",
+              "indeed", "glassdoor", "facebook", "instagram",
+              "autotalk", "tradetruck", "fleetnews", "motormag", "4wdaction",
+            ];
             if (noiseWords.some((w) => companyName.toLowerCase().includes(w))) continue;
 
             if (channel === "trailbait") {
