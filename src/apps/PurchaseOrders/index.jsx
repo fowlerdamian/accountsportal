@@ -4,8 +4,8 @@ import { supabase } from '@portal/lib/supabase'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ALL_STATUSES   = ['Draft', 'Authorised', 'Ordered', 'Invoiced']
-const DEFAULT_FILTER = ['Draft', 'Authorised', 'Ordered']
+const ALL_STATUSES   = ['Draft', 'Authorised', 'Ordered', 'Invoiced', 'Receiving', 'Received', 'Cancelled']
+const DEFAULT_FILTER = ['Draft', 'Authorised', 'Ordered', 'Invoiced', 'Receiving', 'Received', 'Cancelled']
 
 const STATUS_STYLE = {
   Draft:      { color: '#a0a0a0',    background: '#0a0a0a',                  border: '1px solid #222222' },

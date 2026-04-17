@@ -24,10 +24,20 @@ serve(async (req) => {
     const cin7AccountId = Deno.env.get("CIN7_ACCOUNT_ID");
     const cin7ApiKey    = Deno.env.get("CIN7_API_KEY");
     const cin7Headers   = { "api-auth-accountid": cin7AccountId!, "api-auth-applicationkey": cin7ApiKey!, "Content-Type": "application/json" };
-    const res = await fetch(`${CIN7_BASE}/purchaseList?Limit=50&Page=1`, { headers: cin7Headers });
-    const json = await res.json();
-    const statuses = [...new Set((json.PurchaseList ?? []).map((p: any) => p.Status))];
-    return new Response(JSON.stringify({ statuses, sample: (json.PurchaseList ?? []).slice(0, 3).map((p: any) => ({ ID: p.ID, OrderNumber: p.OrderNumber, Status: p.Status, OrderStatus: p.OrderStatus, StockReceivedStatus: p.StockReceivedStatus, InvoiceStatus: p.InvoiceStatus })) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const sixMonthsAgo = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const [r1, r2, r3] = await Promise.all([
+      fetch(`${CIN7_BASE}/purchaseList?Limit=50&Page=1`, { headers: cin7Headers }).then(r => r.json()),
+      fetch(`${CIN7_BASE}/purchaseList?Limit=10&Page=1&Status=DRAFT`, { headers: cin7Headers }).then(r => r.json()),
+      fetch(`${CIN7_BASE}/purchaseList?Limit=10&Page=1&Status=DRAFT&CreatedSince=${sixMonthsAgo}`, { headers: cin7Headers }).then(r => r.json()),
+    ]);
+    const statuses = [...new Set((r1.PurchaseList ?? []).map((p: any) => p.Status))];
+    return new Response(JSON.stringify({
+      unfiltered_statuses: statuses,
+      status_draft_count: (r2.PurchaseList ?? []).length,
+      status_draft_with_date_count: (r3.PurchaseList ?? []).length,
+      status_draft_sample: (r2.PurchaseList ?? []).slice(0, 2).map((p: any) => ({ ID: p.ID, OrderNumber: p.OrderNumber, Status: p.Status, OrderStatus: p.OrderStatus })),
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   try {
@@ -96,7 +106,7 @@ serve(async (req) => {
 
     const [activePOs, draftPOs] = await Promise.all([
       fetchPages(`&CreatedSince=${sixMonthsAgo}`).catch(() => [] as any[]),
-      fetchPages(`&OrderStatus=DRAFT&CreatedSince=${sixMonthsAgo}`).catch(() => [] as any[]),
+      fetchPages(`&Status=DRAFT&CreatedSince=${sixMonthsAgo}`).catch(() => [] as any[]),
     ]);
 
     // Merge and deduplicate by ID.
