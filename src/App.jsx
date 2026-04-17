@@ -1,9 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { AuthProvider as GuideAuthProvider } from './apps/Guide/contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Layout from './components/Layout.jsx'
+import GlobalChat from './components/GlobalChat'
 import LoginPage from './components/LoginPage.jsx'
 import PortalDashboard from './pages/Dashboard.jsx'
 import TileSettings from './pages/TileSettings.jsx'
@@ -22,7 +24,6 @@ import XeroChat from './apps/Xero/index'
 import AccountsLayout from './apps/Accounts/AccountsLayout'
 
 // Contractor Hub
-import HubDashboard from './apps/ContractorHub/pages/HubDashboard'
 import ContractorsList from './apps/ContractorHub/pages/ContractorsList'
 import ContractorProfile from './apps/ContractorHub/pages/ContractorProfile'
 import ProjectsList from './apps/ContractorHub/pages/ProjectsList'
@@ -88,11 +89,42 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
 })
 
+// Longest prefix wins — more specific paths must come before their parents.
+const PATH_TITLES = [
+  ['/accounts/xero',         'Xero'],
+  ['/accounts',              'Accounts'],
+  ['/logistics/invoices',    'Invoices'],
+  ['/logistics/rate-cards',  'Rate Cards'],
+  ['/logistics/disputes',    'Disputes'],
+  ['/logistics',             'Logistics'],
+  ['/purchase-orders',       'Purchasing'],
+  ['/sales-support',         'Sales Support'],
+  ['/compliance',            'Compliance'],
+  ['/support',               'Customer Service'],
+  ['/projects',              'Projects'],
+  ['/guide',                 'Guide Portal'],
+  ['/dashboard/settings',    'Tile Settings'],
+  ['/dashboard',             'Dashboard'],
+  ['/settings',              'Settings'],
+  ['/login',                 'Login'],
+]
+
+function DocumentTitle() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    const match = PATH_TITLES.find(([prefix]) => pathname === prefix || pathname.startsWith(prefix + '/'))
+    document.title = match ? `${match[1]} — Staff Portal` : 'Staff Portal'
+  }, [pathname])
+  return null
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
+          <DocumentTitle />
+          <GlobalChat />
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
@@ -116,7 +148,7 @@ export default function App() {
                 <ProtectedRoute>
                   <GuideAuthProvider>
                     <Routes>
-                      <Route index element={<HubDashboard />} />
+                      <Route index element={<Navigate to="/projects/list" replace />} />
                       <Route path="contractors" element={<ContractorsList />} />
                       <Route path="contractors/:id" element={<ContractorProfile />} />
                       <Route path="list" element={<ProjectsList />} />
