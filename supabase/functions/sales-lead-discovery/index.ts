@@ -536,12 +536,43 @@ async function googleNewsSearch(query: string, cseKey: string, cseCx: string): P
 }
 
 async function googleMapsSearch(query: string, placesKey: string): Promise<{ results: any[]; diagnostic?: string }> {
-  const url = `${PLACES_BASE}/textsearch/json?query=${encodeURIComponent(query)}&region=au&key=${placesKey}`;
-  const res = await fetch(url);
-  if (!res.ok) return { results: [], diagnostic: `HTTP ${res.status}` };
-  const data = await res.json();
-  const diagnostic = data.status !== "OK" ? `Places API: ${data.status} — ${data.error_message ?? ""}` : undefined;
-  return { results: data.results ?? [], diagnostic };
+  // Text Search returns up to 20 per page, 60 total via next_page_token.
+  // Google requires a short delay (~2s) before a next_page_token becomes
+  // servable, otherwise you get INVALID_REQUEST.
+  const accumulated: any[] = [];
+  let diagnostic: string | undefined;
+  let pageToken: string | null = null;
+
+  for (let page = 0; page < 3; page++) {
+    const url = pageToken
+      ? `${PLACES_BASE}/textsearch/json?pagetoken=${encodeURIComponent(pageToken)}&key=${placesKey}`
+      : `${PLACES_BASE}/textsearch/json?query=${encodeURIComponent(query)}&region=au&key=${placesKey}`;
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      if (page === 0) diagnostic = `HTTP ${res.status}`;
+      break;
+    }
+    const data = await res.json();
+
+    if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+      if (page === 0) diagnostic = `Places API: ${data.status} — ${data.error_message ?? ""}`;
+      break;
+    }
+
+    // Skip permanently-closed businesses up front — saves downstream work
+    const liveResults = (data.results ?? []).filter(
+      (p: any) => p.business_status !== "CLOSED_PERMANENTLY",
+    );
+    accumulated.push(...liveResults);
+
+    pageToken = data.next_page_token ?? null;
+    if (!pageToken) break;
+    // Google requires a short wait before the next_page_token becomes valid
+    await new Promise((r) => setTimeout(r, 2100));
+  }
+
+  return { results: accumulated, diagnostic };
 }
 
 // ─── Extract tender winner from search result snippet ────────────────────────
@@ -657,7 +688,8 @@ serve(async (req) => {
             }));
           }
 
-          for (const place of rawResults.slice(0, 15)) {
+          // Text Search now returns up to 60 via pagination — raise the cap.
+          for (const place of rawResults.slice(0, 60)) {
             const companyName = place.name ?? "";
             if (!companyName || companyName.length < 3) continue;
 

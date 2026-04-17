@@ -28,7 +28,20 @@ async function enrichFromPlaces(placeId: string | null, companyName: string, pla
 
   if (!pid) return null;
 
-  const detailUrl = `${PLACES_BASE}/details/json?place_id=${pid}&fields=name,rating,user_ratings_total,formatted_phone_number,website,formatted_address,opening_hours,reviews&key=${placesKey}`;
+  // Request extra Details fields that are cheap to fetch and valuable for scoring:
+  //   business_status     — auto-disqualify CLOSED_PERMANENTLY
+  //   types               — validates category match (car_dealer, car_repair, etc.)
+  //   editorial_summary   — Google's own short description of the business
+  //   price_level         — rough scale signal (0-4)
+  //   geometry            — for future geo-analysis and state inference
+  //   url                 — canonical Google Maps URL (useful for sales ops)
+  const fields = [
+    "name", "rating", "user_ratings_total", "formatted_phone_number",
+    "website", "formatted_address", "opening_hours", "reviews",
+    "business_status", "types", "editorial_summary", "price_level",
+    "geometry", "url",
+  ].join(",");
+  const detailUrl = `${PLACES_BASE}/details/json?place_id=${pid}&fields=${fields}&key=${placesKey}`;
   const res = await fetch(detailUrl);
   if (!res.ok) return null;
   const data = await res.json();
@@ -47,6 +60,12 @@ async function enrichFromPlaces(placeId: string | null, companyName: string, pla
     website:             r.website ?? null,
     address:             r.formatted_address ?? null,
     recent_reviews:      recentReviews,
+    business_status:     r.business_status ?? null,
+    types:               Array.isArray(r.types) ? r.types : [],
+    editorial_summary:   r.editorial_summary?.overview ?? null,
+    price_level:         typeof r.price_level === "number" ? r.price_level : null,
+    location:            r.geometry?.location ?? null,
+    maps_url:            r.url ?? null,
   };
 }
 
@@ -651,12 +670,33 @@ serve(async (req) => {
       const places = await enrichFromPlaces(lead.google_place_id, lead.company_name, placesKey);
       let recentReviewsText = "";
       if (places) {
+        // Auto-disqualify permanently-closed businesses — no point enriching further
+        if (places.business_status === "CLOSED_PERMANENTLY") {
+          await supabase.from("sales_leads").update({
+            status:                  "disqualified",
+            disqualification_reason: "permanently closed (Google)",
+            google_place_id:         places.google_place_id,
+          }).eq("id", lead.id);
+          enrichedCount++;
+          continue;
+        }
+
         if (places.google_rating)       updates.google_rating       = places.google_rating;
         if (places.google_review_count) updates.google_review_count = places.google_review_count;
         if (places.phone && !lead.phone) updates.phone = places.phone;
         if (places.website && !lead.website) updates.website = places.website;
         if (places.address && !lead.address) updates.address = places.address;
         if (places.google_place_id)     updates.google_place_id     = places.google_place_id;
+
+        // Stash the new signals into score_breakdown so scoring can use them
+        const sbPlaces: Record<string, any> = { ...(lead.score_breakdown ?? {}) };
+        if (places.business_status)     sbPlaces.places_business_status = places.business_status;
+        if (places.types?.length)       sbPlaces.places_types           = places.types;
+        if (places.editorial_summary)   sbPlaces.places_summary         = places.editorial_summary;
+        if (places.price_level !== null) sbPlaces.places_price_level    = places.price_level;
+        if (places.location)            sbPlaces.places_location        = places.location;
+        if (places.maps_url)            sbPlaces.places_maps_url        = places.maps_url;
+        updates.score_breakdown = sbPlaces;
         // Compile review text for AI context
         if (places.recent_reviews?.length) {
           recentReviewsText = (places.recent_reviews as any[])
@@ -691,7 +731,7 @@ serve(async (req) => {
           enrichFromWayback(websiteDomain),
           enrichFromPageSpeed(websiteUrl, placesKey),
         ]);
-        const sbEnrich: Record<string, any> = { ...(lead.score_breakdown ?? {}) };
+        const sbEnrich: Record<string, any> = { ...(updates.score_breakdown ?? lead.score_breakdown ?? {}) };
         if (wayback?.first_seen) sbEnrich.website_first_seen = wayback.first_seen;
         if (wayback?.age_years !== null && wayback?.age_years !== undefined) sbEnrich.website_age_years = wayback.age_years;
         if (pagespeed?.performance_score !== null && pagespeed?.performance_score !== undefined) sbEnrich.website_performance = pagespeed.performance_score;
