@@ -56,53 +56,73 @@ function DueLabel({ due }) {
 
 function DueDateCell({ poId, due, onSaved }) {
   const [editing, setEditing] = useState(false)
-  const [value,   setValue]   = useState(due ?? '')
   const [saving,  setSaving]  = useState(false)
-  const saveInProgress = useRef(false)
+  const inputRef = useRef(null)
 
   async function save(newVal) {
-    if (saveInProgress.current) return
-    saveInProgress.current = true
+    const normalized = newVal || null
+    if (normalized === due) { setEditing(false); return }
     setSaving(true)
     const { error } = await supabase
       .from('purchase_orders')
-      .update({ due_date: newVal || null })
+      .update({ due_date: normalized })
       .eq('id', poId)
     setSaving(false)
-    saveInProgress.current = false
-    if (error) {
-      alert(`Failed to save due date: ${error.message}`)
-      return
-    }
-    onSaved(poId, newVal || null)
+    if (error) { alert(`Failed to save due date: ${error.message}`); return }
+    onSaved(poId, normalized)
     setEditing(false)
+  }
+
+  function openEditor() {
+    setEditing(true)
+    // Queue past the re-render so the input exists, then open the native picker.
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.showPicker?.()
+    })
   }
 
   if (editing) {
     return (
       <input
+        ref={inputRef}
         type="date"
-        autoFocus
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        onBlur={() => save(value)}
-        onKeyDown={e => { if (e.key === 'Enter') save(value); if (e.key === 'Escape') setEditing(false) }}
+        defaultValue={due ?? ''}
+        onChange={e => save(e.target.value)}
+        onBlur={() => setEditing(false)}
+        onKeyDown={e => { if (e.key === 'Escape') setEditing(false) }}
         style={{
           background: '#1a1a1a', border: '1px solid rgba(243,202,15,0.5)',
           borderRadius: '4px', color: '#ffffff', fontSize: '13px',
           padding: '6px 8px', outline: 'none',
-          fontFamily: '"JetBrains Mono", monospace', width: '100%',
+          fontFamily: '"JetBrains Mono", monospace',
           opacity: saving ? 0.5 : 1, boxSizing: 'border-box',
+          colorScheme: 'dark',
         }}
       />
     )
   }
 
   return (
-    <div onClick={() => { setValue(due ?? ''); setEditing(true) }} title="Tap to set due date"
-      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', minHeight: '32px' }}>
-      <DueLabel due={due} />
-      <span style={{ fontSize: '10px', color: '#333', flexShrink: 0 }}>✎</span>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', minHeight: '32px' }}>
+      <div onClick={openEditor} title={due ? 'Change due date' : 'Set due date'}
+        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        <DueLabel due={due} />
+        {!due && <span style={{ fontSize: '10px', color: '#333' }}>✎</span>}
+      </div>
+      {due && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); save('') }}
+          title="Clear due date"
+          style={{
+            background: 'transparent', border: 'none', color: '#555',
+            cursor: 'pointer', padding: '0 4px', fontSize: '14px', lineHeight: 1,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#ff6b6b' }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
+        >×</button>
+      )}
     </div>
   )
 }
