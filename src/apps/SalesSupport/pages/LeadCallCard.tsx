@@ -42,6 +42,9 @@ export default function LeadCallCard() {
   const [syncingOutcome, setSyncingOutcome] = useState<string | null>(null);
   const [revealedPhone, setRevealedPhone]   = useState<string | null>(null);
   const [revealingPhone, setRevealingPhone] = useState(false);
+  const [lushaMobile, setLushaMobile]       = useState<string | null>(null);
+  const [lushaLoading, setLushaLoading]     = useState(false);
+  const [lushaError, setLushaError]         = useState<string | null>(null);
   // Track the live call entry ID (may be created on first outcome/save)
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
 
@@ -49,6 +52,11 @@ export default function LeadCallCard() {
     if (callEntry?.call_notes) setNotes(callEntry.call_notes);
     if (callEntry?.id) setActiveCallId(callEntry.id);
   }, [callEntry?.id, callEntry?.call_notes]);
+
+  // Pre-populate cached Lusha mobile from lead record
+  useEffect(() => {
+    if (lead?.lusha_mobile) setLushaMobile(lead.lusha_mobile);
+  }, [lead?.lusha_mobile]);
 
   if (loadingLead || loadingCall || !lead) {
     return (
@@ -180,6 +188,23 @@ export default function LeadCallCard() {
     }
   }
 
+  async function lookupLusha() {
+    setLushaLoading(true);
+    setLushaError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("sales-lusha-lookup", {
+        body: { lead_id: lead.id },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.mobile) setLushaMobile(data.mobile);
+      else setLushaError("Not found in Lusha");
+    } catch (err: any) {
+      setLushaError(err.message ?? "Lookup failed");
+    } finally {
+      setLushaLoading(false);
+    }
+  }
+
   const isComplete = callEntry?.is_complete ?? false;
 
   const trendDir = () => {
@@ -303,6 +328,34 @@ export default function LeadCallCard() {
           {contactSource && (
             <p className="text-xs text-muted-foreground/60">Source: {contactSource}</p>
           )}
+
+          {/* Lusha mobile lookup */}
+          {lushaMobile ? (
+            <a
+              href={`tel:${lushaMobile}`}
+              className="flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              {lushaMobile}
+              <span className="text-[10px] text-muted-foreground/50 ml-0.5">Lusha</span>
+            </a>
+          ) : contactName ? (
+            <div className="flex items-center gap-2 pt-0.5">
+              <button
+                onClick={lookupLusha}
+                disabled={lushaLoading}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-border hover:bg-muted/50 transition-colors disabled:opacity-50 text-muted-foreground"
+              >
+                {lushaLoading
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : <Phone className="w-3 h-3" />}
+                Find mobile
+              </button>
+              {lushaError && (
+                <span className="text-xs text-muted-foreground/60">{lushaError}</span>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">

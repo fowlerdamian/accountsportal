@@ -42,6 +42,7 @@ export interface SalesLead {
   status: string;
   disqualification_reason: string | null;
   hubspot_previous_contact: Array<{ date: string; body: string }> | null;
+  lusha_mobile: string | null;
   created_at: string;
   updated_at: string;
 }
