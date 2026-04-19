@@ -41,6 +41,10 @@ serve(async (req) => {
   await invoke("sales-lead-discovery");
   console.log("[sales-research-run] Discovery done");
 
+  // Dedup immediately after discovery so enrichment never wastes credits on duplicates
+  await invoke("sales-lead-dedup");
+  console.log("[sales-research-run] Dedup done");
+
   // Enrich and score all 3 channels in parallel — each gets its own 150s budget.
   // Previously sequential: 3 × 150s would blow the orchestrator's own 150s limit.
   await Promise.all(

@@ -62,9 +62,12 @@ function mergeFields(keeper: any, dupe: any): Record<string, any> {
     if (merged.length > keeper.key_products_services.length) patch.key_products_services = merged;
   }
 
-  // Prefer higher score breakdown if keeper has none
-  if (!keeper.score_breakdown && dupe.score_breakdown) {
-    patch.score_breakdown = dupe.score_breakdown;
+  // Deep-merge score_breakdown: take keeper keys but fill any missing ones from dupe
+  if (dupe.score_breakdown && typeof dupe.score_breakdown === "object") {
+    const merged = { ...dupe.score_breakdown, ...(keeper.score_breakdown ?? {}) };
+    if (JSON.stringify(merged) !== JSON.stringify(keeper.score_breakdown ?? {})) {
+      patch.score_breakdown = merged;
+    }
   }
 
   // Prefer "existing customer" if either record knows it
@@ -125,24 +128,40 @@ serve(async (req) => {
       continue;
     }
 
-    // Build domain map and find duplicate groups
-    const domainMap = new Map<string, any[]>();   // domain → leads
-    const noDomain: any[] = [];
+    // ── Pass 1: hard-match buckets (domain / place_id / phone) ──────────────
+    // Each lead gets assigned to at most one bucket. We use a union-find approach:
+    // track which bucket each lead already belongs to and merge on collision.
 
-    for (const lead of leads) {
-      const domain = lead.website ? extractDomain(lead.website) : null;
-      if (domain) {
-        const bucket = domainMap.get(domain) ?? [];
-        bucket.push(lead);
-        domainMap.set(domain, bucket);
-      } else {
-        noDomain.push(lead);
-      }
+    const idToBucket = new Map<string, string>(); // lead.id → bucket key
+    const buckets    = new Map<string, Set<string>>(); // bucket key → Set<lead.id>
+
+    function bucketKey(lead: any): string | null {
+      const domain  = lead.website ? extractDomain(lead.website) : null;
+      const placeId = lead.google_place_id ?? null;
+      const phone   = lead.phone ? lead.phone.replace(/\D/g, "") : null;
+      // Priority: place_id > domain > phone (phone alone is weakest)
+      return placeId ? `place:${placeId}` : domain ? `domain:${domain}` : phone && phone.length >= 8 ? `phone:${phone}` : null;
     }
 
-    // Also group by name similarity for leads without a domain match
+    for (const lead of leads) {
+      const key = bucketKey(lead);
+      if (!key) continue;
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.add(lead.id);
+      } else {
+        buckets.set(key, new Set([lead.id]));
+      }
+      idToBucket.set(lead.id, key);
+    }
+
+    // ── Pass 2: name-similarity for leads with no hard-match key ─────────────
+    const leadMap   = new Map(leads.map((l: any) => [l.id, l]));
+    const hardKeyed = new Set(idToBucket.keys());
+    const noKey     = leads.filter((l: any) => !hardKeyed.has(l.id));
+
     const nameGroups: any[][] = [];
-    const ungrouped = [...noDomain];
+    const ungrouped = [...noKey];
 
     for (let i = 0; i < ungrouped.length; i++) {
       const a = ungrouped[i];
@@ -159,9 +178,11 @@ serve(async (req) => {
       if (group.length > 1) nameGroups.push(group);
     }
 
-    // Combine domain groups + name groups (only groups with 2+ members)
+    // ── Combine into final dup groups ─────────────────────────────────────────
     const dupGroups: any[][] = [
-      ...Array.from(domainMap.values()).filter((g) => g.length > 1),
+      ...Array.from(buckets.values())
+        .filter((s) => s.size > 1)
+        .map((s) => [...s].map((id) => leadMap.get(id)).filter(Boolean)),
       ...nameGroups,
     ];
 

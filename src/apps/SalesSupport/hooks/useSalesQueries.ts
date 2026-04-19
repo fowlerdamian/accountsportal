@@ -23,6 +23,8 @@ export interface SalesLead {
   website_summary: string | null;
   key_products_services: string[] | null;
   recommended_contact_name: string | null;
+  recommended_contact_last_name: string | null;
+  recommended_contact_title: string | null;
   recommended_contact_position: string | null;
   recommended_contact_source: string | null;
   discovery_source: string;
@@ -39,6 +41,7 @@ export interface SalesLead {
   score_breakdown: Record<string, number> | null;
   status: string;
   disqualification_reason: string | null;
+  hubspot_previous_contact: Array<{ date: string; body: string }> | null;
   created_at: string;
   updated_at: string;
 }
@@ -113,6 +116,9 @@ export function useLeads(channel: Channel, filters?: {
       if (filters?.state) q = q.eq("state", filters.state);
       if (filters?.existingOnly) q = q.eq("is_existing_customer", true);
 
+      // AGA requires own brand — exclude leads where has_own_brand was explicitly confirmed false by AI
+      if (channel === "aga") q = q.not("score_breakdown->has_own_brand", "eq", "false");
+
       const { data, error } = await q.limit(200);
       if (error) throw error;
       return data as SalesLead[];
@@ -184,6 +190,23 @@ export function useCallEntry(id: string) {
         .single();
       if (error) throw error;
       return data as CallEntry;
+    },
+  });
+}
+
+export function useCallEntryByLead(leadId: string) {
+  return useQuery({
+    queryKey: ["call_entry_by_lead", leadId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("call_list")
+        .select("*, sales_leads(*)")
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as CallEntry | null;
     },
   });
 }

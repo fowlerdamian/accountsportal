@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import { Search, Filter, Loader2, RefreshCw, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useLeads } from "../hooks/useSalesQueries";
 import { LeadScoreBadge } from "../components/LeadScoreBadge";
-import { LeadDetailDrawer } from "../components/LeadDetailDrawer";
 import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type Channel } from "../lib/constants";
-import type { SalesLead } from "../hooks/useSalesQueries";
 import { supabase } from "@portal/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -16,6 +14,7 @@ const STATES = ["NSW", "VIC", "QLD", "SA", "WA", "TAS", "NT", "ACT"];
 
 export default function LeadList() {
   const { channel } = useOutletContext<{ channel: Channel }>();
+  const navigate    = useNavigate();
   const qc = useQueryClient();
 
   const [search, setSearch]       = useState("");
@@ -25,7 +24,6 @@ export default function LeadList() {
   const [existingOnly, setExistingOnly] = useState(false);
   const [sortKey, setSortKey]     = useState<SortKey>("lead_score");
   const [sortAsc, setSortAsc]     = useState(false);
-  const [selectedLead, setSelectedLead] = useState<SalesLead | null>(null);
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction]     = useState<string | null>(null);
 
@@ -108,6 +106,14 @@ export default function LeadList() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* AGA qualification notice */}
+      {channel === "aga" && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
+          <span className="font-semibold">Own brand required</span>
+          <span className="text-emerald-400/60">· Only leads with a confirmed own brand are shown for AGA Bespoke</span>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Search */}
@@ -225,7 +231,7 @@ export default function LeadList() {
               ) : filtered.map((lead) => (
                 <tr
                   key={lead.id}
-                  onClick={() => setSelectedLead(lead)}
+                  onClick={() => navigate(`/sales-support/${channel}/leads/${lead.id}`)}
                   className={cn(
                     "border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors cursor-pointer",
                     selectedIds.has(lead.id) && "bg-primary/5"
@@ -263,7 +269,9 @@ export default function LeadList() {
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-sm text-muted-foreground max-w-[140px] truncate">
-                    {lead.recommended_contact_name ?? "—"}
+                    {lead.recommended_contact_name
+                      ? [lead.recommended_contact_title, lead.recommended_contact_name, lead.recommended_contact_last_name].filter(Boolean).join(" ")
+                      : "—"}
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     {lead.is_existing_customer ? (
@@ -293,15 +301,6 @@ export default function LeadList() {
         </div>
       </div>
 
-      {/* Lead detail drawer */}
-      <LeadDetailDrawer
-        lead={selectedLead}
-        onClose={() => setSelectedLead(null)}
-        onLeadUpdated={() => {
-          qc.invalidateQueries({ queryKey: ["sales_leads", channel] });
-          setSelectedLead(null);
-        }}
-      />
     </div>
   );
 }

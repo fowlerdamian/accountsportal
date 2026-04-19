@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, ExternalLink, Star, Globe, Phone, MapPin, User, Link, TrendingDown, TrendingUp, Minus, Loader2, PhoneCall } from "lucide-react";
+import { X, ExternalLink, Star, Globe, Phone, MapPin, User, Link, TrendingDown, TrendingUp, Minus, Loader2, PhoneCall, MessageSquare } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { LeadScoreBadge } from "./LeadScoreBadge";
 import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type Channel } from "../lib/constants";
@@ -87,7 +87,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
           google_rating:       lead.google_rating,
           google_reviews:      lead.google_review_count,
           recommended_contact: lead.recommended_contact_name
-            ? `${lead.recommended_contact_name}${lead.recommended_contact_position ? ", " + lead.recommended_contact_position : ""}`
+            ? `${[lead.recommended_contact_title, lead.recommended_contact_name, lead.recommended_contact_last_name].filter(Boolean).join(" ")}${lead.recommended_contact_position ? ", " + lead.recommended_contact_position : ""}`
             : null,
           company_summary:     lead.website_summary,
           is_existing_customer: lead.is_existing_customer,
@@ -220,7 +220,9 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
               {lead.recommended_contact_name && (
                 <div className="flex items-center gap-2 text-sm">
                   <User className="w-4 h-4 text-muted-foreground" />
-                  <span className="font-medium">{lead.recommended_contact_name}</span>
+                  <span className="font-medium">
+                    {[lead.recommended_contact_title, lead.recommended_contact_name, lead.recommended_contact_last_name].filter(Boolean).join(" ")}
+                  </span>
                   {lead.recommended_contact_position && <span className="text-muted-foreground">— {lead.recommended_contact_position}</span>}
                   {lead.recommended_contact_source && <span className="text-xs text-muted-foreground/60">via {lead.recommended_contact_source}</span>}
                 </div>
@@ -239,6 +241,23 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
               )}
             </div>
           </section>
+
+          {/* Previous Contact (HubSpot notes) */}
+          {lead.hubspot_previous_contact?.length ? (
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5" /> Previous Contact
+              </h3>
+              <div className="space-y-2">
+                {lead.hubspot_previous_contact.map((note, i) => (
+                  <div key={i} className="text-sm bg-muted/20 rounded-lg p-2.5 border border-border/50">
+                    <span className="text-xs text-muted-foreground/60 font-mono mr-2">{note.date}</span>
+                    <span className="text-foreground/70">{note.body}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {/* Google & Social */}
           <section>
