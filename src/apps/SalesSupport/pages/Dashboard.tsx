@@ -205,7 +205,7 @@ export default function Dashboard() {
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Recent Research Jobs</h2>
         <div className="rounded-xl border border-border bg-card/50 overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: '480px' }}>
+          <table className="w-full text-sm min-w-[380px]">
             <thead>
               <tr className="border-b border-border">
                 {["Channel", "Type", "Status", "Leads Found", "Started"].map((h) => (

@@ -4,10 +4,10 @@ import type { TaskStatus, ProjectStatus } from "@hub/hooks/use-hub-queries";
 type AnyStatus = TaskStatus | ProjectStatus;
 
 const TASK_CONFIG: Record<TaskStatus, { label: string; className: string }> = {
-  backlog:     { label: "Backlog",      className: "bg-muted text-muted-foreground" },
+  backlog:     { label: "To Do",        className: "bg-muted text-muted-foreground" },
   in_progress: { label: "In Progress",  className: "bg-blue-900/40 text-blue-300 border border-blue-800/40" },
-  review:      { label: "Review",       className: "bg-amber-900/40 text-amber-300 border border-amber-800/40" },
-  done:        { label: "Done",         className: "bg-green-900/40 text-green-300 border border-green-800/40" },
+  review:      { label: "Stuck",        className: "bg-red-900/40 text-red-300 border border-red-800/40" },
+  done:        { label: "Complete",     className: "bg-green-900/40 text-green-300 border border-green-800/40" },
 };
 
 const PROJECT_CONFIG: Record<ProjectStatus, { label: string; className: string }> = {

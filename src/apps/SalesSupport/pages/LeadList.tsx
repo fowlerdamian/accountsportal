@@ -115,50 +115,53 @@ export default function LeadList() {
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search companies, locations..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
-          />
+      <div className="space-y-2">
+        {/* Row 1: search + refresh */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search companies, locations..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          </div>
+          <button onClick={() => refetch()} className="p-2 rounded-lg hover:bg-muted/50 transition-colors border border-border shrink-0">
+            <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
+          </button>
         </div>
 
-        {/* Filters */}
-        <select value={statusFilter} onChange={(e) => setStatus(e.target.value)}
-          className="px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none cursor-pointer">
-          <option value="all">All statuses</option>
-          {["new","researched","enriched","queued","contacted","converted","disqualified"].map((s) => (
-            <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}</option>
-          ))}
-        </select>
+        {/* Row 2: filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={statusFilter} onChange={(e) => setStatus(e.target.value)}
+            className="px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none cursor-pointer">
+            <option value="all">All statuses</option>
+            {["new","researched","enriched","queued","contacted","converted","disqualified"].map((s) => (
+              <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}</option>
+            ))}
+          </select>
 
-        <select value={stateFilter} onChange={(e) => setState(e.target.value)}
-          className="px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none cursor-pointer">
-          <option value="">All states</option>
-          {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+          <select value={stateFilter} onChange={(e) => setState(e.target.value)}
+            className="px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none cursor-pointer">
+            <option value="">All states</option>
+            {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
 
-        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-          <input type="checkbox" checked={existingOnly} onChange={(e) => setExistingOnly(e.target.checked)}
-            className="rounded border-border" />
-          Existing customers
-        </label>
+          <label className="flex items-center gap-1.5 text-sm cursor-pointer whitespace-nowrap">
+            <input type="checkbox" checked={existingOnly} onChange={(e) => setExistingOnly(e.target.checked)}
+              className="rounded border-border w-4 h-4" />
+            Existing
+          </label>
 
-        <div className="flex items-center gap-2 text-sm">
-          <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-muted-foreground text-xs">Min score:</span>
-          <input type="number" min={0} max={100} value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}
-            className="w-16 px-2 py-1 bg-muted/40 border border-border rounded text-xs focus:outline-none text-center" />
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground text-xs whitespace-nowrap">Min score:</span>
+            <input type="number" min={0} max={100} value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}
+              className="w-14 px-2 py-1 bg-muted/40 border border-border rounded text-xs focus:outline-none text-center" />
+          </div>
         </div>
-
-        <button onClick={() => refetch()} className="p-1.5 rounded hover:bg-muted/50 transition-colors">
-          <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
-        </button>
       </div>
 
       {/* Bulk actions */}
@@ -191,8 +194,72 @@ export default function LeadList() {
         {search && ` matching "${search}"`}
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl border border-border bg-card/50 overflow-hidden">
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-2">
+        {isLoading ? (
+          <div className="py-12 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">No leads found. Run discovery to populate this list.</div>
+        ) : filtered.map((lead) => (
+          <div
+            key={lead.id}
+            onClick={() => navigate(`/sales-support/${channel}/leads/${lead.id}`)}
+            className={cn(
+              "rounded-xl border border-border bg-card/50 p-3.5 cursor-pointer hover:border-foreground/20 transition-all",
+              selectedIds.has(lead.id) && "bg-primary/5 border-primary/30"
+            )}
+          >
+            <div className="flex items-start gap-2.5">
+              <div onClick={(e) => e.stopPropagation()} className="pt-0.5">
+                <input type="checkbox" checked={selectedIds.has(lead.id)} onChange={() => toggleSelect(lead.id)}
+                  className="rounded border-border w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm leading-snug">{lead.company_name}</div>
+                    {lead.website && (
+                      <div className="text-xs text-muted-foreground truncate">
+                        {lead.website.replace(/^https?:\/\/(www\.)?/, "")}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <LeadScoreBadge score={lead.lead_score} size="sm" />
+                    {lead.hubspot_company_id && (
+                      <a href={`https://app-ap1.hubspot.com/contacts/22572063/company/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-orange-400">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                  <span className={cn("text-xs px-2 py-0.5 rounded-full", LEAD_STATUS_COLOR[lead.status])}>
+                    {LEAD_STATUS_LABEL[lead.status]}
+                  </span>
+                  {[lead.state, lead.postcode].filter(Boolean).length > 0 && (
+                    <span className="text-xs text-muted-foreground">{[lead.state, lead.postcode].filter(Boolean).join(" ")}</span>
+                  )}
+                  {lead.google_rating != null && (
+                    <span className="text-xs text-yellow-400">★ {lead.google_rating}</span>
+                  )}
+                  {lead.is_existing_customer && (
+                    <span className="text-xs text-green-400 font-medium">Existing</span>
+                  )}
+                  <span className="text-xs text-muted-foreground/60">
+                    {new Date(lead.updated_at).toLocaleDateString("en-AU")}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block rounded-xl border border-border bg-card/50 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

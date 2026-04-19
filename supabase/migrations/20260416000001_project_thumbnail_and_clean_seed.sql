@@ -1,0 +1,48 @@
+-- Add thumbnail_url to projects
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS thumbnail_url text;
+
+-- ── Remove seed / dummy data ──────────────────────────────────────────────────
+-- Seed IDs all follow the b1.../a1.../c1... pattern from contractor_hub_seed.sql
+
+DELETE FROM public.activity_log
+  WHERE project_id IN (
+    'b1000000-0000-0000-0000-000000000001',
+    'b1000000-0000-0000-0000-000000000002',
+    'b1000000-0000-0000-0000-000000000003'
+  );
+
+DELETE FROM public.time_entries
+  WHERE project_id IN (
+    'b1000000-0000-0000-0000-000000000001',
+    'b1000000-0000-0000-0000-000000000002',
+    'b1000000-0000-0000-0000-000000000003'
+  );
+
+DELETE FROM public.tasks
+  WHERE project_id IN (
+    'b1000000-0000-0000-0000-000000000001',
+    'b1000000-0000-0000-0000-000000000002',
+    'b1000000-0000-0000-0000-000000000003'
+  );
+
+DELETE FROM public.project_stages
+  WHERE project_id IN (
+    'b1000000-0000-0000-0000-000000000001',
+    'b1000000-0000-0000-0000-000000000002',
+    'b1000000-0000-0000-0000-000000000003'
+  );
+
+DELETE FROM public.projects
+  WHERE id IN (
+    'b1000000-0000-0000-0000-000000000001',
+    'b1000000-0000-0000-0000-000000000002',
+    'b1000000-0000-0000-0000-000000000003'
+  );
+
+DELETE FROM public.contractors
+  WHERE id IN (
+    'a1000000-0000-0000-0000-000000000001',
+    'a1000000-0000-0000-0000-000000000002',
+    'a1000000-0000-0000-0000-000000000003',
+    'a1000000-0000-0000-0000-000000000004'
+  );

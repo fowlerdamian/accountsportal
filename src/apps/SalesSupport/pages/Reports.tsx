@@ -165,7 +165,7 @@ export default function Reports() {
       </div>
 
       {/* Row 1: Leads over time + Score distribution */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <ChartCard title="New Leads Discovered (Weekly)">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={d?.leadsPerWeek ?? []} margin={{ left: -10 }}>
@@ -192,7 +192,7 @@ export default function Reports() {
       </div>
 
       {/* Row 2: Conversion funnel + Call outcomes */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <ChartCard title="Conversion Funnel">
           <div className="space-y-2">
             {(d?.funnel ?? []).map((step, i) => {
@@ -253,7 +253,7 @@ export default function Reports() {
 
       {/* Channel-specific extras */}
       {channel === "trailbait" && (
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <ChartCard title="Win-back Candidates">
             <div className="flex items-center gap-4 py-4">
               <div className="text-5xl font-bold text-red-400 tabular-nums">{d?.winbackCount ?? 0}</div>

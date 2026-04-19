@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { NavLink, Link, useMatch } from "react-router-dom";
-import { LayoutDashboard, FolderOpen, Users, LogOut, Menu, Plus, Settings } from "lucide-react";
+import { FolderOpen, Users, LogOut, Menu, Plus, Settings, Sparkles } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "@guide/contexts/AuthContext";
 import { useIsMobile } from "@guide/hooks/use-mobile";
@@ -10,6 +10,7 @@ import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { NewTaskModal } from "./NewTaskModal";
 import { CommandPalette } from "./CommandPalette";
 import { HubTimerButton } from "./HubTimer";
+import { AiAssistantPanel } from "./AiAssistantPanel";
 
 // ── Context ───────────────────────────────────────────────────
 
@@ -36,7 +37,6 @@ export function useHub() {
 // ── Sidebar ───────────────────────────────────────────────────
 
 const navItems = [
-  { label: "Dashboard",   icon: LayoutDashboard, path: "/projects",             end: true },
   { label: "Projects",    icon: FolderOpen,       path: "/projects/list",        end: false },
   { label: "Contractors", icon: Users,            path: "/projects/contractors", end: false },
   { label: "Settings",    icon: Settings,         path: "/projects/settings",    end: false },
@@ -90,14 +90,6 @@ function SidebarContent({
           >
             <item.icon className="h-3.5 w-3.5 shrink-0" />
             <span>{item.label}</span>
-            {item.path === "/projects" && overdueCount > 0 && (
-              <span
-                className="ml-auto h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-medium rounded-sm"
-                style={{ background: "rgba(239,68,68,0.2)", color: "#ff1744" }}
-              >
-                {overdueCount}
-              </span>
-            )}
           </NavLink>
         ))}
 
@@ -151,6 +143,8 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskPid, setNewTaskPid]   = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [aiOpen, setAiOpen]           = useState(false);
+  const aiInputRef = useRef<HTMLTextAreaElement>(null);
 const isMobile                      = useIsMobile();
   const { signOut }                   = useAuth();
   const overdueCount                  = useOverdueTaskCount();
@@ -261,6 +255,23 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
               {/* Timer */}
               <HubTimerButton />
 
+              {/* AI Assistant */}
+              <button
+                onClick={() => setAiOpen(v => !v)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  fontSize: "11px", fontFamily: '"JetBrains Mono", monospace',
+                  color: aiOpen ? "#f3ca0f" : "#555", background: "none",
+                  border: `1px solid ${aiOpen ? "rgba(243,202,15,0.4)" : "#222222"}`,
+                  borderRadius: "4px", padding: "4px 10px", cursor: "pointer",
+                  transition: "color 120ms, border-color 120ms",
+                }}
+                title="AI Assistant"
+              >
+                <Sparkles style={{ width: "11px", height: "11px" }} />
+                <span className="hidden sm:inline">AI</span>
+              </button>
+
               {/* Command palette */}
               <button
                 onClick={() => setPaletteOpen(v => !v)}
@@ -297,6 +308,9 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         {newTaskOpen && !currentProjectId && (
           <NewTaskModal open={newTaskOpen} onClose={closeNewTask} projectId={newTaskPid} />
         )}
+
+        {/* AI Assistant panel */}
+        <AiAssistantPanel open={aiOpen} onClose={() => setAiOpen(false)} searchInputRef={aiInputRef} />
 
         {/* Command palette — Cmd+K */}
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

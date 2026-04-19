@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2, ChevronRight, Plus, Upload, Paperclip, Clock,
-  GripVertical, Trash2,
+  GripVertical, Camera, Trash2,
 } from "lucide-react";
 import { Button } from "@guide/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
@@ -17,6 +17,7 @@ import { StatusPill, TASK_STATUS_ORDER, nextTaskStatus } from "@hub/components/S
 import { PriorityPill } from "@hub/components/PriorityPill";
 import { ContractorAvatar } from "@hub/components/ContractorAvatar";
 import { ActivityFeed } from "@hub/components/ActivityFeed";
+import { StagedActivityFeed } from "@hub/components/StagedActivityFeed";
 import { TaskDrawer } from "@hub/components/TaskDrawer";
 import { LogTimeForm } from "@hub/components/LogTimeForm";
 import { ProductStagesView } from "@hub/components/ProductStagesView";
@@ -25,8 +26,10 @@ import {
   useProject, useTasks, useProjectBudgetSummary, useActivityLog,
   useFiles, useContractors, useProjectContractors, useTimeEntries,
   useUpdateProject, useCreateTask, useUpdateTask, useReorderTasks,
-  usePostActivity, useUploadFile,
-  type Task, type TaskStatus, type TaskPriority, type ProjectStatus,
+  usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
+  useUploadProjectThumbnail, useSoftDeleteProject,
+  NEW_PRODUCT_STAGES,
+  type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
 import { notifyBudgetThreshold } from "@hub/lib/notifyHubChat";
 
@@ -52,16 +55,21 @@ function ProjectViewContent() {
   const { data: timeEntries = [] }                    = useTimeEntries({ projectId: id });
 
   // ── Mutations ─────────────────────────────────────────────
-  const { mutateAsync: updateProject }  = useUpdateProject();
-  const { mutateAsync: createTask }     = useCreateTask();
+  const { mutateAsync: updateProject }         = useUpdateProject();
+  const { mutateAsync: createProjectStages }   = useCreateProjectStages();
+  const { data: existingStages = [] }          = useProjectStages(id);
+  const { mutateAsync: uploadThumbnail }       = useUploadProjectThumbnail();
+  const { mutateAsync: softDelete }            = useSoftDeleteProject();
+  const { mutateAsync: createTask }            = useCreateTask();
   const { mutateAsync: updateTask }     = useUpdateTask();
   const { mutateAsync: reorderTasks }   = useReorderTasks();
   const { mutateAsync: postActivity }   = usePostActivity();
   const { mutateAsync: uploadFile }     = useUploadFile();
 
   // ── Local state ───────────────────────────────────────────
-  const [selectedTask,    setSelectedTask]    = useState<Task | null>(null);
-  const [drawerOpen,      setDrawerOpen]      = useState(false);
+  const [selectedTask,      setSelectedTask]      = useState<Task | null>(null);
+  const [drawerOpen,        setDrawerOpen]        = useState(false);
+  const [editingPriority,   setEditingPriority]   = useState(false);
   const [taskFilter,      setTaskFilter]      = useState<TaskStatus | "all">("all");
   const [editingName,     setEditingName]     = useState(false);
   const [nameValue,       setNameValue]       = useState("");
@@ -78,10 +86,11 @@ function ProjectViewContent() {
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [logTimeOpen,     setLogTimeOpen]     = useState(false);
 
-  const fileInputRef       = useRef<HTMLInputElement>(null);
-  const newTaskInputRef    = useRef<HTMLInputElement>(null);
-  const activityEndRef     = useRef<HTMLDivElement>(null);
-  const prevBudgetPctRef   = useRef<number | null>(null);
+  const fileInputRef        = useRef<HTMLInputElement>(null);
+  const thumbInputRef       = useRef<HTMLInputElement>(null);
+  const newTaskInputRef     = useRef<HTMLInputElement>(null);
+  const activityEndRef      = useRef<HTMLDivElement>(null);
+  const prevBudgetPctRef    = useRef<number | null>(null);
 
   // ── Budget threshold notifications ────────────────────────
   useEffect(() => {
@@ -151,20 +160,26 @@ function ProjectViewContent() {
     } catch { toast.error("Failed to save name"); }
   }
 
-  async function handleStatusChange(status: ProjectStatus) {
-    if (!project || !user) return;
+  async function handleTypeChange(newType: string) {
+    if (!project) return;
     try {
-      await updateProject({ id: project.id, status });
-      await postActivity({
-        project_id:  project.id,
-        type:        "status_change",
-        content:     `${authorName} moved project to ${status.replace("_", " ")}`,
-        author_id:   user.id,
-        author_name: authorName,
-        metadata:    { from: project.status, to: status },
-      });
-      sendNotification({ type: "task_status_changed", task_title: project.name, status, author: authorName, project_name: project.name, project_id: project.id });
-    } catch { toast.error("Failed to update status"); }
+      await updateProject({ id: project.id, type: newType as any });
+      if (newType === "new_product" && existingStages.length === 0) {
+        const today = new Date().toISOString().split("T")[0];
+        await createProjectStages({
+          projectId: project.id,
+          stages: NEW_PRODUCT_STAGES.map((stageName, i) => ({
+            project_id: project.id,
+            name:       stageName,
+            position:   i,
+            start_date: i === 0 ? today : null,
+            end_date:   null,
+            is_active:  i === 0,
+          })),
+        });
+      }
+      toast.success("Project type updated");
+    } catch { toast.error("Failed to update type"); }
   }
 
   async function handleStatusCycle(task: Task, e: React.MouseEvent) {
@@ -209,13 +224,16 @@ function ProjectViewContent() {
     if (!activityInput.trim() || !user || !id) return;
     setPostingSaving(true);
     try {
+      const stageMeta = project?.type === "new_product" && activeStage
+        ? { stage_name: activeStage.name }
+        : {};
       await postActivity({
         project_id:  id,
         type:        "note",
         content:     activityInput.trim(),
         author_id:   user.id,
         author_name: authorName,
-        metadata:    sendToUpwork ? { send_to_upwork: true } : null,
+        metadata:    { ...stageMeta, ...(sendToUpwork ? { send_to_upwork: true } : {}) } || null,
       });
       if (sendToUpwork) {
         const { data: { session } } = await supabase.auth.getSession();
@@ -297,6 +315,27 @@ function ProjectViewContent() {
     });
   }
 
+  // ── Active stage (for activity tagging) ──────────────────
+  const activeStage = existingStages.find(s => s.is_active);
+
+  async function handleThumbnailUpload(file: File | null) {
+    if (!file || !id) return;
+    try {
+      await uploadThumbnail({ file, projectId: id });
+      toast.success("Thumbnail updated");
+    } catch { toast.error("Failed to upload thumbnail"); }
+  }
+
+  async function handleDelete() {
+    if (!project) return;
+    if (!window.confirm(`Move "${project.name}" to the recycle bin? It will be permanently deleted after 15 days.`)) return;
+    try {
+      await softDelete(project.id);
+      toast.success("Project moved to recycle bin");
+      navigate("/projects/list");
+    } catch { toast.error("Failed to delete project"); }
+  }
+
   // ── Task table rendering ──────────────────────────────────
 
   const today       = new Date().toISOString().split("T")[0];
@@ -337,47 +376,128 @@ function ProjectViewContent() {
       {/* ── Project Header ── */}
       <div className="rounded-lg border bg-background p-5 space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex-1 min-w-0">
-            {editingName ? (
-              <input
-                value={nameValue}
-                onChange={e => setNameValue(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
-                onBlur={handleSaveName}
-                className="text-2xl font-bold bg-transparent outline-none border-b border-primary/50 w-full"
-                autoFocus
-              />
-            ) : (
-              <h1
-                className="text-2xl font-bold cursor-text hover:text-foreground/80 transition-colors"
-                onClick={() => { setNameValue(project.name); setEditingName(true); }}
-                title="Click to edit"
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {/* Thumbnail mini-icon */}
+            <div className="relative shrink-0 group">
+              <button
+                onClick={() => thumbInputRef.current?.click()}
+                className="w-10 h-10 rounded-lg overflow-hidden border border-border/40 bg-muted flex items-center justify-center hover:border-primary/40 transition-colors"
+                title="Upload project thumbnail"
               >
-                {project.name}
-              </h1>
-            )}
+                {project.thumbnail_url ? (
+                  <img
+                    src={project.thumbnail_url}
+                    alt="Project thumbnail"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Camera className="w-4 h-4 text-muted-foreground/40" />
+                )}
+              </button>
+              <div className="absolute inset-0 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                <Camera className="w-3.5 h-3.5 text-white" />
+              </div>
+              <input
+                ref={thumbInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => handleThumbnailUpload(e.target.files?.[0] ?? null)}
+              />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              {editingName ? (
+                <input
+                  value={nameValue}
+                  onChange={e => setNameValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
+                  onBlur={handleSaveName}
+                  className="text-2xl font-bold bg-transparent outline-none border-b border-primary/50 w-full"
+                  autoFocus
+                />
+              ) : (
+                <h1
+                  className="text-2xl font-bold cursor-text hover:text-foreground/80 transition-colors"
+                  onClick={() => { setNameValue(project.name); setEditingName(true); }}
+                  title="Click to edit"
+                >
+                  {project.name}
+                </h1>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap shrink-0">
-            {/* Status dropdown */}
-            <Select value={project.status} onValueChange={(v) => handleStatusChange(v as ProjectStatus)}>
+            <Select value={project.type} onValueChange={handleTypeChange}>
               <SelectTrigger className="h-8 w-fit border-0 bg-transparent p-0 focus:ring-0 shadow-none">
-                <StatusPill status={project.status} />
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                  {{ web: "Web", new_product: "New Product", product: "Product", website: "Website", other: "Other" }[project.type] ?? project.type}
+                </span>
               </SelectTrigger>
               <SelectContent>
-                {(["planning", "active", "on_hold", "complete"] as ProjectStatus[]).map(s => (
-                  <SelectItem key={s} value={s}>{s.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase())}</SelectItem>
-                ))}
+                <SelectItem value="new_product">New Product</SelectItem>
+                <SelectItem value="web">Web</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
 
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
-              {{ web: "Web", new_product: "New Product", product: "Product", website: "Website", other: "Other" }[project.type] ?? project.type}
-            </span>
+            {/* Priority score */}
+            {editingPriority ? (
+              <div className="flex items-center gap-0.5 bg-muted rounded-md px-1.5 py-1">
+                {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                  <button
+                    key={n}
+                    onClick={async () => {
+                      const newScore = project.priority_score === n ? null : n;
+                      await updateProject({ id: project.id, priority_score: newScore });
+                      setEditingPriority(false);
+                    }}
+                    className={cn(
+                      "w-5 h-5 rounded text-[10px] font-bold transition-colors",
+                      project.priority_score === n
+                        ? n >= 8 ? "bg-green-500 text-white"
+                          : n >= 5 ? "bg-amber-500 text-white"
+                          : "bg-red-500 text-white"
+                        : "hover:bg-background text-muted-foreground",
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setEditingPriority(false)}
+                  className="ml-1 text-muted-foreground hover:text-foreground text-[10px]"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setEditingPriority(true)}
+                title="Set priority score"
+                className={cn(
+                  "text-[11px] font-bold px-2 py-1 rounded border transition-colors",
+                  project.priority_score != null
+                    ? project.priority_score >= 8
+                      ? "border-green-500/40 text-green-400 bg-green-500/10 hover:bg-green-500/20"
+                      : project.priority_score >= 5
+                      ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                      : "border-red-500/40 text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                    : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {project.priority_score != null ? `${project.priority_score}/10` : "Priority"}
+              </button>
+            )}
 
             <Button size="sm" variant="outline" onClick={() => setLogTimeOpen(v => !v)}>
               <Clock className="w-3.5 h-3.5 mr-1.5" />
               Log Time
+            </Button>
+
+            <Button size="sm" variant="ghost" onClick={handleDelete} className="text-muted-foreground hover:text-red-400 hover:bg-red-400/10">
+              <Trash2 className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
@@ -433,18 +553,24 @@ function ProjectViewContent() {
           <h2 className="text-sm font-semibold shrink-0">Tasks</h2>
           {/* Filter pills */}
           <div className="flex gap-1.5 flex-wrap">
-            {(["all", "backlog", "in_progress", "review", "done"] as const).map(f => (
+            {([
+              { key: "all",         label: "All" },
+              { key: "backlog",     label: "To Do" },
+              { key: "in_progress", label: "In Progress" },
+              { key: "review",      label: "Stuck" },
+              { key: "done",        label: "Complete" },
+            ] as const).map(({ key, label }) => (
               <button
-                key={f}
-                onClick={() => setTaskFilter(f)}
+                key={key}
+                onClick={() => setTaskFilter(key)}
                 className={cn(
                   "px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors",
-                  taskFilter === f
+                  taskFilter === key
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:text-foreground",
                 )}
               >
-                {f === "all" ? "All" : f.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase())}
+                {label}
               </button>
             ))}
           </div>
@@ -680,18 +806,38 @@ function ProjectViewContent() {
       </div>
 
       {/* ── Activity feed ── */}
-      <div className="rounded-lg border bg-background p-5 space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Activity</h2>
+      <div className="rounded-lg border bg-background overflow-hidden">
+        <div className="px-5 py-3 border-b bg-muted/20 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Activity</h2>
+          {project.type === "new_product" && activeStage && (
+            <span className="text-[11px] text-muted-foreground/60">
+              Notes tagged to current stage: <span className="font-semibold text-foreground/60">{activeStage.name}</span>
+            </span>
+          )}
+        </div>
 
-        {/* Post form */}
-        <div className="space-y-2">
+        {/* Feed */}
+        <div className="px-5 py-2 max-h-[480px] overflow-y-auto">
+          {project.type === "new_product" ? (
+            <StagedActivityFeed
+              entries={activity}
+              emptyText="No activity yet. Post a note below to get started."
+            />
+          ) : (
+            <ActivityFeed entries={activity} emptyText="No activity yet. Post a note below to get started." />
+          )}
+          <div ref={activityEndRef} />
+        </div>
+
+        {/* Post form — below the feed */}
+        <div className="border-t px-5 py-4 space-y-2 bg-muted/10">
           <Textarea
             value={activityInput}
             onChange={e => setActivityInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePostActivity(); }}
-            placeholder="Add a note or update..."
+            placeholder="Add a note or update… (Ctrl+Enter to post)"
             rows={2}
-            className="resize-none"
+            className="resize-none bg-background"
           />
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -713,11 +859,6 @@ function ProjectViewContent() {
             </Button>
           </div>
         </div>
-
-        <div className="border-t pt-4">
-          <ActivityFeed entries={activity} emptyText="No activity yet. Post a note to get started." />
-        </div>
-        <div ref={activityEndRef} />
       </div>
 
       {/* Task drawer */}

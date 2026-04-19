@@ -8,7 +8,7 @@ import { supabase } from "@guide/integrations/supabase/client";
 
 export type ContractorStatus = "active" | "paused" | "ended";
 export type ContractorSource = "upwork" | "direct";
-export type ProjectType      = "product" | "website" | "other" | "web" | "new_product";
+export type ProjectType      = "other" | "web" | "new_product" | "product" | "website"; // product/website legacy only
 export type ProjectStatus    = "planning" | "active" | "on_hold" | "complete";
 export type TaskStatus       = "backlog" | "in_progress" | "review" | "done";
 export type TaskPriority     = "low" | "medium" | "high" | "urgent";
@@ -39,9 +39,12 @@ export interface Project {
   description:      string | null;
   type:             ProjectType;
   status:           ProjectStatus;
+  priority_score:   number | null;
   budget_allocated: number | null;
   start_date:       string | null;
   due_date:         string | null;
+  thumbnail_url:    string | null;
+  deleted_at:       string | null;
   created_at:       string;
 }
 
@@ -124,15 +127,15 @@ export interface ProjectStage {
   start_date: string | null;
   end_date:   string | null;
   is_active:  boolean;
+  metadata:   Record<string, unknown> | null;
   created_at: string;
 }
 
 export const NEW_PRODUCT_STAGES = [
   "Idea",
-  "Drawing",
-  "CAD Drawing",
+  "Sketch",
+  "CAD",
   "Prototype",
-  "Final Test",
   "Complete",
 ] as const;
 
@@ -228,9 +231,27 @@ export function useProjects() {
       const { data, error } = await supabase
         .from("projects")
         .select("*")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as Project[];
+    },
+  });
+}
+
+export function useDeletedProjects() {
+  return useQuery({
+    queryKey: ["hub_projects_deleted"],
+    queryFn:  async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false });
+      if (error) throw error;
+      // Client-side filter: only show those deleted within 15 days
+      const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+      return (data as Project[]).filter(p => p.deleted_at! >= cutoff);
     },
   });
 }
@@ -312,6 +333,56 @@ export function useUpdateProject() {
       qc.invalidateQueries({ queryKey: ["hub_projects"] });
       qc.invalidateQueries({ queryKey: ["hub_project", data.id] });
       qc.invalidateQueries({ queryKey: ["hub_budget_summary", data.id] });
+    },
+  });
+}
+
+export function useSoftDeleteProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("projects")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hub_projects"] });
+      qc.invalidateQueries({ queryKey: ["hub_projects_deleted"] });
+    },
+  });
+}
+
+export function useRestoreProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("projects")
+        .update({ deleted_at: null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hub_projects"] });
+      qc.invalidateQueries({ queryKey: ["hub_projects_deleted"] });
+    },
+  });
+}
+
+export function usePermanentDeleteProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("projects")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hub_projects_deleted"] });
     },
   });
 }
@@ -596,6 +667,33 @@ export function useUploadFile() {
   });
 }
 
+export function useUploadProjectThumbnail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ file, projectId }: { file: File; projectId: string }) => {
+      const path = `thumbnails/${projectId}`;
+      await supabase.storage.from("contractor-hub-files").remove([path]);
+      const { error: uploadErr } = await supabase.storage
+        .from("contractor-hub-files")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage
+        .from("contractor-hub-files")
+        .getPublicUrl(path);
+      const { error } = await supabase
+        .from("projects")
+        .update({ thumbnail_url: urlData.publicUrl })
+        .eq("id", projectId);
+      if (error) throw error;
+      return urlData.publicUrl;
+    },
+    onSuccess: (_url, { projectId }) => {
+      qc.invalidateQueries({ queryKey: ["hub_project", projectId] });
+      qc.invalidateQueries({ queryKey: ["hub_projects"] });
+    },
+  });
+}
+
 // ─────────────────────────────────────────────────────────────
 // Budget summary
 // ─────────────────────────────────────────────────────────────
@@ -779,6 +877,22 @@ export function useUpdateProjectStage() {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["hub_project_stages", data.project_id] });
+      qc.invalidateQueries({ queryKey: ["hub_active_stages"] });
+    },
+  });
+}
+
+// Fetch the currently-active stage for every project (used by the dashboard stage filter)
+export function useActiveStages() {
+  return useQuery({
+    queryKey: ["hub_active_stages"],
+    queryFn:  async () => {
+      const { data, error } = await supabase
+        .from("project_stages")
+        .select("*")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data as ProjectStage[];
     },
   });
 }
