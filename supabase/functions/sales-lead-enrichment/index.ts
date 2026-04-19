@@ -520,37 +520,85 @@ async function enrichFromLusha(
 
 // ─── Cin7 customer cross-reference ───────────────────────────────────────────
 
+// Strict company-name match. The previous version used bare
+// name.includes(target) || target.includes(name) after stripping all
+// punctuation, which falsely matched unrelated shops that shared common
+// tokens (e.g. "Pro 4x4" ≈ "Total 4x4" ≈ "4x4 Extras" all collapsed to
+// strings starting with "4x4" and matched each other).
+function normalizeCompany(s: string): string {
+  return s.toLowerCase()
+    // Drop common corporate suffixes before stripping punctuation
+    .replace(/\b(pty\s*\.?\s*ltd|pty|ltd|limited|proprietary|inc|incorporated|llc|the)\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, "");
+}
+
+function bigramSim(a: string, b: string): number {
+  if (a.length < 2 || b.length < 2) return 0;
+  const grams = (s: string) => {
+    const set = new Set<string>();
+    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+    return set;
+  };
+  const ga = grams(a);
+  const gb = grams(b);
+  let overlap = 0;
+  for (const g of ga) if (gb.has(g)) overlap++;
+  return (2 * overlap) / (ga.size + gb.size);
+}
+
+function isStrictCompanyMatch(leadName: string, cin7Name: string): boolean {
+  const a = normalizeCompany(leadName);
+  const b = normalizeCompany(cin7Name);
+  if (!a || !b) return false;
+
+  // 1. Exact normalized match — safe
+  if (a === b) return true;
+
+  // 2. Substring match only when BOTH strings are substantial AND the
+  //    shorter one is at least 70% of the longer. Prevents "4x4" being
+  //    treated as a match for "4x4extras" or "4wddirect".
+  const short = a.length < b.length ? a : b;
+  const long  = a.length < b.length ? b : a;
+  if (short.length >= 6 && long.includes(short) && short.length / long.length >= 0.70) {
+    return true;
+  }
+
+  // 3. Bigram similarity fallback — tight threshold
+  return bigramSim(a, b) >= 0.90;
+}
+
 async function findCin7Customer(
   companyName: string,
   cin7AccountId: string,
   cin7ApiKey: string
-): Promise<{ id: string; tag: string } | null> {
+): Promise<{ id: string; tag: string; matched_name: string } | null> {
   const headers = {
     "api-auth-accountid":      cin7AccountId,
     "api-auth-applicationkey": cin7ApiKey,
     "Content-Type":            "application/json",
   };
 
+  // Ask Cin7 for up to 20 candidates — their server-side match is fuzzy,
+  // so we over-fetch then filter strictly client-side.
   const res = await fetch(
-    `${CIN7_BASE}/customer?Name=${encodeURIComponent(companyName)}&Limit=5`,
+    `${CIN7_BASE}/customer?Name=${encodeURIComponent(companyName)}&Limit=20`,
     { headers }
   );
   if (!res.ok) return null;
 
-  const data        = await res.json();
-  const customers   = data?.CustomerList ?? [];
+  const data      = await res.json();
+  const customers = data?.CustomerList ?? [];
   if (!customers.length) return null;
 
-  // Match on name similarity
-  const target = companyName.toLowerCase().replace(/[^a-z0-9]/g, "");
   for (const c of customers) {
-    const name = (c.Name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (name === target || name.includes(target) || target.includes(name)) {
-      // Tags: D = TrailBait, F = FleetCraft, A = AGA
-      const tags  = (c.Tags ?? "").split(",").map((t: string) => t.trim());
-      const tag   = tags.find((t: string) => ["D","F","A"].includes(t)) ?? tags[0] ?? "";
-      return { id: c.ID ?? c.CustomerID, tag };
-    }
+    const cin7Name = c.Name ?? "";
+    if (!isStrictCompanyMatch(companyName, cin7Name)) continue;
+    // Tags: D = TrailBait, F = FleetCraft, A = AGA
+    const tags = (c.Tags ?? "").split(",").map((t: string) => t.trim());
+    const tag  = tags.find((t: string) => ["D","F","A"].includes(t)) ?? tags[0] ?? "";
+    return { id: c.ID ?? c.CustomerID, tag, matched_name: cin7Name };
   }
   return null;
 }
