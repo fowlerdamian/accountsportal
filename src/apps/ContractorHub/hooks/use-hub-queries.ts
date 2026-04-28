@@ -103,10 +103,10 @@ export interface HubFile {
   task_id:       string | null;
   filename:      string;
   file_url:      string;
-  file_size:     number;
+  file_size:     number | null;
   mime_type:     string;
-  uploaded_by:   string;
-  source:        "upload" | "upwork";
+  uploaded_by:   string | null;
+  source:        "upload" | "upwork" | "drive";
   drive_file_id: string | null;
   created_at:    string;
   profiles?:     { full_name: string | null } | null;
@@ -633,7 +633,7 @@ export function useFiles(params: { projectId?: string; taskId?: string } = {}) {
     queryFn:  async () => {
       let q = supabase
         .from("files")
-        .select("*, profiles(full_name)")
+        .select("*")
         .order("created_at", { ascending: false });
       if (projectId) q = q.eq("project_id", projectId);
       if (taskId)    q = q.eq("task_id", taskId);

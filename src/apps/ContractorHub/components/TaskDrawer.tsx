@@ -282,7 +282,7 @@ export function TaskDrawer({ task, open, onClose }: TaskDrawerProps) {
                       <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" />
                       <span className="truncate">{file.filename}</span>
                       <span className="text-muted-foreground shrink-0">
-                        {(file.file_size / 1024).toFixed(0)}kb
+                        {file.file_size != null ? `${(file.file_size / 1024).toFixed(0)}kb` : ""}
                       </span>
                     </a>
                   </li>
