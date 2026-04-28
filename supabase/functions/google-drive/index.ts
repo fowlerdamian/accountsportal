@@ -290,88 +290,94 @@ serve(async (req) => {
       let thumbBytes: Uint8Array | null = null;
       let thumbMime = "image/jpeg";
 
-      // 1. Try Drive thumbnail URL directly (works for files Google can preview)
-      for (const url of [
-        `https://drive.google.com/thumbnail?id=${drive_file_id}&sz=w800`,
-        `https://lh3.google.com/drive-viewer/thumbnail?id=${drive_file_id}`,
-      ]) {
-        const tr = await fetch(url, { headers: { Authorization: `Bearer ${gtoken}` } });
-        console.log("[get_thumbnail] thumbnail url:", url, "status:", tr.status, "ct:", tr.headers.get("content-type"));
-        const ct = tr.headers.get("content-type") ?? "";
-        if (tr.ok && ct.startsWith("image/")) {
-          thumbBytes = new Uint8Array(await tr.arrayBuffer());
-          thumbMime = ct.split(";")[0].trim();
-          console.log("[get_thumbnail] got thumbnail from url, bytes:", thumbBytes.length);
+      // Download file and scan for embedded image in OLE binary (SLDPRT etc.)
+      // Google Drive does not generate thumbnails for CAD files.
+      const fileResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${drive_file_id}?alt=media&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${gtoken}` } },
+      );
+      console.log("[get_thumbnail] file download status:", fileResp.status, "size:", fileResp.headers.get("content-length"));
+      if (!fileResp.ok) return json({ skipped: true });
+
+      const raw = new Uint8Array(await fileResp.arrayBuffer());
+      const view = new DataView(raw.buffer);
+      console.log("[get_thumbnail] raw bytes:", raw.length);
+
+      // 1. Scan for JPEG (FF D8 FF)
+      for (let i = 0; i < raw.length - 3; i++) {
+        if (raw[i] === 0xFF && raw[i + 1] === 0xD8 && raw[i + 2] === 0xFF) {
+          let lastEoi = -1;
+          for (let j = i + 4; j < raw.length - 1; j++) {
+            if (raw[j] === 0xFF && raw[j + 1] === 0xD9) lastEoi = j;
+          }
+          if (lastEoi > i) {
+            thumbBytes = raw.slice(i, lastEoi + 2);
+            thumbMime = "image/jpeg";
+            console.log("[get_thumbnail] JPEG at offset", i, "size", thumbBytes.length);
+            break;
+          }
+        }
+      }
+
+      // 2. Scan for PNG (89 50 4E 47)
+      if (!thumbBytes) {
+        for (let i = 0; i < raw.length - 8; i++) {
+          if (raw[i] === 0x89 && raw[i+1] === 0x50 && raw[i+2] === 0x4E && raw[i+3] === 0x47) {
+            for (let j = i + 8; j < raw.length - 8; j++) {
+              if (raw[j] === 0x49 && raw[j+1] === 0x45 && raw[j+2] === 0x4E && raw[j+3] === 0x44 &&
+                  raw[j+4] === 0xAE && raw[j+5] === 0x42 && raw[j+6] === 0x60 && raw[j+7] === 0x82) {
+                thumbBytes = raw.slice(i, j + 8);
+                thumbMime = "image/png";
+                console.log("[get_thumbnail] PNG at offset", i, "size", thumbBytes.length);
+                break;
+              }
+            }
+            if (thumbBytes) break;
+          }
+        }
+      }
+
+      // 3. Scan for CF_DIB / BITMAPINFOHEADER (biSize = 40 = 0x28 in LE)
+      // SolidWorks stores a preview bitmap in the OLE SummaryInformation stream.
+      if (!thumbBytes) {
+        for (let i = 512; i < raw.length - 54; i++) {
+          if (raw[i] !== 0x28 || raw[i+1] !== 0x00 || raw[i+2] !== 0x00 || raw[i+3] !== 0x00) continue;
+          const w   = view.getInt32(i + 4,  true);
+          const h   = view.getInt32(i + 8,  true);
+          const pl  = view.getUint16(i + 12, true);
+          const bc  = view.getUint16(i + 14, true);
+          const cmp = view.getUint32(i + 16, true);
+          const cu  = view.getUint32(i + 32, true);
+          if (w < 1 || w > 4096 || Math.abs(h) < 1 || Math.abs(h) > 4096) continue;
+          if (pl !== 1 || ![1,4,8,16,24,32].includes(bc) || cmp > 1) continue;
+          const ctEntries = bc <= 8 ? (cu > 0 ? cu : (1 << bc)) : 0;
+          const ctSize    = ctEntries * 4;
+          const rowBytes  = Math.ceil(w * bc / 32) * 4;
+          const pixSize   = rowBytes * Math.abs(h);
+          const dibSize   = 40 + ctSize + pixSize;
+          if (i + dibSize > raw.length) continue;
+          const pxOff = 14 + 40 + ctSize;
+          const bmp = new Uint8Array(14 + dibSize);
+          const bv  = new DataView(bmp.buffer);
+          bmp[0] = 0x42; bmp[1] = 0x4D;
+          bv.setUint32(2,  14 + dibSize, true);
+          bv.setUint32(6,  0,            true);
+          bv.setUint32(10, pxOff,        true);
+          bmp.set(raw.slice(i, i + dibSize), 14);
+          thumbBytes = bmp;
+          thumbMime  = "image/bmp";
+          console.log("[get_thumbnail] DIB at offset", i, "w", w, "h", h, "bc", bc, "size", dibSize);
           break;
         }
       }
 
-      // 2. Try Drive thumbnailLink from Files.get
       if (!thumbBytes) {
-        const metaResp = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${drive_file_id}?fields=thumbnailLink&supportsAllDrives=true`,
-          { headers: { Authorization: `Bearer ${gtoken}` } },
-        );
-        const meta = await metaResp.json();
-        console.log("[get_thumbnail] thumbnailLink:", meta.thumbnailLink ?? "none");
-        if (meta.thumbnailLink) {
-          const tr = await fetch(meta.thumbnailLink);
-          console.log("[get_thumbnail] thumbnailLink status:", tr.status, "ct:", tr.headers.get("content-type"));
-          if (tr.ok) thumbBytes = new Uint8Array(await tr.arrayBuffer());
-        }
+        console.log("[get_thumbnail] no image found in file");
+        return json({ skipped: true });
       }
 
-      // 3. Download file and scan for embedded image (JPEG or PNG) in OLE binary
-      if (!thumbBytes) {
-        const fileResp = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${drive_file_id}?alt=media&supportsAllDrives=true`,
-          { headers: { Authorization: `Bearer ${gtoken}` } },
-        );
-        console.log("[get_thumbnail] file download status:", fileResp.status, "size:", fileResp.headers.get("content-length"));
-        if (fileResp.ok) {
-          const raw = new Uint8Array(await fileResp.arrayBuffer());
-          console.log("[get_thumbnail] raw bytes:", raw.length);
-          // Scan for JPEG (FF D8 FF)
-          for (let i = 0; i < raw.length - 3; i++) {
-            if (raw[i] === 0xFF && raw[i + 1] === 0xD8 && raw[i + 2] === 0xFF) {
-              let lastEoi = -1;
-              for (let j = i + 4; j < raw.length - 1; j++) {
-                if (raw[j] === 0xFF && raw[j + 1] === 0xD9) lastEoi = j;
-              }
-              if (lastEoi > i) {
-                thumbBytes = raw.slice(i, lastEoi + 2);
-                thumbMime = "image/jpeg";
-                console.log("[get_thumbnail] JPEG at offset", i, "size", thumbBytes.length);
-                break;
-              }
-            }
-          }
-          // Scan for PNG (89 50 4E 47)
-          if (!thumbBytes) {
-            for (let i = 0; i < raw.length - 8; i++) {
-              if (raw[i] === 0x89 && raw[i+1] === 0x50 && raw[i+2] === 0x4E && raw[i+3] === 0x47) {
-                // Find IEND chunk (49 45 4E 44 AE 42 60 82)
-                for (let j = i + 8; j < raw.length - 8; j++) {
-                  if (raw[j] === 0x49 && raw[j+1] === 0x45 && raw[j+2] === 0x4E && raw[j+3] === 0x44 &&
-                      raw[j+4] === 0xAE && raw[j+5] === 0x42 && raw[j+6] === 0x60 && raw[j+7] === 0x82) {
-                    thumbBytes = raw.slice(i, j + 8);
-                    thumbMime = "image/png";
-                    console.log("[get_thumbnail] PNG at offset", i, "size", thumbBytes.length);
-                    break;
-                  }
-                }
-                if (thumbBytes) break;
-              }
-            }
-          }
-          if (!thumbBytes) console.log("[get_thumbnail] no JPEG or PNG found in file bytes");
-        }
-      }
-
-      if (!thumbBytes) return json({ skipped: true });
-
-      // 4. Upload to Supabase Storage
-      const ext = thumbMime === "image/png" ? "png" : "jpg";
+      // Upload to Supabase Storage
+      const ext = thumbMime === "image/png" ? "png" : thumbMime === "image/bmp" ? "bmp" : "jpg";
       const path = `file-thumbnails/${db_file_id}.${ext}`;
       const { error: upErr } = await sb.storage
         .from("contractor-hub-files")
