@@ -27,7 +27,7 @@ import { cn } from "@guide/lib/utils";
 import {
   useProject, useTasks, useProjectBudgetSummary, useActivityLog,
   useFiles, useContractors, useProjectContractors, useTimeEntries,
-  useUpdateProject, useCreateTask, useUpdateTask, useReorderTasks,
+  useUpdateProject, useCreateTask, useUpdateTask, useDeleteTask, useReorderTasks,
   usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
   useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
   useGenerateStepThumbnails,
@@ -68,6 +68,7 @@ function ProjectViewContent() {
   const { mutateAsync: softDelete }            = useSoftDeleteProject();
   const { mutateAsync: createTask }            = useCreateTask();
   const { mutateAsync: updateTask }     = useUpdateTask();
+  const { mutateAsync: deleteTask }     = useDeleteTask();
   const { mutateAsync: reorderTasks }   = useReorderTasks();
   const { mutateAsync: postActivity }   = usePostActivity();
   const { mutateAsync: uploadFile }     = useUploadFile();
@@ -91,6 +92,7 @@ function ProjectViewContent() {
   const [draggedId,       setDraggedId]       = useState<string | null>(null);
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [logTimeOpen,     setLogTimeOpen]     = useState(false);
+  const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<string | null>(null);
   const [cadPreview,      setCadPreview]      = useState<{ url: string; filename: string; displayName: string } | null>(null);
   const [imgPreview,      setImgPreview]      = useState<{ url: string; filename: string } | null>(null);
   const [drivePreview,    setDrivePreview]    = useState<{ id: string; filename: string } | null>(null);
@@ -629,7 +631,7 @@ function ProjectViewContent() {
                     onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
                     onClick={() => { setSelectedTask(task); setDrawerOpen(true); }}
                     className={cn(
-                      "border-b hover:bg-muted/20 cursor-pointer transition-colors",
+                      "group border-b hover:bg-muted/20 cursor-pointer transition-colors",
                       draggedId === task.id && "opacity-40",
                       isDragOver && "border-t-2 border-t-primary",
                     )}
@@ -656,7 +658,36 @@ function ProjectViewContent() {
                       )}
                     </td>
                     <td className={cn("p-3 text-right text-xs hidden sm:table-cell", isOverdue ? "text-red-400" : "text-muted-foreground")}>
-                      {task.due_date ?? "—"}
+                      <div className="flex items-center justify-end gap-2">
+                        <span>{task.due_date ?? "—"}</span>
+                        {confirmDeleteTaskId === task.id ? (
+                          <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                            <button
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  await deleteTask({ id: task.id, project_id: task.project_id });
+                                  toast.success("Task deleted");
+                                } catch { toast.error("Failed to delete"); }
+                                setConfirmDeleteTaskId(null);
+                              }}
+                            >Delete</button>
+                            <button
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:bg-muted/70"
+                              onClick={e => { e.stopPropagation(); setConfirmDeleteTaskId(null); }}
+                            >Cancel</button>
+                          </span>
+                        ) : (
+                          <button
+                            title="Delete task"
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-opacity"
+                            onClick={e => { e.stopPropagation(); setConfirmDeleteTaskId(task.id); }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
 
@@ -667,7 +698,7 @@ function ProjectViewContent() {
                       <tr
                         key={sub.id}
                         onClick={() => { setSelectedTask(sub); setDrawerOpen(true); }}
-                        className="border-b bg-muted/5 hover:bg-muted/20 cursor-pointer transition-colors"
+                        className="group border-b bg-muted/5 hover:bg-muted/20 cursor-pointer transition-colors"
                       >
                         <td className="p-3"></td>
                         <td className="p-3 pl-6">
@@ -686,7 +717,36 @@ function ProjectViewContent() {
                           )}
                         </td>
                         <td className={cn("p-3 text-right text-xs hidden sm:table-cell", subOverdue ? "text-red-400" : "text-muted-foreground")}>
-                          {sub.due_date ?? "—"}
+                          <div className="flex items-center justify-end gap-2">
+                            <span>{sub.due_date ?? "—"}</span>
+                            {confirmDeleteTaskId === sub.id ? (
+                              <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                <button
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      await deleteTask({ id: sub.id, project_id: sub.project_id });
+                                      toast.success("Task deleted");
+                                    } catch { toast.error("Failed to delete"); }
+                                    setConfirmDeleteTaskId(null);
+                                  }}
+                                >Delete</button>
+                                <button
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:bg-muted/70"
+                                  onClick={e => { e.stopPropagation(); setConfirmDeleteTaskId(null); }}
+                                >Cancel</button>
+                              </span>
+                            ) : (
+                              <button
+                                title="Delete task"
+                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-opacity"
+                                onClick={e => { e.stopPropagation(); setConfirmDeleteTaskId(sub.id); }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

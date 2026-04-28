@@ -139,6 +139,31 @@ function Get-PendingFiles {
     Invoke-RestMethod -Uri $url -Headers $headers -Method GET
 }
 
+function Get-AllSwFiles {
+    $url = "$SupabaseUrl/rest/v1/files?select=id,filename,project_id,thumbnail_url" +
+           "&thumbnail_url=not.is.null" +
+           "&project_id=not.is.null" +
+           "&or=(filename.ilike.*.sldprt,filename.ilike.*.sldasm)"
+    $headers = @{
+        apikey        = $ServiceRoleKey
+        Authorization = "Bearer $ServiceRoleKey"
+    }
+    Invoke-RestMethod -Uri $url -Headers $headers -Method GET
+}
+
+function Update-ProjectThumbnail {
+    param([string] $ProjectId, [string] $ThumbUrl)
+    $url = "$SupabaseUrl/rest/v1/projects?id=eq.$ProjectId"
+    $headers = @{
+        apikey         = $ServiceRoleKey
+        Authorization  = "Bearer $ServiceRoleKey"
+        'Content-Type' = 'application/json'
+        Prefer         = 'return=minimal'
+    }
+    $body = @{ thumbnail_url = $ThumbUrl } | ConvertTo-Json -Compress
+    Invoke-RestMethod -Uri $url -Headers $headers -Method PATCH -Body $body | Out-Null
+}
+
 function Save-Thumbnail {
     param([System.Drawing.Bitmap] $Bitmap, [string] $OutPath)
     # Encode as JPEG quality 85
@@ -232,3 +257,45 @@ foreach ($row in $pending) {
 
 Write-Host ""
 Write-Host "Done. ok=$ok missing=$missing failed=$failed" -ForegroundColor Cyan
+
+# -- Project thumbnail auto-update (latest-mtime SLDPRT wins) ---------------
+
+Write-Host ""
+Write-Host "Updating project thumbnails to latest SLDPRT preview..." -ForegroundColor Cyan
+
+# Local mtime lookup keyed by filename (lowercase). Use file with newest mtime
+# when same name appears in multiple folders.
+$mtimeByName = @{}
+foreach ($f in $localFiles) {
+    $k = $f.Name.ToLowerInvariant()
+    if (-not $mtimeByName.ContainsKey($k) -or $f.LastWriteTime -gt $mtimeByName[$k]) {
+        $mtimeByName[$k] = $f.LastWriteTime
+    }
+}
+
+$allSw = Get-AllSwFiles
+# project_id -> @{ mtime, thumbUrl }
+$bestPerProject = @{}
+foreach ($row in $allSw) {
+    $k = $row.filename.ToLowerInvariant()
+    if (-not $mtimeByName.ContainsKey($k)) { continue }
+    $mt = $mtimeByName[$k]
+    $cur = $bestPerProject[$row.project_id]
+    if (-not $cur -or $mt -gt $cur.mtime) {
+        $bestPerProject[$row.project_id] = @{ mtime = $mt; thumbUrl = $row.thumbnail_url; filename = $row.filename }
+    }
+}
+
+$projOk = 0; $projFail = 0
+foreach ($projId in $bestPerProject.Keys) {
+    $entry = $bestPerProject[$projId]
+    try {
+        Update-ProjectThumbnail -ProjectId $projId -ThumbUrl $entry.thumbUrl
+        Write-Host "  [proj] $projId <- $($entry.filename)" -ForegroundColor Green
+        $projOk++
+    } catch {
+        Write-Host "  [fail] proj=$projId - $($_.Exception.Message)" -ForegroundColor Red
+        $projFail++
+    }
+}
+Write-Host "Project thumbnails: ok=$projOk failed=$projFail" -ForegroundColor Cyan

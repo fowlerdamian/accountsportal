@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Plus, Clock, Paperclip, ChevronRight } from "lucide-react";
+import { X, Clock, Paperclip, ChevronRight, Trash2 } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@guide/contexts/AuthContext";
@@ -9,6 +9,7 @@ import {
   useFiles,
   useUpdateTask,
   useCreateTask,
+  useDeleteTask,
   usePostActivity,
   useProject,
   type Task,
@@ -26,8 +27,9 @@ interface TaskDrawerProps {
 
 export function TaskDrawer({ task, open, onClose }: TaskDrawerProps) {
   const { user } = useAuth();
-  const [editingDesc, setEditingDesc] = useState(false);
-  const [descValue, setDescValue]     = useState("");
+  const [editingDesc,   setEditingDesc]   = useState(false);
+  const [descValue,     setDescValue]     = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: project }             = useProject(task?.project_id);
   const { data: allTasks = [] }       = useTasks(task?.project_id);
@@ -35,6 +37,7 @@ export function TaskDrawer({ task, open, onClose }: TaskDrawerProps) {
   const { data: files = [] }          = useFiles({ taskId: task?.id });
   const { mutateAsync: updateTask }   = useUpdateTask();
   const { mutateAsync: createTask }   = useCreateTask();
+  const { mutateAsync: deleteTask }   = useDeleteTask();
   const { mutateAsync: postActivity } = usePostActivity();
 
   // Use the live version from the query cache so status updates reflect immediately
@@ -89,6 +92,17 @@ export function TaskDrawer({ task, open, onClose }: TaskDrawerProps) {
     setEditingDesc(true);
   }
 
+  async function handleDelete() {
+    try {
+      await deleteTask({ id: liveTask.id, project_id: liveTask.project_id });
+      toast.success("Task deleted");
+      setConfirmDelete(false);
+      onClose();
+    } catch {
+      toast.error("Failed to delete task");
+    }
+  }
+
   const totalHours = timeEntries.reduce((s, e) => s + (e.hours ?? 0), 0);
 
   return (
@@ -133,12 +147,39 @@ export function TaskDrawer({ task, open, onClose }: TaskDrawerProps) {
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {confirmDelete ? (
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-muted-foreground">Delete?</span>
+              <button
+                onClick={handleDelete}
+                className="px-2 py-1 rounded text-xs bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-2 py-1 rounded text-xs border hover:bg-muted transition-colors"
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
+                title="Delete task"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Scrollable body */}
