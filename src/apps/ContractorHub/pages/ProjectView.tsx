@@ -6,6 +6,7 @@ import {
   GripVertical, Camera, Trash2, Box, ExternalLink,
 } from "lucide-react";
 import CadViewer, { isCadFile, canPreview3D } from "@hub/components/CadViewer";
+import { PriorityScorecardModal } from "@hub/components/PriorityScorecardModal";
 import { Button } from "@guide/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { Textarea } from "@guide/components/ui/textarea";
@@ -72,7 +73,7 @@ function ProjectViewContent() {
   // ── Local state ───────────────────────────────────────────
   const [selectedTask,      setSelectedTask]      = useState<Task | null>(null);
   const [drawerOpen,        setDrawerOpen]        = useState(false);
-  const [editingPriority,   setEditingPriority]   = useState(false);
+  const [scorecardOpen,     setScorecardOpen]     = useState(false);
   const [taskFilter,      setTaskFilter]      = useState<TaskStatus | "all">("all");
   const [editingName,     setEditingName]     = useState(false);
   const [nameValue,       setNameValue]       = useState("");
@@ -447,53 +448,30 @@ function ProjectViewContent() {
             </Select>
 
             {/* Priority score */}
-            {editingPriority ? (
-              <div className="flex items-center gap-0.5 bg-muted rounded-md px-1.5 py-1">
-                {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
-                  <button
-                    key={n}
-                    onClick={async () => {
-                      const newScore = project.priority_score === n ? null : n;
-                      await updateProject({ id: project.id, priority_score: newScore });
-                      setEditingPriority(false);
-                    }}
-                    className={cn(
-                      "w-5 h-5 rounded text-[10px] font-bold transition-colors",
-                      project.priority_score === n
-                        ? n >= 8 ? "bg-green-500 text-white"
-                          : n >= 5 ? "bg-amber-500 text-white"
-                          : "bg-red-500 text-white"
-                        : "hover:bg-background text-muted-foreground",
-                    )}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setEditingPriority(false)}
-                  className="ml-1 text-muted-foreground hover:text-foreground text-[10px]"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setEditingPriority(true)}
-                title="Set priority score"
-                className={cn(
-                  "text-[11px] font-bold px-2 py-1 rounded border transition-colors",
-                  project.priority_score != null
-                    ? project.priority_score >= 8
-                      ? "border-green-500/40 text-green-400 bg-green-500/10 hover:bg-green-500/20"
-                      : project.priority_score >= 5
-                      ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
-                      : "border-red-500/40 text-red-400 bg-red-500/10 hover:bg-red-500/20"
-                    : "border-border text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {project.priority_score != null ? `${project.priority_score}/10` : "Priority"}
-              </button>
-            )}
+            <button
+              onClick={() => setScorecardOpen(true)}
+              title="Score project priority"
+              className={cn(
+                "text-[11px] font-bold px-2 py-1 rounded border transition-colors",
+                project.priority_score != null
+                  ? project.priority_score >= 8
+                    ? "border-green-500/40 text-green-400 bg-green-500/10 hover:bg-green-500/20"
+                    : project.priority_score >= 5
+                    ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                    : "border-red-500/40 text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                  : "border-border text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {project.priority_score != null ? `${project.priority_score}/10` : "Priority"}
+            </button>
+            <PriorityScorecardModal
+              open={scorecardOpen}
+              onClose={() => setScorecardOpen(false)}
+              onComplete={async (score) => {
+                setScorecardOpen(false);
+                await updateProject({ id: project.id, priority_score: score });
+              }}
+            />
 
             {project.drive_folder_id && (
               <button
