@@ -36,7 +36,7 @@ function buildScene(canvas: HTMLCanvasElement) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x111111);
+  scene.background = new THREE.Color(0xffffff);
 
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 10000);
   camera.position.set(0, 0, 5);
@@ -111,10 +111,10 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
     const { renderer, scene, camera, controls } = s;
 
     const material = new THREE.MeshPhongMaterial({
-      color: 0xf3ca0f,
-      specular: 0x333333,
-      shininess: 40,
-      side: THREE.DoubleSide,
+      color:    0xb8bcc4,
+      specular: 0x222222,
+      shininess: 30,
+      side:     THREE.DoubleSide,
     });
 
     let cancelled = false;
@@ -261,7 +261,7 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
         </div>
 
         {/* Viewport */}
-        <div style={{ position: "relative", height: "520px", background: "#111" }}>
+        <div style={{ position: "relative", height: "520px", background: "#ffffff" }}>
           <canvas
             ref={canvasRef}
             style={{ width: "100%", height: "100%", display: isUnsupported ? "none" : "block", outline: "none" }}
@@ -303,7 +303,7 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
           )}
 
           {status === "ready" && (
-            <div style={{ position: "absolute", bottom: "12px", left: "12px", fontSize: "10px", color: "#333", fontFamily: '"JetBrains Mono", monospace', pointerEvents: "none" }}>
+            <div style={{ position: "absolute", bottom: "12px", left: "12px", fontSize: "10px", color: "#888", fontFamily: '"JetBrains Mono", monospace', pointerEvents: "none" }}>
               drag to rotate · scroll to zoom · right-drag to pan
             </div>
           )}

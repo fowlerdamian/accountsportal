@@ -771,16 +771,20 @@ export function useGenerateStepThumbnails(files: HubFile[]) {
           canvas.height  = 512;
           const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
           renderer.setSize(512, 512, false);
-          renderer.setClearColor(0x111111, 1);
+          renderer.setClearColor(0xffffff, 1);
 
           const scene = new THREE.Scene();
-          scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-          const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+          scene.background = new THREE.Color(0xffffff);
+          scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+          const dir = new THREE.DirectionalLight(0xffffff, 0.9);
           dir.position.set(5, 10, 7);
           scene.add(dir);
+          const fill = new THREE.DirectionalLight(0xffffff, 0.3);
+          fill.position.set(-5, -3, -5);
+          scene.add(fill);
 
           const fallbackMat = new THREE.MeshPhongMaterial({
-            color: 0xf3ca0f, specular: 0x333333, shininess: 40, side: THREE.DoubleSide,
+            color: 0xb8bcc4, specular: 0x222222, shininess: 30, side: THREE.DoubleSide,
           });
 
           const group = new THREE.Group();
