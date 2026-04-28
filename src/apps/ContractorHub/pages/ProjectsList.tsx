@@ -21,7 +21,6 @@ import {
   NEW_PRODUCT_STAGES,
   type Project,
   type ProjectStage,
-  type ProjectStatus,
 } from "@hub/hooks/use-hub-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
@@ -42,13 +41,11 @@ function stageColor(stageName: string) {
   return STAGE_COLORS[idx >= 0 ? idx : STAGE_COLORS.length - 1];
 }
 
-// ── Kanban columns ────────────────────────────────────────────
+// ── Kanban columns (product dev stages + catch-all) ──────────
 
-const KANBAN_COLS: { status: ProjectStatus; label: string; color: string }[] = [
-  { status: "planning",  label: "Planning",  color: "border-t-violet-500" },
-  { status: "active",    label: "Active",    color: "border-t-blue-500" },
-  { status: "on_hold",   label: "On Hold",   color: "border-t-amber-500" },
-  { status: "complete",  label: "Complete",  color: "border-t-green-500" },
+const KANBAN_STAGE_COLS = [
+  ...NEW_PRODUCT_STAGES.map((s, i) => ({ key: s, label: s, color: ["border-t-violet-500","border-t-blue-500","border-t-cyan-500","border-t-amber-500","border-t-green-500"][i] })),
+  { key: "__other__", label: "Other", color: "border-t-zinc-500" },
 ];
 
 // ── Project card (grid) ───────────────────────────────────────
@@ -435,10 +432,12 @@ export default function ProjectsList() {
         {/* ── Kanban view ── */}
         {!showBin && view === "kanban" && (
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 items-start">
-            {KANBAN_COLS.map(col => {
-              const colProjects = filtered.filter(p => p.status === col.status);
+            {KANBAN_STAGE_COLS.map(col => {
+              const colProjects = col.key === "__other__"
+                ? filtered.filter(p => p.type !== "new_product" || !activeStageByProject[p.id])
+                : filtered.filter(p => activeStageByProject[p.id]?.name === col.key);
               return (
-                <div key={col.status} className={cn("rounded-lg border border-t-2 bg-muted/20 flex flex-col gap-2 p-3", col.color)}>
+                <div key={col.key} className={cn("rounded-lg border border-t-2 bg-muted/20 flex flex-col gap-2 p-3", col.color)}>
                   <div className="flex items-center justify-between px-0.5 mb-1">
                     <span className="text-xs font-semibold">{col.label}</span>
                     <span className="text-[10px] text-muted-foreground">{colProjects.length}</span>

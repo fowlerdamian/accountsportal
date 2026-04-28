@@ -238,14 +238,15 @@ serve(async (req) => {
         `'${folder_id}' in parents and trashed=false and mimeType != 'application/vnd.google-apps.folder'`
       );
       const listResp = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,webViewLink)&supportsAllDrives=true&includeItemsFromAllDrives=true&pageSize=1000`,
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,webViewLink)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=1000`,
         { headers: { Authorization: `Bearer ${gtoken}` } },
       );
       const listData = await listResp.json();
+      console.log("[sync_from_drive] folder:", folder_id, "status:", listResp.status, "files:", listData.files?.length ?? 0, listData.error ? JSON.stringify(listData.error) : "");
       const driveFiles: Array<{ id: string; name: string; mimeType: string; size?: string; webViewLink: string }> =
         listData.files ?? [];
 
-      if (driveFiles.length === 0) return json({ synced: 0 });
+      if (driveFiles.length === 0) return json({ synced: 0, debug: listData.error ?? null });
 
       const { data: existing } = await sb
         .from("files")
