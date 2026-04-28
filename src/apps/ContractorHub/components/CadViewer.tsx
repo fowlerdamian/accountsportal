@@ -65,17 +65,16 @@ function fitCameraToObject(
   controls: OrbitControls,
   object: THREE.Object3D,
 ) {
-  const box = new THREE.Box3().setFromObject(object);
-  const size = box.getSize(new THREE.Vector3());
+  const box    = new THREE.Box3().setFromObject(object);
   const center = box.getCenter(new THREE.Vector3());
-
   object.position.sub(center); // centre on origin
 
-  const maxDim = Math.max(size.x, size.y, size.z);
-  const fov = camera.fov * (Math.PI / 180);
-  const dist = Math.abs(maxDim / (2 * Math.tan(fov / 2))) * 1.8;
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  const fov    = camera.fov * (Math.PI / 180);
+  const dist   = (sphere.radius / Math.sin(fov / 2)) * 1.1; // tight fit, 10% padding
 
-  camera.position.set(dist * 0.6, dist * 0.4, dist);
+  const dir = new THREE.Vector3(0.6, 0.4, 1.0).normalize();
+  camera.position.copy(dir.multiplyScalar(dist));
   camera.near = dist / 100;
   camera.far  = dist * 100;
   camera.updateProjectionMatrix();

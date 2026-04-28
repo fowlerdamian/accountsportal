@@ -803,14 +803,15 @@ export function useGenerateStepThumbnails(files: HubFile[]) {
           }
           scene.add(group);
 
-          const box     = new THREE.Box3().setFromObject(group);
-          const size    = box.getSize(new THREE.Vector3());
-          const center  = box.getCenter(new THREE.Vector3());
+          const box    = new THREE.Box3().setFromObject(group);
+          const center = box.getCenter(new THREE.Vector3());
           group.position.sub(center);
-          const maxDim  = Math.max(size.x, size.y, size.z);
-          const camera  = new THREE.PerspectiveCamera(35, 1, 0.01, 10000);
-          const dist    = Math.abs(maxDim / (2 * Math.tan((35 * Math.PI / 180) / 2))) * 1.8;
-          camera.position.set(dist * 0.6, dist * 0.4, dist);
+          const sphere = box.getBoundingSphere(new THREE.Sphere());
+          const fov    = 35;
+          const dist   = (sphere.radius / Math.sin((fov * Math.PI / 180) / 2)) * 1.1;
+          const camera = new THREE.PerspectiveCamera(fov, 1, dist / 100, dist * 100);
+          const camDir = new THREE.Vector3(0.6, 0.4, 1.0).normalize();
+          camera.position.copy(camDir.multiplyScalar(dist));
           camera.lookAt(0, 0, 0);
           renderer.render(scene, camera);
 
