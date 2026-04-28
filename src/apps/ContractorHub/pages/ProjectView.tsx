@@ -3,8 +3,9 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2, ChevronRight, Plus, Upload, Paperclip, Clock,
-  GripVertical, Camera, Trash2, ExternalLink,
+  GripVertical, Camera, Trash2, ExternalLink, Box, X,
 } from "lucide-react";
+import CadViewer, { canPreview3D } from "@hub/components/CadViewer";
 import { PriorityScorecardModal } from "@hub/components/PriorityScorecardModal";
 import { Button } from "@guide/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
@@ -29,6 +30,7 @@ import {
   useUpdateProject, useCreateTask, useUpdateTask, useReorderTasks,
   usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
   useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
+  useGenerateThumbnails,
   NEW_PRODUCT_STAGES,
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
@@ -56,6 +58,7 @@ function ProjectViewContent() {
   const { data: timeEntries = [] }                    = useTimeEntries({ projectId: id });
 
   useSyncDriveFiles(id, project?.drive_folder_id);
+  useGenerateThumbnails(files);
 
   // ── Mutations ─────────────────────────────────────────────
   const { mutateAsync: updateProject }         = useUpdateProject();
@@ -88,6 +91,8 @@ function ProjectViewContent() {
   const [draggedId,       setDraggedId]       = useState<string | null>(null);
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [logTimeOpen,     setLogTimeOpen]     = useState(false);
+  const [cadPreview,      setCadPreview]      = useState<{ url: string; filename: string; displayName: string } | null>(null);
+  const [imgPreview,      setImgPreview]      = useState<{ url: string; filename: string } | null>(null);
 
   const fileInputRef        = useRef<HTMLInputElement>(null);
   const thumbInputRef       = useRef<HTMLInputElement>(null);
@@ -775,38 +780,79 @@ function ProjectViewContent() {
         <div className="p-5 space-y-3">
           {files.length > 0 && (
             <ul className="space-y-2 mb-4">
-              {files.map(file => (
-                <li key={file.id} className="flex items-center gap-3 text-sm">
-                  {file.source === "drive" ? (
-                    <ExternalLink className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                  ) : (
-                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  )}
-                  <a href={file.file_url} target="_blank" rel="noopener noreferrer"
-                     className="flex-1 truncate hover:text-primary transition-colors">
-                    {file.filename}
-                  </a>
-                  {file.file_size != null && (
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {file.file_size > 1048576
-                        ? `${(file.file_size / 1048576).toFixed(1)} MB`
-                        : `${(file.file_size / 1024).toFixed(0)} KB`}
-                    </span>
-                  )}
-                  <span className="text-xs text-muted-foreground shrink-0">{file.created_at.split("T")[0]}</span>
-                  {file.drive_file_id && (
+              {files.map(file => {
+                const ext      = file.filename.split(".").pop()?.toLowerCase() ?? "";
+                const is3D     = canPreview3D(file.filename);
+                const isImage  = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);
+                const previewable = is3D || isImage || !!file.thumbnail_url;
+
+                function handleClick(e: React.MouseEvent) {
+                  if (!previewable) return;
+                  e.preventDefault();
+                  if (is3D) {
+                    setCadPreview({ url: file.file_url, filename: file.filename, displayName: file.filename });
+                  } else if (isImage) {
+                    setImgPreview({ url: file.file_url, filename: file.filename });
+                  } else if (file.thumbnail_url) {
+                    setImgPreview({ url: file.thumbnail_url, filename: file.filename });
+                  }
+                }
+
+                return (
+                  <li key={file.id} className="flex items-center gap-3 text-sm">
+                    {file.thumbnail_url ? (
+                      <button
+                        onClick={() => setImgPreview({ url: file.thumbnail_url!, filename: file.filename })}
+                        className="shrink-0 w-9 h-9 rounded overflow-hidden border border-border/40 bg-muted hover:border-primary/40 transition-colors"
+                        title="Preview thumbnail"
+                      >
+                        <img src={file.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    ) : file.source === "drive" ? (
+                      <ExternalLink className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    ) : (
+                      <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    )}
                     <a
-                      href={`https://drive.google.com/file/d/${file.drive_file_id}/view`}
+                      href={file.file_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="Open in Google Drive"
-                      className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                      onClick={handleClick}
+                      className="flex-1 truncate hover:text-primary transition-colors"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      {file.filename}
                     </a>
-                  )}
-                </li>
-              ))}
+                    {is3D && (
+                      <button
+                        onClick={() => setCadPreview({ url: file.file_url, filename: file.filename, displayName: file.filename })}
+                        title="3D preview"
+                        className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <Box className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {file.file_size != null && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {file.file_size > 1048576
+                          ? `${(file.file_size / 1048576).toFixed(1)} MB`
+                          : `${(file.file_size / 1024).toFixed(0)} KB`}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground shrink-0">{file.created_at.split("T")[0]}</span>
+                    {file.drive_file_id && (
+                      <a
+                        href={`https://drive.google.com/file/d/${file.drive_file_id}/view`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open in Google Drive"
+                        className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
@@ -896,6 +942,37 @@ function ProjectViewContent() {
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setSelectedTask(null); }}
       />
+
+      {/* 3D CAD preview */}
+      {cadPreview && (
+        <CadViewer
+          fileUrl={cadPreview.url}
+          filename={cadPreview.filename}
+          displayName={cadPreview.displayName}
+          onClose={() => setCadPreview(null)}
+        />
+      )}
+
+      {/* Image / thumbnail lightbox */}
+      {imgPreview && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}
+          onClick={() => setImgPreview(null)}
+        >
+          <button
+            onClick={() => setImgPreview(null)}
+            style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", color: "#fff", cursor: "pointer", padding: 6 }}
+          >
+            <X size={22} />
+          </button>
+          <img
+            src={imgPreview.url}
+            alt={imgPreview.filename}
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: "92vw", maxHeight: "88vh", objectFit: "contain", borderRadius: 8, boxShadow: "0 4px 32px rgba(0,0,0,0.6)" }}
+          />
+        </div>
+      )}
 
     </div>
   );

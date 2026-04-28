@@ -718,6 +718,33 @@ export function useSyncDriveFiles(projectId: string, folderId: string | null | u
   }, [projectId, folderId, qc]);
 }
 
+const SW_EXTS = ["sldprt", "sldasm"];
+
+export function useGenerateThumbnails(files: HubFile[]) {
+  const qc       = useQueryClient();
+  const firedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const targets = files.filter(f => {
+      if (!f.drive_file_id || f.thumbnail_url || firedRef.current.has(f.id)) return false;
+      const ext = f.filename.split(".").pop()?.toLowerCase() ?? "";
+      return SW_EXTS.includes(ext);
+    });
+    if (!targets.length) return;
+
+    const projectIds = new Set<string>();
+    Promise.all(targets.map(f => {
+      firedRef.current.add(f.id);
+      if (f.project_id) projectIds.add(f.project_id);
+      return supabase.functions.invoke("google-drive", {
+        body: { action: "get_thumbnail", db_file_id: f.id, drive_file_id: f.drive_file_id },
+      }).catch(() => null);
+    })).then(() => {
+      projectIds.forEach(pid => qc.invalidateQueries({ queryKey: ["hub_files", pid] }));
+    });
+  }, [files, qc]);
+}
+
 export function useUploadProjectThumbnail() {
   const qc = useQueryClient();
   return useMutation({
