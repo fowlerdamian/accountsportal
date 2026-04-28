@@ -287,48 +287,95 @@ serve(async (req) => {
     if (action === "get_thumbnail") {
       const { db_file_id, drive_file_id } = payload as { db_file_id: string; drive_file_id: string };
 
-      // 1. Try Drive thumbnailLink first (fast, no download needed)
       let thumbBytes: Uint8Array | null = null;
-      const metaResp = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${drive_file_id}?fields=thumbnailLink&supportsAllDrives=true`,
-        { headers: { Authorization: `Bearer ${gtoken}` } },
-      );
-      const meta = await metaResp.json();
-      if (meta.thumbnailLink) {
-        const tr = await fetch(meta.thumbnailLink);
-        if (tr.ok) thumbBytes = new Uint8Array(await tr.arrayBuffer());
+      let thumbMime = "image/jpeg";
+
+      // 1. Try Drive thumbnail URL directly (works for files Google can preview)
+      for (const url of [
+        `https://drive.google.com/thumbnail?id=${drive_file_id}&sz=w800`,
+        `https://lh3.google.com/drive-viewer/thumbnail?id=${drive_file_id}`,
+      ]) {
+        const tr = await fetch(url, { headers: { Authorization: `Bearer ${gtoken}` } });
+        console.log("[get_thumbnail] thumbnail url:", url, "status:", tr.status, "ct:", tr.headers.get("content-type"));
+        const ct = tr.headers.get("content-type") ?? "";
+        if (tr.ok && ct.startsWith("image/")) {
+          thumbBytes = new Uint8Array(await tr.arrayBuffer());
+          thumbMime = ct.split(";")[0].trim();
+          console.log("[get_thumbnail] got thumbnail from url, bytes:", thumbBytes.length);
+          break;
+        }
       }
 
-      // 2. Fall back: download file and scan for embedded JPEG (OLE SolidWorks preview)
+      // 2. Try Drive thumbnailLink from Files.get
+      if (!thumbBytes) {
+        const metaResp = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${drive_file_id}?fields=thumbnailLink&supportsAllDrives=true`,
+          { headers: { Authorization: `Bearer ${gtoken}` } },
+        );
+        const meta = await metaResp.json();
+        console.log("[get_thumbnail] thumbnailLink:", meta.thumbnailLink ?? "none");
+        if (meta.thumbnailLink) {
+          const tr = await fetch(meta.thumbnailLink);
+          console.log("[get_thumbnail] thumbnailLink status:", tr.status, "ct:", tr.headers.get("content-type"));
+          if (tr.ok) thumbBytes = new Uint8Array(await tr.arrayBuffer());
+        }
+      }
+
+      // 3. Download file and scan for embedded image (JPEG or PNG) in OLE binary
       if (!thumbBytes) {
         const fileResp = await fetch(
           `https://www.googleapis.com/drive/v3/files/${drive_file_id}?alt=media&supportsAllDrives=true`,
           { headers: { Authorization: `Bearer ${gtoken}` } },
         );
+        console.log("[get_thumbnail] file download status:", fileResp.status, "size:", fileResp.headers.get("content-length"));
         if (fileResp.ok) {
           const raw = new Uint8Array(await fileResp.arrayBuffer());
-          // SolidWorks OLE files embed a JPEG preview — scan past OLE header
-          for (let i = 512; i < Math.min(raw.length - 3, 4 * 1024 * 1024); i++) {
+          console.log("[get_thumbnail] raw bytes:", raw.length);
+          // Scan for JPEG (FF D8 FF)
+          for (let i = 0; i < raw.length - 3; i++) {
             if (raw[i] === 0xFF && raw[i + 1] === 0xD8 && raw[i + 2] === 0xFF) {
+              let lastEoi = -1;
               for (let j = i + 4; j < raw.length - 1; j++) {
-                if (raw[j] === 0xFF && raw[j + 1] === 0xD9) {
-                  thumbBytes = raw.slice(i, j + 2);
-                  break;
-                }
+                if (raw[j] === 0xFF && raw[j + 1] === 0xD9) lastEoi = j;
               }
-              if (thumbBytes) break;
+              if (lastEoi > i) {
+                thumbBytes = raw.slice(i, lastEoi + 2);
+                thumbMime = "image/jpeg";
+                console.log("[get_thumbnail] JPEG at offset", i, "size", thumbBytes.length);
+                break;
+              }
             }
           }
+          // Scan for PNG (89 50 4E 47)
+          if (!thumbBytes) {
+            for (let i = 0; i < raw.length - 8; i++) {
+              if (raw[i] === 0x89 && raw[i+1] === 0x50 && raw[i+2] === 0x4E && raw[i+3] === 0x47) {
+                // Find IEND chunk (49 45 4E 44 AE 42 60 82)
+                for (let j = i + 8; j < raw.length - 8; j++) {
+                  if (raw[j] === 0x49 && raw[j+1] === 0x45 && raw[j+2] === 0x4E && raw[j+3] === 0x44 &&
+                      raw[j+4] === 0xAE && raw[j+5] === 0x42 && raw[j+6] === 0x60 && raw[j+7] === 0x82) {
+                    thumbBytes = raw.slice(i, j + 8);
+                    thumbMime = "image/png";
+                    console.log("[get_thumbnail] PNG at offset", i, "size", thumbBytes.length);
+                    break;
+                  }
+                }
+                if (thumbBytes) break;
+              }
+            }
+          }
+          if (!thumbBytes) console.log("[get_thumbnail] no JPEG or PNG found in file bytes");
         }
       }
 
       if (!thumbBytes) return json({ skipped: true });
 
-      // 3. Upload to Supabase Storage
-      const path = `file-thumbnails/${db_file_id}.jpg`;
+      // 4. Upload to Supabase Storage
+      const ext = thumbMime === "image/png" ? "png" : "jpg";
+      const path = `file-thumbnails/${db_file_id}.${ext}`;
       const { error: upErr } = await sb.storage
         .from("contractor-hub-files")
-        .upload(path, thumbBytes, { contentType: "image/jpeg", upsert: true });
+        .upload(path, thumbBytes, { contentType: thumbMime, upsert: true });
       if (upErr) return json({ error: upErr.message }, 500);
 
       const { data: { publicUrl } } = sb.storage.from("contractor-hub-files").getPublicUrl(path);
