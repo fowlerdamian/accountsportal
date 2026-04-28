@@ -93,6 +93,7 @@ function ProjectViewContent() {
   const [logTimeOpen,     setLogTimeOpen]     = useState(false);
   const [cadPreview,      setCadPreview]      = useState<{ url: string; filename: string; displayName: string } | null>(null);
   const [imgPreview,      setImgPreview]      = useState<{ url: string; filename: string } | null>(null);
+  const [drivePreview,    setDrivePreview]    = useState<{ id: string; filename: string } | null>(null);
 
   const fileInputRef        = useRef<HTMLInputElement>(null);
   const thumbInputRef       = useRef<HTMLInputElement>(null);
@@ -787,14 +788,17 @@ function ProjectViewContent() {
                 const previewable = is3D || isImage || !!file.thumbnail_url;
 
                 function handleClick(e: React.MouseEvent) {
-                  if (!previewable) return;
                   e.preventDefault();
                   if (is3D) {
                     setCadPreview({ url: file.file_url, filename: file.filename, displayName: file.filename });
                   } else if (isImage) {
                     setImgPreview({ url: file.file_url, filename: file.filename });
+                  } else if (file.drive_file_id) {
+                    setDrivePreview({ id: file.drive_file_id, filename: file.filename });
                   } else if (file.thumbnail_url) {
                     setImgPreview({ url: file.thumbnail_url, filename: file.filename });
+                  } else {
+                    window.open(file.file_url, "_blank");
                   }
                 }
 
@@ -951,6 +955,43 @@ function ProjectViewContent() {
           displayName={cadPreview.displayName}
           onClose={() => setCadPreview(null)}
         />
+      )}
+
+      {/* Google Drive embedded preview (works for SLDPRT, PDF, images, etc.) */}
+      {drivePreview && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}
+          onClick={() => setDrivePreview(null)}
+        >
+          <div
+            style={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: 12, width: "100%", maxWidth: 960, height: "85vh", overflow: "hidden", display: "flex", flexDirection: "column" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid #1e1e1e" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#fff", fontFamily: '"JetBrains Mono", monospace', overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {drivePreview.filename}
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <a
+                  href={`https://drive.google.com/file/d/${drivePreview.id}/view`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ background: "none", border: "1px solid #333", borderRadius: 6, color: "#888", padding: "5px 10px", fontSize: 12, textDecoration: "none" }}
+                >
+                  Open in Drive
+                </a>
+                <button onClick={() => setDrivePreview(null)} style={{ background: "none", border: "none", color: "#666", cursor: "pointer", padding: 4 }}>
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <iframe
+              src={`https://drive.google.com/file/d/${drivePreview.id}/preview`}
+              style={{ flex: 1, width: "100%", border: "none", background: "#111" }}
+              allow="autoplay"
+            />
+          </div>
+        </div>
       )}
 
       {/* Image / thumbnail lightbox */}
