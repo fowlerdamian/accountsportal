@@ -19,7 +19,7 @@ const QUESTIONS: Question[] = [
     description: "How large is the potential customer base for this product or project?",
     lowLabel:    "Very niche — < 1,000 buyers",
     highLabel:   "Mass market — global reach",
-    weight:      0.20,
+    weight:      0.18,
   },
   {
     id:          "npd_ease",
@@ -27,7 +27,7 @@ const QUESTIONS: Question[] = [
     description: "How straightforward is the product development or project execution?",
     lowLabel:    "Highly complex / novel engineering",
     highLabel:   "Simple / well-understood process",
-    weight:      0.15,
+    weight:      0.14,
   },
   {
     id:          "expected_volume",
@@ -35,7 +35,7 @@ const QUESTIONS: Question[] = [
     description: "What are the expected annual unit sales or usage scale?",
     lowLabel:    "< 10 units / year",
     highLabel:   "> 500 units / year",
-    weight:      0.20,
+    weight:      0.18,
   },
   {
     id:          "profit_margin",
@@ -43,7 +43,15 @@ const QUESTIONS: Question[] = [
     description: "What is the expected gross profit margin on this project?",
     lowLabel:    "< 5% margin",
     highLabel:   "> 50% margin",
-    weight:      0.20,
+    weight:      0.18,
+  },
+  {
+    id:          "retail_price",
+    label:       "Estimated Retail Price",
+    description: "What is the expected retail selling price per unit?",
+    lowLabel:    "< $25",
+    highLabel:   "> $2,000",
+    weight:      0.10,
   },
   {
     id:          "time_to_market",
@@ -51,7 +59,7 @@ const QUESTIONS: Question[] = [
     description: "How quickly can this be launched or delivered?",
     lowLabel:    "> 18 months away",
     highLabel:   "< 3 months away",
-    weight:      0.10,
+    weight:      0.08,
   },
   {
     id:          "strategic_fit",
@@ -59,7 +67,7 @@ const QUESTIONS: Question[] = [
     description: "How well does this align with your core capabilities and business strategy?",
     lowLabel:    "Major pivot from core business",
     highLabel:   "Perfect fit with core competency",
-    weight:      0.10,
+    weight:      0.09,
   },
   {
     id:          "competitive_edge",
