@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Extracts thumbnails from SolidWorks .SLDPRT/.SLDASM files using the Windows
   Shell preview handler (sldwinshellextu.dll) and uploads them to Supabase
@@ -6,7 +6,7 @@
 
 .DESCRIPTION
   Uses IShellItemImageFactory::GetImage which delegates to whichever shell
-  extension is registered for the file type — i.e. SolidWorks's preview handler
+  extension is registered for the file type - i.e. SolidWorks's preview handler
   if SolidWorks/eDrawings is installed. Produces the same thumbnail Explorer's
   Preview Pane (Alt+P) shows.
 
@@ -56,7 +56,7 @@ if (-not (Test-Path -LiteralPath $FolderPath)) {
     throw "FolderPath not found: $FolderPath"
 }
 
-# ── Win32 P/Invoke for IShellItemImageFactory ──────────────────────────────
+# -- Win32 P/Invoke for IShellItemImageFactory ------------------------------
 
 Add-Type -AssemblyName System.Drawing
 
@@ -126,7 +126,7 @@ namespace AGA {
 "@ -ReferencedAssemblies System.Drawing
 }
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
+# -- Helpers -----------------------------------------------------------------
 
 function Get-PendingFiles {
     $url = "$SupabaseUrl/rest/v1/files?select=id,filename,project_id,drive_file_id" +
@@ -177,13 +177,13 @@ function Update-FileRow {
     Invoke-RestMethod -Uri $url -Headers $headers -Method PATCH -Body $body | Out-Null
 }
 
-# ── Main ────────────────────────────────────────────────────────────────────
+# -- Main --------------------------------------------------------------------
 
 Write-Host "Searching $FolderPath for SolidWorks files..." -ForegroundColor Cyan
 $localFiles = Get-ChildItem -LiteralPath $FolderPath -Recurse -File `
               -Include '*.sldprt','*.sldasm' -ErrorAction SilentlyContinue
 
-# Build a name→path map (case-insensitive). Multiple matches resolved by first.
+# Build a name->path map (case-insensitive). Multiple matches resolved by first.
 $byName = @{}
 foreach ($f in $localFiles) {
     if (-not $byName.ContainsKey($f.Name.ToLowerInvariant())) {
@@ -203,7 +203,7 @@ $ok = 0; $missing = 0; $failed = 0
 foreach ($row in $pending) {
     $key = $row.filename.ToLowerInvariant()
     if (-not $byName.ContainsKey($key)) {
-        Write-Host "  [skip] $($row.filename) — not found locally" -ForegroundColor DarkGray
+        Write-Host "  [skip] $($row.filename) - not found locally" -ForegroundColor DarkGray
         $missing++
         continue
     }
@@ -223,7 +223,7 @@ foreach ($row in $pending) {
         Write-Host "  [ok]   $($row.filename)" -ForegroundColor Green
         $ok++
     } catch {
-        Write-Host "  [fail] $($row.filename) — $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [fail] $($row.filename) - $($_.Exception.Message)" -ForegroundColor Red
         $failed++
     } finally {
         if (Test-Path -LiteralPath $outPath) { Remove-Item -LiteralPath $outPath -Force }

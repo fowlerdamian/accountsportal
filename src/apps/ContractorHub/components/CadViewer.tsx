@@ -10,11 +10,12 @@ import { X, Download, RotateCcw } from "lucide-react";
 const STL_EXTS  = ["stl"];
 const OBJ_EXTS  = ["obj"];
 const GLTF_EXTS = ["gltf", "glb"];
-const ALL_3D    = [...STL_EXTS, ...OBJ_EXTS, ...GLTF_EXTS];
+const STEP_EXTS = ["step", "stp"];
+const ALL_3D    = [...STL_EXTS, ...OBJ_EXTS, ...GLTF_EXTS, ...STEP_EXTS];
 
 export function isCadFile(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-  return ["sldprt", "sldasm", "step", "stp", "iges", "igs", "dxf", "dwg", ...ALL_3D].includes(ext);
+  return ["sldprt", "sldasm", "iges", "igs", "dxf", "dwg", ...ALL_3D].includes(ext);
 }
 
 export function canPreview3D(filename: string) {
@@ -148,6 +149,38 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
             loader.parse(buffer, "", res, rej);
           });
           object = gltf.scene;
+
+        } else if (STEP_EXTS.includes(ext)) {
+          const bytes = new Uint8Array(await resp.arrayBuffer());
+          const occtImport = (await import("occt-import-js")).default;
+          const occt: any = await occtImport({
+            locateFile: (f: string) => f.endsWith(".wasm")
+              ? new URL("occt-import-js/dist/occt-import-js.wasm", import.meta.url).href
+              : f,
+          });
+          const result = occt.ReadStepFile(bytes, null);
+          if (!result?.success) throw new Error("STEP parse failed");
+          const group = new THREE.Group();
+          for (const m of result.meshes ?? []) {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute("position", new THREE.Float32BufferAttribute(m.attributes.position.array, 3));
+            if (m.attributes.normal?.array) {
+              geo.setAttribute("normal", new THREE.Float32BufferAttribute(m.attributes.normal.array, 3));
+            } else {
+              geo.computeVertexNormals();
+            }
+            if (m.index?.array) geo.setIndex(new THREE.Uint32BufferAttribute(m.index.array, 1));
+            const meshMat = m.color
+              ? new THREE.MeshPhongMaterial({
+                  color:    new THREE.Color(m.color[0], m.color[1], m.color[2]),
+                  specular: 0x222222,
+                  shininess: 30,
+                  side:      THREE.DoubleSide,
+                })
+              : material;
+            group.add(new THREE.Mesh(geo, meshMat));
+          }
+          object = group;
         }
 
         if (cancelled || !object) return;
