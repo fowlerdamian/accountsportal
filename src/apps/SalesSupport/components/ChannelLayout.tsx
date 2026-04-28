@@ -2,13 +2,14 @@ import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNELS, type Channel } from "../lib/constants";
 import {
-  Users, Kanban, BarChart3, ArrowLeft,
+  Users, Kanban, BarChart3, ArrowLeft, Phone,
 } from "lucide-react";
 
 interface Props { channel: string }
 
 const NAV_ITEMS = [
   { label: "Leads",    path: "leads",    icon: Users },
+  { label: "Calls",    path: "calls",    icon: Phone },
   { label: "Pipeline", path: "pipeline", icon: Kanban },
   { label: "Reports",  path: "reports",  icon: BarChart3 },
 ];

@@ -119,7 +119,11 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
       queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
       toast.success(`ShipStation order created: ${data.orderNumber} — marked as dispatched`);
     },
-    onError: () => toast.error('ShipStation order failed — try again or create manually'),
+    onError: (err: any) => {
+      console.error('ShipStation error:', err?.context ?? err);
+      const detail = err?.context?.detail || err?.context?.error || err?.message;
+      toast.error(detail ? `ShipStation: ${detail}` : 'ShipStation order failed — try again or create manually', { duration: 8000 });
+    },
   });
 
   const markDispatched = useMutation({

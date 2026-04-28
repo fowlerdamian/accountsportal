@@ -6,13 +6,14 @@ import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
 import { Textarea } from "@guide/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   useCreateProject,
   useCreateProjectStages,
   NEW_PRODUCT_STAGES,
 } from "@hub/hooks/use-hub-queries";
+import { PriorityScorecardModal } from "@hub/components/PriorityScorecardModal";
 
 type ModalProjectType = "web" | "new_product" | "other";
 
@@ -25,19 +26,20 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
   const navigate = useNavigate();
   const [name,          setName]          = useState("");
   const [description,   setDescription]   = useState("");
-  const [type,          setType]          = useState<ModalProjectType>("web");
+  const [type,          setType]          = useState<ModalProjectType>("new_product");
   const [budget,        setBudget]        = useState("");
   const [startDate,     setStartDate]     = useState("");
   const [dueDate,       setDueDate]       = useState("");
-  const [priorityScore, setPriorityScore] = useState<number | null>(null);
-  const [saving,        setSaving]        = useState(false);
+  const [priorityScore,  setPriorityScore]  = useState<number | null>(null);
+  const [scorecardOpen,  setScorecardOpen]  = useState(false);
+  const [saving,         setSaving]         = useState(false);
 
   const { mutateAsync: createProject }      = useCreateProject();
   const { mutateAsync: createProjectStages } = useCreateProjectStages();
 
   function resetForm() {
     setName(""); setDescription(""); setType("web");
-    setBudget(""); setStartDate(""); setDueDate(""); setPriorityScore(null);
+    setBudget(""); setStartDate(""); setDueDate(""); setPriorityScore(null); setScorecardOpen(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -86,6 +88,7 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
   const isNewProduct = type === "new_product";
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => { if (!v) { resetForm(); onClose(); } }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -139,7 +142,19 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
             )}
           </div>
           <div className="space-y-1.5">
-            <Label>Priority <span className="text-muted-foreground">(optional)</span></Label>
+            <div className="flex items-center justify-between">
+              <Label>Priority <span className="text-muted-foreground">(optional)</span></Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2 gap-1"
+                onClick={() => setScorecardOpen(true)}
+              >
+                <Sparkles className="w-3 h-3" />
+                {priorityScore !== null ? "Re-score" : "Score it"}
+              </Button>
+            </div>
             <div className="flex items-center gap-1">
               {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
                 <button
@@ -159,6 +174,7 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
                 </button>
               ))}
             </div>
+            <p className="text-xs text-muted-foreground">Use the scorecard for a guided score, or pick manually above.</p>
           </div>
 
           <div className="flex gap-2 pt-2 justify-end">
@@ -171,5 +187,12 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
         </form>
       </DialogContent>
     </Dialog>
+
+    <PriorityScorecardModal
+      open={scorecardOpen}
+      onClose={() => setScorecardOpen(false)}
+      onComplete={(score) => { setPriorityScore(score); setScorecardOpen(false); }}
+    />
+    </>
   );
 }

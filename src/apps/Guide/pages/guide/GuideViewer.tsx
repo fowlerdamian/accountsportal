@@ -46,18 +46,8 @@ export default function GuideViewer() {
 
   useEffect(() => {
     document.title = guide?.title ? `${guide.title} | Product Guide` : 'Product Guide';
+    return () => { document.title = 'Staff Portal'; };
   }, [guide?.title]);
-
-  useEffect(() => {
-    return () => {
-      const hostname = window.location.hostname;
-      if (hostname.startsWith('guide.')) {
-        window.location.href = `https://${hostname.replace(/^guide\./, '')}`;
-      } else {
-        document.title = 'Staff Portal';
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (guide?.id) {

@@ -43,6 +43,18 @@ export interface SalesLead {
   disqualification_reason: string | null;
   hubspot_previous_contact: Array<{ date: string; body: string }> | null;
   lusha_mobile: string | null;
+  lusha_contact_id: string | null;
+  industry: string | null;
+  employee_count: number | null;
+  founded_year: number | null;
+  company_description: string | null;
+  tech_stack: string[] | null;
+  scraped_emails: string[] | null;
+  scraped_phones: string[] | null;
+  abn: string | null;
+  annual_revenue_estimate: string | null;
+  hunter_email_pattern: string | null;
+  hunter_contacts: Array<{ name: string; email: string; position: string | null; confidence: number }> | null;
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +90,21 @@ export interface OrderHistory {
   days_since_last_order: number | null;
   is_winback_candidate: boolean;
   last_synced: string;
+}
+
+export interface CallLog {
+  id: string;
+  lead_id: string | null;
+  dialpad_call_id: string | null;
+  direction: "inbound" | "outbound";
+  from_number: string | null;
+  to_number: string | null;
+  duration_seconds: number;
+  status: "answered" | "missed" | "voicemail" | "busy";
+  started_at: string | null;
+  ended_at: string | null;
+  recording_url: string | null;
+  created_at: string;
 }
 
 export interface ResearchJob {
@@ -119,6 +146,8 @@ export function useLeads(channel: Channel, filters?: {
 
       // AGA requires own brand — exclude leads where has_own_brand was explicitly confirmed false by AI
       if (channel === "aga") q = q.not("score_breakdown->has_own_brand", "eq", "false");
+      // FleetCraft requires an installer — exclude leads scoring 0 on is_installer after scoring
+      if (channel === "fleetcraft") q = q.not("score_breakdown->confirmed_non_installer", "eq", "true");
 
       const { data, error } = await q.limit(200);
       if (error) throw error;
@@ -209,6 +238,7 @@ export function useCallEntryByLead(leadId: string) {
       if (error) throw error;
       return data as CallEntry | null;
     },
+    staleTime: 15_000,
   });
 }
 
@@ -242,7 +272,7 @@ export function useDashboardMetrics() {
       const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
       const [leadsRes, callsRes, winbackRes, jobsRes] = await Promise.all([
-        supabase.from("sales_leads").select("id, channel, lead_score, status, created_at, company_name"),
+        supabase.from("sales_leads").select("id, channel, lead_score, status, created_at, company_name").neq("status", "disqualified"),
         supabase.from("call_list").select("id, channel, is_complete, scheduled_date").eq("scheduled_date", today),
         supabase.from("trailbait_order_history").select("id").eq("is_winback_candidate", true),
         supabase.from("research_jobs").select("*").order("created_at", { ascending: false }).limit(6),
@@ -274,6 +304,27 @@ export function useDashboardMetrics() {
         recentJobs: jobs,
       };
     },
+    staleTime: 30_000,
+  });
+}
+
+// ─── Call logs ────────────────────────────────────────────────────────────────
+
+export function useCallLogs(leadId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["call_logs", leadId],
+    queryFn: async () => {
+      if (!leadId) return [];
+      const { data, error } = await supabase
+        .from("sales_call_logs")
+        .select("*")
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data as CallLog[];
+    },
+    enabled: !!leadId,
     staleTime: 30_000,
   });
 }

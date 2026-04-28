@@ -100,22 +100,24 @@ async function syncTrailBaitCustomer(
   // Skip if synced in the last 6 hours — reduces API calls on re-runs
   if (recentlySyncedIds.has(String(customerId))) return;
 
-  const orders90 = await fetchOrdersForCustomer(customerId, 90, accountId, apiKey);
+  // Fetch 365 days — customers lapsed >90d were silently dropped with a 90d window
+  const orders365 = await fetchOrdersForCustomer(customerId, 365, accountId, apiKey);
   await sleep(150);
 
   const now      = new Date();
-  const cutoff30 = new Date(now);
-  cutoff30.setDate(now.getDate() - 30);
+  const cutoff90 = new Date(now);  cutoff90.setDate(now.getDate() - 90);
+  const cutoff30 = new Date(now);  cutoff30.setDate(now.getDate() - 30);
 
   // DEAR Systems saleList uses "SaleDate" as the date field
   const saleDate = (o: any): Date =>
     new Date(o.SaleDate ?? o.SaleOrderDate ?? o.OrderDate ?? o.CreatedDate ?? "");
 
-  const orders30 = orders90.filter((o: any) => saleDate(o) >= cutoff30);
+  const orders90 = orders365.filter((o: any) => saleDate(o) >= cutoff90);
+  const orders30 = orders365.filter((o: any) => saleDate(o) >= cutoff30);
 
   // Last order date
   let lastOrderDate: Date | null = null;
-  for (const o of orders90) {
+  for (const o of orders365) {
     const d = saleDate(o);
     if (!isNaN(d.getTime()) && (!lastOrderDate || d > lastOrderDate)) lastOrderDate = d;
   }
@@ -126,11 +128,11 @@ async function syncTrailBaitCustomer(
 
   // Revenue last 90 days
   const totalRevenue90 = orders90.reduce((sum: number, o: any) => sum + (Number(o.Total) || 0), 0);
-  const avgOrderValue  = orders90.length ? totalRevenue90 / orders90.length : 0;
+  const avgOrderValue  = orders365.length ? orders365.reduce((s: number, o: any) => s + (Number(o.Total) || 0), 0) / orders365.length : 0;
 
   // Top products — fetch line items for the most recent 5 orders
   const productQty: Record<string, { name: string; qty: number; sku: string }> = {};
-  const recentOrders = orders90
+  const recentOrders = orders365
     .slice()
     .sort((a: any, b: any) => saleDate(b).getTime() - saleDate(a).getTime())
     .slice(0, 5);
@@ -154,33 +156,48 @@ async function syncTrailBaitCustomer(
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 5);
 
-  // Win-back: no order in 30+ days but had orders in last 90
-  const isWinback = orders90.length > 0 && daysSinceLast > 30;
+  // Win-back: genuine repeat customer (≥2 orders in 365d) who has lapsed ≥45 days
+  // Previously used orders90.length > 0 && daysSinceLast > 30 — missed anyone lapsed >90d
+  const isWinback = orders365.length >= 2 && daysSinceLast >= 45;
 
-  // Find matching lead
+  // Find matching lead — try cin7_customer_id direct link first, then name match
   const companyName = customer.Name ?? "";
-  const { data: matchedLeads } = await supabase
+  let leadId: string | null = null;
+
+  const { data: directMatch } = await supabase
     .from("sales_leads")
     .select("id")
     .eq("channel", "trailbait")
-    .ilike("company_name", `%${companyName.split(" ")[0]}%`)
+    .eq("cin7_customer_id", String(customerId))
     .limit(1);
 
-  const leadId = matchedLeads?.[0]?.id ?? null;
+  if (directMatch?.[0]) {
+    leadId = directMatch[0].id;
+  } else {
+    // Multi-word name match: require all words ≥4 chars to appear in company_name
+    const words = companyName.split(/\s+/).filter((w: string) => w.length >= 4);
+    if (words.length > 0) {
+      let q = supabase.from("sales_leads").select("id").eq("channel", "trailbait");
+      for (const word of words.slice(0, 3)) q = q.ilike("company_name", `%${word}%`);
+      const { data: nameMatch } = await q.limit(1);
+      leadId = nameMatch?.[0]?.id ?? null;
+    }
+  }
 
   // Upsert order history
   await supabase.from("trailbait_order_history").upsert({
-    cin7_customer_id:     customerId,
-    lead_id:              leadId,
-    last_order_date:      lastOrderDate?.toISOString() ?? null,
-    order_count_30d:      orders30.length,
-    order_count_90d:      orders90.length,
-    total_revenue_90d:    totalRevenue90,
-    average_order_value:  avgOrderValue,
-    top_products:         topProducts,
+    cin7_customer_id:      customerId,
+    lead_id:               leadId,
+    last_order_date:       lastOrderDate?.toISOString() ?? null,
+    order_count_30d:       orders30.length,
+    order_count_90d:       orders90.length,
+    order_count_365d:      orders365.length,
+    total_revenue_90d:     totalRevenue90,
+    average_order_value:   avgOrderValue,
+    top_products:          topProducts,
     days_since_last_order: daysSinceLast,
-    is_winback_candidate: isWinback,
-    last_synced:          now.toISOString(),
+    is_winback_candidate:  isWinback,
+    last_synced:           now.toISOString(),
   }, { onConflict: "cin7_customer_id" });
 
   // If we found a matching lead, update its existing customer flag

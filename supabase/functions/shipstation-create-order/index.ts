@@ -6,6 +6,41 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function normalizeCountry(country: string | null | undefined): string {
+  if (!country) return "AU";
+  const c = country.trim().toLowerCase();
+  const map: Record<string, string> = {
+    "australia": "AU",
+    "new zealand": "NZ",
+    "united states": "US",
+    "united states of america": "US",
+    "usa": "US",
+    "united kingdom": "GB",
+    "great britain": "GB",
+    "canada": "CA",
+  };
+  if (map[c]) return map[c];
+  // If already looks like a 2-letter code, uppercase it
+  if (country.trim().length === 2) return country.trim().toUpperCase();
+  return country.trim();
+}
+
+function normalizeAustralianState(state: string | null | undefined): string {
+  if (!state) return "";
+  const s = state.trim().toLowerCase();
+  const map: Record<string, string> = {
+    "new south wales": "NSW",
+    "victoria": "VIC",
+    "queensland": "QLD",
+    "western australia": "WA",
+    "south australia": "SA",
+    "tasmania": "TAS",
+    "northern territory": "NT",
+    "australian capital territory": "ACT",
+  };
+  return map[s] ?? state.trim().toUpperCase();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -38,36 +73,33 @@ serve(async (req) => {
       lineItemKey: item.sku ?? item.name,
       name:        item.name ?? item.sku,
       sku:         item.sku  ?? null,
-      quantity:    item.quantity ?? 1,
+      quantity:    item.qty ?? item.quantity ?? 1,
       unitPrice:   item.unitPrice ?? 0,
     }));
+
+    const country = normalizeCountry(address?.country);
+    const state   = country === "AU"
+      ? normalizeAustralianState(address?.state)
+      : (address?.state ?? "");
+
+    const shipAddress = {
+      name:       customerName ?? "Customer",
+      phone:      phone        ?? null,
+      street1:    address?.street1    ?? "",
+      street2:    address?.street2    ?? null,
+      city:       address?.city       ?? "",
+      state,
+      postalCode: address?.postalCode ?? "",
+      country,
+    };
 
     const ssOrder = {
       orderNumber:   `SUPPORT-${caseNumber}`,
       orderDate:     new Date().toISOString(),
       orderStatus:   "awaiting_shipment",
-      customerEmail: null,
-      billTo: {
-        name:    customerName ?? "Customer",
-        phone:   phone        ?? null,
-        street1: address?.street1  ?? "",
-        street2: address?.street2  ?? null,
-        city:    address?.city     ?? "",
-        state:   address?.state    ?? "",
-        postalCode: address?.postalCode ?? "",
-        country: address?.country  ?? "AU",
-      },
-      shipTo: {
-        name:    customerName ?? "Customer",
-        phone:   phone        ?? null,
-        street1: address?.street1  ?? "",
-        street2: address?.street2  ?? null,
-        city:    address?.city     ?? "",
-        state:   address?.state    ?? "",
-        postalCode: address?.postalCode ?? "",
-        country: address?.country  ?? "AU",
-      },
-      items: orderItems,
+      billTo:        shipAddress,
+      shipTo:        shipAddress,
+      items:         orderItems,
       internalNotes: `Support case: ${caseTitle ?? caseNumber}`,
     };
 
@@ -95,7 +127,11 @@ serve(async (req) => {
     if (actionItemId) {
       await supabase
         .from("action_items")
-        .update({ status: "done", shipstation_order_id: ssData.orderId ?? null })
+        .update({
+          status: "done",
+          shipstation_order_id:     ssData.orderId     ?? null,
+          shipstation_order_number: ssData.orderNumber ?? null,
+        })
         .eq("id", actionItemId);
     }
 

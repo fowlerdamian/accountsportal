@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
 
     if (pageImages?.length) {
       // Vision mode: pre-rendered JPEG page images (avoids large PDF body)
-      const imageBlocks = pageImages.slice(0, 20).map((b64: string) => ({
+      const imageBlocks = pageImages.slice(0, 40).map((b64: string) => ({
         type: "image",
         source: { type: "base64", media_type: "image/jpeg", data: b64 },
       }));
@@ -99,12 +99,12 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "x-api-key": apiKey,
-        "anthropic-version": "2024-06-01",
+        "anthropic-version": "2023-06-01",
         "content-type": "application/json",
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: SYSTEM_PROMPT,
         messages,
       }),

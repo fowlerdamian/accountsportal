@@ -642,20 +642,7 @@ async function runAgentLoop(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
-  }
-
-  const anonClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-  );
-  const token = authHeader.replace("Bearer ", "");
-  const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
-  }
+  const authHeader = req.headers.get("Authorization") ?? "";
 
   const serviceClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -665,6 +652,8 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
 
+    // check_connection is intentionally unauthenticated — it only returns whether
+    // Xero tokens exist (no user data), so no JWT is required.
     if (body.action === "check_connection") {
       const { data: row } = await serviceClient
         .from("xero_tokens")
@@ -690,6 +679,26 @@ Deno.serve(async (req) => {
         tenant_name: row.tenant_name ?? null,
         last_sync: lastSync ?? null,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // All other actions require a valid JWT.
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const anonClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    );
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(
+      authHeader.replace("Bearer ", ""),
+    );
+    if (authError || !user) {
+      console.error("[xero-chat] Auth failed:", authError?.message, "header prefix:", authHeader.substring(0, 30));
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const message: string = body.message;

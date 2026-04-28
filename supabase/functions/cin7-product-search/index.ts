@@ -53,8 +53,8 @@ serve(async (req) => {
     const rawProducts: any[] = data?.Products ?? [];
 
     const products = rawProducts.map((p: any) => ({
-      sku:  p.SKU  ?? "",
-      name: p.Name ?? p.Description ?? p.SKU ?? "",
+      SKU:  p.SKU  ?? "",
+      Name: p.Name ?? p.Description ?? p.SKU ?? "",
     }));
 
     return new Response(

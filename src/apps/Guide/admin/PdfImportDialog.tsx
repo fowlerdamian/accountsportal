@@ -184,7 +184,7 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
       // Render each page to a compressed JPEG — avoids sending raw PDF bytes
       // which can exceed the 6 MB edge function body limit
       setProgressText("Rendering pages for AI vision…");
-      const maxPages = Math.min(pdf.numPages, 15);
+      const maxPages = Math.min(pdf.numPages, 40);
       const pageImages: string[] = [];
       for (let i = 1; i <= maxPages; i++) {
         const page = await pdf.getPage(i);

@@ -337,7 +337,7 @@ async function generateAICallReason(
       ? new Date(orderHistory.last_order_date).toLocaleDateString("en-AU")
       : "unknown";
     cin7Lines.push(`Last order: ${lastOrderDate}`);
-    cin7Lines.push(`Orders last 30d / 90d: ${orderHistory.order_count_30d} / ${orderHistory.order_count_90d}`);
+    cin7Lines.push(`Orders last 30d / 90d / 365d: ${orderHistory.order_count_30d} / ${orderHistory.order_count_90d} / ${orderHistory.order_count_365d ?? "?"}`);
     cin7Lines.push(`Average order value: $${Math.round(orderHistory.average_order_value ?? 0).toLocaleString()}`);
     if ((orderHistory.top_products ?? []).length) {
       cin7Lines.push(`Top products ordered: ${(orderHistory.top_products ?? []).slice(0,4).map((p: any) => p.name ?? p.sku).join(", ")}`);
@@ -480,6 +480,7 @@ function buildContextBrief(
     cin7_data: orderHistory ? {
       last_order:            orderHistory.last_order_date ? new Date(orderHistory.last_order_date).toLocaleDateString("en-AU") : null,
       days_since_last_order: orderHistory.days_since_last_order,
+      order_count_365d:      orderHistory.order_count_365d,
       order_count_90d:       orderHistory.order_count_90d,
       order_count_30d:       orderHistory.order_count_30d,
       avg_order_value:       orderHistory.average_order_value,
@@ -532,8 +533,8 @@ serve(async (req) => {
         .eq("scheduled_date", targetDate)
         .eq("is_complete", false);
 
-      // Fetch top scored leads
-      const { data: leads } = await supabase
+      // Fetch top scored leads — apply same channel gates as the UI list view
+      let leadsQuery = supabase
         .from("sales_leads")
         .select("*")
         .eq("channel", channel)
@@ -541,6 +542,13 @@ serve(async (req) => {
         .gt("lead_score", 0)
         .order("lead_score", { ascending: false })
         .limit(30);
+
+      // AGA: exclude confirmed non-own-brand leads
+      if (channel === "aga") leadsQuery = leadsQuery.not("score_breakdown->has_own_brand", "eq", "false");
+      // FleetCraft: exclude confirmed non-installers
+      if (channel === "fleetcraft") leadsQuery = leadsQuery.not("score_breakdown->confirmed_non_installer", "eq", "true");
+
+      const { data: leads } = await leadsQuery;
 
       if (!leads?.length) {
         await supabase.from("research_jobs").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", job?.id);

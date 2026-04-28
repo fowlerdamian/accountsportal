@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { X, ExternalLink, Star, Globe, Phone, MapPin, User, Link, TrendingDown, TrendingUp, Minus, Loader2, PhoneCall, MessageSquare } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { LeadScoreBadge } from "./LeadScoreBadge";
@@ -6,6 +6,7 @@ import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type Channel } from "../lib/const
 import { useOrderHistory } from "../hooks/useSalesQueries";
 import type { SalesLead } from "../hooks/useSalesQueries";
 import { supabase } from "@portal/lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 interface Props {
@@ -18,8 +19,12 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
   const [syncing, setSyncing]           = useState(false);
   const [addingToCall, setAddingToCall] = useState(false);
   const [addedToCall, setAddedToCall]   = useState(false);
+  const [addCallError, setAddCallError] = useState<string | null>(null);
   const [disqualReason, setDisqual]     = useState("");
   const [showDisqual, setShowDisqual]   = useState(false);
+  const [disqualifying, setDisqualifying] = useState(false);
+  const addedToCallTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qc = useQueryClient();
 
   const { data: orderHistory } = useOrderHistory(
     lead?.channel === "trailbait" ? (lead?.cin7_customer_id ?? null) : null
@@ -27,10 +32,17 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
 
   if (!lead) return null;
 
+  // score_breakdown stores nested objects {sub_score, weight, contribution} per factor
+  // plus flat enrichment flags — extract contribution for charting, filter non-factor keys
   const scoreFactors = lead.score_breakdown
     ? Object.entries(lead.score_breakdown)
-        .filter(([, v]) => typeof v === "number")
-        .map(([k, v]) => ({ name: k.replace(/_/g, " "), value: v as number }))
+        .filter(([, v]) => v !== null && typeof v === "object" && "contribution" in (v as object))
+        .map(([k, v]) => ({
+          name:  k.replace(/_/g, " "),
+          value: Math.round(((v as any).contribution ?? 0) * 100) / 100,
+        }))
+        .filter((f) => f.value > 0)
+        .sort((a, b) => b.value - a.value)
     : [];
 
   async function pushToHubSpot() {
@@ -47,9 +59,9 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
 
   async function addToCallList() {
     setAddingToCall(true);
+    setAddCallError(null);
     try {
       const today = new Date().toISOString().split("T")[0];
-      // Check if already on today's list
       const { data: existing } = await supabase
         .from("call_list")
         .select("id")
@@ -59,10 +71,11 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
 
       if (existing?.length) {
         setAddedToCall(true);
+        if (addedToCallTimer.current) clearTimeout(addedToCallTimer.current);
+        addedToCallTimer.current = setTimeout(() => setAddedToCall(false), 3000);
         return;
       }
 
-      // Get next priority rank for today
       const { data: callList } = await supabase
         .from("call_list")
         .select("priority_rank")
@@ -73,7 +86,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
 
       const nextRank = ((callList?.[0]?.priority_rank) ?? 0) + 1;
 
-      await supabase.from("call_list").insert({
+      const { error } = await supabase.from("call_list").insert({
         lead_id:        lead.id,
         channel:        lead.channel,
         priority_rank:  nextRank,
@@ -89,15 +102,28 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
           recommended_contact: lead.recommended_contact_name
             ? `${[lead.recommended_contact_title, lead.recommended_contact_name, lead.recommended_contact_last_name].filter(Boolean).join(" ")}${lead.recommended_contact_position ? ", " + lead.recommended_contact_position : ""}`
             : null,
+          contact_source:      lead.recommended_contact_source,
           company_summary:     lead.website_summary,
+          social: {
+            facebook:  lead.social_facebook,
+            instagram: lead.social_instagram,
+            linkedin:  lead.social_linkedin,
+          },
           is_existing_customer: lead.is_existing_customer,
-          lead_score:          lead.lead_score,
+          lead_score:           lead.lead_score,
+          tender_context:       lead.tender_context,
         },
         scheduled_date: today,
       });
 
+      if (error) { setAddCallError("Failed to add to list"); return; }
+
+      qc.invalidateQueries({ queryKey: ["call_list"] });
       setAddedToCall(true);
-      setTimeout(() => setAddedToCall(false), 3000);
+      if (addedToCallTimer.current) clearTimeout(addedToCallTimer.current);
+      addedToCallTimer.current = setTimeout(() => setAddedToCall(false), 3000);
+    } catch {
+      setAddCallError("Failed to add to list");
     } finally {
       setAddingToCall(false);
     }
@@ -105,12 +131,19 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
 
   async function disqualify() {
     if (!disqualReason.trim()) return;
-    await supabase
-      .from("sales_leads")
-      .update({ status: "disqualified", disqualification_reason: disqualReason })
-      .eq("id", lead.id);
-    onLeadUpdated();
-    onClose();
+    setDisqualifying(true);
+    try {
+      const { error } = await supabase
+        .from("sales_leads")
+        .update({ status: "disqualified", disqualification_reason: disqualReason })
+        .eq("id", lead.id);
+      if (error) return;
+      qc.invalidateQueries({ queryKey: ["sales_leads"] });
+      onLeadUpdated();
+      onClose();
+    } finally {
+      setDisqualifying(false);
+    }
   }
 
   const trendIcon = () => {
@@ -171,11 +204,14 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
                 Push to HubSpot
               </button>
             )}
-            <button onClick={addToCallList} disabled={addingToCall || addedToCall}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted hover:bg-muted/70 text-sm transition-colors disabled:opacity-70">
-              {addingToCall ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5" />}
-              {addedToCall ? "Added!" : "Add to Call List"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={addToCallList} disabled={addingToCall || addedToCall}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted hover:bg-muted/70 text-sm transition-colors disabled:opacity-70">
+                {addingToCall ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5" />}
+                {addedToCall ? "Added!" : "Add to Call List"}
+              </button>
+              {addCallError && <span className="text-xs text-red-400">{addCallError}</span>}
+            </div>
             <button onClick={() => setShowDisqual(!showDisqual)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 text-red-400 text-sm hover:bg-red-500/20 transition-colors">
               Disqualify
@@ -193,8 +229,9 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
                 className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500/50"
               />
               <div className="flex gap-2">
-                <button onClick={disqualify}
-                  className="px-3 py-1.5 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors">
+                <button onClick={disqualify} disabled={disqualifying || !disqualReason.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors disabled:opacity-50">
+                  {disqualifying && <Loader2 className="w-3 h-3 animate-spin" />}
                   Confirm
                 </button>
                 <button onClick={() => setShowDisqual(false)}
@@ -292,7 +329,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
           </section>
 
           {/* TrailBait order history */}
-          {lead.channel === "trailbait" && lead.is_existing_customer && (
+          {lead.channel === "trailbait" && (lead.is_existing_customer || !!orderHistory) && (
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Order History</h3>
               {orderHistory ? (

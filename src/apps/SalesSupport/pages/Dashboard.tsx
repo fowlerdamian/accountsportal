@@ -60,6 +60,7 @@ export default function Dashboard() {
         if (r3.error) throw new Error(r3.error.message);
       }
       qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
+      qc.invalidateQueries({ queryKey: ["sales_leads"] });
     } catch (err: unknown) {
       setSyncError((err as Error).message ?? "Research sync failed");
     } finally {
@@ -86,6 +87,7 @@ export default function Dashboard() {
       if (r4.error) throw new Error(r4.error.message);
       qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
       qc.invalidateQueries({ queryKey: ["sales_leads"] });
+      qc.invalidateQueries({ queryKey: ["call_list"] });
     } catch (err: unknown) {
       setSyncError((err as Error).message ?? "List sync failed");
     } finally {

@@ -1,13 +1,22 @@
 import { useState, useEffect } from "react";
 import { useParams, useOutletContext, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Phone, Globe, Star, User, Link,
-  ExternalLink, Loader2, CheckCircle, TrendingDown, TrendingUp, Minus, Save, MessageSquare,
+  ExternalLink, Loader2, CheckCircle, TrendingDown, TrendingUp, Minus, Save, MessageSquare, PhoneCall,
 } from "lucide-react";
+import CallHistory from "../components/CallHistory";
+import CompanyIntel from "../components/CompanyIntel";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useCallEntry, useUpdateCallOutcome, useSaveCallNotes } from "../hooks/useSalesQueries";
 import { type Channel } from "../lib/constants";
 import { supabase } from "@portal/lib/supabase";
+
+const CHANNEL_PITCH: Record<string, string> = {
+  trailbait:  "Accelerate accessory fitment times through innovative products. Add additional unique products to increase average invoice value.",
+  fleetcraft: "Accelerate accessory fitment times through innovative products such as wiring looms and brackets.",
+  aga:        "We offer turn-key products to complement your range without the need to design and manufacture yourself.",
+};
 
 const OUTCOMES = [
   { key: "connected",      label: "Connected",      color: "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" },
@@ -22,6 +31,7 @@ export default function CallCard() {
   const { channel } = useOutletContext<{ channel: Channel }>();
   const navigate    = useNavigate();
 
+  const queryClient               = useQueryClient();
   const { data: call, isLoading } = useCallEntry(callId!);
   const updateOutcome             = useUpdateCallOutcome();
   const saveNotes                 = useSaveCallNotes();
@@ -30,20 +40,13 @@ export default function CallCard() {
   const [notesSaved, setNotesSaved] = useState(false);
   const [syncing, setSyncing]       = useState(false);
   const [syncingOutcome, setSyncingOutcome] = useState<string | null>(null);
-  const [revealedPhone, setRevealedPhone]   = useState<string | null>(null);
-  const [revealingPhone, setRevealingPhone] = useState(false);
-  const [lushaMobile, setLushaMobile]       = useState<string | null>(null);
-  const [lushaLoading, setLushaLoading]     = useState(false);
-  const [lushaError, setLushaError]         = useState<string | null>(null);
+  const [lushaLoading, setLushaLoading] = useState(false);
+  const [lushaError, setLushaError]     = useState<string | null>(null);
+  const [numberRevealed, setNumberRevealed] = useState(false);
 
   useEffect(() => {
     if (call?.call_notes) setNotes(call.call_notes);
   }, [call?.call_notes]);
-
-  // Pre-populate cached Lusha mobile from joined lead record
-  useEffect(() => {
-    if (lead?.lusha_mobile) setLushaMobile(lead.lusha_mobile);
-  }, [lead?.lusha_mobile]);
 
   if (isLoading || !call) {
     return (
@@ -56,6 +59,22 @@ export default function CallCard() {
   const brief = call.context_brief ?? {};
   const cin7  = brief.cin7_data;
   const lead  = call.sales_leads;
+
+  // Fall back to live lead data for fields that may be missing from older briefs
+  const companyName    = brief.company_name    ?? lead?.company_name   ?? "";
+  const companyAddress = brief.address         ?? lead?.address;
+  const companyPhone   = brief.phone           ?? lead?.phone;
+  const companyWebsite = brief.website         ?? lead?.website;
+  const companySummary = brief.company_summary ?? lead?.website_summary;
+  const googleRating   = brief.google_rating   ?? lead?.google_rating;
+  const googleReviews  = brief.google_reviews  ?? lead?.google_review_count;
+  const social = brief.social ?? {
+    facebook:  lead?.social_facebook,
+    instagram: lead?.social_instagram,
+    linkedin:  lead?.social_linkedin,
+  };
+  const contactName   = brief.recommended_contact;
+  const tenderContext = brief.tender_context ?? lead?.tender_context;
 
   async function markOutcome(outcome: string) {
     setSyncingOutcome(outcome);
@@ -80,32 +99,41 @@ export default function CallCard() {
     }
   }
 
-  async function revealPhone() {
-    if (!lead?.id) return;
-    setRevealingPhone(true);
-    try {
-      const { data } = await supabase.functions.invoke("sales-lead-enrichment", {
-        body: { action: "reveal_phone", lead_id: lead.id },
-      });
-      if (data?.phone) setRevealedPhone(data.phone);
-    } finally {
-      setRevealingPhone(false);
-    }
-  }
-
   async function lookupLusha() {
     if (!lead?.id) return;
     setLushaLoading(true);
     setLushaError(null);
     try {
       const { data, error } = await supabase.functions.invoke("sales-lusha-lookup", {
-        body: { lead_id: lead.id },
+        body: { lead_id: lead.id, action: "enrich" },
       });
       if (error) throw new Error(error.message);
-      if (data?.mobile) setLushaMobile(data.mobile);
-      else setLushaError("Not found in Lusha");
+      if (!data?.found && !data?.company && !data?.scraped) setLushaError("Not found");
+      queryClient.invalidateQueries({ queryKey: ["call_entry", callId] });
     } catch (err: any) {
       setLushaError(err.message ?? "Lookup failed");
+    } finally {
+      setLushaLoading(false);
+    }
+  }
+
+  async function revealLusha() {
+    if (!lead?.id) return;
+    setLushaLoading(true);
+    setLushaError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("sales-lusha-lookup", {
+        body: { lead_id: lead.id, action: "reveal" },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.mobile) {
+        setNumberRevealed(true);
+        queryClient.invalidateQueries({ queryKey: ["call_entry", callId] });
+      } else {
+        setLushaError("Not found in Lusha");
+      }
+    } catch (err: any) {
+      setLushaError(err.message ?? "Reveal failed");
     } finally {
       setLushaLoading(false);
     }
@@ -144,13 +172,13 @@ export default function CallCard() {
               #{call.priority_rank}
             </div>
             <div>
-              <h1 className="text-xl font-bold">{brief.company_name}</h1>
-              {brief.address && <p className="text-sm text-muted-foreground mt-0.5">{brief.address}</p>}
+              <h1 className="text-xl font-bold">{companyName}</h1>
+              {companyAddress && <p className="text-sm text-muted-foreground mt-0.5">{companyAddress}</p>}
             </div>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            {brief.website && (
-              <a href={brief.website} target="_blank" rel="noopener noreferrer"
+            {companyWebsite && (
+              <a href={companyWebsite} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-muted hover:bg-muted/70 transition-colors">
                 <Globe className="w-3.5 h-3.5" /> Website
               </a>
@@ -162,7 +190,7 @@ export default function CallCard() {
               </a>
             )}
             {channel === "trailbait" && lead?.cin7_customer_id && (
-              <a href={`https://inventory.dearsystems.com/Customer#guid=${lead.cin7_customer_id}`} target="_blank" rel="noopener noreferrer"
+              <a href={`https://go.cin7.com/Customer#guid=${lead.cin7_customer_id}`} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" /> Cin7
               </a>
@@ -170,24 +198,13 @@ export default function CallCard() {
           </div>
         </div>
 
-        {/* Phone — prominent */}
-        {(revealedPhone ?? brief.phone) ? (
-          <a href={`tel:${revealedPhone ?? brief.phone}`}
-            className="mt-4 flex items-center gap-2 text-2xl font-mono font-semibold text-primary hover:text-primary/80 transition-colors">
-            <Phone className="w-5 h-5" />
-            {revealedPhone ?? brief.phone}
+        {/* Company phone — click-to-dial via Dialpad CTI */}
+        {companyPhone && (
+          <a href={`tel:${companyPhone}`}
+            className="mt-4 inline-flex items-center gap-2 text-2xl font-mono font-semibold text-primary hover:text-primary/80 transition-colors">
+            <PhoneCall className="w-5 h-5" />
+            {companyPhone}
           </a>
-        ) : (
-          <button
-            onClick={revealPhone}
-            disabled={revealingPhone}
-            className="mt-4 flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/70 transition-colors disabled:opacity-50 text-muted-foreground"
-          >
-            {revealingPhone
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <Phone className="w-4 h-4" />}
-            {revealingPhone ? "Finding number…" : "Reveal direct number"}
-          </button>
         )}
       </div>
 
@@ -208,9 +225,12 @@ export default function CallCard() {
         </div>
         <ul className="space-y-2">
           {[
-            brief.recommended_pitch || brief.channel_pitch,
+            brief.recommended_pitch || brief.channel_pitch || CHANNEL_PITCH[channel],
             ...(call.talking_points ?? []),
-          ].filter(Boolean).slice(0, 3).map((point: string, i: number) => (
+            ...(!call.talking_points?.length && lead?.key_products_services?.length
+              ? [`Key products: ${lead.key_products_services.slice(0, 3).join(", ")}`]
+              : []),
+          ].filter(Boolean).slice(0, 4).map((point: string, i: number) => (
             <li key={i} className="text-sm text-foreground/80 flex gap-2.5 leading-relaxed">
               <span className="text-amber-400 font-bold flex-shrink-0">·</span>
               {point}
@@ -223,10 +243,10 @@ export default function CallCard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recommended Contact</div>
-          {brief.recommended_contact ? (
+          {contactName ? (
             <div className="flex items-center gap-2 text-sm">
               <User className="w-4 h-4 text-muted-foreground" />
-              <span>{brief.recommended_contact}</span>
+              <span>{contactName}</span>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No contact identified</p>
@@ -235,57 +255,65 @@ export default function CallCard() {
             <p className="text-xs text-muted-foreground/60">Source: {brief.contact_source}</p>
           )}
 
-          {/* Lusha mobile lookup */}
-          {lushaMobile ? (
-            <a
-              href={`tel:${lushaMobile}`}
-              className="flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
-            >
-              <Phone className="w-3.5 h-3.5" />
-              {lushaMobile}
-              <span className="text-[10px] text-muted-foreground/50 ml-0.5">Lusha</span>
+          {lead?.lusha_mobile && numberRevealed ? (
+            <a href={`tel:${lead.lusha_mobile}`} className="flex items-center gap-1.5 text-sm font-mono font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">
+              <PhoneCall className="w-3.5 h-3.5" />
+              {lead.lusha_mobile}
             </a>
-          ) : brief.recommended_contact ? (
+          ) : (lead?.lusha_contact_id || lead?.lusha_mobile) ? (
+            <button
+              onClick={revealLusha}
+              disabled={lushaLoading}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+            >
+              {lushaLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
+              {lushaLoading ? "Revealing…" : "Reveal number"}
+            </button>
+          ) : contactName ? (
             <div className="flex items-center gap-2 pt-0.5">
               <button
                 onClick={lookupLusha}
                 disabled={lushaLoading}
                 className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-border hover:bg-muted/50 transition-colors disabled:opacity-50 text-muted-foreground"
               >
-                {lushaLoading
-                  ? <Loader2 className="w-3 h-3 animate-spin" />
-                  : <Phone className="w-3 h-3" />}
-                Find mobile
+                {lushaLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
+                {lushaLoading ? "Enriching…" : "Find & Enrich"}
               </button>
-              {lushaError && (
-                <span className="text-xs text-muted-foreground/60">{lushaError}</span>
-              )}
+              {lushaError && <span className="text-xs text-muted-foreground/60">{lushaError}</span>}
             </div>
           ) : null}
+          {lead?.email && (
+            <a href={`mailto:${lead.email}`} className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors truncate">
+              {lead.email}
+            </a>
+          )}
         </div>
 
         <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Online</div>
           <div className="flex flex-wrap gap-3 text-sm">
-            {brief.google_rating && (
+            {googleRating && (
               <span className="flex items-center gap-1 text-yellow-400">
                 <Star className="w-4 h-4 fill-yellow-400" />
-                {brief.google_rating}
-                {brief.google_reviews && <span className="text-muted-foreground text-xs">({brief.google_reviews})</span>}
+                {googleRating}
+                {googleReviews && <span className="text-muted-foreground text-xs">({googleReviews})</span>}
               </span>
             )}
-            {brief.social?.facebook && (
-              <a href={brief.social.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300"><Link className="w-4 h-4" /></a>
+            {social?.facebook && (
+              <a href={social.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300"><Link className="w-4 h-4" /></a>
             )}
-            {brief.social?.instagram && (
-              <a href={brief.social.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300"><Link className="w-4 h-4" /></a>
+            {social?.instagram && (
+              <a href={social.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300"><Link className="w-4 h-4" /></a>
             )}
-            {brief.social?.linkedin && (
-              <a href={brief.social.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-400"><Link className="w-4 h-4" /></a>
+            {social?.linkedin && (
+              <a href={social.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-400"><Link className="w-4 h-4" /></a>
             )}
           </div>
         </div>
       </div>
+
+      {/* Company intel */}
+      {lead && <CompanyIntel lead={lead} />}
 
       {/* HubSpot previous contact */}
       <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">
@@ -307,11 +335,20 @@ export default function CallCard() {
         )}
       </div>
 
+      {/* Dialpad call history */}
+      <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <PhoneCall className="w-3.5 h-3.5" />
+          Call History
+        </div>
+        <CallHistory leadId={lead?.id} />
+      </div>
+
       {/* Company summary */}
-      {brief.company_summary && (
+      {companySummary && (
         <div className="rounded-xl border border-border bg-card/50 p-4">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Company Overview</div>
-          <p className="text-sm text-foreground/80 leading-relaxed">{brief.company_summary}</p>
+          <p className="text-sm text-foreground/80 leading-relaxed">{companySummary}</p>
         </div>
       )}
 
@@ -357,10 +394,10 @@ export default function CallCard() {
       )}
 
       {/* FleetCraft: tender context */}
-      {channel === "fleetcraft" && brief.tender_context && (
+      {channel === "fleetcraft" && tenderContext && (
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
           <div className="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-2">Tender / Contract Context</div>
-          <p className="text-sm text-foreground/80">{brief.tender_context}</p>
+          <p className="text-sm text-foreground/80">{tenderContext}</p>
         </div>
       )}
 

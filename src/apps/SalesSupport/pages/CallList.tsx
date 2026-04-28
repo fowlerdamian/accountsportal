@@ -52,8 +52,9 @@ export default function CallList() {
     }
   }
 
+  // Sort by priority_rank — already accounts for win-back boost; don't re-sort by raw lead_score
   const pending   = calls.filter((c) => !c.is_complete)
-    .sort((a, b) => ((b.context_brief?.lead_score ?? 0) - (a.context_brief?.lead_score ?? 0)));
+    .sort((a, b) => a.priority_rank - b.priority_rank);
   const completed = calls.filter((c) => c.is_complete);
 
   return (
@@ -140,7 +141,7 @@ export default function CallList() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <h4 className="font-semibold text-base leading-tight">{brief.company_name ?? call.context_brief?.company_name ?? "—"}</h4>
+                              <h4 className="font-semibold text-base leading-tight">{brief.company_name ?? call.sales_leads?.company_name ?? "—"}</h4>
                               {brief.phone && (
                                 <a
                                   href={`tel:${brief.phone}`}
@@ -212,7 +213,7 @@ export default function CallList() {
                       className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/30 transition-colors cursor-pointer opacity-70"
                     >
                       <span className="text-xs text-muted-foreground w-5 text-right">{call.priority_rank}</span>
-                      <span className="flex-1 text-sm font-medium">{brief.company_name}</span>
+                      <span className="flex-1 text-sm font-medium">{brief.company_name ?? call.sales_leads?.company_name ?? "—"}</span>
                       {call.call_outcome && (
                         <span className={cn("text-xs px-2 py-0.5 rounded-full", OUTCOME_COLOR[call.call_outcome] ?? "bg-muted text-muted-foreground")}>
                           {call.call_outcome.replace(/_/g, " ")}

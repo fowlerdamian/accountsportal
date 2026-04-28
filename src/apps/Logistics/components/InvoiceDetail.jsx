@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useParams } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
-import { aud, lineVariance, invoiceOvercharge, invoiceTotal } from '../utils/helpers.js'
+import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../utils/helpers.js'
 
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
@@ -46,6 +47,7 @@ const sectionLabel = {
 
 export default function InvoiceDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
 
   // Existing state
   const [invoice,          setInvoice]          = useState(null)
@@ -112,7 +114,7 @@ export default function InvoiceDetail() {
     const { error } = await supabase.from('freight_invoices').update({ status: 'disputed' }).eq('id', invoice.id)
     setUpdatingStatus(false)
     if (error) { flash('err', error.message); return }
-    setInvoice(prev => ({ ...prev, status: 'disputed' }))
+    await fetchInvoice()
 
     const claimsEmail = invoice.carriers?.claims_email
     if (!claimsEmail) {
@@ -206,13 +208,16 @@ export default function InvoiceDetail() {
     if (!invoice) return
     setPanelBusy(true)
     const { data: { user } } = await supabase.auth.getUser()
-    const { error } = await supabase.from('dispute_emails').insert({
-      invoice_id:  invoice.id,
-      sent_to:     invoice.carriers?.claims_email,
-      letter_text: panelLetter,
-      sent_by:     user?.id ?? null,
-      status:      'draft',
-    })
+    const existingDraft = disputeEmails.find(e => e.status === 'draft')
+    const { error } = existingDraft
+      ? await supabase.from('dispute_emails').update({ letter_text: panelLetter }).eq('id', existingDraft.id)
+      : await supabase.from('dispute_emails').insert({
+          invoice_id:  invoice.id,
+          sent_to:     invoice.carriers?.claims_email,
+          letter_text: panelLetter,
+          sent_by:     user?.id ?? null,
+          status:      'draft',
+        })
     setPanelBusy(false)
     if (error) { flash('err', error.message); return }
     setShowPanel(false)
@@ -261,6 +266,14 @@ export default function InvoiceDetail() {
     <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
 
       <div style={{ marginBottom: '24px' }}>
+        <button
+          onClick={() => navigate('/logistics/invoices')}
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: '#555', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '4px', transition: 'color 120ms' }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#a0a0a0' }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
+        >
+          ← Invoices
+        </button>
         <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0 }}>Invoice Detail</h1>
         <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>Review and manage carrier invoice</p>
       </div>
@@ -297,8 +310,8 @@ export default function InvoiceDetail() {
               {invoice.carriers?.email && <> · <a href={`mailto:${invoice.carriers.email}`} style={{ color: '#f3ca0f', textDecoration: 'none' }}>{invoice.carriers.email}</a></>}
             </p>
             <p style={{ fontSize: '12px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
-              Invoice: {new Date(invoice.invoice_date).toLocaleDateString('en-AU')}
-              {invoice.due_date && <> · Due: {new Date(invoice.due_date).toLocaleDateString('en-AU')}</>}
+              Invoice: {fmtDate(invoice.invoice_date)}
+              {invoice.due_date && <> · Due: {fmtDate(invoice.due_date)}</>}
             </p>
           </div>
           <span style={{ ...ss, display: 'inline-block', padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', textTransform: 'capitalize', flexShrink: 0 }}>
@@ -498,13 +511,12 @@ export default function InvoiceDetail() {
                 </tr>
               </thead>
               <tbody>
-                {disputeEmails.map((em, idx) => {
+                {disputeEmails.map((em) => {
                   const es = EMAIL_STATUS_STYLE[em.status] ?? EMAIL_STATUS_STYLE.sent
                   const isExpanded = expandedEmail === em.id
                   return (
-                    <>
+                    <Fragment key={em.id}>
                       <tr
-                        key={em.id}
                         style={{ borderBottom: isExpanded ? 'none' : '1px solid #181818', cursor: em.status === 'sent' ? 'pointer' : 'default', transition: 'background 120ms' }}
                         onClick={() => { if (em.status === 'sent') setExpandedEmail(isExpanded ? null : em.id) }}
                         onMouseEnter={e => { if (em.status === 'sent') e.currentTarget.style.background = '#0a0a0a' }}
@@ -512,7 +524,7 @@ export default function InvoiceDetail() {
                       >
                         <td style={{ padding: '11px 14px', fontSize: '12px', color: '#888', fontFamily: '"JetBrains Mono", monospace' }}>{em.sent_to ?? '—'}</td>
                         <td style={{ padding: '11px 14px', fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace' }}>
-                          {new Date(em.sent_at).toLocaleDateString('en-AU')}
+                          {fmtDate(em.sent_at?.slice(0, 10))}
                         </td>
                         <td style={{ padding: '11px 14px' }}>
                           <span style={{ ...es, display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', textTransform: 'capitalize' }}>
@@ -538,7 +550,7 @@ export default function InvoiceDetail() {
                         </td>
                       </tr>
                       {isExpanded && em.status === 'sent' && (
-                        <tr key={`${em.id}-expand`} style={{ borderBottom: '1px solid #181818' }}>
+                        <tr style={{ borderBottom: '1px solid #181818' }}>
                           <td colSpan={4} style={{ padding: '0 14px 14px' }}>
                             <pre style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', margin: 0, fontSize: '12px', color: '#ffffff', whiteSpace: 'pre-wrap', fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.6 }}>
                               {em.letter_text}
@@ -546,7 +558,7 @@ export default function InvoiceDetail() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
               </tbody>

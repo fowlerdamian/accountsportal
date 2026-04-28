@@ -143,6 +143,37 @@ function factorsTrailBait(lead: any, orderHistory: any | null): Record<string, F
   return factors;
 }
 
+// ─── Fleet channel classifier ────────────────────────────────────────────────
+//
+// Companies that SELL TO the fleet industry (accessories, equipment, parts) but
+// don't fit out vehicles themselves belong under AGA, not FleetCraft.
+//
+// Rule: if no installer keywords are found AND at least one "sells-to-fleet"
+// signal is present, this lead should be re-assigned to "aga".
+
+const FLEET_INSTALLER_KW = [
+  "fitout", "fit-out", "fit out", "upfit", "upfitter", "upfitting",
+  "installer", "installation", "modify", "modification", "vehicle mod",
+  "body builder", "body build", "custom build", "conversion", "fleet build",
+  "fleet conversion", "builds vehicles", "vehicle fit",
+];
+
+const FLEET_SELLER_KW = [
+  "fleet supplier", "fleet supply", "fleet supplies", "supplies to fleet",
+  "supply to fleet", "sells to fleet", "fleet distributor", "fleet products",
+  "fleet accessories", "fleet equipment supplier", "fleet parts",
+  "fleet procurement", "fleet leasing", "fleet management company",
+  "fleet operator", "corporate fleet", "fleet sales", "fleet manager",
+  "fleet rental", "fleet hire", "vehicle fleet management",
+  "supplies fleet operators", "fleet industry supplier",
+];
+
+function detectSellsToFleet(allText: string): boolean {
+  const hasInstaller = FLEET_INSTALLER_KW.some((k) => allText.includes(k));
+  if (hasInstaller) return false;
+  return FLEET_SELLER_KW.some((k) => allText.includes(k));
+}
+
 function factorsFleetCraft(lead: any): Record<string, FactorResult> {
   const factors: Record<string, FactorResult> = {};
   const summary     = (lead.website_summary ?? "").toLowerCase();
@@ -351,6 +382,12 @@ serve(async (req) => {
       // Preserve existing score_breakdown keys (Wayback/PageSpeed/Places/Apollo
       // signals produced by enrichment) — merge, don't overwrite.
       const merged = { ...(lead.score_breakdown ?? {}), ...breakdown };
+
+      // FleetCraft: write a top-level gate flag so the DB query can hard-exclude
+      // confirmed non-installers (mirrors AGA's has_own_brand gate pattern).
+      if (ch === "fleetcraft") {
+        merged.confirmed_non_installer = factors.is_installer.score === 0;
+      }
 
       await supabase.from("sales_leads").update({
         lead_score:      score,

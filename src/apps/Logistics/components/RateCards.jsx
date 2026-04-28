@@ -1,38 +1,22 @@
 import { useEffect, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
 
-// ─── CSV parser ───────────────────────────────────────────────────────────────
+// ─── Shared row validator ─────────────────────────────────────────────────────
 
-function parseRateCsv(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) return { rows: [], skipped: [{ row: '—', reason: 'CSV has no data rows' }] }
-
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
-  const col = {
-    service:        headers.indexOf('service'),
-    lane:           headers.indexOf('lane'),
-    rate:           headers.indexOf('rate'),
-    effective_from: headers.indexOf('effective_from'),
-    effective_to:   headers.indexOf('effective_to'),
-  }
-
-  const missingCols = ['service', 'lane', 'rate'].filter(k => col[k] === -1)
-  if (missingCols.length) {
-    return { rows: [], skipped: [{ row: '—', reason: `Missing required columns: ${missingCols.join(', ')}` }] }
-  }
-
+function validateRows(rawRows) {
   const rows = []
   const skipped = []
 
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(',').map(c => c.trim())
-    const service        = col.service        !== -1 ? (cells[col.service]        ?? '') : ''
-    const lane           = col.lane           !== -1 ? (cells[col.lane]           ?? '') : ''
-    const rate           = col.rate           !== -1 ? (cells[col.rate]           ?? '') : ''
-    const effective_from = col.effective_from !== -1 ? (cells[col.effective_from] ?? '') : ''
-    const effective_to   = col.effective_to   !== -1 ? (cells[col.effective_to]   ?? '') : ''
-    const rowNum = i + 1
+  for (let i = 0; i < rawRows.length; i++) {
+    const r = rawRows[i]
+    const service        = String(r.service        ?? '').trim()
+    const lane           = String(r.lane           ?? '').trim()
+    const rate           = String(r.rate           ?? '').trim()
+    const effective_from = String(r.effective_from ?? '').trim()
+    const effective_to   = String(r.effective_to   ?? '').trim()
+    const rowNum = i + 2  // 1-based, skipping header
 
     if (!service) { skipped.push({ row: rowNum, reason: 'Missing service' }); continue }
     if (!lane)    { skipped.push({ row: rowNum, reason: 'Missing lane' });    continue }
@@ -51,6 +35,56 @@ function parseRateCsv(text) {
   return { rows, skipped }
 }
 
+// ─── Format parsers ───────────────────────────────────────────────────────────
+
+function parseDelimited(text, sep) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return { rows: [], skipped: [{ row: '—', reason: 'File has no data rows' }] }
+
+  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase())
+  const required = ['service', 'lane', 'rate']
+  const missing = required.filter(k => !headers.includes(k))
+  if (missing.length) return { rows: [], skipped: [{ row: '—', reason: `Missing required columns: ${missing.join(', ')}` }] }
+
+  const idx = k => headers.indexOf(k)
+  const rawRows = []
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(sep).map(c => c.trim())
+    rawRows.push({
+      service:        cells[idx('service')]        ?? '',
+      lane:           cells[idx('lane')]           ?? '',
+      rate:           cells[idx('rate')]           ?? '',
+      effective_from: cells[idx('effective_from')] ?? '',
+      effective_to:   cells[idx('effective_to')]   ?? '',
+    })
+  }
+  return validateRows(rawRows)
+}
+
+function parseExcelBuffer(buffer) {
+  const wb = XLSX.read(buffer, { type: 'array' })
+  if (!wb.SheetNames.length) return { rows: [], skipped: [{ row: '—', reason: 'Workbook has no sheets' }] }
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  if (!ws) return { rows: [], skipped: [{ row: '—', reason: 'First sheet is empty' }] }
+  const json = XLSX.utils.sheet_to_json(ws, { defval: '' })
+
+  if (!json.length) return { rows: [], skipped: [{ row: '—', reason: 'Spreadsheet has no data rows' }] }
+
+  // Normalise keys to lowercase
+  const normalised = json.map(r => {
+    const out = {}
+    for (const [k, v] of Object.entries(r)) out[k.trim().toLowerCase()] = v
+    return out
+  })
+
+  const required = ['service', 'lane', 'rate']
+  const firstRow = normalised[0]
+  const missing = required.filter(k => !(k in firstRow))
+  if (missing.length) return { rows: [], skipped: [{ row: '—', reason: `Missing required columns: ${missing.join(', ')}` }] }
+
+  return validateRows(normalised)
+}
+
 function downloadTemplate() {
   const csv = [
     'service,lane,rate,effective_from,effective_to',
@@ -63,6 +97,8 @@ function downloadTemplate() {
   a.href = url; a.download = 'rate_card_template.csv'; a.click()
   URL.revokeObjectURL(url)
 }
+
+const ACCEPTED_FORMATS = '.csv,.tsv,.xlsx,.xls'
 
 // ─── Sub-tab bar ──────────────────────────────────────────────────────────────
 
@@ -99,8 +135,8 @@ export default function RateCards() {
   const [uploadModal,      setUploadModal]      = useState(false)    // open/closed
   const [uploadDone,       setUploadDone]       = useState(false)    // showing result
   const [uploadCarrierId,  setUploadCarrierId]  = useState('')
-  const [uploadCsvText,    setUploadCsvText]    = useState('')
   const [uploadFile,       setUploadFile]       = useState(null)
+  const [uploadParsed,     setUploadParsed]     = useState(null)     // { rows, skipped } after parse
   const [uploading,        setUploading]        = useState(false)
   const [uploadResult,     setUploadResult]     = useState(null)     // { added, superseded, skipped }
 
@@ -147,34 +183,47 @@ export default function RateCards() {
 
   const openUploadModal = () => {
     setUploadCarrierId('')
-    setUploadCsvText('')
     setUploadFile(null)
+    setUploadParsed(null)
     setUploadResult(null)
     setUploadDone(false)
     setUploadModal(true)
   }
 
   const closeUploadModal = () => {
+    const shouldRefresh = uploadResult?.added > 0
     setUploadModal(false)
     setUploadDone(false)
     setUploadResult(null)
-    if (uploadResult?.added > 0) fetchAll()
+    if (shouldRefresh) fetchAll()
   }
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (!file) return
     setUploadFile(file)
-    const reader = new FileReader()
-    reader.onload = (ev) => setUploadCsvText(ev.target.result ?? '')
-    reader.readAsText(file)
+    setUploadParsed(null)
+
+    const ext = file.name.split('.').pop().toLowerCase()
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      const reader = new FileReader()
+      reader.onload = (ev) => setUploadParsed(parseExcelBuffer(new Uint8Array(ev.target.result)))
+      reader.readAsArrayBuffer(file)
+    } else {
+      // csv or tsv — read as text
+      const sep = ext === 'tsv' ? '\t' : ','
+      const reader = new FileReader()
+      reader.onload = (ev) => setUploadParsed(parseDelimited(ev.target.result ?? '', sep))
+      reader.readAsText(file)
+    }
   }
 
   const handleUpload = async () => {
     if (!uploadCarrierId) { flash('err', 'Select a carrier'); return }
-    if (!uploadCsvText)   { flash('err', 'Choose a CSV file'); return }
+    if (!uploadParsed)    { flash('err', 'Choose a file'); return }
 
-    const { rows, skipped } = parseRateCsv(uploadCsvText)
+    const { rows, skipped } = uploadParsed
     const today = new Date().toISOString().slice(0, 10)
 
     setUploading(true)
@@ -460,7 +509,7 @@ export default function RateCards() {
             {!uploadDone ? (
               <>
                 <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', margin: '0 0 4px' }}>Upload rate card</p>
-                <p style={{ fontSize: '12px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', margin: '0 0 20px' }}>CSV will be appended — existing rates are not deleted</p>
+                <p style={{ fontSize: '12px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', margin: '0 0 20px' }}>Rates will be appended — existing rates are not deleted</p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
                   <div>
@@ -476,13 +525,20 @@ export default function RateCards() {
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>CSV File</label>
+                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>File <span style={{ color: '#444', textTransform: 'none' }}>(CSV, TSV, Excel)</span></label>
                     <input
                       type="file"
-                      accept=".csv"
+                      accept={ACCEPTED_FORMATS}
                       onChange={handleFileChange}
                       style={{ fontSize: '12px', color: '#AAA', fontFamily: '"JetBrains Mono", monospace', width: '100%' }}
                     />
+                    {uploadParsed && (
+                      <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: uploadParsed.rows.length > 0 ? '#4ade80' : '#ff1744' }}>
+                        {uploadParsed.rows.length > 0
+                          ? `${uploadParsed.rows.length} row${uploadParsed.rows.length !== 1 ? 's' : ''} ready${uploadParsed.skipped.length > 0 ? `, ${uploadParsed.skipped.length} skipped` : ''}`
+                          : `No valid rows found`}
+                      </p>
+                    )}
                   </div>
 
                   <button
@@ -498,8 +554,8 @@ export default function RateCards() {
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
                     onClick={handleUpload}
-                    disabled={uploading || !uploadCarrierId || !uploadCsvText}
-                    style={{ ...btnPrimary, opacity: (uploading || !uploadCarrierId || !uploadCsvText) ? 0.5 : 1, cursor: (uploading || !uploadCarrierId || !uploadCsvText) ? 'not-allowed' : 'pointer' }}
+                    disabled={uploading || !uploadCarrierId || !uploadParsed || uploadParsed.rows.length === 0}
+                    style={{ ...btnPrimary, opacity: (uploading || !uploadCarrierId || !uploadParsed || uploadParsed.rows.length === 0) ? 0.5 : 1, cursor: (uploading || !uploadCarrierId || !uploadParsed || uploadParsed.rows.length === 0) ? 'not-allowed' : 'pointer' }}
                     onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                   >
