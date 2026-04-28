@@ -731,6 +731,113 @@ export function useSyncDriveFiles(projectId: string, folderId: string | null | u
   }, [projectId, folderId, qc]);
 }
 
+const STEP_EXTS = ["step", "stp"];
+
+export function useGenerateStepThumbnails(files: HubFile[]) {
+  const qc       = useQueryClient();
+  const firedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const targets = files.filter(f => {
+      if (f.thumbnail_url || firedRef.current.has(f.id)) return false;
+      const ext = f.filename.split(".").pop()?.toLowerCase() ?? "";
+      return STEP_EXTS.includes(ext);
+    });
+    if (!targets.length) return;
+    targets.forEach(f => firedRef.current.add(f.id));
+
+    (async () => {
+      const [{ default: occtImport }, THREE] = await Promise.all([
+        import("occt-import-js"),
+        import("three"),
+      ]);
+      const occt: any = await occtImport({
+        locateFile: (n: string) => n.endsWith(".wasm")
+          ? new URL("occt-import-js/dist/occt-import-js.wasm", import.meta.url).href
+          : n,
+      });
+
+      const projectIds = new Set<string>();
+      for (const f of targets) {
+        try {
+          const resp = await fetch(f.file_url);
+          if (!resp.ok) continue;
+          const bytes  = new Uint8Array(await resp.arrayBuffer());
+          const result = occt.ReadStepFile(bytes, null);
+          if (!result?.success || !result.meshes?.length) continue;
+
+          const canvas   = document.createElement("canvas");
+          canvas.width   = 512;
+          canvas.height  = 512;
+          const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+          renderer.setSize(512, 512, false);
+          renderer.setClearColor(0x111111, 1);
+
+          const scene = new THREE.Scene();
+          scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+          const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+          dir.position.set(5, 10, 7);
+          scene.add(dir);
+
+          const fallbackMat = new THREE.MeshPhongMaterial({
+            color: 0xf3ca0f, specular: 0x333333, shininess: 40, side: THREE.DoubleSide,
+          });
+
+          const group = new THREE.Group();
+          for (const m of result.meshes) {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute("position", new THREE.Float32BufferAttribute(m.attributes.position.array, 3));
+            if (m.attributes.normal?.array) {
+              geo.setAttribute("normal", new THREE.Float32BufferAttribute(m.attributes.normal.array, 3));
+            } else {
+              geo.computeVertexNormals();
+            }
+            if (m.index?.array) geo.setIndex(new THREE.Uint32BufferAttribute(m.index.array, 1));
+            const mat = m.color
+              ? new THREE.MeshPhongMaterial({
+                  color: new THREE.Color(m.color[0], m.color[1], m.color[2]),
+                  specular: 0x222222, shininess: 30, side: THREE.DoubleSide,
+                })
+              : fallbackMat;
+            group.add(new THREE.Mesh(geo, mat));
+          }
+          scene.add(group);
+
+          const box     = new THREE.Box3().setFromObject(group);
+          const size    = box.getSize(new THREE.Vector3());
+          const center  = box.getCenter(new THREE.Vector3());
+          group.position.sub(center);
+          const maxDim  = Math.max(size.x, size.y, size.z);
+          const camera  = new THREE.PerspectiveCamera(35, 1, 0.01, 10000);
+          const dist    = Math.abs(maxDim / (2 * Math.tan((35 * Math.PI / 180) / 2))) * 1.8;
+          camera.position.set(dist * 0.6, dist * 0.4, dist);
+          camera.lookAt(0, 0, 0);
+          renderer.render(scene, camera);
+
+          const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, "image/png"));
+          renderer.dispose();
+          if (!blob) continue;
+
+          const path = `file-thumbnails/${f.id}.png`;
+          const { error: upErr } = await supabase.storage
+            .from("contractor-hub-files")
+            .upload(path, blob, { contentType: "image/png", upsert: true });
+          if (upErr) continue;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from("contractor-hub-files")
+            .getPublicUrl(path);
+          await supabase.from("files").update({ thumbnail_url: publicUrl }).eq("id", f.id);
+          if (f.project_id) projectIds.add(f.project_id);
+        } catch (err) {
+          console.warn("[step-thumb] failed for", f.filename, err);
+        }
+      }
+      projectIds.forEach(pid => qc.invalidateQueries({ queryKey: ["hub_files", pid] }));
+    })();
+  }, [files, qc]);
+}
+
 export function useUploadProjectThumbnail() {
   const qc = useQueryClient();
   return useMutation({

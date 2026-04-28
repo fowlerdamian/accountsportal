@@ -30,6 +30,7 @@ import {
   useUpdateProject, useCreateTask, useUpdateTask, useReorderTasks,
   usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
   useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
+  useGenerateStepThumbnails,
   NEW_PRODUCT_STAGES,
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
@@ -57,6 +58,7 @@ function ProjectViewContent() {
   const { data: timeEntries = [] }                    = useTimeEntries({ projectId: id });
 
   useSyncDriveFiles(id, project?.drive_folder_id);
+  useGenerateStepThumbnails(files);
 
   // ── Mutations ─────────────────────────────────────────────
   const { mutateAsync: updateProject }         = useUpdateProject();
@@ -800,13 +802,21 @@ function ProjectViewContent() {
                   }
                 }
 
+                const onThumbClick = () => {
+                  if (is3D) {
+                    setCadPreview({ url: file.file_url, filename: file.filename, displayName: file.filename });
+                  } else if (file.thumbnail_url) {
+                    setImgPreview({ url: file.thumbnail_url, filename: file.filename });
+                  }
+                };
+
                 return (
                   <li key={file.id} className="flex items-center gap-3 text-sm">
                     {file.thumbnail_url ? (
                       <button
-                        onClick={() => setImgPreview({ url: file.thumbnail_url!, filename: file.filename })}
+                        onClick={onThumbClick}
                         className="shrink-0 w-9 h-9 rounded overflow-hidden border border-border/40 bg-muted hover:border-primary/40 transition-colors"
-                        title="Preview thumbnail"
+                        title={is3D ? "Open 3D preview" : "Preview thumbnail"}
                       >
                         <img src={file.thumbnail_url} alt="" className="w-full h-full object-cover" />
                       </button>
