@@ -3,8 +3,9 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2, ChevronRight, Plus, Upload, Paperclip, Clock,
-  GripVertical, Camera, Trash2,
+  GripVertical, Camera, Trash2, Box, ExternalLink,
 } from "lucide-react";
+import CadViewer, { isCadFile, canPreview3D } from "@hub/components/CadViewer";
 import { Button } from "@guide/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { Textarea } from "@guide/components/ui/textarea";
@@ -85,6 +86,7 @@ function ProjectViewContent() {
   const [draggedId,       setDraggedId]       = useState<string | null>(null);
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [logTimeOpen,     setLogTimeOpen]     = useState(false);
+  const [cadPreview,      setCadPreview]      = useState<{ url: string; name: string } | null>(null);
 
   const fileInputRef        = useRef<HTMLInputElement>(null);
   const thumbInputRef       = useRef<HTMLInputElement>(null);
@@ -491,6 +493,38 @@ function ProjectViewContent() {
               </button>
             )}
 
+            {project.drive_folder_id && (
+              <button
+                title="Open project folder in Google Drive"
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                onClick={async (e) => {
+                  e.currentTarget.disabled = true;
+                  try {
+                    const { data } = await supabase.functions.invoke("google-drive", {
+                      body: { action: "ensure_folder", project_id: project.id, project_name: project.name, folder_id: project.drive_folder_id },
+                    });
+                    const folderId = data?.folder_id ?? project.drive_folder_id;
+                    if (data?.recreated) qc.invalidateQueries({ queryKey: ["hub_project", project.id] });
+                    window.open(`https://drive.google.com/drive/folders/${folderId}`, "_blank");
+                  } catch {
+                    window.open(`https://drive.google.com/drive/folders/${project.drive_folder_id}`, "_blank");
+                  } finally {
+                    e.currentTarget.disabled = false;
+                  }
+                }}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 87.3 78" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0a15.92 15.92 0 003.3 6.65z" fill="#0066DA"/>
+                  <path d="M43.65 25L29.9 1.2c-1.35.8-2.5 1.9-3.3 3.3L.95 50.2A15.86 15.86 0 000 56.9h27.5z" fill="#00AC47"/>
+                  <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.6H59.8l5.85 11.05z" fill="#EA4335"/>
+                  <path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z" fill="#00832D"/>
+                  <path d="M59.8 56.9h27.5a16 16 0 00-1.2-6.7L62.05 7.55c-.8-1.4-1.95-2.5-3.3-3.3L45 25z" fill="#2684FC"/>
+                  <path d="M27.5 56.9H0l13.75 23.8c1.35.8 2.9 1.2 4.5 1.2H69.05c1.6 0 3.15-.45 4.5-1.2L59.8 56.9z" fill="#FFBA00"/>
+                </svg>
+                Drive
+              </button>
+            )}
+
             <Button size="sm" variant="outline" onClick={() => setLogTimeOpen(v => !v)}>
               <Clock className="w-3.5 h-3.5 mr-1.5" />
               Log Time
@@ -776,6 +810,26 @@ function ProjectViewContent() {
                       : `${(file.file_size / 1024).toFixed(0)} KB`}
                   </span>
                   <span className="text-xs text-muted-foreground shrink-0">{file.created_at.split("T")[0]}</span>
+                  {file.drive_file_id && (
+                    <a
+                      href={`https://drive.google.com/file/d/${file.drive_file_id}/view`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open in Google Drive"
+                      className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                  {isCadFile(file.filename) && (
+                    <button
+                      onClick={() => setCadPreview({ url: file.file_url, name: file.filename })}
+                      title="3D Preview"
+                      className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <Box className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -867,6 +921,15 @@ function ProjectViewContent() {
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setSelectedTask(null); }}
       />
+
+      {/* CAD viewer */}
+      {cadPreview && (
+        <CadViewer
+          fileUrl={cadPreview.url}
+          filename={cadPreview.name}
+          onClose={() => setCadPreview(null)}
+        />
+      )}
     </div>
   );
 }

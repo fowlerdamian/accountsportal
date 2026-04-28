@@ -211,6 +211,7 @@ export default function ProjectsList() {
   const [stageFilter,     setStageFilter]     = useState<string>("all");
   const [showBin,         setShowBin]         = useState(false);
   const [sortByPriority,  setSortByPriority]  = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: projects = [],       isLoading }         = useProjects();
   const { data: deletedProjects = [] }                   = useDeletedProjects();
@@ -414,18 +415,39 @@ export default function ProjectsList() {
                         <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
                         Restore
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground hover:text-red-400 hover:bg-red-400/10"
-                        onClick={async () => {
-                          if (!window.confirm(`Permanently delete "${p.name}"? This cannot be undone.`)) return;
-                          await permanentDelete(p.id);
-                          toast.success("Project permanently deleted");
-                        }}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {confirmDeleteId === p.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-7 px-2 text-xs"
+                            onClick={async () => {
+                              setConfirmDeleteId(null);
+                              await permanentDelete({ id: p.id, drive_folder_id: p.drive_folder_id });
+                              toast.success("Project permanently deleted");
+                            }}
+                          >
+                            Delete
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setConfirmDeleteId(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-muted-foreground hover:text-red-400 hover:bg-red-400/10"
+                          onClick={() => setConfirmDeleteId(p.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </div>
                   );
                 })}

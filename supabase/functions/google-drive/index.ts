@@ -1,0 +1,264 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
+}
+
+// ── Google Service Account JWT ────────────────────────────────────────────────
+
+function pemToBytes(pem: string): Uint8Array {
+  const b64 = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  const binary = atob(b64);
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+}
+
+function b64url(obj: object): string {
+  return btoa(JSON.stringify(obj))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
+}
+
+async function getGoogleAccessToken(email: string, privateKeyPem: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const claims = {
+    iss: email,
+    scope: "https://www.googleapis.com/auth/drive",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  };
+
+  const sigInput = `${b64url(header)}.${b64url(claims)}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToBytes(privateKeyPem),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sigBytes = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(sigInput),
+  );
+  const sig = btoa(String.fromCharCode(...new Uint8Array(sigBytes)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+
+  const jwt = `${sigInput}.${sig}`;
+
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+  const data = await resp.json();
+  if (!data.access_token) throw new Error(`Google auth failed: ${JSON.stringify(data)}`);
+  return data.access_token;
+}
+
+// ── Drive API helpers ─────────────────────────────────────────────────────────
+
+async function createDriveFolder(
+  token: string,
+  name: string,
+  parentId?: string,
+): Promise<{ id: string }> {
+  const body: Record<string, unknown> = {
+    name,
+    mimeType: "application/vnd.google-apps.folder",
+  };
+  if (parentId) body.parents = [parentId];
+
+  const resp = await fetch(
+    "https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  const data = await resp.json();
+  if (!data.id) throw new Error(`Drive folder creation failed: ${JSON.stringify(data)}`);
+  return data;
+}
+
+async function uploadFileToDrive(
+  token: string,
+  folderId: string,
+  filename: string,
+  mimeType: string,
+  fileUrl: string,
+): Promise<{ id: string; webViewLink: string }> {
+  const fileResp = await fetch(fileUrl);
+  if (!fileResp.ok) throw new Error(`Failed to fetch file from storage: ${fileResp.status}`);
+  const fileBytes = await fileResp.arrayBuffer();
+
+  const boundary = `drive_${Date.now()}`;
+  const metadata = JSON.stringify({ name: filename, parents: [folderId] });
+  const enc = new TextEncoder();
+
+  const parts = [
+    enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`),
+    enc.encode(`--${boundary}\r\nContent-Type: ${mimeType || "application/octet-stream"}\r\n\r\n`),
+    new Uint8Array(fileBytes),
+    enc.encode(`\r\n--${boundary}--`),
+  ];
+
+  const totalLen = parts.reduce((n, p) => n + p.byteLength, 0);
+  const body = new Uint8Array(totalLen);
+  let off = 0;
+  for (const p of parts) { body.set(p, off); off += p.byteLength; }
+
+  const resp = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink&supportsAllDrives=true",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": `multipart/related; boundary=${boundary}`,
+      },
+      body,
+    },
+  );
+  const data = await resp.json();
+  if (!data.id) throw new Error(`Drive upload failed: ${JSON.stringify(data)}`);
+  return data;
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return json({ error: "Unauthorized" }, 401);
+
+  try {
+    const { action, ...payload } = await req.json();
+
+    const serviceEmail = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+    const privateKeyPem = (Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") ?? "")
+      .replace(/\\n/g, "\n");
+    const parentFolderId = Deno.env.get("GOOGLE_DRIVE_PARENT_FOLDER_ID");
+
+    if (!serviceEmail || !privateKeyPem) {
+      return json({ error: "Google Drive not configured" }, 503);
+    }
+
+    const gtoken = await getGoogleAccessToken(serviceEmail, privateKeyPem);
+
+    const sb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // ── create_folder ─────────────────────────────────────────
+    if (action === "create_folder") {
+      const { project_id, project_name } = payload as { project_id: string; project_name: string };
+      const folder = await createDriveFolder(gtoken, project_name, parentFolderId);
+      await sb.from("projects").update({ drive_folder_id: folder.id }).eq("id", project_id);
+      return json({ folder_id: folder.id, folder_url: `https://drive.google.com/drive/folders/${folder.id}` });
+    }
+
+    // ── ensure_folder ─────────────────────────────────────────
+    if (action === "ensure_folder") {
+      const { project_id, project_name, folder_id } = payload as {
+        project_id: string; project_name: string; folder_id?: string;
+      };
+      if (folder_id) {
+        const check = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${folder_id}?supportsAllDrives=true&fields=id`,
+          { headers: { Authorization: `Bearer ${gtoken}` } },
+        );
+        if (check.ok) return json({ folder_id, recreated: false });
+      }
+      const folder = await createDriveFolder(gtoken, project_name, parentFolderId);
+      await sb.from("projects").update({ drive_folder_id: folder.id }).eq("id", project_id);
+      return json({ folder_id: folder.id, recreated: true });
+    }
+
+    // ── upload_file ───────────────────────────────────────────
+    if (action === "upload_file") {
+      const { file_id, project_id, file_url, filename, mime_type } = payload as {
+        file_id: string; project_id: string; file_url: string; filename: string; mime_type: string;
+      };
+
+      const { data: project } = await sb
+        .from("projects")
+        .select("drive_folder_id, name")
+        .eq("id", project_id)
+        .single();
+
+      if (!project) return json({ skipped: true });
+
+      let folderId = project.drive_folder_id;
+      if (folderId) {
+        const check = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${folderId}?supportsAllDrives=true&fields=id`,
+          { headers: { Authorization: `Bearer ${gtoken}` } },
+        );
+        if (!check.ok) {
+          const folder = await createDriveFolder(gtoken, project.name, parentFolderId);
+          await sb.from("projects").update({ drive_folder_id: folder.id }).eq("id", project_id);
+          folderId = folder.id;
+        }
+      }
+      if (!folderId) return json({ skipped: true });
+
+      const driveFile = await uploadFileToDrive(
+        gtoken,
+        folderId,
+        filename,
+        mime_type,
+        file_url,
+      );
+      await sb.from("files").update({ drive_file_id: driveFile.id }).eq("id", file_id);
+      return json({ drive_file_id: driveFile.id, drive_file_url: driveFile.webViewLink });
+    }
+
+    // ── rename_folder ─────────────────────────────────────────
+    if (action === "delete_folder") {
+      const { folder_id } = payload as { folder_id: string };
+      await fetch(
+        `https://www.googleapis.com/drive/v3/files/${folder_id}?supportsAllDrives=true`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${gtoken}` } },
+      );
+      return json({ deleted: true });
+    }
+
+    if (action === "rename_folder") {
+      const { folder_id, new_name } = payload as { folder_id: string; new_name: string };
+      const resp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${folder_id}?supportsAllDrives=true&fields=id`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${gtoken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: new_name }),
+        },
+      );
+      const data = await resp.json();
+      if (!data.id) throw new Error(`Drive rename failed: ${JSON.stringify(data)}`);
+      return json({ folder_id: data.id });
+    }
+
+    return json({ error: "Unknown action" }, 400);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[google-drive]", msg);
+    return json({ error: msg }, 500);
+  }
+});

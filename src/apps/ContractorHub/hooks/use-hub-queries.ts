@@ -44,6 +44,7 @@ export interface Project {
   start_date:       string | null;
   due_date:         string | null;
   thumbnail_url:    string | null;
+  drive_folder_id:  string | null;
   deleted_at:       string | null;
   created_at:       string;
 }
@@ -97,17 +98,18 @@ export interface ActivityEntry {
 }
 
 export interface HubFile {
-  id:          string;
-  project_id:  string | null;
-  task_id:     string | null;
-  filename:    string;
-  file_url:    string;
-  file_size:   number;
-  mime_type:   string;
-  uploaded_by: string;
-  source:      "upload" | "upwork";
-  created_at:  string;
-  profiles?:   { full_name: string | null } | null;
+  id:            string;
+  project_id:    string | null;
+  task_id:       string | null;
+  filename:      string;
+  file_url:      string;
+  file_size:     number;
+  mime_type:     string;
+  uploaded_by:   string;
+  source:        "upload" | "upwork";
+  drive_file_id: string | null;
+  created_at:    string;
+  profiles?:     { full_name: string | null } | null;
 }
 
 export interface ProjectBudgetSummary {
@@ -301,14 +303,24 @@ export function useProjectContractors(projectId: string | undefined) {
 export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: Omit<Project, "id" | "created_at">) => {
+    mutationFn: async (payload: Omit<Project, "id" | "created_at" | "drive_folder_id">) => {
       const { data, error } = await supabase
         .from("projects")
         .insert(payload)
         .select()
         .single();
       if (error) throw error;
-      return data as Project;
+      const project = data as Project;
+
+      // Fire-and-forget: create matching Google Drive folder
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) return;
+        supabase.functions.invoke("google-drive", {
+          body: { action: "create_folder", project_id: project.id, project_name: project.name },
+        }).catch(() => {});
+      });
+
+      return project;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["hub_projects"] });
@@ -329,10 +341,16 @@ export function useUpdateProject() {
       if (error) throw error;
       return data as Project;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       qc.invalidateQueries({ queryKey: ["hub_projects"] });
       qc.invalidateQueries({ queryKey: ["hub_project", data.id] });
       qc.invalidateQueries({ queryKey: ["hub_budget_summary", data.id] });
+
+      if (variables.name && data.drive_folder_id) {
+        supabase.functions.invoke("google-drive", {
+          body: { action: "rename_folder", folder_id: data.drive_folder_id, new_name: data.name },
+        }).catch(() => {});
+      }
     },
   });
 }
@@ -374,15 +392,21 @@ export function useRestoreProject() {
 export function usePermanentDeleteProject() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, drive_folder_id }: { id: string; drive_folder_id?: string | null }) => {
       const { error } = await supabase
         .from("projects")
         .delete()
         .eq("id", id);
       if (error) throw error;
+      return { drive_folder_id };
     },
-    onSuccess: () => {
+    onSuccess: ({ drive_folder_id }) => {
       qc.invalidateQueries({ queryKey: ["hub_projects_deleted"] });
+      if (drive_folder_id) {
+        supabase.functions.invoke("google-drive", {
+          body: { action: "delete_folder", folder_id: drive_folder_id },
+        }).catch(() => {});
+      }
     },
   });
 }
@@ -659,7 +683,21 @@ export function useUploadFile() {
         .select()
         .single();
       if (error) throw error;
-      return data as HubFile;
+      const hubFile = data as HubFile;
+
+      // Fire-and-forget: sync to Google Drive
+      supabase.functions.invoke("google-drive", {
+        body: {
+          action:     "upload_file",
+          file_id:    hubFile.id,
+          project_id: projectId,
+          file_url:   urlData.publicUrl,
+          filename:   file.name,
+          mime_type:  file.type || "application/octet-stream",
+        },
+      }).catch(() => {});
+
+      return hubFile;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["hub_files", data.project_id] });
