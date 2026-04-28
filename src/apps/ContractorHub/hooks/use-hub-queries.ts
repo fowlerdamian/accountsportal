@@ -705,6 +705,18 @@ export function useUploadFile() {
   });
 }
 
+export function useSyncDriveFiles(projectId: string, folderId: string | null | undefined) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!folderId) return;
+    supabase.functions.invoke("google-drive", {
+      body: { action: "sync_from_drive", project_id: projectId, folder_id: folderId },
+    }).then(({ data }) => {
+      if (data?.synced > 0) qc.invalidateQueries({ queryKey: ["hub_files", projectId] });
+    }).catch(() => {});
+  }, [projectId, folderId, qc]);
+}
+
 export function useUploadProjectThumbnail() {
   const qc = useQueryClient();
   return useMutation({

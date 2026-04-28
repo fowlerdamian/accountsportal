@@ -28,7 +28,7 @@ import {
   useFiles, useContractors, useProjectContractors, useTimeEntries,
   useUpdateProject, useCreateTask, useUpdateTask, useReorderTasks,
   usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
-  useUploadProjectThumbnail, useSoftDeleteProject,
+  useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
   NEW_PRODUCT_STAGES,
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
@@ -54,6 +54,8 @@ function ProjectViewContent() {
   const { data: contractors = [] }                    = useContractors();
   const { data: projContractors = [] }                = useProjectContractors(id);
   const { data: timeEntries = [] }                    = useTimeEntries({ projectId: id });
+
+  useSyncDriveFiles(id, project?.drive_folder_id);
 
   // ── Mutations ─────────────────────────────────────────────
   const { mutateAsync: updateProject }         = useUpdateProject();
@@ -799,16 +801,21 @@ function ProjectViewContent() {
             <ul className="space-y-2 mb-4">
               {files.map(file => (
                 <li key={file.id} className="flex items-center gap-3 text-sm">
-                  <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  {file.source === "drive"
+                    ? <ExternalLink className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    : <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  }
                   <a href={file.file_url} target="_blank" rel="noopener noreferrer"
                      className="flex-1 truncate hover:text-primary transition-colors">
                     {file.filename}
                   </a>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {file.file_size > 1048576
-                      ? `${(file.file_size / 1048576).toFixed(1)} MB`
-                      : `${(file.file_size / 1024).toFixed(0)} KB`}
-                  </span>
+                  {file.file_size != null && (
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {file.file_size > 1048576
+                        ? `${(file.file_size / 1048576).toFixed(1)} MB`
+                        : `${(file.file_size / 1024).toFixed(0)} KB`}
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground shrink-0">{file.created_at.split("T")[0]}</span>
                   {file.drive_file_id && (
                     <a

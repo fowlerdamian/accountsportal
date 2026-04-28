@@ -230,7 +230,49 @@ serve(async (req) => {
       return json({ drive_file_id: driveFile.id, drive_file_url: driveFile.webViewLink });
     }
 
-    // ── rename_folder ─────────────────────────────────────────
+    // ── sync_from_drive ───────────────────────────────────────
+    if (action === "sync_from_drive") {
+      const { project_id, folder_id } = payload as { project_id: string; folder_id: string };
+
+      const q = encodeURIComponent(
+        `'${folder_id}' in parents and trashed=false and mimeType != 'application/vnd.google-apps.folder'`
+      );
+      const listResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,webViewLink)&supportsAllDrives=true&includeItemsFromAllDrives=true&pageSize=1000`,
+        { headers: { Authorization: `Bearer ${gtoken}` } },
+      );
+      const listData = await listResp.json();
+      const driveFiles: Array<{ id: string; name: string; mimeType: string; size?: string; webViewLink: string }> =
+        listData.files ?? [];
+
+      if (driveFiles.length === 0) return json({ synced: 0 });
+
+      const { data: existing } = await sb
+        .from("files")
+        .select("drive_file_id")
+        .eq("project_id", project_id)
+        .not("drive_file_id", "is", null);
+
+      const existingIds = new Set((existing ?? []).map((f: { drive_file_id: string }) => f.drive_file_id));
+      const newFiles = driveFiles.filter((f) => !existingIds.has(f.id));
+      if (newFiles.length === 0) return json({ synced: 0 });
+
+      await sb.from("files").insert(
+        newFiles.map((f) => ({
+          project_id,
+          filename:      f.name,
+          file_url:      f.webViewLink,
+          file_size:     f.size ? parseInt(f.size, 10) : null,
+          mime_type:     f.mimeType || "application/octet-stream",
+          source:        "drive",
+          drive_file_id: f.id,
+        })),
+      );
+
+      return json({ synced: newFiles.length });
+    }
+
+    // ── delete_folder ─────────────────────────────────────────
     if (action === "delete_folder") {
       const { folder_id } = payload as { folder_id: string };
       await fetch(
