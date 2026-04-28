@@ -109,6 +109,7 @@ export interface HubFile {
   source:        "upload" | "upwork" | "drive";
   drive_file_id: string | null;
   thumbnail_url: string | null;
+  stl_url:       string | null;
   created_at:    string;
   profiles?:     { full_name: string | null } | null;
 }
@@ -738,6 +739,35 @@ export function useGenerateThumbnails(files: HubFile[]) {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingKey]);
+}
+
+export function useConvertSldprt(files: HubFile[]) {
+  const qc = useQueryClient();
+  const [converting, setConverting] = useState<Set<string>>(new Set());
+
+  const pendingKey = files
+    .filter(f => f.drive_file_id && !f.stl_url && SW_EXT.test(f.filename))
+    .map(f => f.id)
+    .join(",");
+
+  useEffect(() => {
+    if (!pendingKey) return;
+    const pending = files.filter(f => f.drive_file_id && !f.stl_url && SW_EXT.test(f.filename));
+    setConverting(prev => new Set([...prev, ...pending.map(f => f.id)]));
+    pending.forEach(f => {
+      supabase.functions.invoke("google-drive", {
+        body: { action: "convert_to_stl", db_file_id: f.id, drive_file_id: f.drive_file_id },
+      }).then(({ data }) => {
+        setConverting(prev => { const n = new Set(prev); n.delete(f.id); return n; });
+        if (data?.stl_url) qc.invalidateQueries({ queryKey: ["hub_files"] });
+      }).catch(() => {
+        setConverting(prev => { const n = new Set(prev); n.delete(f.id); return n; });
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey]);
+
+  return converting;
 }
 
 export function useUploadProjectThumbnail() {

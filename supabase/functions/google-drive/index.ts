@@ -250,27 +250,40 @@ serve(async (req) => {
 
       const { data: existing } = await sb
         .from("files")
-        .select("drive_file_id")
+        .select("id, drive_file_id, file_size")
         .eq("project_id", project_id)
         .not("drive_file_id", "is", null);
 
-      const existingIds = new Set((existing ?? []).map((f: { drive_file_id: string }) => f.drive_file_id));
-      const newFiles = driveFiles.filter((f) => !existingIds.has(f.id));
-      if (newFiles.length === 0) return json({ synced: 0 });
+      const existingMap = new Map((existing ?? []).map((f: { id: string; drive_file_id: string; file_size: number | null }) => [f.drive_file_id, f]));
+      const newFiles = driveFiles.filter(f => !existingMap.has(f.id));
+      const changedFiles = driveFiles.filter(f => {
+        const ex = existingMap.get(f.id);
+        return ex && f.size != null && parseInt(f.size, 10) !== (ex.file_size ?? -1);
+      });
 
-      await sb.from("files").insert(
-        newFiles.map((f) => ({
-          project_id,
-          filename:      f.name,
-          file_url:      f.webViewLink,
-          file_size:     f.size ? parseInt(f.size, 10) : null,
-          mime_type:     f.mimeType || "application/octet-stream",
-          source:        "drive",
-          drive_file_id: f.id,
-        })),
-      );
+      if (newFiles.length > 0) {
+        await sb.from("files").insert(
+          newFiles.map((f) => ({
+            project_id,
+            filename:      f.name,
+            file_url:      f.webViewLink,
+            file_size:     f.size ? parseInt(f.size, 10) : null,
+            mime_type:     f.mimeType || "application/octet-stream",
+            source:        "drive",
+            drive_file_id: f.id,
+          })),
+        );
+      }
 
-      return json({ synced: newFiles.length });
+      for (const f of changedFiles) {
+        const ex = existingMap.get(f.id)!;
+        await sb.from("files")
+          .update({ file_size: parseInt(f.size!, 10), stl_url: null, thumbnail_url: null })
+          .eq("id", ex.id);
+        console.log("[sync_from_drive] size change on", f.name, "— cleared stl_url/thumbnail_url");
+      }
+
+      return json({ synced: newFiles.length, updated: changedFiles.length });
     }
 
     // ── delete_folder ─────────────────────────────────────────
@@ -388,6 +401,90 @@ serve(async (req) => {
       await sb.from("files").update({ thumbnail_url: publicUrl }).eq("id", db_file_id);
 
       return json({ thumbnail_url: publicUrl });
+    }
+
+    // ── convert_to_stl ────────────────────────────────────────
+    if (action === "convert_to_stl") {
+      const { db_file_id, drive_file_id } = payload as { db_file_id: string; drive_file_id: string };
+
+      const ccKey = Deno.env.get("CLOUDCONVERT_API_KEY");
+      if (!ccKey) return json({ error: "CloudConvert not configured" }, 503);
+
+      // Download SLDPRT from Drive
+      const fileResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${drive_file_id}?alt=media&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${gtoken}` } },
+      );
+      console.log("[convert_to_stl] drive download status:", fileResp.status, "size:", fileResp.headers.get("content-length"));
+      if (!fileResp.ok) return json({ error: `Drive download failed: ${fileResp.status}` }, 500);
+      const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
+      console.log("[convert_to_stl] downloaded", fileBytes.length, "bytes");
+
+      // Create CloudConvert job
+      const jobResp = await fetch("https://api.cloudconvert.com/v2/jobs", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${ccKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tasks: {
+            "import-file": { operation: "import/upload" },
+            "convert":     { operation: "convert", input: ["import-file"], output_format: "stl" },
+            "export":      { operation: "export/url", input: ["convert"], inline: false, archive_multiple_files: false },
+          },
+        }),
+      });
+      const job = await jobResp.json();
+      console.log("[convert_to_stl] job id:", job.data?.id, "status:", job.data?.status);
+      if (!job.data?.id) return json({ error: `CloudConvert job creation failed: ${JSON.stringify(job)}` }, 500);
+
+      // Upload file to CloudConvert import form
+      const importTask = (job.data.tasks as any[]).find(t => t.name === "import-file");
+      if (!importTask?.result?.form) return json({ error: "No upload form in job" }, 500);
+      const { url: uploadUrl, parameters } = importTask.result.form;
+      const form = new FormData();
+      for (const [k, v] of Object.entries(parameters as Record<string, string>)) form.append(k, v);
+      form.append("file", new Blob([fileBytes], { type: "application/octet-stream" }), "model.sldprt");
+      const uploadResp = await fetch(uploadUrl, { method: "POST", body: form });
+      console.log("[convert_to_stl] upload status:", uploadResp.status);
+
+      // Poll until finished (max 25 × 4 s = 100 s)
+      const jobId: string = job.data.id;
+      let stlBytes: Uint8Array | null = null;
+      for (let i = 0; i < 25; i++) {
+        await new Promise(r => setTimeout(r, 4000));
+        const statusResp = await fetch(`https://api.cloudconvert.com/v2/jobs/${jobId}`, {
+          headers: { Authorization: `Bearer ${ccKey}` },
+        });
+        const status = await statusResp.json();
+        const jobStatus: string = status.data?.status ?? "";
+        console.log("[convert_to_stl] poll", i + 1, "status:", jobStatus);
+        if (jobStatus === "finished") {
+          const exportTask = (status.data.tasks as any[]).find(t => t.name === "export");
+          const stlUrl: string | undefined = exportTask?.result?.files?.[0]?.url;
+          if (!stlUrl) return json({ error: "No STL in export result" }, 500);
+          const stlResp = await fetch(stlUrl);
+          stlBytes = new Uint8Array(await stlResp.arrayBuffer());
+          console.log("[convert_to_stl] STL bytes:", stlBytes.length);
+          break;
+        }
+        if (jobStatus === "error") {
+          const errTask = (status.data.tasks as any[]).find(t => t.status === "error");
+          return json({ error: `Conversion error: ${errTask?.message ?? "unknown"}` }, 500);
+        }
+      }
+
+      if (!stlBytes) return json({ error: "Conversion timed out" }, 504);
+
+      // Store in Supabase Storage
+      const path = `file-stl/${db_file_id}.stl`;
+      const { error: upErr } = await sb.storage
+        .from("contractor-hub-files")
+        .upload(path, stlBytes, { contentType: "model/stl", upsert: true });
+      if (upErr) return json({ error: upErr.message }, 500);
+
+      const { data: { publicUrl } } = sb.storage.from("contractor-hub-files").getPublicUrl(path);
+      await sb.from("files").update({ stl_url: publicUrl }).eq("id", db_file_id);
+      console.log("[convert_to_stl] done:", publicUrl);
+      return json({ stl_url: publicUrl });
     }
 
     if (action === "rename_folder") {

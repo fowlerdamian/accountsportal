@@ -29,7 +29,7 @@ import {
   useFiles, useContractors, useProjectContractors, useTimeEntries,
   useUpdateProject, useCreateTask, useUpdateTask, useReorderTasks,
   usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
-  useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles, useGenerateThumbnails,
+  useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles, useGenerateThumbnails, useConvertSldprt,
   NEW_PRODUCT_STAGES,
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
@@ -58,6 +58,7 @@ function ProjectViewContent() {
 
   useSyncDriveFiles(id, project?.drive_folder_id);
   useGenerateThumbnails(files);
+  const convertingIds = useConvertSldprt(files);
 
   // ── Mutations ─────────────────────────────────────────────
   const { mutateAsync: updateProject }         = useUpdateProject();
@@ -90,7 +91,7 @@ function ProjectViewContent() {
   const [draggedId,       setDraggedId]       = useState<string | null>(null);
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [logTimeOpen,     setLogTimeOpen]     = useState(false);
-  const [cadPreview,      setCadPreview]      = useState<{ url: string; name: string } | null>(null);
+  const [cadPreview,      setCadPreview]      = useState<{ url: string; name: string; displayName?: string } | null>(null);
   const [thumbPreview,    setThumbPreview]    = useState<{ url: string; name: string } | null>(null);
 
   const fileInputRef        = useRef<HTMLInputElement>(null);
@@ -818,13 +819,25 @@ function ProjectViewContent() {
                     </a>
                   )}
                   {isCadFile(file.filename) && (
-                    <button
-                      onClick={() => setCadPreview({ url: file.file_url, name: file.filename })}
-                      title="3D Preview"
-                      className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      <Box className="w-3.5 h-3.5" />
-                    </button>
+                    file.stl_url ? (
+                      <button
+                        onClick={() => setCadPreview({ url: file.stl_url!, name: "model.stl", displayName: file.filename })}
+                        title="3D Preview"
+                        className="shrink-0 text-primary hover:text-primary/70 transition-colors"
+                      >
+                        <Box className="w-3.5 h-3.5" />
+                      </button>
+                    ) : convertingIds.has(file.id) ? (
+                      <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin shrink-0" title="Converting to 3D…" />
+                    ) : (
+                      <button
+                        onClick={() => setCadPreview({ url: file.file_url, name: file.filename })}
+                        title="3D Preview"
+                        className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <Box className="w-3.5 h-3.5" />
+                      </button>
+                    )
                   )}
                 </li>
               ))}
@@ -923,6 +936,7 @@ function ProjectViewContent() {
         <CadViewer
           fileUrl={cadPreview.url}
           filename={cadPreview.name}
+          displayName={cadPreview.displayName}
           onClose={() => setCadPreview(null)}
         />
       )}

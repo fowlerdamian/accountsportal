@@ -86,12 +86,13 @@ function fitCameraToObject(
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
-  fileUrl:  string;
-  filename: string;
-  onClose:  () => void;
+  fileUrl:      string;
+  filename:     string;
+  displayName?: string;
+  onClose:      () => void;
 }
 
-export default function CadViewer({ fileUrl, filename, onClose }: Props) {
+export default function CadViewer({ fileUrl, filename, displayName, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef  = useRef<ReturnType<typeof buildScene> | null>(null);
   const rafRef    = useRef<number>(0);
@@ -210,7 +211,7 @@ export default function CadViewer({ fileUrl, filename, onClose }: Props) {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #1e1e1e" }}>
           <span style={{ fontSize: "13px", fontWeight: 600, color: "#fff", fontFamily: '"JetBrains Mono", monospace', maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {filename}
+            {displayName ?? filename}
           </span>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             {status === "ready" && (
