@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus, Loader2, Calendar, AlertCircle, Check, X as XIcon,
-  Trash2, RotateCcw, Search, LayoutGrid, Columns3,
+  Trash2, RotateCcw, Search, LayoutGrid, Columns3, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
@@ -208,10 +208,10 @@ function FilterPill({ active, onClick, children }: { active: boolean; onClick: (
 
 // ── Types ─────────────────────────────────────────────────────
 
-type TypeFilter     = "all" | "new_product" | "web" | "other";
-type PriorityFilter = "all" | "high" | "med" | "low" | "none";
-type DateFilter     = "all" | "30d" | "90d" | "365d";
-type ViewMode       = "grid" | "kanban";
+type TypeFilter = "all" | "new_product" | "web" | "other";
+type ViewMode   = "grid" | "kanban";
+type SortBy     = "priority" | "created" | "progress";
+type SortDir    = "asc" | "desc";
 
 // ── Page ─────────────────────────────────────────────────────
 
@@ -220,9 +220,8 @@ export default function ProjectsList() {
   const [view,            setView]            = useState<ViewMode>("grid");
   const [search,          setSearch]          = useState("");
   const [typeFilter,      setTypeFilter]      = useState<TypeFilter>("all");
-  const [stageFilter,     setStageFilter]     = useState<string>("all");
-  const [priorityFilter,  setPriorityFilter]  = useState<PriorityFilter>("all");
-  const [dateFilter,      setDateFilter]      = useState<DateFilter>("all");
+  const [sortBy,          setSortBy]          = useState<SortBy>("priority");
+  const [sortDir,         setSortDir]         = useState<SortDir>("desc");
   const [showBin,         setShowBin]         = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -245,33 +244,29 @@ export default function ProjectsList() {
   }, [qc]);
 
   const activeStageByProject = Object.fromEntries(activeStages.map(s => [s.project_id, s]));
-  const productProjects      = projects.filter(p => p.type === "new_product");
-  const showStageFilter      = typeFilter === "new_product" || typeFilter === "all";
 
-  // ── Filtering pipeline ────────────────────────────────────────
+  // ── Filter + sort pipeline ────────────────────────────────────
 
-  const cutoff = dateFilter !== "all"
-    ? new Date(Date.now() - parseInt(dateFilter) * 24 * 60 * 60 * 1000).toISOString()
-    : null;
+  function progressIdx(p: Project): number {
+    if (p.type !== "new_product") return -1;
+    const stage = activeStageByProject[p.id];
+    return stage ? NEW_PRODUCT_STAGES.indexOf(stage.name as any) : -1;
+  }
 
   const filtered = projects
     .filter(p => typeFilter === "all" || (typeFilter === "other" ? p.type !== "new_product" && p.type !== "web" : p.type === typeFilter))
-    .filter(p => {
-      if (stageFilter === "all") return true;
-      if (p.type !== "new_product") return true;
-      return activeStageByProject[p.id]?.name === stageFilter;
-    })
-    .filter(p => {
-      if (priorityFilter === "all")  return true;
-      if (priorityFilter === "none") return p.priority_score == null;
-      if (priorityFilter === "high") return p.priority_score != null && p.priority_score >= 8;
-      if (priorityFilter === "med")  return p.priority_score != null && p.priority_score >= 5 && p.priority_score < 8;
-      if (priorityFilter === "low")  return p.priority_score != null && p.priority_score < 5;
-      return true;
-    })
-    .filter(p => !cutoff || p.created_at >= cutoff)
     .filter(p => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
-    .sort((a, b) => (b.priority_score ?? -1) - (a.priority_score ?? -1));
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "priority") {
+        cmp = (a.priority_score ?? -1) - (b.priority_score ?? -1);
+      } else if (sortBy === "created") {
+        cmp = a.created_at.localeCompare(b.created_at);
+      } else {
+        cmp = progressIdx(a) - progressIdx(b);
+      }
+      return sortDir === "desc" ? -cmp : cmp;
+    });
 
   if (isLoading || stagesLoading) {
     return (
@@ -302,18 +297,39 @@ export default function ProjectsList() {
 
           {/* Type pills */}
           <div className="flex items-center gap-1 flex-wrap">
-            <FilterPill active={typeFilter === "all"} onClick={() => { setTypeFilter("all"); setStageFilter("all"); }}>
+            <FilterPill active={typeFilter === "all"} onClick={() => setTypeFilter("all")}>
               All <span className="ml-1 opacity-50">{projects.length}</span>
             </FilterPill>
-            <FilterPill active={typeFilter === "new_product"} onClick={() => { setTypeFilter("new_product"); setStageFilter("all"); }}>
+            <FilterPill active={typeFilter === "new_product"} onClick={() => setTypeFilter("new_product")}>
               Products <span className="ml-1 opacity-50">{projects.filter(p => p.type === "new_product").length}</span>
             </FilterPill>
-            <FilterPill active={typeFilter === "web"} onClick={() => { setTypeFilter("web"); setStageFilter("all"); }}>
+            <FilterPill active={typeFilter === "web"} onClick={() => setTypeFilter("web")}>
               Web <span className="ml-1 opacity-50">{projects.filter(p => p.type === "web").length}</span>
             </FilterPill>
-            <FilterPill active={typeFilter === "other"} onClick={() => { setTypeFilter("other"); setStageFilter("all"); }}>
+            <FilterPill active={typeFilter === "other"} onClick={() => setTypeFilter("other")}>
               Other <span className="ml-1 opacity-50">{projects.filter(p => p.type !== "new_product" && p.type !== "web").length}</span>
             </FilterPill>
+          </div>
+
+          {/* Sort pills */}
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground/50 text-[11px] mr-0.5">Sort</span>
+            {(["priority", "created", "progress"] as SortBy[]).map(s => {
+              const active = sortBy === s;
+              return (
+                <button
+                  key={s}
+                  onClick={() => active ? setSortDir(d => d === "desc" ? "asc" : "desc") : setSortBy(s)}
+                  className={cn(
+                    "px-3 py-0.5 rounded-full text-xs font-medium transition-colors border flex items-center gap-1",
+                    active ? "bg-muted text-foreground border-border" : "text-muted-foreground border-transparent hover:border-border/50",
+                  )}
+                >
+                  {s === "priority" ? "Priority" : s === "created" ? "Created" : "Progress"}
+                  {active && (sortDir === "desc" ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />)}
+                </button>
+              );
+            })}
           </div>
 
           {/* Right side */}
@@ -355,61 +371,6 @@ export default function ProjectsList() {
             </Button>
           </div>
         </div>
-
-        {/* ── Filter row 2: priority · date · stage ── */}
-        {!showBin && (
-          <div className="flex items-center gap-3 flex-wrap text-[11px]">
-            {/* Priority */}
-            <div className="flex items-center gap-1">
-              <span className="text-muted-foreground/50 mr-0.5">Priority</span>
-              {(["all", "high", "med", "low", "none"] as PriorityFilter[]).map(f => (
-                <FilterPill key={f} active={priorityFilter === f} onClick={() => setPriorityFilter(f)}>
-                  {f === "all" ? "All" : f === "high" ? "High" : f === "med" ? "Med" : f === "low" ? "Low" : "Unscored"}
-                </FilterPill>
-              ))}
-            </div>
-
-            <div className="w-px h-4 bg-border/50" />
-
-            {/* Date created */}
-            <div className="flex items-center gap-1">
-              <span className="text-muted-foreground/50 mr-0.5">Created</span>
-              {(["all", "30d", "90d", "365d"] as DateFilter[]).map(f => (
-                <FilterPill key={f} active={dateFilter === f} onClick={() => setDateFilter(f)}>
-                  {f === "all" ? "All time" : f === "30d" ? "30d" : f === "90d" ? "90d" : "1y"}
-                </FilterPill>
-              ))}
-            </div>
-
-            {/* Stage sub-filter */}
-            {showStageFilter && productProjects.length > 0 && (
-              <>
-                <div className="w-px h-4 bg-border/50" />
-                <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground/50 mr-0.5">Stage</span>
-                  <FilterPill active={stageFilter === "all"} onClick={() => setStageFilter("all")}>All</FilterPill>
-                  {NEW_PRODUCT_STAGES.map((s, i) => {
-                    const count = productProjects.filter(p => activeStageByProject[p.id]?.name === s).length;
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => setStageFilter(s)}
-                        className={cn(
-                          "px-3 py-0.5 rounded-full text-xs font-medium transition-colors border flex items-center gap-1",
-                          stageFilter === s ? "bg-muted text-foreground border-border" : "text-muted-foreground border-transparent hover:border-border/50",
-                        )}
-                      >
-                        <span className={cn("w-1.5 h-1.5 rounded-full", STAGE_COLORS[i].dot)} />
-                        {s}
-                        <span className="opacity-50">{count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        )}
 
         {/* ── Grid view ── */}
         {!showBin && view === "grid" && (
