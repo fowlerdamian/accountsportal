@@ -29,7 +29,7 @@ import {
   useFiles, useContractors, useProjectContractors, useTimeEntries,
   useUpdateProject, useCreateTask, useUpdateTask, useReorderTasks,
   usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
-  useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
+  useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles, useGenerateThumbnails,
   NEW_PRODUCT_STAGES,
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
@@ -57,6 +57,7 @@ function ProjectViewContent() {
   const { data: timeEntries = [] }                    = useTimeEntries({ projectId: id });
 
   useSyncDriveFiles(id, project?.drive_folder_id);
+  useGenerateThumbnails(files);
 
   // ── Mutations ─────────────────────────────────────────────
   const { mutateAsync: updateProject }         = useUpdateProject();
@@ -90,6 +91,7 @@ function ProjectViewContent() {
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [logTimeOpen,     setLogTimeOpen]     = useState(false);
   const [cadPreview,      setCadPreview]      = useState<{ url: string; name: string } | null>(null);
+  const [thumbPreview,    setThumbPreview]    = useState<{ url: string; name: string } | null>(null);
 
   const fileInputRef        = useRef<HTMLInputElement>(null);
   const thumbInputRef       = useRef<HTMLInputElement>(null);
@@ -779,10 +781,19 @@ function ProjectViewContent() {
             <ul className="space-y-2 mb-4">
               {files.map(file => (
                 <li key={file.id} className="flex items-center gap-3 text-sm">
-                  {file.source === "drive"
-                    ? <ExternalLink className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    : <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  }
+                  {file.thumbnail_url ? (
+                    <button
+                      onClick={() => setThumbPreview({ url: file.thumbnail_url!, name: file.filename })}
+                      className="shrink-0 w-8 h-8 rounded overflow-hidden border border-border hover:ring-2 hover:ring-primary transition-all"
+                      title="View preview"
+                    >
+                      <img src={file.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ) : file.source === "drive" ? (
+                    <ExternalLink className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  ) : (
+                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  )}
                   <a href={file.file_url} target="_blank" rel="noopener noreferrer"
                      className="flex-1 truncate hover:text-primary transition-colors">
                     {file.filename}
@@ -914,6 +925,29 @@ function ProjectViewContent() {
           filename={cadPreview.name}
           onClose={() => setCadPreview(null)}
         />
+      )}
+
+      {/* Thumbnail lightbox */}
+      {thumbPreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setThumbPreview(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] p-2" onClick={e => e.stopPropagation()}>
+            <p className="text-white text-xs mb-2 text-center opacity-70 truncate">{thumbPreview.name}</p>
+            <img
+              src={thumbPreview.url}
+              alt={thumbPreview.name}
+              className="max-w-full max-h-[80vh] rounded-lg object-contain shadow-2xl"
+            />
+            <button
+              onClick={() => setThumbPreview(null)}
+              className="absolute top-0 right-0 text-white/70 hover:text-white text-2xl leading-none p-1"
+            >
+              ×
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

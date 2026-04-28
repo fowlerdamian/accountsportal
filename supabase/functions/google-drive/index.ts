@@ -283,6 +283,60 @@ serve(async (req) => {
       return json({ deleted: true });
     }
 
+    // ── get_thumbnail ─────────────────────────────────────────
+    if (action === "get_thumbnail") {
+      const { db_file_id, drive_file_id } = payload as { db_file_id: string; drive_file_id: string };
+
+      // 1. Try Drive thumbnailLink first (fast, no download needed)
+      let thumbBytes: Uint8Array | null = null;
+      const metaResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${drive_file_id}?fields=thumbnailLink&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${gtoken}` } },
+      );
+      const meta = await metaResp.json();
+      if (meta.thumbnailLink) {
+        const tr = await fetch(meta.thumbnailLink);
+        if (tr.ok) thumbBytes = new Uint8Array(await tr.arrayBuffer());
+      }
+
+      // 2. Fall back: download file and scan for embedded JPEG (OLE SolidWorks preview)
+      if (!thumbBytes) {
+        const fileResp = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${drive_file_id}?alt=media&supportsAllDrives=true`,
+          { headers: { Authorization: `Bearer ${gtoken}` } },
+        );
+        if (fileResp.ok) {
+          const raw = new Uint8Array(await fileResp.arrayBuffer());
+          // SolidWorks OLE files embed a JPEG preview — scan past OLE header
+          for (let i = 512; i < Math.min(raw.length - 3, 4 * 1024 * 1024); i++) {
+            if (raw[i] === 0xFF && raw[i + 1] === 0xD8 && raw[i + 2] === 0xFF) {
+              for (let j = i + 4; j < raw.length - 1; j++) {
+                if (raw[j] === 0xFF && raw[j + 1] === 0xD9) {
+                  thumbBytes = raw.slice(i, j + 2);
+                  break;
+                }
+              }
+              if (thumbBytes) break;
+            }
+          }
+        }
+      }
+
+      if (!thumbBytes) return json({ skipped: true });
+
+      // 3. Upload to Supabase Storage
+      const path = `file-thumbnails/${db_file_id}.jpg`;
+      const { error: upErr } = await sb.storage
+        .from("contractor-hub-files")
+        .upload(path, thumbBytes, { contentType: "image/jpeg", upsert: true });
+      if (upErr) return json({ error: upErr.message }, 500);
+
+      const { data: { publicUrl } } = sb.storage.from("contractor-hub-files").getPublicUrl(path);
+      await sb.from("files").update({ thumbnail_url: publicUrl }).eq("id", db_file_id);
+
+      return json({ thumbnail_url: publicUrl });
+    }
+
     if (action === "rename_folder") {
       const { folder_id, new_name } = payload as { folder_id: string; new_name: string };
       const resp = await fetch(

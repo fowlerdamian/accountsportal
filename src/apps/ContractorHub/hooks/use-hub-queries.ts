@@ -108,6 +108,7 @@ export interface HubFile {
   uploaded_by:   string | null;
   source:        "upload" | "upwork" | "drive";
   drive_file_id: string | null;
+  thumbnail_url: string | null;
   created_at:    string;
   profiles?:     { full_name: string | null } | null;
 }
@@ -715,6 +716,28 @@ export function useSyncDriveFiles(projectId: string, folderId: string | null | u
       if (data?.synced > 0) qc.invalidateQueries({ queryKey: ["hub_files", projectId] });
     }).catch(() => {});
   }, [projectId, folderId, qc]);
+}
+
+const SW_EXT = /\.(sldprt|sldasm|slddrw)$/i;
+
+export function useGenerateThumbnails(files: HubFile[]) {
+  const qc = useQueryClient();
+  const pendingKey = files
+    .filter(f => f.drive_file_id && !f.thumbnail_url && SW_EXT.test(f.filename))
+    .map(f => f.id)
+    .join(",");
+  useEffect(() => {
+    if (!pendingKey) return;
+    const pending = files.filter(f => f.drive_file_id && !f.thumbnail_url && SW_EXT.test(f.filename));
+    pending.forEach(f => {
+      supabase.functions.invoke("google-drive", {
+        body: { action: "get_thumbnail", db_file_id: f.id, drive_file_id: f.drive_file_id },
+      }).then(({ data }) => {
+        if (data?.thumbnail_url) qc.invalidateQueries({ queryKey: ["hub_files"] });
+      }).catch(() => {});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey]);
 }
 
 export function useUploadProjectThumbnail() {
