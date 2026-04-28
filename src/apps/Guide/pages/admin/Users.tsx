@@ -1,7 +1,7 @@
 import { useProfiles } from "@guide/hooks/use-supabase-query";
 import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
-import { Plus, Shield, Loader2 } from "lucide-react";
+import { Plus, Shield, Loader2, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@guide/components/ui/dialog";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
@@ -19,11 +19,31 @@ export default function Users() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("editor");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const resetForm = () => {
     setFullName("");
     setEmail("");
     setRole("editor");
+  };
+
+  const handleDelete = async (userId: string) => {
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("User deleted");
+      setConfirmDeleteId(null);
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete user");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleInvite = async () => {
@@ -102,11 +122,12 @@ export default function Users() {
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground uppercase">Name</th>
               <th className="text-center p-3 text-xs font-semibold text-muted-foreground uppercase">Role</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground uppercase">Joined</th>
+              <th className="p-3" />
             </tr>
           </thead>
           <tbody>
             {profiles.map((user: any) => (
-              <tr key={user.id} className="border-b hover:bg-muted/30">
+              <tr key={user.id} className="border-b hover:bg-muted/30 group">
                 <td className="p-3">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
@@ -127,6 +148,27 @@ export default function Users() {
                 </td>
                 <td className="p-3 text-sm text-muted-foreground">
                   {new Date(user.created_at).toLocaleDateString()}
+                </td>
+                <td className="p-3 text-right">
+                  {confirmDeleteId === user.id ? (
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button size="sm" variant="destructive" className="h-7 px-2 text-xs"
+                        disabled={deleting}
+                        onClick={() => handleDelete(user.id)}>
+                        {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                        onClick={() => setConfirmDeleteId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => setConfirmDeleteId(user.id)}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                 </td>
               </tr>
             ))}
