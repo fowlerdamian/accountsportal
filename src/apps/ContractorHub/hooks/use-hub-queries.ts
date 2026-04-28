@@ -496,6 +496,19 @@ export function useUpdateTask() {
   });
 }
 
+export function useDeleteTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, project_id }: { id: string; project_id: string }) => {
+      const { error } = await supabase.from("tasks").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { project_id }) => {
+      qc.invalidateQueries({ queryKey: ["hub_tasks", project_id] });
+    },
+  });
+}
+
 export function useReorderTasks() {
   const qc = useQueryClient();
   return useMutation({
@@ -716,33 +729,6 @@ export function useSyncDriveFiles(projectId: string, folderId: string | null | u
       if (data?.synced > 0) qc.invalidateQueries({ queryKey: ["hub_files", projectId] });
     }).catch(() => {});
   }, [projectId, folderId, qc]);
-}
-
-const SW_EXTS = ["sldprt", "sldasm"];
-
-export function useGenerateThumbnails(files: HubFile[]) {
-  const qc       = useQueryClient();
-  const firedRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    const targets = files.filter(f => {
-      if (!f.drive_file_id || f.thumbnail_url || firedRef.current.has(f.id)) return false;
-      const ext = f.filename.split(".").pop()?.toLowerCase() ?? "";
-      return SW_EXTS.includes(ext);
-    });
-    if (!targets.length) return;
-
-    const projectIds = new Set<string>();
-    Promise.all(targets.map(f => {
-      firedRef.current.add(f.id);
-      if (f.project_id) projectIds.add(f.project_id);
-      return supabase.functions.invoke("google-drive", {
-        body: { action: "get_thumbnail", db_file_id: f.id, drive_file_id: f.drive_file_id },
-      }).catch(() => null);
-    })).then(() => {
-      projectIds.forEach(pid => qc.invalidateQueries({ queryKey: ["hub_files", pid] }));
-    });
-  }, [files, qc]);
 }
 
 export function useUploadProjectThumbnail() {

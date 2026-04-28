@@ -30,7 +30,6 @@ import {
   useUpdateProject, useCreateTask, useUpdateTask, useReorderTasks,
   usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
   useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
-  useGenerateThumbnails,
   NEW_PRODUCT_STAGES,
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
@@ -58,7 +57,6 @@ function ProjectViewContent() {
   const { data: timeEntries = [] }                    = useTimeEntries({ projectId: id });
 
   useSyncDriveFiles(id, project?.drive_folder_id);
-  useGenerateThumbnails(files);
 
   // ── Mutations ─────────────────────────────────────────────
   const { mutateAsync: updateProject }         = useUpdateProject();
