@@ -27,11 +27,11 @@ const STATUS_STYLE = {
 // Legacy Invoiced/Received rows display as Completed until next sync rewrites them.
 const displayStatus = (s) => (s === 'Invoiced' || s === 'Received' ? 'Completed' : s)
 
-function dueDiffDays(due) {
-  if (!due) return null
+function etaDiffDays(eta) {
+  if (!eta) return null
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  return Math.floor((localDate(due).getTime() - today.getTime()) / 86_400_000)
+  return Math.floor((localDate(eta).getTime() - today.getTime()) / 86_400_000)
 }
 
 function localDate(str) {
@@ -43,39 +43,47 @@ function fmtDate(str) {
   return d ? d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 }
 
-function DueLabel({ due }) {
-  if (!due) return <span style={{ color: '#333' }}>—</span>
-  const diff = dueDiffDays(due)
-  const label = fmtDate(due)
+function EtaLabel({ eta }) {
+  if (!eta) return <span style={{ color: '#333' }}>—</span>
+  const diff = etaDiffDays(eta)
+  const label = fmtDate(eta)
   if (diff < 0)  return <span style={{ color: '#ff1744', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span></span>
   if (diff <= 7) return <span style={{ color: '#f3ca0f', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span></span>
   return <span style={{ color: '#AAA' }}>{label}</span>
 }
 
-// ─── Inline editable due date ─────────────────────────────────────────────────
+// ─── Inline editable ETA ──────────────────────────────────────────────────────
 
-function DueDateCell({ poId, due, onSaved }) {
+function EtaCell({ poId, eta, onSaved }) {
   const [editing, setEditing] = useState(false)
+  const [value,   setValue]   = useState(eta ?? '')
   const [saving,  setSaving]  = useState(false)
+  const saveInProgress = useRef(false)
   const inputRef = useRef(null)
 
+  // Save on both onChange (picker commit) and onBlur (fallback when picker
+  // close steals focus before change fires). saveInProgress + equality guard
+  // prevent duplicate writes.
   async function save(newVal) {
+    if (saveInProgress.current) return
     const normalized = newVal || null
-    if (normalized === due) { setEditing(false); return }
+    if (normalized === (eta ?? null)) { setEditing(false); return }
+    saveInProgress.current = true
     setSaving(true)
     const { error } = await supabase
       .from('purchase_orders')
       .update({ due_date: normalized })
       .eq('id', poId)
     setSaving(false)
-    if (error) { alert(`Failed to save due date: ${error.message}`); return }
+    saveInProgress.current = false
+    if (error) { alert(`Failed to save ETA: ${error.message}`); return }
     onSaved(poId, normalized)
     setEditing(false)
   }
 
   function openEditor() {
+    setValue(eta ?? '')
     setEditing(true)
-    // Queue past the re-render so the input exists, then open the native picker.
     requestAnimationFrame(() => {
       inputRef.current?.focus()
       inputRef.current?.showPicker?.()
@@ -87,9 +95,9 @@ function DueDateCell({ poId, due, onSaved }) {
       <input
         ref={inputRef}
         type="date"
-        defaultValue={due ?? ''}
-        onChange={e => save(e.target.value)}
-        onBlur={() => setEditing(false)}
+        value={value}
+        onChange={e => { setValue(e.target.value); save(e.target.value) }}
+        onBlur={e => save(e.target.value)}
         onKeyDown={e => { if (e.key === 'Escape') setEditing(false) }}
         style={{
           background: '#1a1a1a', border: '1px solid rgba(243,202,15,0.5)',
@@ -105,16 +113,16 @@ function DueDateCell({ poId, due, onSaved }) {
 
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', minHeight: '32px' }}>
-      <div onClick={openEditor} title={due ? 'Change due date' : 'Set due date'}
+      <div onClick={openEditor} title={eta ? 'Change ETA' : 'Set ETA'}
         style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-        <DueLabel due={due} />
-        {!due && <span style={{ fontSize: '10px', color: '#333' }}>✎</span>}
+        <EtaLabel eta={eta} />
+        {!eta && <span style={{ fontSize: '10px', color: '#333' }}>✎</span>}
       </div>
-      {due && (
+      {eta && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); save('') }}
-          title="Clear due date"
+          title="Clear ETA"
           style={{
             background: 'transparent', border: 'none', color: '#555',
             cursor: 'pointer', padding: '0 4px', fontSize: '14px', lineHeight: 1,
@@ -231,8 +239,8 @@ function FilterToggle({ status, active, onToggle }) {
 
 // ─── Mobile card ──────────────────────────────────────────────────────────────
 
-function PoCard({ po, onDueSaved, onNoteSaved }) {
-  const diff = dueDiffDays(po.due_date)
+function PoCard({ po, onEtaSaved, onNoteSaved }) {
+  const diff = etaDiffDays(po.due_date)
   const isOverdue = diff !== null && diff < 0
   const shownStatus = displayStatus(po.status)
   const ss = STATUS_STYLE[shownStatus] ?? STATUS_STYLE.Draft
@@ -273,10 +281,10 @@ function PoCard({ po, onDueSaved, onNoteSaved }) {
         )}
       </div>
 
-      {/* Row 3: due date */}
+      {/* Row 3: ETA */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Due</span>
-        <DueDateCell poId={po.id} due={po.due_date} onSaved={onDueSaved} />
+        <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.06em' }}>ETA</span>
+        <EtaCell poId={po.id} eta={po.due_date} onSaved={onEtaSaved} />
       </div>
 
       {/* Row 4: note */}
@@ -338,7 +346,7 @@ export default function PurchaseOrders() {
     fetchOrders(dbStatuses)
   }, [activeFilters, fetchOrders])
 
-  function handleDueSaved(poId, newDate) {
+  function handleEtaSaved(poId, newDate) {
     setOrders(prev => prev.map(o => o.id === poId ? { ...o, due_date: newDate } : o))
   }
 
@@ -412,8 +420,8 @@ export default function PurchaseOrders() {
       return sortDir === 'asc' ? av - bv : bv - av
     })
   }, [orders, activeFilters, sortCol, sortDir])
-  const overdue   = visible.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d < 0 })
-  const dueSoon   = visible.filter(o => { const d = dueDiffDays(o.due_date); return d !== null && d >= 0 && d <= 7 })
+  const overdue   = visible.filter(o => { const d = etaDiffDays(o.due_date); return d !== null && d < 0 })
+  const dueSoon   = visible.filter(o => { const d = etaDiffDays(o.due_date); return d !== null && d >= 0 && d <= 7 })
 
   if (loading) {
     return (
@@ -493,7 +501,7 @@ export default function PurchaseOrders() {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '24px' }}>
         <KpiCard label="Showing"       value={visible.length} />
         <KpiCard label="Overdue"       value={overdue.length} valueStyle={overdue.length > 0 ? { color: '#ff1744' } : {}} />
-        <KpiCard label="Due This Week" value={dueSoon.length} valueStyle={dueSoon.length > 0 ? { color: '#f3ca0f' } : {}} />
+        <KpiCard label="ETA This Week" value={dueSoon.length} valueStyle={dueSoon.length > 0 ? { color: '#f3ca0f' } : {}} />
         <KpiCard label="Order Sent"    value={visible.filter(o => o.has_attachment).length} />
       </div>
 
@@ -505,7 +513,7 @@ export default function PurchaseOrders() {
               No orders match the current filter.
             </p>
           ) : (
-            visible.map(po => <PoCard key={po.id} po={po} onDueSaved={handleDueSaved} onNoteSaved={handleNoteSaved} />)
+            visible.map(po => <PoCard key={po.id} po={po} onEtaSaved={handleEtaSaved} onNoteSaved={handleNoteSaved} />)
           )}
         </div>
       ) : (
@@ -520,7 +528,7 @@ export default function PurchaseOrders() {
                   { label: 'Created',     key: 'order_date',    align: 'left' },
                   { label: 'Supplier',    key: 'supplier_name', align: 'left' },
                   { label: 'Status',      key: 'status',        align: 'left' },
-                  { label: 'Due Date',    key: 'due_date',      align: 'left' },
+                  { label: 'ETA',         key: 'due_date',      align: 'left' },
                   { label: 'Note',        key: 'notes',         align: 'left' },
                   { label: 'Order Sent',  key: 'has_attachment', align: 'center' },
                 ].map(col => {
@@ -556,7 +564,7 @@ export default function PurchaseOrders() {
                 </tr>
               ) : (
                 visible.map(po => {
-                  const diff = dueDiffDays(po.due_date)
+                  const diff = etaDiffDays(po.due_date)
                   const isOverdue = diff !== null && diff < 0
                   const shownStatus = displayStatus(po.status)
                   const ss = STATUS_STYLE[shownStatus] ?? STATUS_STYLE.Draft
@@ -585,7 +593,7 @@ export default function PurchaseOrders() {
                         </span>
                       </td>
                       <td style={{ padding: '11px 14px', fontSize: '13px' }}>
-                        <DueDateCell poId={po.id} due={po.due_date} onSaved={handleDueSaved} />
+                        <EtaCell poId={po.id} eta={po.due_date} onSaved={handleEtaSaved} />
                       </td>
                       <td style={{ padding: '11px 14px', fontSize: '13px' }}>
                         <NotesCell poId={po.id} notes={po.notes} onSaved={handleNoteSaved} />
