@@ -5,6 +5,7 @@ import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { X, Download, RotateCcw } from "lucide-react";
+import { supabase } from "@guide/integrations/supabase/client";
 
 // ─── Supported formats ────────────────────────────────────────────────────────
 const STL_EXTS  = ["stl"];
@@ -89,10 +90,43 @@ interface Props {
   fileUrl:      string;
   filename:     string;
   displayName?: string;
+  /** When set, file bytes are fetched via the google-drive edge function
+   *  instead of `fileUrl` (which for Drive files is a /view HTML page). */
+  driveFileId?: string | null;
   onClose:      () => void;
 }
 
-export default function CadViewer({ fileUrl, filename, displayName, onClose }: Props) {
+// Fetch raw bytes for the file, routing Drive files through the auth-proxy
+// edge function. Without this, fileUrl is a /view HTML page and OCCT/STL
+// parsers explode on HTML bytes.
+async function fetchBytes(fileUrl: string, driveFileId?: string | null): Promise<Uint8Array> {
+  if (driveFileId) {
+    const { data, error } = await supabase.functions.invoke("google-drive", {
+      body: { action: "download_bytes", drive_file_id: driveFileId },
+    });
+    if (error) throw new Error(`Drive download failed: ${error.message}`);
+    if (!data?.base64) throw new Error("Drive download returned no bytes");
+    const bin = atob(data.base64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  const resp = await fetch(fileUrl);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
+function disposeObject(obj: THREE.Object3D) {
+  obj.traverse((c) => {
+    const m = c as THREE.Mesh;
+    if (m.geometry) m.geometry.dispose();
+    const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+    if (Array.isArray(mat)) mat.forEach((mm) => mm.dispose());
+    else if (mat) mat.dispose();
+  });
+}
+
+export default function CadViewer({ fileUrl, filename, displayName, driveFileId, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef  = useRef<ReturnType<typeof buildScene> | null>(null);
   const rafRef    = useRef<number>(0);
@@ -121,20 +155,18 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
 
     async function load() {
       try {
-        const resp = await fetch(fileUrl);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const bytes = await fetchBytes(fileUrl, driveFileId);
 
         let object: THREE.Object3D | null = null;
 
         if (STL_EXTS.includes(ext)) {
-          const buffer = await resp.arrayBuffer();
           const loader = new STLLoader();
-          const geo = loader.parse(buffer);
+          const geo = loader.parse(bytes.buffer);
           geo.computeVertexNormals();
           object = new THREE.Mesh(geo, material);
 
         } else if (OBJ_EXTS.includes(ext)) {
-          const text = await resp.text();
+          const text = new TextDecoder().decode(bytes);
           const loader = new OBJLoader();
           object = loader.parse(text);
           object.traverse(child => {
@@ -142,15 +174,13 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
           });
 
         } else if (GLTF_EXTS.includes(ext)) {
-          const buffer = await resp.arrayBuffer();
           const loader = new GLTFLoader();
           const gltf = await new Promise<any>((res, rej) => {
-            loader.parse(buffer, "", res, rej);
+            loader.parse(bytes.buffer, "", res, rej);
           });
           object = gltf.scene;
 
         } else if (STEP_EXTS.includes(ext)) {
-          const bytes = new Uint8Array(await resp.arrayBuffer());
           const occtImport = (await import("occt-import-js")).default;
           const occt: any = await occtImport({
             locateFile: (f: string) => f.endsWith(".wasm")
@@ -158,7 +188,7 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
               : f,
           });
           const result = occt.ReadStepFile(bytes, null);
-          if (!result?.success) throw new Error("STEP parse failed");
+          if (!result?.success) throw new Error("STEP parse failed — file may not be a valid STEP/AP214 model");
           const group = new THREE.Group();
           for (const m of result.meshes ?? []) {
             const geo = new THREE.BufferGeometry();
@@ -197,7 +227,10 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
         animate();
 
       } catch (err: any) {
-        if (!cancelled) { setErrorMsg(err.message); setStatus("error"); }
+        if (!cancelled) {
+          setErrorMsg(err?.message ?? String(err));
+          setStatus("error");
+        }
       }
     }
 
@@ -217,9 +250,12 @@ export default function CadViewer({ fileUrl, filename, displayName, onClose }: P
       cancelled = true;
       cancelAnimationFrame(rafRef.current);
       ro.disconnect();
+      // Dispose geometries/materials on every loaded child before tearing
+      // down the renderer; otherwise GPU memory leaks across opens.
+      scene.traverse((c) => disposeObject(c));
       renderer.dispose();
     };
-  }, [fileUrl, filename]);
+  }, [fileUrl, filename, driveFileId]);
 
   const resetCamera = () => {
     const s = sceneRef.current;

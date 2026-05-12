@@ -8,6 +8,7 @@ import { useOverdueTaskCount } from "@hub/hooks/use-hub-queries";
 import { Sheet, SheetContent, SheetTitle } from "@guide/ui/sheet";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { NewTaskModal } from "./NewTaskModal";
+import { NewProjectModal } from "./NewProjectModal";
 import { CommandPalette } from "./CommandPalette";
 import { HubTimerButton } from "./HubTimer";
 import { AiAssistantPanel } from "./AiAssistantPanel";
@@ -19,6 +20,7 @@ interface HubContextValue {
   newTaskProjectId: string | null;
   isNewTaskOpen:    boolean;
   closeNewTask:     () => void;
+  openNewProject:   () => void;
   currentProjectId: string | null;
 }
 
@@ -27,6 +29,7 @@ const HubContext = createContext<HubContextValue>({
   newTaskProjectId: null,
   isNewTaskOpen:    false,
   closeNewTask:     () => {},
+  openNewProject:   () => {},
   currentProjectId: null,
 });
 
@@ -93,20 +96,6 @@ function SidebarContent({
           </NavLink>
         ))}
 
-        {/* New task shortcut */}
-        <button
-          onClick={onNewTask}
-          className="flex items-center gap-3 px-3 py-2.5 text-xs font-medium transition-colors duration-150 border-l-2 border-transparent text-[#555] hover:text-[#ffffff] hover:border-[#333] font-mono tracking-wide uppercase w-full text-left mt-1"
-        >
-          <Plus className="h-3.5 w-3.5 shrink-0" />
-          <span>New Task</span>
-          <span
-            className="ml-auto text-[9px] border px-1"
-            style={{ color: "#444", borderColor: "#222222", fontFamily: '"JetBrains Mono", monospace' }}
-          >
-            N
-          </span>
-        </button>
       </nav>
 
       {/* Sign out */}
@@ -140,8 +129,9 @@ interface HubLayoutProps {
 
 export function HubLayout({ children, fullScreen }: HubLayoutProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [newTaskOpen, setNewTaskOpen] = useState(false);
-  const [newTaskPid, setNewTaskPid]   = useState<string | null>(null);
+  const [newTaskOpen,    setNewTaskOpen]    = useState(false);
+  const [newTaskPid,     setNewTaskPid]     = useState<string | null>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [aiOpen, setAiOpen]           = useState(false);
   const aiInputRef = useRef<HTMLTextAreaElement>(null);
@@ -167,7 +157,7 @@ const isMobile                      = useIsMobile();
 
       if (e.key === "n" || e.key === "N") {
         e.preventDefault();
-        openNewTask(currentProjectId ?? undefined);
+        setNewProjectOpen(true);
         return;
       }
 if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -190,9 +180,12 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
     setNewTaskPid(null);
   }, []);
 
+  const openNewProject = useCallback(() => setNewProjectOpen(true), []);
+
   const ctx: HubContextValue = {
     openNewTask, newTaskProjectId: newTaskPid,
-    isNewTaskOpen: newTaskOpen, closeNewTask, currentProjectId,
+    isNewTaskOpen: newTaskOpen, closeNewTask,
+    openNewProject, currentProjectId,
   };
 
   const sidebarProps = {
@@ -308,6 +301,9 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         {newTaskOpen && !currentProjectId && (
           <NewTaskModal open={newTaskOpen} onClose={closeNewTask} projectId={newTaskPid} />
         )}
+
+        {/* New project modal — global, opened via N or any context call */}
+        <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
 
         {/* AI Assistant panel */}
         <AiAssistantPanel open={aiOpen} onClose={() => setAiOpen(false)} searchInputRef={aiInputRef} />

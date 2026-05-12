@@ -6,22 +6,26 @@ import {
 } from "lucide-react";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
-import { HubLayout } from "@hub/components/HubLayout";
+import { HubLayout, useHub } from "@hub/components/HubLayout";
 import { ContractorAvatarGroup } from "@hub/components/ContractorAvatar";
-import { NewProjectModal } from "@hub/components/NewProjectModal";
 import { toast } from "sonner";
 import {
   useProjects,
   useDeletedProjects,
-  useProjectContractors,
-  useProjectBudgetSummary,
+  useAllProjectContractors,
+  useAllProjectBudgetSummaries,
+  useAllProjectLatestFileThumbnail,
   useActiveStages,
   useRestoreProject,
   usePermanentDeleteProject,
   NEW_PRODUCT_STAGES,
   type Project,
   type ProjectStage,
+  type ProjectBudgetSummary,
+  type Contractor,
 } from "@hub/hooks/use-hub-queries";
+
+type ContractorBrief = Pick<Contractor, "id" | "name" | "avatar_url" | "role" | "source">;
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import { cn } from "@guide/lib/utils";
@@ -50,10 +54,16 @@ const KANBAN_STAGE_COLS = [
 
 // ── Project card (grid) ───────────────────────────────────────
 
-function ProjectCard({ project, activeStage }: { project: Project; activeStage: ProjectStage | undefined }) {
+function ProjectCard({
+  project, activeStage, contractors = [], budget, latestFileThumb,
+}: {
+  project: Project;
+  activeStage: ProjectStage | undefined;
+  contractors?: ContractorBrief[];
+  budget?: ProjectBudgetSummary;
+  latestFileThumb?: string;
+}) {
   const navigate                   = useNavigate();
-  const { data: contractors = [] } = useProjectContractors(project.id);
-  const { data: budget }           = useProjectBudgetSummary(project.id);
   const today                      = new Date().toISOString().split("T")[0];
   const isOverdue                  = project.due_date && project.due_date < today;
   const isProduct                  = project.type === "new_product";
@@ -72,11 +82,38 @@ function ProjectCard({ project, activeStage }: { project: Project; activeStage: 
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/projects/list/${project.id}`); } }}
       tabIndex={0} role="button" aria-label={`Open project ${project.name}`}
       className={cn(
-        "rounded-lg border border-l-4 bg-background px-5 py-4 flex flex-col gap-2.5 cursor-pointer",
+        "rounded-lg border border-l-4 bg-background flex flex-col cursor-pointer overflow-hidden",
         "hover:bg-muted/20 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
         borderClass,
       )}
     >
+      {/* Featured thumbnail banner — prefers the most recent file thumbnail
+          (so freshly-uploaded designs show up automatically), falling back
+          to the manually-uploaded project image, then to a tinted initials
+          tile. */}
+      {(() => {
+        const heroSrc = latestFileThumb || project.thumbnail_url;
+        return (
+      <div className="relative w-full aspect-[16/9] bg-muted overflow-hidden">
+        {heroSrc ? (
+          <img
+            src={heroSrc}
+            alt=""
+            loading="lazy"
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className={cn("w-full h-full flex items-center justify-center", color.dot.replace("bg-", "bg-").replace("-400", "-500/10"))}>
+            <span className={cn("text-3xl font-bold opacity-30", color.text)}>
+              {project.name.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join("")}
+            </span>
+          </div>
+        )}
+      </div>
+        );
+      })()}
+
+      <div className="flex flex-col gap-2.5 px-5 py-4 flex-1">
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-sm leading-snug">{project.name}</h3>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -140,15 +177,21 @@ function ProjectCard({ project, activeStage }: { project: Project; activeStage: 
         ) : <span />}
         {isProduct && <span className="text-[10px] text-muted-foreground/50">Stage {Math.max(stageIdx + 1, 1)} of {NEW_PRODUCT_STAGES.length}</span>}
       </div>
+      </div>
     </div>
   );
 }
 
 // ── Kanban card (compact) ─────────────────────────────────────
 
-function KanbanCard({ project, activeStage }: { project: Project; activeStage: ProjectStage | undefined }) {
+function KanbanCard({
+  project, activeStage, contractors = [],
+}: {
+  project: Project;
+  activeStage: ProjectStage | undefined;
+  contractors?: ContractorBrief[];
+}) {
   const navigate                   = useNavigate();
-  const { data: contractors = [] } = useProjectContractors(project.id);
   const today                      = new Date().toISOString().split("T")[0];
   const isOverdue                  = project.due_date && project.due_date < today;
   const isProduct                  = project.type === "new_product";
@@ -216,7 +259,7 @@ type SortDir    = "asc" | "desc";
 // ── Page ─────────────────────────────────────────────────────
 
 export default function ProjectsList() {
-  const [newOpen,         setNewOpen]         = useState(false);
+  const { openNewProject } = useHub();
   const [view,            setView]            = useState<ViewMode>("grid");
   const [search,          setSearch]          = useState("");
   const [typeFilter,      setTypeFilter]      = useState<TypeFilter>("all");
@@ -228,6 +271,9 @@ export default function ProjectsList() {
   const { data: projects = [],       isLoading }         = useProjects();
   const { data: deletedProjects = [] }                   = useDeletedProjects();
   const { data: activeStages = [],   isLoading: stagesLoading } = useActiveStages();
+  const { data: contractorsByProject } = useAllProjectContractors();
+  const { data: budgetByProject }      = useAllProjectBudgetSummaries();
+  const { data: latestThumbByProject } = useAllProjectLatestFileThumbnail();
   const { mutateAsync: restoreProject }                  = useRestoreProject();
   const { mutateAsync: permanentDelete }                 = usePermanentDeleteProject();
 
@@ -365,7 +411,7 @@ export default function ProjectsList() {
               </button>
             </div>
 
-            <Button size="sm" onClick={() => setNewOpen(true)}>
+            <Button size="sm" onClick={() => openNewProject()}>
               <Plus className="w-3.5 h-3.5 mr-1.5" />
               New Project
             </Button>
@@ -377,14 +423,21 @@ export default function ProjectsList() {
           filtered.length === 0 ? (
             <div className="rounded-lg border border-dashed p-10 text-center">
               <p className="text-muted-foreground text-sm">No projects found.</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => setNewOpen(true)}>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => openNewProject()}>
                 <Plus className="w-3.5 h-3.5 mr-1.5" />Create one
               </Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {filtered.map(p => (
-                <ProjectCard key={p.id} project={p} activeStage={activeStageByProject[p.id]} />
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  activeStage={activeStageByProject[p.id]}
+                  contractors={contractorsByProject?.get(p.id)}
+                  budget={budgetByProject?.get(p.id)}
+                  latestFileThumb={latestThumbByProject?.get(p.id)}
+                />
               ))}
             </div>
           )
@@ -407,7 +460,12 @@ export default function ProjectsList() {
                     <p className="text-[11px] text-muted-foreground/40 text-center py-4">Empty</p>
                   ) : (
                     colProjects.map(p => (
-                      <KanbanCard key={p.id} project={p} activeStage={activeStageByProject[p.id]} />
+                      <KanbanCard
+                        key={p.id}
+                        project={p}
+                        activeStage={activeStageByProject[p.id]}
+                        contractors={contractorsByProject?.get(p.id)}
+                      />
                     ))
                   )}
                 </div>
@@ -463,8 +521,6 @@ export default function ProjectsList() {
           </>
         )}
       </div>
-
-      <NewProjectModal open={newOpen} onClose={() => setNewOpen(false)} />
     </HubLayout>
   );
 }

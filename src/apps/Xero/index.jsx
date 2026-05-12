@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, Component } from 'react'
-import { Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Link2, ExternalLink, Trash2 } from 'lucide-react'
+import { Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Link2, ExternalLink, Trash2, Menu, X as XIcon } from 'lucide-react'
 import { supabase } from '@portal/lib/supabase'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -250,7 +250,7 @@ function QuickActionsBar({ onAction, disabled }) {
 
 // ─── Sessions sidebar ─────────────────────────────────────────────────────────
 
-function SessionsSidebar({ sessions, currentId, onSelect, onNew, onDelete, loading }) {
+function SessionsSidebar({ sessions, currentId, onSelect, onNew, onDelete, loading, onClose }) {
   const [hoveredId, setHoveredId] = useState(null)
 
   return (
@@ -262,7 +262,23 @@ function SessionsSidebar({ sessions, currentId, onSelect, onNew, onDelete, loadi
       flexDirection: 'column',
       background: '#050505',
       overflow: 'hidden',
+      height: '100%',
     }}>
+      {/* Mobile header row */}
+      {onClose && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 10px 0',
+        }}>
+          <span style={{ fontSize: '11px', color: '#444', fontFamily: '"JetBrains Mono", monospace' }}>Conversations</span>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', padding: '4px', display: 'flex' }}
+          >
+            <XIcon size={16} />
+          </button>
+        </div>
+      )}
       {/* New conversation button */}
       <div style={{ padding: '10px', borderBottom: '1px solid #111', flexShrink: 0 }}>
         <button
@@ -498,8 +514,19 @@ function XeroChatInner() {
   const [sessions, setSessions] = useState([])
   const [sessionId, setSessionId] = useState(null)
 
+  // Mobile sidebar
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const handler = (e) => { setIsMobile(e.matches); if (!e.matches) setSidebarOpen(false) }
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -629,6 +656,7 @@ function XeroChatInner() {
       setMessages(data.messages ?? [])
       setApiHistory(data.api_history ?? [])
       setError(null)
+      setSidebarOpen(false)
     }
   }
 
@@ -779,23 +807,34 @@ function XeroChatInner() {
       {/* Header */}
       <div style={{
         flexShrink: 0,
-        padding: '12px 24px',
+        padding: isMobile ? '10px 14px' : '12px 24px',
         borderBottom: '1px solid #1a1a1a',
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
       }}>
+        {/* Mobile sidebar toggle */}
+        {isMobile && (
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', padding: '2px', display: 'flex', flexShrink: 0 }}
+          >
+            <Menu size={18} />
+          </button>
+        )}
         <div style={{
           width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e',
           boxShadow: '0 0 5px #22c55e', flexShrink: 0,
         }} />
-        <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em', color: '#fff' }}>
+        <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em', color: '#fff', whiteSpace: 'nowrap' }}>
           XERO ASSISTANT
         </span>
-        <span style={{ fontSize: '11px', color: '#444', fontFamily: '"JetBrains Mono", monospace' }}>
-          {tenantName ?? 'Automotive Group Australia'}
-        </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' }}>
+        {!isMobile && (
+          <span style={{ fontSize: '11px', color: '#444', fontFamily: '"JetBrains Mono", monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {tenantName ?? 'Automotive Group Australia'}
+          </span>
+        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
           <button
             onClick={() => { setConnectionStatus('not_connected'); setConnectError(null) }}
             title="Reconnect Xero"
@@ -803,7 +842,7 @@ function XeroChatInner() {
               fontSize: '11px', color: '#333', background: 'none',
               border: '1px solid #1a1a1a', borderRadius: '4px', padding: '3px 8px',
               cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace',
-              transition: 'color 120ms, border-color 120ms',
+              transition: 'color 120ms, border-color 120ms', whiteSpace: 'nowrap',
             }}
             onMouseEnter={e => { e.currentTarget.style.color = '#666'; e.currentTarget.style.borderColor = '#2a2a2a' }}
             onMouseLeave={e => { e.currentTarget.style.color = '#333'; e.currentTarget.style.borderColor = '#1a1a1a' }}
@@ -814,23 +853,42 @@ function XeroChatInner() {
       </div>
 
       {/* Body: sidebar + chat */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+
+        {/* Mobile backdrop */}
+        {isMobile && sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 49 }}
+          />
+        )}
 
         {/* Sessions sidebar */}
-        <SessionsSidebar
-          sessions={sessions}
-          currentId={sessionId}
-          onSelect={handleSelectSession}
-          onNew={handleNewConversation}
-          onDelete={handleDeleteSession}
-          loading={loading}
-        />
+        <div style={isMobile ? {
+          position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 50,
+          width: '80vw', maxWidth: '280px',
+          transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 250ms ease',
+          display: 'flex',
+        } : {
+          display: 'flex',
+        }}>
+          <SessionsSidebar
+            sessions={sessions}
+            currentId={sessionId}
+            onSelect={handleSelectSession}
+            onNew={() => { handleNewConversation(); setSidebarOpen(false) }}
+            onDelete={handleDeleteSession}
+            loading={loading}
+            onClose={isMobile ? () => setSidebarOpen(false) : null}
+          />
+        </div>
 
         {/* Chat column */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 14px' : '24px' }}>
             {!hasMessages ? (
               <div style={{ maxWidth: '620px', margin: '0 auto' }}>
                 <p style={{ fontSize: '13px', color: '#444', marginBottom: '24px', lineHeight: 1.6 }}>
@@ -882,7 +940,7 @@ function XeroChatInner() {
           {/* Input area */}
           <div style={{
             flexShrink: 0,
-            padding: '12px 24px 16px',
+            padding: isMobile ? '10px 14px 14px' : '12px 24px 16px',
             borderTop: '1px solid #1a1a1a',
           }}>
             <div style={{ maxWidth: '720px', margin: '0 auto' }}>
@@ -925,13 +983,15 @@ function XeroChatInner() {
 
               <QuickActionsBar onAction={send} disabled={loading} />
 
-              <p style={{
-                margin: '8px 0 0',
-                fontSize: '10px', color: '#2a2a2a',
-                fontFamily: '"JetBrains Mono", monospace',
-              }}>
-                Enter to send · Shift+Enter for new line · Write operations require confirmation
-              </p>
+              {!isMobile && (
+                <p style={{
+                  margin: '8px 0 0',
+                  fontSize: '10px', color: '#2a2a2a',
+                  fontFamily: '"JetBrains Mono", monospace',
+                }}>
+                  Enter to send · Shift+Enter for new line · Write operations require confirmation
+                </p>
+              )}
             </div>
           </div>
         </div>
