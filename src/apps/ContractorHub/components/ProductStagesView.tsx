@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Check, Loader2, Plus, ShoppingCart, X as XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@guide/lib/utils";
@@ -8,6 +9,7 @@ import {
   useTasks,
   useUpdateTask,
   useCreateTask,
+  useSoftDeleteProject,
   type ProjectStage,
   type Task,
   type TaskStatus,
@@ -70,7 +72,9 @@ function StageStepper({
           const isFuture    = !isActive && !isCompleted;
           const isLast      = i === stages.length - 1;
           const lineActive  = i < activeIdx || (isActive && i < stages.length - 1);
-          const isClickable = !activating && !isActive;
+          // Allow re-clicking the active LAST stage ("Complete") to archive the project.
+          const isArchiveClick = isActive && stage.name === "Complete";
+          const isClickable = !activating && (!isActive || isArchiveClick);
 
           return (
             <div
@@ -82,9 +86,10 @@ function StageStepper({
                 <div className="relative">
                   <button
                     onClick={() => isClickable && onJump(stage)}
-                    disabled={activating || isActive}
+                    disabled={activating || (isActive && !isArchiveClick)}
                     title={
-                      isActive    ? undefined
+                      isArchiveClick ? "Click to archive this project"
+                      : isActive    ? undefined
                       : isCompleted ? `Roll back to ${stage.name}`
                       : `Jump to ${stage.name}`
                     }
@@ -142,6 +147,9 @@ function StageStepper({
                   )}
                   {isActive && stage.name !== "Prototype" && (
                     <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">ACTIVE</p>
+                  )}
+                  {isArchiveClick && (
+                    <p className="text-[10px] text-muted-foreground/40 mt-0.5">click again to archive</p>
                   )}
                   {isCompleted && stage.end_date && (
                     <p className="text-[10px] text-green-400/50 mt-0.5">{stage.end_date}</p>
@@ -220,11 +228,13 @@ interface ProductStagesViewProps {
 }
 
 export function ProductStagesView({ projectId }: ProductStagesViewProps) {
+  const navigate                     = useNavigate();
   const { data: stages = [], isLoading: stagesLoading } = useProjectStages(projectId);
   const { data: tasks  = [], isLoading: tasksLoading  } = useTasks(projectId);
-  const { mutateAsync: updateStage } = useUpdateProjectStage();
-  const { mutateAsync: updateTask  } = useUpdateTask();
-  const { mutateAsync: createTask  } = useCreateTask();
+  const { mutateAsync: updateStage }       = useUpdateProjectStage();
+  const { mutateAsync: updateTask  }       = useUpdateTask();
+  const { mutateAsync: createTask  }       = useCreateTask();
+  const { mutateAsync: softDeleteProject } = useSoftDeleteProject();
 
   const [activating,  setActivating]  = useState(false);
   const [addingTask,  setAddingTask]   = useState(false);
@@ -233,6 +243,21 @@ export function ProductStagesView({ projectId }: ProductStagesViewProps) {
   const addInputRef = useRef<HTMLInputElement>(null);
 
   async function handleJump(stage: ProjectStage) {
+    // Re-click on the active "Complete" stage → soft-delete (archive to bin).
+    if (stage.is_active && stage.name === "Complete") {
+      setActivating(true);
+      try {
+        await softDeleteProject(projectId);
+        toast.success("Project archived — restore from Bin within 15 days");
+        navigate("/projects/list");
+      } catch {
+        toast.error("Failed to archive project");
+      } finally {
+        setActivating(false);
+      }
+      return;
+    }
+
     setActivating(true);
     const today      = new Date().toISOString().split("T")[0];
     const current    = stages.find(s => s.is_active);

@@ -9,7 +9,7 @@ import { supabase } from "@guide/integrations/supabase/client";
 export type ContractorStatus = "active" | "paused" | "ended";
 export type ContractorSource = "upwork" | "direct";
 export type ProjectType      = "other" | "web" | "new_product" | "product" | "website"; // product/website legacy only
-export type ProjectStatus    = "planning" | "active" | "on_hold" | "complete";
+export type ProjectStatus    = "planning" | "active" | "on_hold" | "complete" | "archived";
 export type TaskStatus       = "backlog" | "in_progress" | "review" | "done";
 export type TaskPriority     = "low" | "medium" | "high" | "urgent";
 export type TimeSource       = "manual" | "timer" | "upwork";
@@ -109,7 +109,9 @@ export interface HubFile {
   source:        "upload" | "upwork" | "drive";
   drive_file_id: string | null;
   thumbnail_url: string | null;
+  stl_url:       string | null;
   created_at:    string;
+  modified_at:   string;
   profiles?:     { full_name: string | null } | null;
 }
 
@@ -653,7 +655,33 @@ export function useFiles(params: { projectId?: string; taskId?: string } = {}) {
       if (taskId)    q = q.eq("task_id", taskId);
       const { data, error } = await q;
       if (error) throw error;
-      return data as HubFile[];
+
+      // Dedupe by filename within (project_id, task_id). When the same name
+      // appears more than once (e.g. UI upload + Drive sync of the same
+      // file, or a double-upload race), keep one row using these tie-
+      // breakers in order: drive source > has thumbnail > newer modified_at
+      // > larger file. This is a presentation-layer fix only; the duplicate
+      // rows still exist in the table.
+      const groups = new Map<string, HubFile[]>();
+      for (const f of (data as HubFile[]) ?? []) {
+        const key = `${f.project_id ?? ""}|${f.task_id ?? ""}|${f.filename.toLowerCase()}`;
+        const arr = groups.get(key) ?? [];
+        arr.push(f);
+        groups.set(key, arr);
+      }
+      const score = (f: HubFile) =>
+        (f.source === "drive" ? 1000 : 0) +
+        (f.thumbnail_url      ? 100  : 0) +
+        Math.floor(new Date(f.modified_at ?? f.created_at).getTime() / 1000) +
+        ((f.file_size ?? 0) / 1_000_000);
+      const out: HubFile[] = [];
+      for (const arr of groups.values()) {
+        arr.sort((a, b) => score(b) - score(a));
+        out.push(arr[0]);
+      }
+      // Preserve the original sort order (created_at desc) for the survivors.
+      out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      return out;
     },
   });
 }
@@ -672,6 +700,20 @@ export function useUploadFile() {
       taskId?:    string;
       uploadedBy: string;
     }) => {
+      // 1. Pre-check: same project + filename + size + task_id means it's already here.
+      //    Prevents the duplicate-row bug we saw in the field (e.g. RTGFRTB (NEW).SLDPRT).
+      const existingQ = supabase
+        .from("files")
+        .select("*")
+        .eq("project_id", projectId)
+        .eq("filename", file.name)
+        .eq("file_size", file.size);
+      const existing = taskId
+        ? await existingQ.eq("task_id", taskId).maybeSingle()
+        : await existingQ.is("task_id", null).maybeSingle();
+      if (existing.data) return { ...(existing.data as HubFile), __duplicate: true } as HubFile & { __duplicate?: boolean };
+
+      // 2. Upload to storage with a collision-proof path.
       const path     = `${projectId}/${Date.now()}_${file.name}`;
       const { error: uploadErr } = await supabase.storage
         .from("contractor-hub-files")
@@ -682,6 +724,8 @@ export function useUploadFile() {
         .from("contractor-hub-files")
         .getPublicUrl(path);
 
+      // 3. Insert row; if the unique index trips (race against another tab), swallow it
+      //    and clean up the orphan storage object.
       const { data, error } = await supabase
         .from("files")
         .insert({
@@ -696,7 +740,16 @@ export function useUploadFile() {
         })
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        if ((error as { code?: string }).code === "23505") {
+          await supabase.storage.from("contractor-hub-files").remove([path]).catch(() => {});
+          const retry = taskId
+            ? await supabase.from("files").select("*").eq("project_id", projectId).eq("filename", file.name).eq("file_size", file.size).eq("task_id", taskId).maybeSingle()
+            : await supabase.from("files").select("*").eq("project_id", projectId).eq("filename", file.name).eq("file_size", file.size).is("task_id", null).maybeSingle();
+          if (retry.data) return { ...(retry.data as HubFile), __duplicate: true } as HubFile & { __duplicate?: boolean };
+        }
+        throw error;
+      }
       const hubFile = data as HubFile;
 
       // Fire-and-forget: sync to Google Drive
@@ -731,7 +784,69 @@ export function useSyncDriveFiles(projectId: string, folderId: string | null | u
   }, [projectId, folderId, qc]);
 }
 
-const STEP_EXTS = ["step", "stp"];
+// Extensions occt-import-js handles directly.
+const OCCT_EXTS = ["step", "stp", "iges", "igs"];
+const STL_EXTS  = ["stl"];
+
+// Fetch raw bytes for any file. Direct uploads use file_url; Drive files
+// route through the google-drive edge function (file_url is a /view page).
+async function fetchFileBytes(f: HubFile): Promise<Uint8Array | null> {
+  if (f.source === "drive" && f.drive_file_id) {
+    const { data, error } = await supabase.functions.invoke("google-drive", {
+      body: { action: "download_bytes", drive_file_id: f.drive_file_id },
+    });
+    if (error || !data?.base64) return null;
+    const bin = atob(data.base64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  const resp = await fetch(f.file_url);
+  if (!resp.ok) return null;
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
+// For files we can't render in-browser (SLDPRT, SLDDRW, anything Drive can
+// preview), defer to the server-side get_thumbnail action — it tries
+// Drive's thumbnailLink first, then falls back to extracting an embedded
+// SolidWorks raster preview.
+const SERVER_THUMB_EXTS = ["sldprt", "slddrw", "sldasm"];
+
+export function useGenerateServerThumbnails(files: HubFile[]) {
+  const qc       = useQueryClient();
+  const firedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const targets = files.filter(f => {
+      if (f.thumbnail_url || firedRef.current.has(f.id)) return false;
+      if (!f.drive_file_id) return false; // server action requires a drive_file_id
+      const ext = f.filename.split(".").pop()?.toLowerCase() ?? "";
+      return SERVER_THUMB_EXTS.includes(ext);
+    });
+    if (!targets.length) return;
+
+    (async () => {
+      const projectIds = new Set<string>();
+      for (const f of targets) {
+        try {
+          const { data, error } = await supabase.functions.invoke("google-drive", {
+            body: {
+              action:        "get_thumbnail",
+              db_file_id:    f.id,
+              drive_file_id: f.drive_file_id,
+            },
+          });
+          if (error) continue;
+          if (data?.thumbnail_url && f.project_id) projectIds.add(f.project_id);
+          firedRef.current.add(f.id); // success or skip — don't retry this session
+        } catch (err) {
+          console.warn("[server-thumb] failed for", f.filename, err);
+        }
+      }
+      projectIds.forEach(pid => qc.invalidateQueries({ queryKey: ["hub_files", pid] }));
+    })();
+  }, [files, qc]);
+}
 
 export function useGenerateStepThumbnails(files: HubFile[]) {
   const qc       = useQueryClient();
@@ -741,31 +856,91 @@ export function useGenerateStepThumbnails(files: HubFile[]) {
     const targets = files.filter(f => {
       if (f.thumbnail_url || firedRef.current.has(f.id)) return false;
       const ext = f.filename.split(".").pop()?.toLowerCase() ?? "";
-      return STEP_EXTS.includes(ext);
+      // STEP/IGES via OCCT, STL via three.js loader, SLDPRT via its derived
+      // stl_url (created server-side by the convert_to_stl pipeline).
+      if (OCCT_EXTS.includes(ext)) return true;
+      if (STL_EXTS.includes(ext))  return true;
+      if (ext === "sldprt" && f.stl_url) return true;
+      return false;
     });
     if (!targets.length) return;
-    targets.forEach(f => firedRef.current.add(f.id));
 
     (async () => {
-      const [{ default: occtImport }, THREE] = await Promise.all([
+      const [{ default: occtImport }, THREE, stlMod] = await Promise.all([
         import("occt-import-js"),
         import("three"),
+        import("three/examples/jsm/loaders/STLLoader.js"),
       ]);
-      const occt: any = await occtImport({
-        locateFile: (n: string) => n.endsWith(".wasm")
-          ? new URL("occt-import-js/dist/occt-import-js.wasm", import.meta.url).href
-          : n,
+      const STLLoader = (stlMod as any).STLLoader;
+      let occt: any = null;
+      const ensureOcct = async () => {
+        if (occt) return occt;
+        occt = await occtImport({
+          locateFile: (n: string) => n.endsWith(".wasm")
+            ? new URL("occt-import-js/dist/occt-import-js.wasm", import.meta.url).href
+            : n,
+        });
+        return occt;
+      };
+
+      const fallbackMat = new THREE.MeshPhongMaterial({
+        color: 0xb8bcc4, specular: 0x222222, shininess: 30, side: THREE.DoubleSide,
       });
 
       const projectIds = new Set<string>();
       for (const f of targets) {
         try {
-          const resp = await fetch(f.file_url);
-          if (!resp.ok) continue;
-          const bytes  = new Uint8Array(await resp.arrayBuffer());
-          const result = occt.ReadStepFile(bytes, null);
-          if (!result?.success || !result.meshes?.length) continue;
+          const ext = f.filename.split(".").pop()?.toLowerCase() ?? "";
 
+          // Build a THREE.Group from whichever geometry source applies.
+          const group = new THREE.Group();
+
+          if (ext === "sldprt") {
+            // SLDPRT renders via the derived STL produced by convert_to_stl.
+            if (!f.stl_url) continue;
+            const r = await fetch(f.stl_url);
+            if (!r.ok) continue;
+            const bytes = new Uint8Array(await r.arrayBuffer());
+            const geo = new STLLoader().parse(bytes.buffer);
+            geo.computeVertexNormals();
+            group.add(new THREE.Mesh(geo, fallbackMat));
+          } else if (STL_EXTS.includes(ext)) {
+            const bytes = await fetchFileBytes(f);
+            if (!bytes) continue;
+            const geo = new STLLoader().parse(bytes.buffer);
+            geo.computeVertexNormals();
+            group.add(new THREE.Mesh(geo, fallbackMat));
+          } else {
+            // STEP / STP / IGES / IGS via occt-import-js.
+            const bytes = await fetchFileBytes(f);
+            if (!bytes) continue;
+            const occtInst = await ensureOcct();
+            const result = (ext === "iges" || ext === "igs")
+              ? occtInst.ReadIgesFile(bytes, null)
+              : occtInst.ReadStepFile(bytes, null);
+            if (!result?.success || !result.meshes?.length) continue;
+            for (const m of result.meshes) {
+              const geo = new THREE.BufferGeometry();
+              geo.setAttribute("position", new THREE.Float32BufferAttribute(m.attributes.position.array, 3));
+              if (m.attributes.normal?.array) {
+                geo.setAttribute("normal", new THREE.Float32BufferAttribute(m.attributes.normal.array, 3));
+              } else {
+                geo.computeVertexNormals();
+              }
+              if (m.index?.array) geo.setIndex(new THREE.Uint32BufferAttribute(m.index.array, 1));
+              const mat = m.color
+                ? new THREE.MeshPhongMaterial({
+                    color: new THREE.Color(m.color[0], m.color[1], m.color[2]),
+                    specular: 0x222222, shininess: 30, side: THREE.DoubleSide,
+                  })
+                : fallbackMat;
+              group.add(new THREE.Mesh(geo, mat));
+            }
+          }
+
+          if (group.children.length === 0) continue;
+
+          // ── Render the group to a 512x512 PNG ──
           const canvas   = document.createElement("canvas");
           canvas.width   = 512;
           canvas.height  = 512;
@@ -776,41 +951,20 @@ export function useGenerateStepThumbnails(files: HubFile[]) {
           const scene = new THREE.Scene();
           scene.background = new THREE.Color(0xffffff);
           scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-          const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-          dir.position.set(5, 10, 7);
-          scene.add(dir);
-          const fill = new THREE.DirectionalLight(0xffffff, 0.3);
-          fill.position.set(-5, -3, -5);
-          scene.add(fill);
-
-          const fallbackMat = new THREE.MeshPhongMaterial({
-            color: 0xb8bcc4, specular: 0x222222, shininess: 30, side: THREE.DoubleSide,
-          });
-
-          const group = new THREE.Group();
-          for (const m of result.meshes) {
-            const geo = new THREE.BufferGeometry();
-            geo.setAttribute("position", new THREE.Float32BufferAttribute(m.attributes.position.array, 3));
-            if (m.attributes.normal?.array) {
-              geo.setAttribute("normal", new THREE.Float32BufferAttribute(m.attributes.normal.array, 3));
-            } else {
-              geo.computeVertexNormals();
-            }
-            if (m.index?.array) geo.setIndex(new THREE.Uint32BufferAttribute(m.index.array, 1));
-            const mat = m.color
-              ? new THREE.MeshPhongMaterial({
-                  color: new THREE.Color(m.color[0], m.color[1], m.color[2]),
-                  specular: 0x222222, shininess: 30, side: THREE.DoubleSide,
-                })
-              : fallbackMat;
-            group.add(new THREE.Mesh(geo, mat));
-          }
+          const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+          dirLight.position.set(5, 10, 7);
+          scene.add(dirLight);
+          const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+          fillLight.position.set(-5, -3, -5);
+          scene.add(fillLight);
           scene.add(group);
 
           const box    = new THREE.Box3().setFromObject(group);
+          if (box.isEmpty()) { renderer.dispose(); continue; }
           const center = box.getCenter(new THREE.Vector3());
           group.position.sub(center);
           const sphere = box.getBoundingSphere(new THREE.Sphere());
+          if (!Number.isFinite(sphere.radius) || sphere.radius <= 0) { renderer.dispose(); continue; }
           const fov    = 35;
           const dist   = (sphere.radius / Math.sin((fov * Math.PI / 180) / 2)) * 1.1;
           const camera = new THREE.PerspectiveCamera(fov, 1, dist / 100, dist * 100);
@@ -834,8 +988,12 @@ export function useGenerateStepThumbnails(files: HubFile[]) {
             .getPublicUrl(path);
           await supabase.from("files").update({ thumbnail_url: publicUrl }).eq("id", f.id);
           if (f.project_id) projectIds.add(f.project_id);
+
+          // Only mark as "done for this session" on success — transient
+          // failures (network blips etc.) get a chance to retry next render.
+          firedRef.current.add(f.id);
         } catch (err) {
-          console.warn("[step-thumb] failed for", f.filename, err);
+          console.warn("[cad-thumb] failed for", f.filename, err);
         }
       }
       projectIds.forEach(pid => qc.invalidateQueries({ queryKey: ["hub_files", pid] }));
@@ -886,6 +1044,79 @@ export function useProjectBudgetSummary(projectId: string | undefined) {
         .single();
       if (error) throw error;
       return data as ProjectBudgetSummary;
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Batch fetches for the projects-list page
+// (avoid N+1 — one query each instead of one per card)
+// ─────────────────────────────────────────────────────────────
+
+type ContractorBrief = Pick<Contractor, "id" | "name" | "avatar_url" | "role" | "source">;
+
+export function useAllProjectContractors() {
+  return useQuery({
+    queryKey: ["hub_all_project_contractors"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("project_id, contractors!inner(id, name, avatar_url, role, source)")
+        .not("assigned_to", "is", null);
+      if (error) throw error;
+      const map = new Map<string, ContractorBrief[]>();
+      for (const row of (data ?? []) as Array<{ project_id: string; contractors: ContractorBrief }>) {
+        const pid = row.project_id;
+        const c = row.contractors;
+        if (!pid || !c) continue;
+        const list = map.get(pid) ?? [];
+        if (!list.some(x => x.id === c.id)) {
+          list.push(c);
+          map.set(pid, list);
+        }
+      }
+      return map;
+    },
+  });
+}
+
+// Latest SLDPRT thumbnail per project. The SolidWorks part is the canonical
+// "design" image — using its embedded preview as the project hero gives
+// each card the most representative shot.
+export function useAllProjectLatestFileThumbnail() {
+  return useQuery({
+    queryKey: ["hub_all_latest_sldprt_thumbnail"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("files")
+        .select("project_id, thumbnail_url, modified_at")
+        .not("thumbnail_url", "is", null)
+        .not("project_id", "is", null)
+        .ilike("filename", "%.sldprt")
+        .order("modified_at", { ascending: false });
+      if (error) throw error;
+      const map = new Map<string, string>();
+      for (const row of (data ?? []) as Array<{ project_id: string; thumbnail_url: string }>) {
+        if (!map.has(row.project_id)) map.set(row.project_id, row.thumbnail_url);
+      }
+      return map;
+    },
+  });
+}
+
+export function useAllProjectBudgetSummaries() {
+  return useQuery({
+    queryKey: ["hub_all_budget_summaries"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_budget_summary")
+        .select("*");
+      if (error) throw error;
+      const map = new Map<string, ProjectBudgetSummary>();
+      for (const row of (data ?? []) as ProjectBudgetSummary[]) {
+        map.set(row.project_id, row);
+      }
+      return map;
     },
   });
 }

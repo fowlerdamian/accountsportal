@@ -15,6 +15,7 @@ const PROJECT_CONFIG: Record<ProjectStatus, { label: string; className: string }
   active:    { label: "Active",     className: "bg-blue-900/40 text-blue-300 border border-blue-800/40" },
   on_hold:   { label: "On Hold",    className: "bg-amber-900/40 text-amber-300 border border-amber-800/40" },
   complete:  { label: "Complete",   className: "bg-green-900/40 text-green-300 border border-green-800/40" },
+  archived:  { label: "Archived",   className: "bg-muted/40 text-muted-foreground/70 border border-border/40" },
 };
 
 const TASK_STATUSES   = new Set<string>(Object.keys(TASK_CONFIG));

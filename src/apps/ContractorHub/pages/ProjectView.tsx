@@ -31,10 +31,65 @@ import {
   usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
   useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
   useGenerateStepThumbnails,
+  useGenerateServerThumbnails,
   NEW_PRODUCT_STAGES,
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
 import { notifyBudgetThreshold } from "@hub/lib/notifyHubChat";
+
+// ── FileThumb ────────────────────────────────────────────────
+// Renders a uniform 36x36 tile for any file. If a thumbnail URL is set,
+// shows the image; otherwise renders a type-coded badge with the
+// extension so the row never has a "missing" gap.
+
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
+
+function fileThumbPalette(ext: string): { bg: string; fg: string; border: string } {
+  const e = ext.toLowerCase();
+  if (["step","stp","stl","sldprt","iges","igs"].includes(e))
+    return { bg: "bg-blue-500/10",   fg: "text-blue-400",   border: "border-blue-500/30" };
+  if (["dxf","dwg"].includes(e))
+    return { bg: "bg-cyan-500/10",   fg: "text-cyan-400",   border: "border-cyan-500/30" };
+  if (["slddrw"].includes(e))
+    return { bg: "bg-indigo-500/10", fg: "text-indigo-400", border: "border-indigo-500/30" };
+  if (["pdf"].includes(e))
+    return { bg: "bg-red-500/10",    fg: "text-red-400",    border: "border-red-500/30" };
+  if (["zip","rar","7z","tar","gz"].includes(e))
+    return { bg: "bg-amber-500/10",  fg: "text-amber-400",  border: "border-amber-500/30" };
+  if (["doc","docx","txt","md","rtf"].includes(e))
+    return { bg: "bg-slate-500/10",  fg: "text-slate-400",  border: "border-slate-500/30" };
+  if (["xls","xlsx","csv"].includes(e))
+    return { bg: "bg-emerald-500/10",fg: "text-emerald-400",border: "border-emerald-500/30" };
+  return { bg: "bg-muted", fg: "text-muted-foreground", border: "border-border/40" };
+}
+
+function FileThumb({
+  file, onClick, title,
+}: {
+  file: { filename: string; file_url: string; thumbnail_url: string | null };
+  onClick?: () => void;
+  title?: string;
+}) {
+  const ext = file.filename.split(".").pop()?.toLowerCase() ?? "";
+  const url = file.thumbnail_url || (IMAGE_EXTS.includes(ext) ? file.file_url : null);
+  const baseClass = "shrink-0 w-9 h-9 rounded overflow-hidden border hover:border-primary/40 transition-colors flex items-center justify-center";
+
+  if (url) {
+    return (
+      <button onClick={onClick} className={`${baseClass} border-border/40 bg-muted`} title={title}>
+        <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+      </button>
+    );
+  }
+  const palette = fileThumbPalette(ext);
+  return (
+    <button onClick={onClick} className={`${baseClass} ${palette.border} ${palette.bg} ${palette.fg}`} title={title}>
+      <span className="text-[9px] font-mono font-semibold tracking-tight px-1 truncate">
+        {ext ? ext.toUpperCase().slice(0, 5) : "FILE"}
+      </span>
+    </button>
+  );
+}
 
 // ── Inner content (needs HubContext) ─────────────────────────
 
@@ -59,6 +114,7 @@ function ProjectViewContent() {
 
   useSyncDriveFiles(id, project?.drive_folder_id);
   useGenerateStepThumbnails(files);
+  useGenerateServerThumbnails(files);
 
   // ── Mutations ─────────────────────────────────────────────
   const { mutateAsync: updateProject }         = useUpdateProject();
@@ -93,7 +149,7 @@ function ProjectViewContent() {
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const [logTimeOpen,     setLogTimeOpen]     = useState(false);
   const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<string | null>(null);
-  const [cadPreview,      setCadPreview]      = useState<{ url: string; filename: string; displayName: string } | null>(null);
+  const [cadPreview,      setCadPreview]      = useState<{ url: string; filename: string; displayName: string; driveFileId: string | null } | null>(null);
   const [imgPreview,      setImgPreview]      = useState<{ url: string; filename: string } | null>(null);
   const [drivePreview,    setDrivePreview]    = useState<{ id: string; filename: string } | null>(null);
 
@@ -295,7 +351,11 @@ function ProjectViewContent() {
     if (!fileList || !user || !id) return;
     for (const file of Array.from(fileList)) {
       try {
-        await uploadFile({ file, projectId: id, uploadedBy: user.id });
+        const result = await uploadFile({ file, projectId: id, uploadedBy: user.id });
+        if ((result as { __duplicate?: boolean })?.__duplicate) {
+          toast.info(`${file.name} already attached`);
+          continue;
+        }
         await postActivity({
           project_id:  id,
           type:        "file",
@@ -847,44 +907,44 @@ function ProjectViewContent() {
                 const isImage  = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);
                 const previewable = is3D || isImage || !!file.thumbnail_url;
 
+                // SLDPRT itself isn't 3D-previewable, but its derived STL is.
+                const sldprt3D = ext === "sldprt" && !!file.stl_url;
+
                 function handleClick(e: React.MouseEvent) {
                   e.preventDefault();
                   if (is3D) {
-                    setCadPreview({ url: file.file_url, filename: file.filename, displayName: file.filename });
+                    // Source is the original file. If it lives in Drive,
+                    // pass drive_file_id so the viewer fetches bytes
+                    // through the auth-proxy edge function.
+                    setCadPreview({
+                      url: file.file_url, filename: file.filename, displayName: file.filename,
+                      driveFileId: file.source === "drive" ? file.drive_file_id : null,
+                    });
+                  } else if (sldprt3D) {
+                    // stl_url is a Supabase Storage URL — direct fetch is fine.
+                    setCadPreview({ url: file.stl_url!, filename: file.filename, displayName: file.filename, driveFileId: null });
                   } else if (isImage) {
                     setImgPreview({ url: file.file_url, filename: file.filename });
+                  } else if (file.thumbnail_url) {
+                    // Show the thumbnail in a lightbox before falling through
+                    // to Drive's iframe — Drive returns "no preview available"
+                    // for SLDPRT/SLDDRW/STEP, so the embedded/Drive-rendered
+                    // thumbnail is the only useful preview we have.
+                    setImgPreview({ url: file.thumbnail_url, filename: file.filename });
                   } else if (file.drive_file_id) {
                     setDrivePreview({ id: file.drive_file_id, filename: file.filename });
-                  } else if (file.thumbnail_url) {
-                    setImgPreview({ url: file.thumbnail_url, filename: file.filename });
                   } else {
                     window.open(file.file_url, "_blank");
                   }
                 }
 
-                const onThumbClick = () => {
-                  if (is3D) {
-                    setCadPreview({ url: file.file_url, filename: file.filename, displayName: file.filename });
-                  } else if (file.thumbnail_url) {
-                    setImgPreview({ url: file.thumbnail_url, filename: file.filename });
-                  }
-                };
-
                 return (
                   <li key={file.id} className="flex items-center gap-3 text-sm">
-                    {file.thumbnail_url ? (
-                      <button
-                        onClick={onThumbClick}
-                        className="shrink-0 w-9 h-9 rounded overflow-hidden border border-border/40 bg-muted hover:border-primary/40 transition-colors"
-                        title={is3D ? "Open 3D preview" : "Preview thumbnail"}
-                      >
-                        <img src={file.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                      </button>
-                    ) : file.source === "drive" ? (
-                      <ExternalLink className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    ) : (
-                      <Paperclip className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    )}
+                    <FileThumb
+                      file={file}
+                      onClick={() => { handleClick({ preventDefault: () => {} } as any); }}
+                      title={is3D ? "Open 3D preview" : "Open file"}
+                    />
                     <a
                       href={file.file_url}
                       target="_blank"
@@ -894,9 +954,14 @@ function ProjectViewContent() {
                     >
                       {file.filename}
                     </a>
-                    {is3D && (
+                    {(is3D || sldprt3D) && (
                       <button
-                        onClick={() => setCadPreview({ url: file.file_url, filename: file.filename, displayName: file.filename })}
+                        onClick={() => setCadPreview({
+                          url: sldprt3D ? file.stl_url! : file.file_url,
+                          filename: file.filename,
+                          displayName: file.filename,
+                          driveFileId: sldprt3D ? null : (file.source === "drive" ? file.drive_file_id : null),
+                        })}
                         title="3D preview"
                         className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
                       >
@@ -928,7 +993,9 @@ function ProjectViewContent() {
             </ul>
           )}
 
-          {/* Drop zone */}
+          {/* Drop zone — input lives outside the clickable div so that
+              fileInputRef.current.click() doesn't bubble back and re-open
+              the picker (which was causing duplicate uploads). */}
           <div
             onDragOver={e => { e.preventDefault(); setFileDragOver(true); }}
             onDragLeave={() => setFileDragOver(false)}
@@ -941,14 +1008,19 @@ function ProjectViewContent() {
           >
             <Upload className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Drop files here or click to upload</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={e => uploadFiles(e.target.files)}
-            />
           </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={e => {
+              const list = e.target.files;
+              // Reset so re-selecting the same filename later still fires onChange.
+              e.target.value = "";
+              uploadFiles(list);
+            }}
+          />
         </div>
       </div>
 
@@ -1021,6 +1093,7 @@ function ProjectViewContent() {
           fileUrl={cadPreview.url}
           filename={cadPreview.filename}
           displayName={cadPreview.displayName}
+          driveFileId={cadPreview.driveFileId}
           onClose={() => setCadPreview(null)}
         />
       )}
