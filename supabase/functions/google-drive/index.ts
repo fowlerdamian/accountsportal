@@ -548,10 +548,11 @@ serve(async (req) => {
       }
 
       // Files in DB whose drive_file_id is no longer present in Drive AND
-      // weren't reattached above → user genuinely removed them. Limit to
-      // source='drive' so we never auto-delete a user upload.
+      // weren't reattached above → user genuinely removed them. We require
+      // a non-null drive_file_id so we never touch rows that haven't synced
+      // to Drive yet (those are in-flight, not ghosts).
       const removedRows = existingArr.filter((f) =>
-        f.source === "drive" &&
+        f.drive_file_id != null &&
         !driveIds.has(f.drive_file_id) &&
         !reattachedIds.has(f.id),
       );
@@ -572,7 +573,7 @@ serve(async (req) => {
       }
 
       for (const f of changedFiles) {
-        const ex = existingMap.get(f.id)!;
+        const ex = existingByDriveId.get(f.id)!;
         await sb.from("files")
           .update({
             file_size:     parseInt(f.size!, 10),
