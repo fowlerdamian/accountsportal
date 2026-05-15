@@ -444,6 +444,27 @@ async function isDuplicate(
     }
   }
 
+  // Branch-aware name match: strip city/state/branch suffixes from both sides
+  // so "KickAss Products Sydney" and "KickAss Products Brisbane" collapse to
+  // the same core "kickass products" and the second one is rejected.
+  const newCore = coreCompanyName(companyName);
+  if (newCore.length >= 3) {
+    const lookupWord = newCore.split(" ")[0];
+    if (lookupWord.length >= 3) {
+      const { data: leads } = await supabase
+        .from("sales_leads")
+        .select("id, company_name")
+        .eq("channel", channel)
+        .ilike("company_name", `%${lookupWord}%`)
+        .limit(20);
+      if (leads?.length) {
+        for (const lead of leads) {
+          if (coreCompanyName(lead.company_name) === newCore) return true;
+        }
+      }
+    }
+  }
+
   // Fuzzy match: name similarity (first word lookup to narrow DB scan)
   const firstWord = companyName.split(" ")[0];
   if (firstWord.length >= 3) {
@@ -462,6 +483,55 @@ async function isDuplicate(
   }
 
   return false;
+}
+
+// ─── Branch-aware company name normalisation ──────────────────────────────────
+// "KickAss Products Sydney", "KickAss Products Brisbane", "KickAss Products
+// (NSW)" all reduce to "kickass products" so a chain is stored once, not once
+// per physical branch.
+
+const AU_CITY_SUFFIXES = [
+  "sydney", "melbourne", "brisbane", "perth", "adelaide", "darwin", "hobart",
+  "canberra", "newcastle", "wollongong", "geelong", "cairns", "townsville",
+  "toowoomba", "ballarat", "bendigo", "launceston", "mackay", "rockhampton",
+  "bunbury", "albury", "wodonga", "shepparton", "mandurah",
+  "sunshine coast", "gold coast", "central coast", "north shore",
+  "western sydney", "eastern suburbs", "northern beaches",
+  "south east", "north east", "south west", "north west",
+  "nsw", "vic", "qld", "sa", "wa", "tas", "nt", "act",
+  "new south wales", "victoria", "queensland", "tasmania",
+  "western australia", "south australia", "northern territory",
+  "north", "south", "east", "west", "central",
+  "australia", "aus",
+];
+
+const BRANCH_TOKENS = [
+  "branch", "store", "outlet", "showroom", "location", "shop",
+  "depot", "warehouse", "service centre", "service center",
+  "head office", "hq", "office",
+];
+
+function coreCompanyName(name: string): string {
+  let s = name.toLowerCase()
+    .replace(/\([^)]*\)/g, " ")           // drop parenthesised text "ARB (Sydney)"
+    .replace(/\s[-–—|]\s.*$/, " ")        // drop everything after " - " or " | "
+    .replace(/[.,'"`]/g, " ")             // strip punctuation
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Strip trailing branch/state/city tokens, longest-first, until stable.
+  const suffixes = [...AU_CITY_SUFFIXES, ...BRANCH_TOKENS]
+    .sort((a, b) => b.length - a.length);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const suffix of suffixes) {
+      const escaped = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`\\s+${escaped}$`, "i");
+      if (re.test(s)) { s = s.replace(re, "").trim(); changed = true; break; }
+    }
+  }
+  return s.replace(/\s+/g, " ").trim();
 }
 
 function nameSimilarity(a: string, b: string): number {
