@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Loader2, TrendingUp, Phone, Users, RotateCcw, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { Loader2, TrendingUp, Phone, Users, RotateCcw, AlertCircle, CheckCircle, Clock, Sparkles } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useDashboardMetrics } from "../hooks/useSalesQueries";
 import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNEL_DESCRIPTION, CHANNELS, type Channel } from "../lib/constants";
@@ -43,6 +43,40 @@ export default function Dashboard() {
   const [activeSync, setActiveSync] = useState<string | null>(null);
   const [syncStep, setSyncStep]     = useState<string>("");
   const [syncError, setSyncError]   = useState<string | null>(null);
+
+  // Free-text research suggestion box
+  const [suggestion, setSuggestion]           = useState<string>("");
+  const [suggestionChannel, setSuggestionChannel] = useState<Channel>("trailbait");
+  const [suggestionResult, setSuggestionResult]   = useState<string | null>(null);
+
+  async function runSuggestion() {
+    const text = suggestion.trim();
+    if (!text || !!activeSync) return;
+    setActiveSync("suggestion");
+    setSyncError(null);
+    setSuggestionResult(null);
+    try {
+      setSyncStep("Researching suggestion…");
+      const { data, error } = await supabase.functions.invoke("sales-lead-discovery", {
+        body: { suggestion: text, channel: suggestionChannel },
+      });
+      if (error) throw new Error(error.message);
+      const found = (data as { leads_found?: number } | null)?.leads_found ?? 0;
+      setSuggestionResult(
+        found > 0
+          ? `Found ${found} new ${found === 1 ? "lead" : "leads"} for ${CHANNEL_LABEL[suggestionChannel]}.`
+          : `No new leads — already in the pipeline or no matches for ${CHANNEL_LABEL[suggestionChannel]}.`
+      );
+      setSuggestion("");
+      qc.invalidateQueries({ queryKey: ["sales_dashboard_metrics"] });
+      qc.invalidateQueries({ queryKey: ["sales_leads"] });
+    } catch (err: unknown) {
+      setSyncError((err as Error).message ?? "Suggestion research failed");
+    } finally {
+      setActiveSync(null);
+      setSyncStep("");
+    }
+  }
 
   async function runResearch() {
     setActiveSync("research");
@@ -143,6 +177,71 @@ export default function Dashboard() {
           {syncError}
         </div>
       )}
+
+      {/* Free-text research suggestion */}
+      <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold">Research suggestion</h2>
+          <span className="text-xs text-muted-foreground">
+            Type a market, niche, or search query — we'll find matching companies and add them as leads.
+          </span>
+        </div>
+        <textarea
+          value={suggestion}
+          onChange={(e) => setSuggestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              runSuggestion();
+            }
+          }}
+          rows={2}
+          disabled={!!activeSync}
+          placeholder='e.g. "Independent 4WD accessory shops in Geelong" or "Mining fleet upfitters WA"'
+          className="w-full px-3 py-2 text-sm bg-background border border-border rounded resize-y focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
+        />
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground mr-1">File under:</span>
+            {CHANNELS.map((ch) => {
+              const isActive = suggestionChannel === ch;
+              const colors   = CHANNEL_COLOR[ch];
+              return (
+                <button
+                  key={ch}
+                  type="button"
+                  onClick={() => setSuggestionChannel(ch)}
+                  disabled={!!activeSync}
+                  className={cn(
+                    "px-2.5 py-1 text-xs rounded-full border transition-colors disabled:opacity-50",
+                    isActive
+                      ? cn(colors.bg, colors.text, colors.border, "font-semibold")
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {CHANNEL_LABEL[ch]}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={runSuggestion}
+            disabled={!suggestion.trim() || !!activeSync}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {activeSync === "suggestion"
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>{syncStep}</span></>
+              : <><Sparkles className="w-3.5 h-3.5" /><span>Run research</span></>}
+          </button>
+        </div>
+        {suggestionResult && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+            {suggestionResult}
+          </div>
+        )}
+      </div>
 
       {/* Channel columns */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

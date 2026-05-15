@@ -612,8 +612,97 @@ serve(async (req) => {
   const cseCx     = Deno.env.get("GOOGLE_CSE_CX") ?? "";
   const placesKey = Deno.env.get("GOOGLE_PLACES_API_KEY") ?? "";
 
-  let body: { channel?: Channel } = {};
+  let body: { channel?: Channel; suggestion?: string } = {};
   try { body = await req.json(); } catch { /* no body */ }
+
+  // ── User-suggested research: single free-text query path ─────────────────────
+  // Skips the canned DISCOVERY_QUERIES / MARKET_QUERIES sets and runs whatever
+  // the user typed through Google Maps + Custom Search, then dedups + inserts.
+  const suggestion = (body.suggestion ?? "").trim();
+  if (suggestion) {
+    const channel: Channel = (body.channel as Channel) ?? "trailbait";
+    const { data: job } = await supabase
+      .from("research_jobs")
+      .insert({ channel, job_type: "user_suggestion", status: "running", started_at: new Date().toISOString() })
+      .select("id")
+      .single();
+    const jobId = job?.id;
+    let found = 0;
+    const errors: string[] = [];
+
+    try {
+      // 1) Maps Text Search — best for physical-location queries
+      const { results: places, diagnostic } = await googleMapsSearch(suggestion, placesKey);
+      if (diagnostic) errors.push(`[Maps] ${diagnostic}`);
+      for (const place of places.slice(0, 60)) {
+        const companyName = place.name ?? "";
+        if (!companyName || companyName.length < 3) continue;
+        const website = place.website ?? null;
+        const isDup = await isDuplicate(supabase, companyName, website, channel, place.formatted_phone_number ?? null, place.place_id ?? null);
+        if (isDup) continue;
+        const address       = place.formatted_address ?? place.vicinity ?? null;
+        const stateMatch    = address?.match(/\b(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\b/)?.[1] ?? null;
+        const postcodeMatch = address?.match(/\b(\d{4})\b/)?.[1] ?? null;
+        await supabase.from("sales_leads").insert({
+          channel,
+          company_name:        companyName,
+          website,
+          address,
+          state:               stateMatch,
+          postcode:            postcodeMatch,
+          google_place_id:     place.place_id ?? null,
+          google_rating:       place.rating ?? null,
+          google_review_count: place.user_ratings_total ?? null,
+          discovery_source:    "user_suggestion",
+          discovery_query:     suggestion,
+          status:              "new",
+        });
+        found++;
+      }
+
+      // 2) Web search fallback — picks up companies without a Maps presence
+      try {
+        const webResults = await googleSearch(suggestion, cseKey, cseCx, 10);
+        for (const item of webResults) {
+          const companyName = (item.title ?? "").split(/\s[|\-–]\s/)[0].trim();
+          if (!companyName || companyName.length < 3) continue;
+          const website = item.link ?? null;
+          const isDup   = await isDuplicate(supabase, companyName, website, channel);
+          if (isDup) continue;
+          await supabase.from("sales_leads").insert({
+            channel,
+            company_name:     companyName,
+            website,
+            discovery_source: "user_suggestion",
+            discovery_query:  suggestion,
+            status:           "new",
+          });
+          found++;
+        }
+      } catch (webErr) {
+        errors.push(`[Web] ${webErr}`);
+      }
+
+      await supabase
+        .from("research_jobs")
+        .update({ status: "completed", leads_found: found, completed_at: new Date().toISOString(), error_log: errors.length ? errors.join("\n") : null })
+        .eq("id", jobId);
+
+      return new Response(
+        JSON.stringify({ ok: true, channel, suggestion, leads_found: found, errors }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (err) {
+      await supabase
+        .from("research_jobs")
+        .update({ status: "failed", error_log: String(err), completed_at: new Date().toISOString() })
+        .eq("id", jobId);
+      return new Response(
+        JSON.stringify({ ok: false, error: String(err) }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+  }
 
   const channels: Channel[] = body.channel ? [body.channel] : ["trailbait", "fleetcraft", "aga"];
   const results: Record<string, number> = {};
