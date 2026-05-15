@@ -144,10 +144,11 @@ export function useLeads(channel: Channel, filters?: {
       if (filters?.state) q = q.eq("state", filters.state);
       if (filters?.existingOnly) q = q.eq("is_existing_customer", true);
 
-      // AGA requires own brand — exclude leads where has_own_brand was explicitly confirmed false by AI
-      if (channel === "aga") q = q.not("score_breakdown->has_own_brand", "eq", "false");
-      // FleetCraft requires an installer — exclude leads scoring 0 on is_installer after scoring
-      if (channel === "fleetcraft") q = q.not("score_breakdown->confirmed_non_installer", "eq", "true");
+      // AGA requires own brand — exclude leads where has_own_brand was explicitly confirmed false by AI.
+      // Keep unscored leads (score_breakdown IS NULL) visible — they haven't been judged yet.
+      if (channel === "aga") q = q.or("score_breakdown.is.null,score_breakdown->has_own_brand.neq.false");
+      // FleetCraft requires an installer — same pattern: keep unscored leads visible.
+      if (channel === "fleetcraft") q = q.or("score_breakdown.is.null,score_breakdown->confirmed_non_installer.neq.true");
 
       const { data, error } = await q.limit(200);
       if (error) throw error;
