@@ -25,7 +25,8 @@ interface AppSidebarProps {
 export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   const { user, isAdmin, signOut } = useAuth();
   const { settings: tileSettings } = useTileSettings(user?.id);
-  const dashboardOnly = tileSettings?.['/support/dashboard-only'] === true;
+  // Storage key is historical — semantically this restricts a user to the Warehouse screen only.
+  const warehouseOnly = tileSettings?.['/support/dashboard-only'] === true;
   const actionCount = useActionItemsCount();
   const warehouseCount = useWarehouseTasksCount();
   const isMobile = useIsMobile();
@@ -63,7 +64,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
       </Link>
 
       <nav className="flex-1 flex flex-col gap-0.5 px-2 pt-3">
-        {(dashboardOnly ? navItems.filter(i => i.path === '/support') : navItems).map((item) => (
+        {(warehouseOnly ? navItems.filter(i => i.path === '/support/warehouse') : navItems).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -100,7 +101,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
           </NavLink>
         ))}
 
-        {isAdmin && !dashboardOnly && (
+        {isAdmin && !warehouseOnly && (
           <>
             <div className="mt-5 mb-1.5 px-3">
               <span

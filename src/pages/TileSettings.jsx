@@ -21,20 +21,22 @@ function AppIcon({ name }) {
 const LIVE_APPS = APPS.filter(a => a.status === 'live' || a.status === 'beta')
 
 // Apps that support sub-access levels (route → [modes])
+// 'warehouse' = locked to the Warehouse screen only (stored under the legacy
+// '/support/dashboard-only' key for backward compat with existing rows).
 const SUPPORT_MODES = {
-  '/support': ['full', 'dashboard', 'off'],
+  '/support': ['full', 'warehouse', 'off'],
 }
 
 function SupportModeSelector({ userId, settings, toggle, saving }) {
   const isOff = settings[userId]?.['/support'] === false
-  const isDashOnly = settings[userId]?.['/support/dashboard-only'] === true
-  const mode = isOff ? 'off' : isDashOnly ? 'dashboard' : 'full'
+  const isWarehouseOnly = settings[userId]?.['/support/dashboard-only'] === true
+  const mode = isOff ? 'off' : isWarehouseOnly ? 'warehouse' : 'full'
 
   const setMode = (next) => {
     if (next === 'off') {
       toggle(userId, '/support', false)
       toggle(userId, '/support/dashboard-only', false)
-    } else if (next === 'dashboard') {
+    } else if (next === 'warehouse') {
       toggle(userId, '/support', true)
       toggle(userId, '/support/dashboard-only', true)
     } else {
@@ -63,7 +65,7 @@ function SupportModeSelector({ userId, settings, toggle, saving }) {
     <div style={{ display: 'flex', justifyContent: 'center' }}>
       <div style={{ display: 'inline-flex', border: '1px solid #222', borderRadius: '4px', overflow: 'hidden' }}>
         {btn('full', 'Full')}
-        {btn('dashboard', 'Dash')}
+        {btn('warehouse', 'WH')}
         {btn('off', 'Off')}
       </div>
     </div>

@@ -1,21 +1,37 @@
-import { useState, useCallback } from 'react';
-import { Outlet } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/useAuth';
+import { useTileSettings } from '@portal/hooks/useTileSettings';
+
+// Routes a warehouse-only user is allowed to visit inside /support.
+const WAREHOUSE_ONLY_ALLOWED = ['/support/warehouse', '/support/warehouse/profile'];
 
 export function AppLayout() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const showShortcuts = useCallback(() => setShortcutsOpen(true), []);
-  useKeyboardShortcuts(() => {}, showShortcuts);
   const isMobile = useIsMobile();
-  const { isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
+  const { settings: tileSettings } = useTileSettings(user?.id);
+  const warehouseOnly = tileSettings?.['/support/dashboard-only'] === true;
 
-  if (isLoading) return null;
+  useKeyboardShortcuts(() => {}, showShortcuts, { isWarehouseOnly: warehouseOnly });
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!warehouseOnly) return;
+    if (!WAREHOUSE_ONLY_ALLOWED.includes(location.pathname)) {
+      navigate('/support/warehouse', { replace: true });
+    }
+  }, [warehouseOnly, location.pathname, navigate]);
+
+  if (isLoading || tileSettings === null) return null;
 
   return (
     <div style={{ minHeight: '100dvh', background: '#000000' }}>
