@@ -232,6 +232,25 @@ export default function LeadCallCard() {
     return "stable";
   };
 
+  // score_breakdown stores { factor_name: { weight, sub_score, contribution } }
+  // plus flat enrichment metadata — keep only the per-factor objects.
+  type ScoreFactor = { name: string; weight: number; subScore: number; contribution: number };
+  const scoreFactors: ScoreFactor[] = lead.score_breakdown
+    ? Object.entries(lead.score_breakdown)
+        .filter(([, v]) => v !== null && typeof v === "object" && "contribution" in (v as object) && "weight" in (v as object))
+        .map(([k, v]) => {
+          const obj = v as { weight: number; sub_score: number; contribution: number };
+          return {
+            name:         k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            weight:       obj.weight ?? 0,
+            subScore:     obj.sub_score ?? 0,
+            contribution: Math.round((obj.contribution ?? 0) * 10) / 10,
+          };
+        })
+        .sort((a, b) => b.contribution - a.contribution)
+    : [];
+  const scoreTotal = Math.round(scoreFactors.reduce((s, f) => s + f.contribution, 0) * 10) / 10;
+
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
       {/* Back nav */}
@@ -547,6 +566,53 @@ export default function LeadCallCard() {
           </button>
         </div>
       )}
+
+      {/* Score breakdown — explains where lead_score came from */}
+      <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Score Breakdown
+          </div>
+          {scoreFactors.length > 0 && (
+            <div className="text-xs text-muted-foreground font-mono">
+              Total <span className="text-foreground font-semibold">{scoreTotal}</span> / 100
+            </div>
+          )}
+        </div>
+        {scoreFactors.length === 0 ? (
+          <p className="text-sm text-muted-foreground/60 italic">
+            Not scored yet — this lead hasn't been through the scoring pass.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {scoreFactors.map((f) => {
+              const fillPct = f.weight > 0 ? Math.max(0, Math.min(100, (f.contribution / f.weight) * 100)) : 0;
+              const isZero  = f.contribution === 0;
+              return (
+                <div key={f.name} className={cn("grid grid-cols-[1fr_auto] gap-x-3 items-center", isZero && "opacity-50")}>
+                  <div className="min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-xs text-foreground/80 truncate">{f.name}</span>
+                      <span className="text-[10px] text-muted-foreground/60 font-mono flex-shrink-0">
+                        weight {f.weight}
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-muted/40 rounded-sm overflow-hidden mt-0.5">
+                      <div
+                        className="h-full bg-amber-400/80 rounded-sm transition-all"
+                        style={{ width: `${fillPct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-xs font-mono tabular-nums text-foreground/90 w-12 text-right">
+                    +{f.contribution.toFixed(1)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
