@@ -101,14 +101,13 @@ export default function LeadCallCard() {
     top_products:         orderHistory.top_products?.map((p) => p.name ?? p.sku) ?? [],
   } : null);
 
-  // Context points — AI pitch first, then talking points, then lead data as fallback
-  // CHANNEL_PITCH is the guaranteed last-resort so the box is never empty
+  // Context points — AI pitch first, then talking points, then lead data as fallback.
+  // CHANNEL_PITCH is the guaranteed last-resort so the box is never empty.
+  // Company summary lives in its own paragraph below the bullets (rendered in the
+  // Context card), so we don't repeat website_summary as a bullet here.
   const contextPoints: string[] = [
     brief.recommended_pitch ?? brief.channel_pitch ?? CHANNEL_PITCH[channel],
     ...(callEntry?.talking_points ?? []),
-    ...(!callEntry?.talking_points?.length && lead.website_summary
-      ? [lead.website_summary.slice(0, 200)]
-      : []),
     ...(lead.key_products_services?.length
       ? [`Key products: ${lead.key_products_services.slice(0, 3).join(", ")}`]
       : []),
@@ -311,8 +310,9 @@ export default function LeadCallCard() {
         )}
       </div>
 
-      {/* Context / pitch points */}
-      {contextPoints.length > 0 && (
+      {/* Context / pitch points + company overview (merged — both surfaced the
+          same website_summary before, just in different boxes) */}
+      {(contextPoints.length > 0 || companySummary) && (
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="text-xs font-semibold uppercase tracking-wider text-amber-400">Context</div>
@@ -327,14 +327,24 @@ export default function LeadCallCard() {
               </span>
             )}
           </div>
-          <ul className="space-y-2">
-            {contextPoints.map((point, i) => (
-              <li key={i} className="text-sm text-foreground/80 flex gap-2.5 leading-relaxed">
-                <span className="text-amber-400 font-bold flex-shrink-0">·</span>
-                {point}
-              </li>
-            ))}
-          </ul>
+          {contextPoints.length > 0 && (
+            <ul className="space-y-2">
+              {contextPoints.map((point, i) => (
+                <li key={i} className="text-sm text-foreground/80 flex gap-2.5 leading-relaxed">
+                  <span className="text-amber-400 font-bold flex-shrink-0">·</span>
+                  {point}
+                </li>
+              ))}
+            </ul>
+          )}
+          {companySummary && (
+            <div className={cn(contextPoints.length > 0 && "mt-3 pt-3 border-t border-amber-500/15")}>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/70 mb-1.5">
+                Company Overview
+              </div>
+              <p className="text-sm text-foreground/70 leading-relaxed">{companySummary}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -445,14 +455,6 @@ export default function LeadCallCard() {
         </div>
         <CallHistory leadId={lead?.id} />
       </div>
-
-      {/* Company summary */}
-      {companySummary && (
-        <div className="rounded-xl border border-border bg-card/50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Company Overview</div>
-          <p className="text-sm text-foreground/80 leading-relaxed">{companySummary}</p>
-        </div>
-      )}
 
       {/* TrailBait: Cin7 order history */}
       {channel === "trailbait" && cin7 && (
