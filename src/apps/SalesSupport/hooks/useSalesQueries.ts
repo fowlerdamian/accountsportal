@@ -55,6 +55,8 @@ export interface SalesLead {
   annual_revenue_estimate: string | null;
   hunter_email_pattern: string | null;
   hunter_contacts: Array<{ name: string; email: string; position: string | null; confidence: number }> | null;
+  ai_brief_bullets: string[] | null;
+  ai_brief_generated_at: string | null;
   created_at: string;
   updated_at: string;
 }

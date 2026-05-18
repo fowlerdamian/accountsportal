@@ -3,7 +3,7 @@ import { useParams, useOutletContext, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft, Phone, Globe, Star, User, Link,
-  ExternalLink, Loader2, CheckCircle, TrendingDown, TrendingUp, Minus, Save, MessageSquare, PhoneCall,
+  ExternalLink, Loader2, CheckCircle, TrendingDown, TrendingUp, Minus, Save, MessageSquare, PhoneCall, Sparkles, RefreshCw, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import {
@@ -55,11 +55,49 @@ export default function LeadCallCard() {
   const [numberRevealed, setNumberRevealed] = useState(false);
   // Track the live call entry ID (may be created on first outcome/save)
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
+  // AI brief — auto-loads on first view; manual refresh button regenerates.
+  const [briefBullets, setBriefBullets]   = useState<string[] | null>(null);
+  const [briefLoading, setBriefLoading]   = useState(false);
+  const [briefError, setBriefError]       = useState<string | null>(null);
+  const [showBriefSource, setShowBriefSource] = useState(false);
 
   useEffect(() => {
     if (callEntry?.call_notes) setNotes(callEntry.call_notes);
     if (callEntry?.id) setActiveCallId(callEntry.id);
   }, [callEntry?.id, callEntry?.call_notes]);
+
+  // Seed bullets from cached lead row; auto-generate if missing.
+  useEffect(() => {
+    if (!lead) return;
+    if (lead.ai_brief_bullets?.length) {
+      setBriefBullets(lead.ai_brief_bullets);
+      return;
+    }
+    // No cached brief — fire one off automatically (skip if already in-flight).
+    if (briefLoading || briefBullets) return;
+    void generateBrief(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
+
+  async function generateBrief(force: boolean) {
+    if (!lead) return;
+    setBriefLoading(true);
+    setBriefError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("sales-lead-brief", {
+        body: { lead_id: lead.id, force },
+      });
+      if (error) throw new Error(error.message);
+      const bullets = (data as { bullets?: string[] } | null)?.bullets ?? [];
+      if (!bullets.length) throw new Error("AI returned no bullets");
+      setBriefBullets(bullets);
+      queryClient.invalidateQueries({ queryKey: ["sales_lead", lead.id] });
+    } catch (err: unknown) {
+      setBriefError((err as Error).message ?? "Brief generation failed");
+    } finally {
+      setBriefLoading(false);
+    }
+  }
 
 
   if (loadingLead || loadingCall || !lead) {
@@ -310,12 +348,18 @@ export default function LeadCallCard() {
         )}
       </div>
 
-      {/* Context / pitch points + company overview (merged — both surfaced the
-          same website_summary before, just in different boxes) */}
-      {(contextPoints.length > 0 || companySummary) && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-amber-400">Context</div>
+      {/* AI-generated sales brief — 3 bullets summarising every raw signal we
+          have on the lead (website summary, tender context, key products,
+          HubSpot notes, channel pitch). Raw inputs are available under
+          "Show source data" for the salesperson who wants to verify. */}
+      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <div className="text-xs font-semibold uppercase tracking-wider text-amber-400">Sales Brief</div>
+            {briefLoading && <Loader2 className="w-3 h-3 animate-spin text-amber-400/70" />}
+          </div>
+          <div className="flex items-center gap-2">
             {brief.hook_tier && (
               <span className={cn(
                 "text-xs px-2 py-0.5 rounded font-mono font-semibold",
@@ -326,27 +370,64 @@ export default function LeadCallCard() {
                 {brief.hook_tier === 1 ? "T1 · Urgent" : brief.hook_tier === 2 ? "T2 · Pain point" : "T3 · General fit"}
               </span>
             )}
+            <button
+              onClick={() => generateBrief(true)}
+              disabled={briefLoading}
+              title="Regenerate brief from latest raw data"
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-amber-500/30 text-amber-400/80 hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={cn("w-3 h-3", briefLoading && "animate-spin")} />
+              Refresh
+            </button>
           </div>
-          {contextPoints.length > 0 && (
-            <ul className="space-y-2">
-              {contextPoints.map((point, i) => (
-                <li key={i} className="text-sm text-foreground/80 flex gap-2.5 leading-relaxed">
-                  <span className="text-amber-400 font-bold flex-shrink-0">·</span>
-                  {point}
-                </li>
-              ))}
-            </ul>
-          )}
-          {companySummary && (
-            <div className={cn(contextPoints.length > 0 && "mt-3 pt-3 border-t border-amber-500/15")}>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/70 mb-1.5">
-                Company Overview
-              </div>
-              <p className="text-sm text-foreground/70 leading-relaxed">{companySummary}</p>
-            </div>
-          )}
         </div>
-      )}
+
+        {briefBullets?.length ? (
+          <ul className="space-y-2">
+            {briefBullets.map((point, i) => (
+              <li key={i} className="text-sm text-foreground/85 flex gap-2.5 leading-relaxed">
+                <span className="text-amber-400 font-bold flex-shrink-0">·</span>
+                {point}
+              </li>
+            ))}
+          </ul>
+        ) : briefLoading ? (
+          <p className="text-sm text-muted-foreground italic">Generating brief from raw data…</p>
+        ) : briefError ? (
+          <p className="text-sm text-red-400">Brief failed: {briefError}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground/60 italic">No brief yet — click Refresh to generate one.</p>
+        )}
+
+        {/* Source data — collapsed by default; salesperson can verify what
+            the AI was working from. */}
+        {(contextPoints.length > 0 || companySummary || tenderContext) && (
+          <div className="mt-3 pt-3 border-t border-amber-500/15">
+            <button
+              onClick={() => setShowBriefSource(!showBriefSource)}
+              className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400/70 hover:text-amber-400 transition-colors"
+            >
+              {showBriefSource ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              Source data
+            </button>
+            {showBriefSource && (
+              <div className="mt-2 space-y-2 text-xs text-foreground/60 leading-relaxed">
+                {contextPoints.length > 0 && (
+                  <ul className="space-y-1">
+                    {contextPoints.map((point, i) => (
+                      <li key={i} className="flex gap-2"><span className="text-amber-400/60 flex-shrink-0">·</span>{point}</li>
+                    ))}
+                  </ul>
+                )}
+                {companySummary && <p>{companySummary}</p>}
+                {tenderContext && (
+                  <p><span className="text-amber-400/70 font-semibold">Tender:</span> {tenderContext}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Contact + Online */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
