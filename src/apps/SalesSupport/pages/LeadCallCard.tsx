@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useParams, useOutletContext, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,6 +24,19 @@ const CHANNEL_PITCH: Record<string, string> = {
   fleetcraft: "Accelerate accessory fitment times through innovative products such as wiring looms and brackets.",
   aga:        "We offer turn-key products to complement your range without the need to design and manufacture yourself.",
 };
+
+// One labeled provenance block in the "Source data" toggle. Keeps every piece
+// of info shown with the system it came from so the salesperson can verify.
+function SourceBlock({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="font-semibold text-amber-400/80 uppercase tracking-wider text-[10px] mb-0.5">
+        {label}
+      </div>
+      <div className="text-foreground/70">{children}</div>
+    </div>
+  );
+}
 
 const OUTCOMES = [
   { key: "connected",      label: "Connected",      color: "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" },
@@ -160,17 +173,33 @@ export default function LeadCallCard() {
     top_products:         orderHistory.top_products?.map((p) => p.name ?? p.sku) ?? [],
   } : null);
 
-  // Context points — AI pitch first, then talking points, then lead data as fallback.
-  // CHANNEL_PITCH is the guaranteed last-resort so the box is never empty.
-  // Company summary lives in its own paragraph below the bullets (rendered in the
-  // Context card), so we don't repeat website_summary as a bullet here.
-  const contextPoints: string[] = [
-    brief.recommended_pitch ?? brief.channel_pitch ?? CHANNEL_PITCH[channel],
-    ...(callEntry?.talking_points ?? []),
-    ...(lead.key_products_services?.length
-      ? [`Key products: ${lead.key_products_services.slice(0, 3).join(", ")}`]
-      : []),
-  ].filter(Boolean).slice(0, 4) as string[];
+  // Discovery-source labels — humanise the raw enum value stored on the lead.
+  const DISCOVERY_LABEL: Record<string, string> = {
+    google_maps:      "Google Maps Places",
+    web_scrape:       "Google web search",
+    austender:        "AusTender OCDS API",
+    user_suggestion:  "User research suggestion",
+    news_tender:      "News article (tender win)",
+    linkedin:         "LinkedIn company search",
+    seek_jobs:        "Seek (hiring activity)",
+    yellow_pages:     "Yellow Pages directory",
+    facebook:         "Facebook business page",
+    instagram:        "Instagram business profile",
+    trade_press:      "Australian trade press",
+    trade_directory:  "AAAA trade directory",
+    market_news:      "Market news search",
+  };
+  const cleanDomain = (url: string) => {
+    try { return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, ""); }
+    catch { return url; }
+  };
+  const housePitch = brief.recommended_pitch ?? brief.channel_pitch ?? CHANNEL_PITCH[channel];
+  const priorNotes = (brief.hubspot_notes ?? lead.hubspot_previous_contact ?? []) as Array<{ date: string; body: string }>;
+  const hasAnySource =
+    !!lead.website_summary || !!lead.company_description || !!lead.industry ||
+    !!lead.employee_count  || !!lead.founded_year       || !!lead.key_products_services?.length ||
+    !!contactName          || !!tenderContext           || priorNotes.length > 0 ||
+    !!callEntry?.talking_points?.length || (channel === "trailbait" && !!cin7);
 
   async function ensureCallEntry(): Promise<string> {
     if (activeCallId) return activeCallId;
@@ -420,34 +449,149 @@ export default function LeadCallCard() {
           <p className="text-sm text-muted-foreground/60 italic">No brief yet — click Refresh to generate one.</p>
         )}
 
-        {/* Source data — collapsed by default; salesperson can verify what
-            the AI was working from. */}
-        {(contextPoints.length > 0 || companySummary || tenderContext) && (
-          <div className="mt-3 pt-3 border-t border-amber-500/15">
-            <button
-              onClick={() => setShowBriefSource(!showBriefSource)}
-              className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400/70 hover:text-amber-400 transition-colors"
-            >
-              {showBriefSource ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              Source data
-            </button>
-            {showBriefSource && (
-              <div className="mt-2 space-y-2 text-xs text-foreground/60 leading-relaxed">
-                {contextPoints.length > 0 && (
+        {/* Source data — collapsed by default. Each section labels where the
+            information came from so the salesperson can verify the brief. */}
+        <div className="mt-3 pt-3 border-t border-amber-500/15">
+          <button
+            onClick={() => setShowBriefSource(!showBriefSource)}
+            className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400/70 hover:text-amber-400 transition-colors"
+          >
+            {showBriefSource ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            Source data
+          </button>
+          {showBriefSource && (
+            <div className="mt-3 space-y-3 text-xs text-foreground/65 leading-relaxed">
+              {/* Discovery provenance — always shown */}
+              <SourceBlock label={`Discovery · ${DISCOVERY_LABEL[lead.discovery_source] ?? lead.discovery_source}`}>
+                {lead.discovery_query && <span>Query: <span className="font-mono text-foreground/80">"{lead.discovery_query}"</span> · </span>}
+                <span>Found {new Date(lead.created_at).toLocaleDateString("en-AU")}</span>
+              </SourceBlock>
+
+              {/* Google Places */}
+              {(lead.google_rating != null || lead.google_place_id) && (
+                <SourceBlock label="Google Places API">
+                  {lead.google_rating != null && (
+                    <span>{lead.google_rating}★ ({lead.google_review_count ?? 0} reviews)</span>
+                  )}
+                  {address && <span> · {address}</span>}
+                  {lead.google_place_id && (
+                    <>
+                      {" · "}
+                      <a
+                        href={`https://www.google.com/maps/place/?q=place_id:${lead.google_place_id}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="text-amber-400 hover:underline"
+                      >
+                        View on Maps ↗
+                      </a>
+                    </>
+                  )}
+                </SourceBlock>
+              )}
+
+              {/* Website summary — enrichment scrape */}
+              {companySummary && (
+                <SourceBlock
+                  label={`Website summary · enrichment scrape${lead.website ? ` of ${cleanDomain(lead.website)}` : ""}`}
+                >
+                  <p>{companySummary}</p>
+                  {lead.website && (
+                    <a
+                      href={lead.website} target="_blank" rel="noopener noreferrer"
+                      className="text-amber-400 hover:underline mt-1 inline-block"
+                    >
+                      {lead.website} ↗
+                    </a>
+                  )}
+                </SourceBlock>
+              )}
+
+              {/* Company profile — Apollo / Lusha */}
+              {(lead.industry || lead.employee_count || lead.founded_year || lead.company_description) && (
+                <SourceBlock label="Company profile · Apollo / Lusha enrichment">
+                  {[
+                    lead.industry        && `Industry: ${lead.industry}`,
+                    lead.employee_count  && `${lead.employee_count} employees`,
+                    lead.founded_year    && `Founded ${lead.founded_year}`,
+                    lead.annual_revenue_estimate && `Revenue est: ${lead.annual_revenue_estimate}`,
+                    lead.abn             && `ABN ${lead.abn}`,
+                  ].filter(Boolean).join(" · ")}
+                  {lead.company_description && <p className="mt-1">{lead.company_description}</p>}
+                </SourceBlock>
+              )}
+
+              {/* Key products */}
+              {lead.key_products_services?.length ? (
+                <SourceBlock label="Key products & services · enrichment AI from website">
+                  <p>{lead.key_products_services.join(", ")}</p>
+                </SourceBlock>
+              ) : null}
+
+              {/* Contact */}
+              {contactName && (
+                <SourceBlock
+                  label={`Recommended contact${contactSource ? ` · ${contactSource}` : ""}`}
+                >
+                  <p>{contactName}</p>
+                </SourceBlock>
+              )}
+
+              {/* Tender context */}
+              {tenderContext && (
+                <SourceBlock label="Tender / contract · AusTender OCDS or news scrape">
+                  <p>{tenderContext}</p>
+                </SourceBlock>
+              )}
+
+              {/* HubSpot notes */}
+              {priorNotes.length > 0 && (
+                <SourceBlock label={`Prior contact · HubSpot timeline (${priorNotes.length})`}>
                   <ul className="space-y-1">
-                    {contextPoints.map((point, i) => (
-                      <li key={i} className="flex gap-2"><span className="text-amber-400/60 flex-shrink-0">·</span>{point}</li>
+                    {priorNotes.slice(0, 3).map((n, i) => (
+                      <li key={i}>
+                        <span className="font-mono text-foreground/40 mr-1.5">{n.date}</span>
+                        {n.body}
+                      </li>
                     ))}
                   </ul>
-                )}
-                {companySummary && <p>{companySummary}</p>}
-                {tenderContext && (
-                  <p><span className="text-amber-400/70 font-semibold">Tender:</span> {tenderContext}</p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                </SourceBlock>
+              )}
+
+              {/* Talking points — call list generator */}
+              {callEntry?.talking_points?.length ? (
+                <SourceBlock label="Talking points · call list generator AI">
+                  <ul className="space-y-1">
+                    {callEntry.talking_points.map((p: string, i: number) => (
+                      <li key={i} className="flex gap-2"><span className="text-amber-400/60 flex-shrink-0">·</span>{p}</li>
+                    ))}
+                  </ul>
+                </SourceBlock>
+              ) : null}
+
+              {/* Channel pitch — hardcoded / call list AI */}
+              <SourceBlock label={`Channel pitch · ${brief.recommended_pitch ? "call list AI" : "hardcoded house line"}`}>
+                <p>{housePitch}</p>
+              </SourceBlock>
+
+              {/* Cin7 (TrailBait only) */}
+              {channel === "trailbait" && cin7 && (
+                <SourceBlock label="Order history · Cin7 daily sync">
+                  <div>
+                    Last order {cin7.last_order ?? "—"} ·{" "}
+                    {cin7.order_count_30d ?? 0} orders (30d) ·{" "}
+                    avg ${Math.round(cin7.avg_order_value ?? 0).toLocaleString()}
+                  </div>
+                </SourceBlock>
+              )}
+
+              {!hasAnySource && (
+                <p className="italic text-foreground/40">
+                  No enrichment data yet — only discovery metadata above. Run enrichment to populate.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Contact + Online */}

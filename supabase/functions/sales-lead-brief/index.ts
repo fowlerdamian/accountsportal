@@ -99,13 +99,20 @@ serve(async (req) => {
     lead.disqualification_reason ? `Prior disqualification reason: ${lead.disqualification_reason}`               : "",
   ].filter(Boolean);
 
-  const prompt = `You are a sales-call brief writer for an Australian automotive accessories distributor. Write EXACTLY 3 bullet points to brief a salesperson before they call this lead. Each bullet must:
+  const prompt = `You are preparing a fact-sheet for an Australian automotive accessories distributor's salesperson before they call this lead. Read the raw data and write EXACTLY 3 bullets that collate the verified facts and figures already present.
 
-- Be one sentence, max 20 words.
-- Be specific (use names, numbers, products, contracts from the data — no generic filler).
-- Together cover: (1) what the company does and our angle, (2) the most compelling reason to call them now, (3) a concrete opening line or question.
+Each bullet must:
+- Be one sentence, max 25 words.
+- Cite specific names, numbers, dates, products, contracts, locations, or counts visible in the data.
+- State facts only. Do NOT recommend, pitch, suggest opening lines, propose questions, or speculate about fit.
+- Never invent details that are not in the raw data. If a field is missing, leave it out — do not fill gaps.
 
-Return ONLY the three bullets, one per line, each starting with "- ". No headers, no preamble, no closing remarks.
+Together the 3 bullets should cover, in order:
+(1) What the company is and what it sells / does.
+(2) Its scale and footprint — employees, locations, founded year, revenue, key product lines or contracts.
+(3) The most specific signal worth noting before calling — named contact, recent activity, tender win, customer status, prior conversation. Skip this bullet entirely (return only 2) if no such signal exists in the data.
+
+Return ONLY the bullets, one per line, each starting with "- ". No headers, no preamble, no closing remarks.
 
 Raw data:
 ${sections.join("\n")}`;
