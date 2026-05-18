@@ -60,6 +60,9 @@ export default function LeadCallCard() {
   const [briefLoading, setBriefLoading]   = useState(false);
   const [briefError, setBriefError]       = useState<string | null>(null);
   const [showBriefSource, setShowBriefSource] = useState(false);
+  // Rescore — re-runs the scoring function for this lead using current data
+  const [rescoring, setRescoring]   = useState(false);
+  const [rescoreError, setRescoreError] = useState<string | null>(null);
 
   useEffect(() => {
     if (callEntry?.call_notes) setNotes(callEntry.call_notes);
@@ -78,6 +81,24 @@ export default function LeadCallCard() {
     void generateBrief(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead?.id]);
+
+  async function rescore() {
+    if (!lead || rescoring) return;
+    setRescoring(true);
+    setRescoreError(null);
+    try {
+      const { error } = await supabase.functions.invoke("sales-lead-scoring", {
+        body: { lead_id: lead.id },
+      });
+      if (error) throw new Error(error.message);
+      queryClient.invalidateQueries({ queryKey: ["sales_lead", lead.id] });
+      queryClient.invalidateQueries({ queryKey: ["sales_leads"] });
+    } catch (err: unknown) {
+      setRescoreError((err as Error).message ?? "Rescore failed");
+    } finally {
+      setRescoring(false);
+    }
+  }
 
   async function generateBrief(force: boolean) {
     if (!lead) return;
@@ -652,16 +673,30 @@ export default function LeadCallCard() {
 
       {/* Score breakdown — explains where lead_score came from */}
       <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Score Breakdown
           </div>
-          {scoreFactors.length > 0 && (
-            <div className="text-xs text-muted-foreground font-mono">
-              Total <span className="text-foreground font-semibold">{scoreTotal}</span> / 100
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {scoreFactors.length > 0 && (
+              <div className="text-xs text-muted-foreground font-mono">
+                Total <span className="text-foreground font-semibold">{scoreTotal}</span> / 100
+              </div>
+            )}
+            <button
+              onClick={rescore}
+              disabled={rescoring}
+              title="Re-run scoring using the current lead data"
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-border hover:bg-muted/50 transition-colors disabled:opacity-50 text-muted-foreground"
+            >
+              <RefreshCw className={cn("w-3 h-3", rescoring && "animate-spin")} />
+              {rescoring ? "Scoring…" : "Rescore"}
+            </button>
+          </div>
         </div>
+        {rescoreError && (
+          <p className="text-xs text-red-400">Rescore failed: {rescoreError}</p>
+        )}
         {scoreFactors.length === 0 ? (
           <p className="text-sm text-muted-foreground/60 italic">
             Not scored yet — this lead hasn't been through the scoring pass.
