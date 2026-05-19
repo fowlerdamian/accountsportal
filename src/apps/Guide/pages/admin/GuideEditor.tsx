@@ -40,6 +40,11 @@ interface StepDraft {
 // editable so different products can have different wording.
 const WIRING_BREAK_SUBTITLE    = "If Purchased Full Light Kit Continue to Next Steps";
 const WIRING_BREAK_DESCRIPTION = "Depending on the manufacturer of your wiring, the installation process outlined may not correspond with your specific setup.";
+// Stedi LED work-light wiring kit / loom / harness — sourced from procheck-
+// automotive.com.au, copied into our public guide-images bucket so we don't
+// hotlink and so it loads under our CDN.
+const WIRING_BREAK_DEFAULT_IMAGE =
+  "https://nvlezbqolzwixquusbfo.supabase.co/storage/v1/object/public/guide-images/wiring-break/wirled-kit-stedi.jpg";
 
 // --- Upload helpers ---
 async function uploadToStorage(file: File, folder: string): Promise<string> {
@@ -253,6 +258,16 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
               placeholder={WIRING_BREAK_DESCRIPTION}
               rows={3}
               className="border-amber-500/30 bg-background"
+            />
+            <DropZone
+              label="Wiring kit image"
+              currentUrl={step.image_url}
+              dragPayload={step.image_url ? { url: step.image_url, originalUrl: step.image_original_url ?? null } : undefined}
+              onDropTransfer={(url, origUrl) => onTransferImage(index, 'image_url', url, origUrl)}
+              onUpload={(url) => onUpdateImage(index, 'image_url', url)}
+              onClear={() => onUpdateImage(index, 'image_url', null)}
+              onEdit={step.image_url ? () => onOpenEditor(index, 'image_url') : undefined}
+              folder="steps"
             />
             <p className="text-[11px] text-muted-foreground">
               Shown as a full-screen "Continue to Wiring" prompt between the bracket-only steps and the wiring section. Excluded from the step count and progress bar.
@@ -528,8 +543,10 @@ export default function GuideEditor() {
             subtitle: s.subtitle || (s.is_divider ? WIRING_BREAK_SUBTITLE : `Step ${i + 1}`),
             description: s.description || (s.is_divider ? WIRING_BREAK_DESCRIPTION : ''),
             order_index: i + 1,
-            image_url: s.is_divider ? null : (s.image_url || null),
-            image_original_url: s.is_divider ? null : (s.image_original_url || null),
+            // Dividers keep their single image (the wiring kit illustration);
+            // we never show a second image on a divider.
+            image_url: s.image_url || null,
+            image_original_url: s.image_original_url || null,
             image2_url: s.is_divider ? null : (s.image2_url || null),
             image2_original_url: s.is_divider ? null : (s.image2_original_url || null),
             is_divider: !!s.is_divider,
@@ -641,6 +658,8 @@ export default function GuideEditor() {
       description: WIRING_BREAK_DESCRIPTION,
       order_index: guideSteps.length + 1,
       is_divider: true,
+      image_url: WIRING_BREAK_DEFAULT_IMAGE,
+      image_original_url: WIRING_BREAK_DEFAULT_IMAGE,
     }]);
   };
 

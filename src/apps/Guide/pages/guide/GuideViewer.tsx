@@ -320,9 +320,18 @@ export default function GuideViewer() {
             {isDivider ? (
               /* Wiring-break interstitial — full-card "Continue" prompt */
               <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/5 p-5 sm:p-7 space-y-5 text-center">
-                <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/15 flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-                </div>
+                {step.image_url ? (
+                  <img
+                    src={step.image_url}
+                    alt={step.subtitle}
+                    className="w-full max-w-xs mx-auto rounded-lg bg-white cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => setLightbox(step.image_url!)}
+                  />
+                ) : (
+                  <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/15 flex items-center justify-center">
+                    <Zap className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <h2 className="text-lg sm:text-xl font-bold">{step.subtitle}</h2>
                   <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
