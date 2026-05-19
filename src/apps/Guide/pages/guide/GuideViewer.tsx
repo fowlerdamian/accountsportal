@@ -291,7 +291,7 @@ export default function GuideViewer() {
             </Button>
             <p className="text-center text-xs text-muted-foreground">
               {guideSteps.filter(s => !(s as any).is_divider).length} steps
-              {guideSteps.some(s => (s as any).is_divider) && " · includes wiring break"}
+              {guideSteps.some(s => (s as any).is_divider) && " · includes wiring instructions"}
             </p>
           </div>
         )}
@@ -402,7 +402,7 @@ export default function GuideViewer() {
                 <ChevronLeft className="w-4 h-4 mr-1" /> Previous
               </Button>
               <span className="text-xs text-muted-foreground self-center">
-                {isDivider ? "Wiring break" : `${currentRealIndex + 1} of ${realStepCount}`}
+                {isDivider ? "Wiring instructions" : `${currentRealIndex + 1} of ${realStepCount}`}
               </span>
               <Button variant="ghost" size="sm" disabled={currentStep === guideSteps.length - 1} onClick={() => setCurrentStep(currentStep + 1)}>
                 Next <ChevronRight className="w-4 h-4 ml-1" />

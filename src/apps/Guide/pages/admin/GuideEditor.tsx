@@ -237,7 +237,7 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
               <GripVertical className="w-4 h-4 text-amber-500/70" />
             </button>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-500/15 px-2 py-1 rounded">
-              Wiring Break
+              Wiring Instructions
             </span>
           </div>
           <div className="flex-1 min-w-0 space-y-2">
@@ -255,7 +255,7 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
               className="border-amber-500/30 bg-background"
             />
             <p className="text-[11px] text-muted-foreground">
-              Shown as a full-screen "Continue" prompt between bracket-only and wiring instructions. Excluded from the step count and progress bar.
+              Shown as a full-screen "Continue to Wiring" prompt between the bracket-only steps and the wiring section. Excluded from the step count and progress bar.
             </p>
           </div>
           {canRemove && (
@@ -632,7 +632,7 @@ export default function GuideEditor() {
   const addWiringBreak = () => {
     // Reject a second divider — there's only ever one bracket→wiring transition.
     if (guideSteps.some(s => s.is_divider)) {
-      toast.info("A wiring break already exists in this guide.");
+      toast.info("Wiring instructions already exist in this guide.");
       return;
     }
     setGuideSteps([...guideSteps, {
@@ -906,11 +906,11 @@ export default function GuideEditor() {
                 disabled={guideSteps.some(s => s.is_divider)}
                 className="w-full border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
               >
-                <Plus className="w-4 h-4 mr-2" /> Add Wiring Break
+                <Plus className="w-4 h-4 mr-2" /> Add Wiring Instructions
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              The wiring break marks where bracket-only instructions end and the full light-kit wiring section begins. Customers without the wiring kit can stop here.
+              Adding wiring instructions marks where bracket-only steps end and the full light-kit wiring section begins. Customers without the wiring kit can stop here.
             </p>
           </div>
         )}
