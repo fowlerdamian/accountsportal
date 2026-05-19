@@ -32,7 +32,14 @@ interface StepDraft {
   image_original_url?: string | null;
   image2_url?: string | null;
   image2_original_url?: string | null;
+  /** When true, this row is a "wiring break" — rendered differently in the viewer. */
+  is_divider?: boolean;
 }
+
+// Defaults used when an admin clicks "Add wiring break". The text remains
+// editable so different products can have different wording.
+const WIRING_BREAK_SUBTITLE    = "If Purchased Full Light Kit Continue to Next Steps";
+const WIRING_BREAK_DESCRIPTION = "Depending on the manufacturer of your wiring, the installation process outlined may not correspond with your specific setup.";
 
 // --- Upload helpers ---
 async function uploadToStorage(file: File, folder: string): Promise<string> {
@@ -216,6 +223,51 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
     zIndex: isDragging ? 10 : undefined,
   };
 
+  // Wiring-break divider — distinct amber style, no images, no step number.
+  if (step.is_divider) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-3 sm:p-4 space-y-3 group"
+      >
+        <div className="flex items-start gap-2 sm:gap-3">
+          <div className="flex items-center gap-1 sm:gap-2 pt-1">
+            <button type="button" className="cursor-grab active:cursor-grabbing touch-none" {...attributes} {...listeners}>
+              <GripVertical className="w-4 h-4 text-amber-500/70" />
+            </button>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-500/15 px-2 py-1 rounded">
+              Wiring Break
+            </span>
+          </div>
+          <div className="flex-1 min-w-0 space-y-2">
+            <Input
+              value={step.subtitle}
+              onChange={e => onUpdate(index, 'subtitle', e.target.value)}
+              placeholder={WIRING_BREAK_SUBTITLE}
+              className="font-medium border-amber-500/30 bg-background"
+            />
+            <Textarea
+              value={step.description}
+              onChange={e => onUpdate(index, 'description', e.target.value)}
+              placeholder={WIRING_BREAK_DESCRIPTION}
+              rows={3}
+              className="border-amber-500/30 bg-background"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Shown as a full-screen "Continue" prompt between bracket-only and wiring instructions. Excluded from the step count and progress bar.
+            </p>
+          </div>
+          {canRemove && (
+            <Button variant="ghost" size="icon" className="text-destructive sm:opacity-0 sm:group-hover:opacity-100 shrink-0" onClick={() => onRemove(index)}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div ref={setNodeRef} style={style} className="border rounded-lg p-3 sm:p-4 space-y-3 group bg-card">
       <div className="flex items-start gap-2 sm:gap-3">
@@ -387,6 +439,7 @@ export default function GuideEditor() {
         image_original_url: s.image_original_url,
         image2_url: s.image2_url,
         image2_original_url: s.image2_original_url,
+        is_divider: (s as any).is_divider ?? false,
       })));
     }
 
@@ -468,17 +521,18 @@ export default function GuideEditor() {
           await supabase.from("instruction_steps").delete().eq("instruction_set_id", guideId);
         }
         const stepsToInsert = guideSteps
-          .filter(s => s.subtitle || s.description)
+          .filter(s => s.subtitle || s.description || s.is_divider)
           .map((s, i) => ({
             instruction_set_id: guideId!,
             step_number: i + 1,
-            subtitle: s.subtitle || `Step ${i + 1}`,
-            description: s.description || '',
+            subtitle: s.subtitle || (s.is_divider ? WIRING_BREAK_SUBTITLE : `Step ${i + 1}`),
+            description: s.description || (s.is_divider ? WIRING_BREAK_DESCRIPTION : ''),
             order_index: i + 1,
-            image_url: s.image_url || null,
-            image_original_url: s.image_original_url || null,
-            image2_url: s.image2_url || null,
-            image2_original_url: s.image2_original_url || null,
+            image_url: s.is_divider ? null : (s.image_url || null),
+            image_original_url: s.is_divider ? null : (s.image_original_url || null),
+            image2_url: s.is_divider ? null : (s.image2_url || null),
+            image2_original_url: s.is_divider ? null : (s.image2_original_url || null),
+            is_divider: !!s.is_divider,
           }));
         if (stepsToInsert.length > 0) {
           const { error } = await supabase.from("instruction_steps").insert(stepsToInsert);
@@ -572,6 +626,21 @@ export default function GuideEditor() {
       subtitle: '',
       description: '',
       order_index: guideSteps.length + 1,
+    }]);
+  };
+
+  const addWiringBreak = () => {
+    // Reject a second divider — there's only ever one bracket→wiring transition.
+    if (guideSteps.some(s => s.is_divider)) {
+      toast.info("A wiring break already exists in this guide.");
+      return;
+    }
+    setGuideSteps([...guideSteps, {
+      step_number: guideSteps.length + 1,
+      subtitle: WIRING_BREAK_SUBTITLE,
+      description: WIRING_BREAK_DESCRIPTION,
+      order_index: guideSteps.length + 1,
+      is_divider: true,
     }]);
   };
 
@@ -827,9 +896,22 @@ export default function GuideEditor() {
                 ))}
               </SortableContext>
             </DndContext>
-            <Button variant="outline" onClick={addStep} className="w-full">
-              <Plus className="w-4 h-4 mr-2" /> Add Step
-            </Button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button variant="outline" onClick={addStep} className="w-full">
+                <Plus className="w-4 h-4 mr-2" /> Add Step
+              </Button>
+              <Button
+                variant="outline"
+                onClick={addWiringBreak}
+                disabled={guideSteps.some(s => s.is_divider)}
+                className="w-full border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+              >
+                <Plus className="w-4 h-4 mr-2" /> Add Wiring Break
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The wiring break marks where bracket-only instructions end and the full light-kit wiring section begins. Customers without the wiring kit can stop here.
+            </p>
           </div>
         )}
 

@@ -54,6 +54,8 @@ export interface InstructionStep {
   image2_url?: string;
   image2_original_url?: string;
   order_index: number;
+  /** When true, render as a "wiring break" interstitial rather than a normal step. */
+  is_divider?: boolean;
 }
 
 export interface GuideVariant {

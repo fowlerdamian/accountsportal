@@ -4,7 +4,7 @@ import { useGuideBySlug, useGuideStepsBySetId, useBrands, useGuideVehicles } fro
 import { supabase } from "@guide/integrations/supabase/client";
 import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
-import { BookOpen, Clock, Wrench, ChevronLeft, ChevronRight, Check, MessageCircle, Star, ArrowLeft, Loader2, Flag, X, Send, Car } from "lucide-react";
+import { BookOpen, Clock, Wrench, ChevronLeft, ChevronRight, Check, MessageCircle, Star, ArrowLeft, Loader2, Flag, X, Send, Car, Zap } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@guide/components/ui/sheet";
 import { Textarea } from "@guide/components/ui/textarea";
 import { Input } from "@guide/components/ui/input";
@@ -179,6 +179,16 @@ export default function GuideViewer() {
 
   const step = currentStep !== null ? guideSteps[currentStep] : null;
 
+  // Wiring-break dividers are not "real" steps — they sit between groups of
+  // bracket-only and wiring instructions. They're excluded from the count, the
+  // progress bar, and the completion total.
+  const realSteps          = guideSteps.filter(s => !(s as any).is_divider);
+  const realStepCount      = realSteps.length;
+  const realStepIndexOf    = (fullIndex: number) =>
+    guideSteps.slice(0, fullIndex + 1).filter(s => !(s as any).is_divider).length - 1;
+  const isDivider          = !!(step && (step as any).is_divider);
+  const currentRealIndex   = step && !isDivider ? realStepIndexOf(currentStep!) : -1;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -267,7 +277,7 @@ export default function GuideViewer() {
               <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">Resume — Step {Math.max(...completedSteps) + 2}</p>
-                  <p className="text-xs text-muted-foreground">{completedSteps.size} of {guideSteps.length} steps done</p>
+                  <p className="text-xs text-muted-foreground">{completedSteps.size} of {realStepCount} steps done</p>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => { setCompletedSteps(new Set()); setCurrentStep(0); }}>Start Over</Button>
@@ -279,84 +289,121 @@ export default function GuideViewer() {
             <Button className="w-full py-6 text-base font-semibold" style={{ backgroundColor: brandColour }} onClick={() => setCurrentStep(0)}>
               Start Guide →
             </Button>
-            <p className="text-center text-xs text-muted-foreground">{guideSteps.length} steps</p>
+            <p className="text-center text-xs text-muted-foreground">
+              {guideSteps.filter(s => !(s as any).is_divider).length} steps
+              {guideSteps.some(s => (s as any).is_divider) && " · includes wiring break"}
+            </p>
           </div>
         )}
 
         {/* Step View */}
         {currentStep !== null && step && !finished && (
           <div className="space-y-6 animate-fade-in">
+            {/* Progress bar — one segment per real step, dividers excluded */}
             <div className="flex gap-1">
-              {guideSteps.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentStep(i)}
-                  className="flex-1 h-2 rounded-full transition-colors"
-                  style={{
-                    backgroundColor: completedSteps.has(i) ? 'hsl(var(--success))' :
-                      i === currentStep ? brandColour : 'hsl(var(--muted))'
-                  }}
-                />
-              ))}
+              {realSteps.map((realStep, ri) => {
+                const fullIndex = guideSteps.indexOf(realStep);
+                return (
+                  <button
+                    key={realStep.id ?? ri}
+                    onClick={() => setCurrentStep(fullIndex)}
+                    className="flex-1 h-2 rounded-full transition-colors"
+                    style={{
+                      backgroundColor: completedSteps.has(fullIndex) ? 'hsl(var(--success))' :
+                        fullIndex === currentStep ? brandColour : 'hsl(var(--muted))'
+                    }}
+                  />
+                );
+              })}
             </div>
 
-            <div className={`rounded-xl border p-3 sm:p-5 space-y-4 transition-opacity ${completedSteps.has(currentStep) ? 'opacity-60' : ''}`}>
-              <div className="flex items-start gap-3">
-                <span className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0" style={{ backgroundColor: brandColour + '20', color: brandColour }}>
-                  {step.step_number}
-                </span>
-                <h2 className="font-semibold text-sm sm:text-base">{step.subtitle}</h2>
+            {isDivider ? (
+              /* Wiring-break interstitial — full-card "Continue" prompt */
+              <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/5 p-5 sm:p-7 space-y-5 text-center">
+                <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/15 flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-lg sm:text-xl font-bold">{step.subtitle}</h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                    {step.description}
+                  </p>
+                </div>
+                <Button
+                  className="w-full py-5 font-semibold"
+                  style={{ backgroundColor: brandColour }}
+                  onClick={() => {
+                    // Skip past the divider — don't count it toward completion.
+                    if (currentStep < guideSteps.length - 1) setCurrentStep(currentStep + 1);
+                    else setFinished(true);
+                  }}
+                >
+                  Continue to Wiring <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
               </div>
+            ) : (
+              <div className={`rounded-xl border p-3 sm:p-5 space-y-4 transition-opacity ${completedSteps.has(currentStep) ? 'opacity-60' : ''}`}>
+                <div className="flex items-start gap-3">
+                  <span className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0" style={{ backgroundColor: brandColour + '20', color: brandColour }}>
+                    {currentRealIndex + 1}
+                  </span>
+                  <h2 className="font-semibold text-sm sm:text-base">{step.subtitle}</h2>
+                </div>
 
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line break-words">{step.description}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line break-words">{step.description}</p>
 
-              {/* Dual image support — stack on mobile */}
-              {step.image_url && step.image2_url ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Dual image support — stack on mobile */}
+                {step.image_url && step.image2_url ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <img
+                      src={step.image_url}
+                      alt={`${step.subtitle} - 1`}
+                      className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity bg-white"
+                      onClick={() => setLightbox(step.image_url!)}
+                    />
+                    <img
+                      src={step.image2_url}
+                      alt={`${step.subtitle} - 2`}
+                      className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity bg-white"
+                      onClick={() => setLightbox(step.image2_url!)}
+                    />
+                  </div>
+                ) : step.image_url ? (
                   <img
                     src={step.image_url}
-                    alt={`${step.subtitle} - 1`}
+                    alt={step.subtitle}
                     className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity bg-white"
                     onClick={() => setLightbox(step.image_url!)}
                   />
-                  <img
-                    src={step.image2_url}
-                    alt={`${step.subtitle} - 2`}
-                    className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity bg-white"
-                    onClick={() => setLightbox(step.image2_url!)}
-                  />
-                </div>
-              ) : step.image_url ? (
-                <img
-                  src={step.image_url}
-                  alt={step.subtitle}
-                  className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity bg-white"
-                  onClick={() => setLightbox(step.image_url!)}
-                />
-              ) : (
-                <div className="w-full aspect-video rounded-lg bg-muted flex items-center justify-center">
-                  <span className="text-xs text-muted-foreground">Step image</span>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <div className="w-full aspect-video rounded-lg bg-muted flex items-center justify-center">
+                    <span className="text-xs text-muted-foreground">Step image</span>
+                  </div>
+                )}
+              </div>
+            )}
 
-            <Button
-              className="w-full py-5 font-semibold"
-              style={{ backgroundColor: completedSteps.has(currentStep) ? 'hsl(var(--success))' : brandColour }}
-              onClick={() => markDone(currentStep)}
-            >
-              {completedSteps.has(currentStep) ? (
-                <><Check className="w-4 h-4 mr-2" /> Done — Next Step</>
-              ) : (
-                <>✓ Mark as Done</>
-              )}
-            </Button>
+            {!isDivider && (
+              <Button
+                className="w-full py-5 font-semibold"
+                style={{ backgroundColor: completedSteps.has(currentStep) ? 'hsl(var(--success))' : brandColour }}
+                onClick={() => markDone(currentStep)}
+              >
+                {completedSteps.has(currentStep) ? (
+                  <><Check className="w-4 h-4 mr-2" /> Done — Next Step</>
+                ) : (
+                  <>✓ Mark as Done</>
+                )}
+              </Button>
+            )}
 
             <div className="flex justify-between">
               <Button variant="ghost" size="sm" disabled={currentStep === 0} onClick={() => setCurrentStep(currentStep - 1)}>
                 <ChevronLeft className="w-4 h-4 mr-1" /> Previous
               </Button>
-              <span className="text-xs text-muted-foreground self-center">{currentStep + 1} of {guideSteps.length}</span>
+              <span className="text-xs text-muted-foreground self-center">
+                {isDivider ? "Wiring break" : `${currentRealIndex + 1} of ${realStepCount}`}
+              </span>
               <Button variant="ghost" size="sm" disabled={currentStep === guideSteps.length - 1} onClick={() => setCurrentStep(currentStep + 1)}>
                 Next <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
