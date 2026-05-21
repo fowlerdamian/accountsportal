@@ -25,7 +25,7 @@ export default function Layout() {
   const guestEmail = !user ? localStorage.getItem('portal_guest_email') : user?.email
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000000' }}>
+    <div style={{ height: 'calc(100dvh - var(--task-dock-h, 0px))', display: 'flex', flexDirection: 'column', background: '#000000' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <header

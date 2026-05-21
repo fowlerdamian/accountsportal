@@ -31,6 +31,10 @@ import ProjectsList from './apps/ContractorHub/pages/ProjectsList'
 import ProjectView from './apps/ContractorHub/pages/ProjectView'
 import HubSettings from './apps/ContractorHub/pages/HubSettings'
 
+// Tasks (staff_tasks app)
+import TasksApp from './apps/Tasks/TasksApp'
+import { TaskDock } from './components/TaskDock'
+
 // Guide Portal
 import { AdminLayout } from './apps/Guide/admin/AdminLayout'
 import GuideDashboard from './apps/Guide/pages/admin/Dashboard'
@@ -103,6 +107,7 @@ const PATH_TITLES = [
   ['/compliance',            'Compliance'],
   ['/support',               'Customer Service'],
   ['/projects',              'Projects'],
+  ['/tasks',                 'Tasks'],
   ['/guide',                 'Guide Portal'],
   ['/dashboard/settings',    'Tile Settings'],
   ['/dashboard',             'Dashboard'],
@@ -126,6 +131,7 @@ export default function App() {
         <AuthProvider>
           <DocumentTitle />
           <GlobalChat />
+          <TaskDock />
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
@@ -157,6 +163,17 @@ export default function App() {
                       <Route path="settings" element={<HubSettings />} />
                     </Routes>
                   </GuideAuthProvider>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Tasks (staff_tasks) — has its own layout, sits outside the
+                generic Layout shell like Projects/Support/Guide. */}
+            <Route
+              path="/tasks/*"
+              element={
+                <ProtectedRoute>
+                  <TasksApp />
                 </ProtectedRoute>
               }
             />

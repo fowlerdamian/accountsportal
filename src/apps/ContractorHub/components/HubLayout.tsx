@@ -197,7 +197,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
 
   return (
     <HubContext.Provider value={ctx}>
-      <div style={{ minHeight: "100dvh", background: "#000000" }}>
+      <div style={{ minHeight: "calc(100dvh - var(--task-dock-h, 0px))", background: "#000000" }}>
 
         {/* Sidebar — sheet on mobile, fixed on desktop */}
         {isMobile ? (
@@ -208,13 +208,13 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
             </SheetContent>
           </Sheet>
         ) : (
-          <aside className="fixed left-0 top-0 bottom-0 w-56 flex flex-col z-30" style={{ background: "#000000", borderRight: "1px solid #222222" }}>
+          <aside className="fixed left-0 top-0 w-56 flex flex-col z-30" style={{ background: "#000000", borderRight: "1px solid #222222", bottom: "var(--task-dock-h, 0px)" }}>
             <SidebarContent {...sidebarProps} />
           </aside>
         )}
 
         {/* Main area */}
-        <div className={isMobile ? "" : "ml-56"} style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
+        <div className={isMobile ? "" : "ml-56"} style={{ display: "flex", flexDirection: "column", minHeight: "calc(100dvh - var(--task-dock-h, 0px))" }}>
 
           {/* Header */}
           <header

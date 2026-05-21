@@ -17,6 +17,8 @@ export default defineConfig({
       '@hub': path.resolve(__dirname, './src/apps/ContractorHub'),
       // Sales Support
       '@sales': path.resolve(__dirname, './src/apps/SalesSupport'),
+      // Tasks
+      '@tasks': path.resolve(__dirname, './src/apps/Tasks'),
     },
   },
 })

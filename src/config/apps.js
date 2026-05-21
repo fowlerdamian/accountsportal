@@ -46,6 +46,14 @@ export const APPS = [
     external:    false,
   },
   {
+    name:        'Tasks',
+    description: 'Lite cross-staff task tracker with Eisenhower scoring, dependencies, and a persistent bottom dock',
+    route:       '/tasks',
+    icon:        'ClipboardCheck',
+    status:      'live',
+    external:    false,
+  },
+  {
     name:        'Guide Portal',
     description: 'Product guides, categories, brands, and customer feedback management',
     route:       '/guide',

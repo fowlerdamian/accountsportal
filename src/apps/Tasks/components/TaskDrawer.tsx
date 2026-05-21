@@ -1,0 +1,501 @@
+import { useState, useMemo } from "react";
+import { X, Trash2, AlertTriangle, Link2, Send, Loader2 } from "lucide-react";
+import { cn } from "@guide/lib/utils";
+import { Button } from "@guide/components/ui/button";
+import { Textarea } from "@guide/components/ui/textarea";
+import { toast } from "sonner";
+import { useAuth } from "../../../context/AuthContext.jsx";
+import {
+  useStaffTask,
+  useStaffTasks,
+  useUpdateStaffTask,
+  useDeleteStaffTask,
+  useAddDependency,
+  useStaffProfiles,
+  useTaskComments,
+  useAddTaskComment,
+  type StaffTask,
+  type StaffTaskStatus,
+} from "../hooks/use-task-queries";
+import { quadrantOf, QUADRANT_LABEL } from "../lib/eisenhower";
+import { dueRingClass, formatDueChip, QUADRANT_DOT_CLASS } from "../lib/color";
+import {
+  StatusPill,
+  nextStaffTaskStatus,
+} from "@hub/components/StatusPill";
+import { QuadrantPill } from "./QuadrantPill";
+import { ScorePicker } from "./ScorePicker";
+import { UserAvatar } from "./UserAvatar";
+import { DependencyPicker, emptyDependency, type DependencyDraft } from "./DependencyPicker";
+import { notifyTaskAssignee } from "../lib/notifyTaskChat";
+
+interface TaskDrawerProps {
+  taskId: string | null;
+  open:   boolean;
+  onClose: () => void;
+}
+
+function nameFor(profiles: { id: string; full_name: string | null; email: string | null }[], id: string, selfId?: string): string {
+  if (id === selfId) return "Me";
+  const p = profiles.find((x) => x.id === id);
+  return p?.full_name ?? p?.email ?? id.slice(0, 8);
+}
+
+export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
+  const { user } = useAuth();
+  const userId   = user?.id ?? "";
+  const myName   = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Someone";
+
+  const { data: task }              = useStaffTask(taskId ?? undefined);
+  const { data: allTasks = [] }     = useStaffTasks({});
+  const { data: profiles = [] }     = useStaffProfiles();
+  const { data: comments = [] }     = useTaskComments(taskId ?? undefined);
+  const { mutateAsync: updateTask } = useUpdateStaffTask();
+  const { mutateAsync: deleteTask } = useDeleteStaffTask();
+  const { mutateAsync: addDependency } = useAddDependency();
+  const { mutateAsync: addComment } = useAddTaskComment();
+
+  const [editingDesc,   setEditingDesc]   = useState(false);
+  const [descValue,     setDescValue]     = useState("");
+  const [editingScore,  setEditingScore]  = useState(false);
+  const [scratchUrg,    setScratchUrg]    = useState<number | null>(null);
+  const [scratchImp,    setScratchImp]    = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [addDepOpen,    setAddDepOpen]    = useState(false);
+  const [depDraft,      setDepDraft]      = useState<DependencyDraft>(emptyDependency());
+  const [savingDep,     setSavingDep]     = useState(false);
+  const [commentBody,   setCommentBody]   = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
+  // Pull the live row from the list cache so status flips reflect instantly.
+  const liveTask: StaffTask | undefined = useMemo(
+    () => allTasks.find((t) => t.id === taskId) ?? task,
+    [allTasks, task, taskId],
+  );
+
+  const blocker = useMemo(
+    () => liveTask?.blocked_by_task_id ? allTasks.find((t) => t.id === liveTask.blocked_by_task_id) : null,
+    [allTasks, liveTask],
+  );
+
+  const dependencies = useMemo(
+    () => liveTask ? allTasks.filter((t) => t.parent_task_id === liveTask.id) : [],
+    [allTasks, liveTask],
+  );
+
+  if (!taskId || !liveTask) {
+    return open ? (
+      <div className="fixed inset-0 z-30 bg-black/30" onClick={onClose} />
+    ) : null;
+  }
+
+  const quad        = quadrantOf(liveTask.urgency, liveTask.importance);
+  const unscored    = liveTask.urgency == null || liveTask.importance == null;
+  const isAssignee  = liveTask.assigned_to === userId;
+  const isCreator   = liveTask.created_by  === userId;
+  const canMutate   = isAssignee || isCreator;
+
+  async function handleStatusClick() {
+    if (!liveTask || !canMutate) return;
+    if (liveTask.status === "blocked") {
+      toast.error("This task is blocked — mark its blocker done first");
+      return;
+    }
+    const next = nextStaffTaskStatus(liveTask.status);
+    try {
+      await updateTask({ id: liveTask.id, status: next });
+    } catch {
+      toast.error("Failed to update status");
+    }
+  }
+
+  async function handleDescSave() {
+    if (!liveTask) return;
+    try {
+      await updateTask({ id: liveTask.id, description: descValue });
+      setEditingDesc(false);
+      toast.success("Saved");
+    } catch {
+      toast.error("Failed to save");
+    }
+  }
+
+  function startEditDesc() {
+    setDescValue(liveTask?.description ?? "");
+    setEditingDesc(true);
+  }
+
+  function startEditScore() {
+    setScratchUrg(liveTask?.urgency ?? null);
+    setScratchImp(liveTask?.importance ?? null);
+    setEditingScore(true);
+  }
+
+  async function handleScoreSave() {
+    if (!liveTask) return;
+    try {
+      await updateTask({ id: liveTask.id, urgency: scratchUrg, importance: scratchImp });
+      setEditingScore(false);
+      toast.success("Score updated");
+    } catch {
+      toast.error("Failed to save");
+    }
+  }
+
+  async function handleDelete() {
+    if (!liveTask) return;
+    try {
+      await deleteTask(liveTask.id);
+      toast.success("Task deleted");
+      setConfirmDelete(false);
+      onClose();
+    } catch {
+      toast.error("Failed to delete");
+    }
+  }
+
+  async function handleSaveDependency() {
+    if (!liveTask) return;
+    if (!depDraft.title.trim())  { toast.error("Describe what you need"); return; }
+    if (!depDraft.assigned_to)   { toast.error("Pick who to wait on"); return; }
+    setSavingDep(true);
+    try {
+      const dep = await addDependency({
+        parent_task_id:  liveTask.id,
+        parent_due_date: liveTask.due_date,
+        title:           depDraft.title.trim(),
+        description:     depDraft.description.trim() || null,
+        assigned_to:     depDraft.assigned_to,
+        created_by:      userId,
+        due_date:        depDraft.due_date || null,
+        urgency:         depDraft.urgency ?? liveTask.urgency,
+        importance:      depDraft.importance ?? liveTask.importance,
+      });
+      notifyTaskAssignee({
+        task_id:      dep.id,
+        recipient_id: depDraft.assigned_to,
+        event:        "dependency_assigned",
+        task_title:   depDraft.title.trim(),
+        actor_name:   myName,
+      });
+      toast.success("Dependency created");
+      setAddDepOpen(false);
+      setDepDraft(emptyDependency());
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to add dependency");
+    } finally {
+      setSavingDep(false);
+    }
+  }
+
+  async function handlePostComment() {
+    if (!liveTask || !commentBody.trim() || !userId) return;
+    setPostingComment(true);
+    try {
+      await addComment({ task_id: liveTask.id, author_id: userId, body: commentBody.trim() });
+      setCommentBody("");
+    } catch {
+      toast.error("Failed to post comment");
+    } finally {
+      setPostingComment(false);
+    }
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      {open && <div className="fixed inset-0 z-30 bg-black/30" onClick={onClose} />}
+
+      <div
+        className={cn(
+          "fixed top-0 right-0 h-full z-40",
+          "w-full sm:w-[460px]",
+          "bg-background border-l shadow-2xl",
+          "flex flex-col",
+          "transition-transform duration-300 ease-out",
+          open ? "translate-x-0" : "translate-x-full",
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b shrink-0 gap-3">
+          <div className="flex-1 min-w-0">
+            <h2 className="font-semibold text-base leading-snug">{liveTask.title}</h2>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <button
+                onClick={handleStatusClick}
+                disabled={!canMutate}
+                title={canMutate ? "Click to advance status" : "Read-only"}
+              >
+                <StatusPill
+                  status={liveTask.status}
+                  staff
+                  size="sm"
+                  className={canMutate ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}
+                />
+              </button>
+              <QuadrantPill quadrant={quad} size="sm" />
+              {liveTask.due_date && (
+                <span className={cn(
+                  "text-xs px-1.5 py-0.5 rounded",
+                  dueRingClass(liveTask.due_date),
+                  new Date(liveTask.due_date) < new Date(new Date().setHours(0, 0, 0, 0)) && liveTask.status !== "done"
+                    ? "text-red-400"
+                    : "text-muted-foreground",
+                )}>
+                  Due {liveTask.due_date} <span className="opacity-70">· {formatDueChip(liveTask.due_date)}</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          {confirmDelete ? (
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-muted-foreground">Delete?</span>
+              <button onClick={handleDelete}
+                className="px-2 py-1 rounded text-xs bg-red-500 text-white hover:bg-red-600 transition-colors">Yes</button>
+              <button onClick={() => setConfirmDelete(false)}
+                className="px-2 py-1 rounded text-xs border hover:bg-muted transition-colors">No</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 shrink-0">
+              {isCreator && (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
+                  title="Delete task"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+              <button onClick={onClose}
+                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Scoring banner if unscored */}
+        {unscored && canMutate && !editingScore && (
+          <button
+            onClick={startEditScore}
+            className="mx-5 mt-3 flex items-center gap-2 rounded-md border border-amber-800/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-200 hover:bg-amber-950/50 transition-colors"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            Score this task — sets its place on the Eisenhower matrix and in the dock.
+          </button>
+        )}
+
+        {/* Blocked-by chip */}
+        {liveTask.blocked_by_task_id && blocker && (
+          <div className="mx-5 mt-3 flex items-start gap-2 rounded-md border border-amber-800/40 bg-amber-950/20 px-3 py-2">
+            <Link2 className="w-3.5 h-3.5 text-amber-300 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0 text-xs">
+              <div className="text-amber-200 font-medium truncate">Blocked by: {blocker.title}</div>
+              <div className="text-muted-foreground mt-0.5">
+                Auto-unblocks when that task is marked Done.
+              </div>
+            </div>
+            <StatusPill status={blocker.status} staff size="sm" />
+          </div>
+        )}
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+
+          {/* Assignee / Creator */}
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <UserAvatar name={nameFor(profiles, liveTask.assigned_to, userId)} size="sm" />
+              <div className="leading-tight">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Assigned</div>
+                <div className="text-foreground/90">{nameFor(profiles, liveTask.assigned_to, userId)}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <div className="text-right leading-tight">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Created by</div>
+                <div className="text-foreground/70 text-xs">{nameFor(profiles, liveTask.created_by, userId)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Description
+            </h3>
+            {editingDesc ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={descValue}
+                  onChange={(e) => setDescValue(e.target.value)}
+                  rows={5}
+                  autoFocus
+                  className="resize-none"
+                />
+                <div className="flex gap-2">
+                  <button onClick={handleDescSave}
+                    className="px-3 py-1.5 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">Save</button>
+                  <button onClick={() => setEditingDesc(false)}
+                    className="px-3 py-1.5 rounded text-xs hover:bg-muted transition-colors text-muted-foreground">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={canMutate ? startEditDesc : undefined}
+                disabled={!canMutate}
+                className={cn(
+                  "w-full text-left rounded-lg px-3 py-2.5 text-sm min-h-[60px]",
+                  "border border-dashed border-border/50",
+                  canMutate && "hover:border-border text-muted-foreground hover:text-foreground transition-colors",
+                  !canMutate && "text-muted-foreground cursor-default",
+                )}
+              >
+                {liveTask.description || (canMutate ? "Add a description…" : "—")}
+              </button>
+            )}
+          </div>
+
+          {/* Score */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Score</h3>
+              {canMutate && !editingScore && (
+                <button
+                  onClick={startEditScore}
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+            {editingScore ? (
+              <div className="space-y-2">
+                <ScorePicker
+                  urgency={scratchUrg}
+                  importance={scratchImp}
+                  onUrgency={setScratchUrg}
+                  onImportance={setScratchImp}
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleScoreSave}>Save</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingScore(false)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 text-sm">
+                <span className={cn("w-2 h-2 rounded-full", QUADRANT_DOT_CLASS[quad])} />
+                <span className="text-foreground/90">{QUADRANT_LABEL[quad]}</span>
+                <span className="font-mono tabular-nums text-muted-foreground">
+                  U {liveTask.urgency ?? "—"} × I {liveTask.importance ?? "—"}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Dependencies */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Dependencies ({dependencies.length})
+              </h3>
+              {canMutate && !addDepOpen && (
+                <button
+                  onClick={() => setAddDepOpen(true)}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 transition-colors"
+                >
+                  + Add dependency
+                </button>
+              )}
+            </div>
+
+            {dependencies.length === 0 && !addDepOpen ? (
+              <p className="text-xs text-muted-foreground/60">No dependencies</p>
+            ) : (
+              <ul className="space-y-1">
+                {dependencies.map((d) => (
+                  <li key={d.id} className="flex items-center gap-2 py-1 text-sm">
+                    <Link2 className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className={cn(
+                      "flex-1 truncate",
+                      d.status === "done" && "line-through text-muted-foreground",
+                    )}>
+                      {d.title}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {nameFor(profiles, d.assigned_to, userId)}
+                    </span>
+                    <StatusPill status={d.status} staff size="sm" />
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {addDepOpen && (
+              <div className="mt-3 space-y-3">
+                <DependencyPicker
+                  value={depDraft}
+                  onChange={setDepDraft}
+                  parentDue={liveTask.due_date}
+                  excludeUser={userId}
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleSaveDependency} disabled={savingDep}>
+                    {savingDep && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
+                    Create
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setAddDepOpen(false); setDepDraft(emptyDependency()); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Comments */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Comments ({comments.length})
+            </h3>
+            {comments.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60">No comments yet</p>
+            ) : (
+              <ul className="space-y-2.5 mb-3">
+                {comments.map((c) => (
+                  <li key={c.id} className="flex gap-2 text-sm">
+                    <UserAvatar name={nameFor(profiles, c.author_id, userId)} size="xs" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">{nameFor(profiles, c.author_id, userId)}</span>
+                        <span className="text-[10px] text-muted-foreground">{c.created_at.slice(0, 10)}</span>
+                      </div>
+                      <p className="text-foreground/90 whitespace-pre-wrap">{c.body}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="flex items-end gap-2">
+              <Textarea
+                value={commentBody}
+                onChange={(e) => setCommentBody(e.target.value)}
+                placeholder="Add a comment…"
+                rows={2}
+                className="resize-none text-sm"
+              />
+              <Button
+                size="sm"
+                onClick={handlePostComment}
+                disabled={!commentBody.trim() || postingComment}
+              >
+                {postingComment ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

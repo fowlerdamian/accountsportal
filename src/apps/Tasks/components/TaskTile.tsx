@@ -1,0 +1,91 @@
+import { cn } from "@guide/lib/utils";
+import { Link2, AlertTriangle } from "lucide-react";
+import { StatusPill } from "@hub/components/StatusPill";
+import { QuadrantPill } from "./QuadrantPill";
+import { UserAvatar } from "./UserAvatar";
+import { quadrantOf } from "../lib/eisenhower";
+import { dueRingClass, formatDueChip, QUADRANT_DOT_CLASS } from "../lib/color";
+import type { StaffTask } from "../hooks/use-task-queries";
+
+interface TaskTileProps {
+  task:          StaffTask;
+  assigneeName:  string;
+  onClick:       () => void;
+  /**
+   * Compact horizontal variant used inside the bottom dock.
+   * Full tile variant used in the dashboard tile grid.
+   */
+  variant?:      "tile" | "dock";
+  className?:    string;
+}
+
+export function TaskTile({ task, assigneeName, onClick, variant = "tile", className }: TaskTileProps) {
+  const quad     = quadrantOf(task.urgency, task.importance);
+  const ringCls  = dueRingClass(task.due_date);
+  const unscored = task.urgency == null || task.importance == null;
+
+  if (variant === "dock") {
+    return (
+      <button
+        onClick={onClick}
+        title={task.title}
+        className={cn(
+          "group flex items-center gap-2 h-9 px-3 rounded-md shrink-0 max-w-[260px]",
+          "border border-border/60 bg-[var(--bg-elevated)]",
+          "hover:border-border transition-colors text-left",
+          ringCls,
+          className,
+        )}
+      >
+        <span className={cn("w-2 h-2 rounded-full shrink-0", QUADRANT_DOT_CLASS[quad])} />
+        <span className="flex-1 min-w-0 truncate text-xs text-foreground/90">{task.title}</span>
+        {task.due_date && (
+          <span className="font-mono tabular-nums text-[10px] text-muted-foreground shrink-0">
+            {formatDueChip(task.due_date)}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "group w-full text-left rounded-lg border bg-[var(--bg-elevated)]",
+        "p-3 space-y-2 hover:border-border transition-colors",
+        ringCls,
+        className,
+      )}
+    >
+      {/* Title row */}
+      <div className="flex items-start gap-2">
+        <span className="text-sm font-medium flex-1 leading-snug line-clamp-2">{task.title}</span>
+        <QuadrantPill quadrant={quad} size="sm" />
+      </div>
+
+      {/* Description preview */}
+      {task.description && (
+        <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <UserAvatar name={assigneeName} size="xs" />
+          <span className="text-[11px] text-muted-foreground truncate">{assigneeName}</span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {unscored && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+          {task.blocked_by_task_id && task.status === "blocked" && <Link2 className="w-3 h-3 text-amber-400" />}
+          {task.due_date && (
+            <span className="font-mono tabular-nums text-[10px] text-muted-foreground">
+              {formatDueChip(task.due_date)}
+            </span>
+          )}
+          <StatusPill status={task.status} staff size="sm" />
+        </div>
+      </div>
+    </button>
+  );
+}

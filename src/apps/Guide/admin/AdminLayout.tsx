@@ -23,7 +23,7 @@ export function AdminLayout() {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="flex w-full" style={{ minHeight: "calc(100dvh - var(--task-dock-h, 0px))" }}>
         <AdminSidebar />
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 flex items-center border-b bg-card px-3 sm:px-4 shrink-0">
