@@ -93,6 +93,14 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
     [allTasks, liveTask],
   );
 
+  // Pull status_notes from the live row into the local textarea whenever
+  // the open task changes or the row reloads, but only if the user hasn't
+  // touched the field yet (preserves in-flight edits).
+  // MUST sit before the early return below — hook order must stay stable.
+  useEffect(() => {
+    if (!notesDirty) setNotesDraft(liveTask?.status_notes ?? "");
+  }, [liveTask?.id, liveTask?.status_notes, notesDirty]);
+
   if (!taskId || !liveTask) {
     return open ? (
       <div className="fixed inset-0 z-30 bg-black/30" onClick={onClose} />
@@ -104,13 +112,6 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
   const isAssignee  = liveTask.assigned_to === userId;
   const isCreator   = liveTask.created_by  === userId;
   const canMutate   = isAssignee || isCreator;
-
-  // Pull status_notes from the live row into the local textarea whenever
-  // the open task changes or the row reloads, but only if the user hasn't
-  // touched the field yet (preserves in-flight edits).
-  useEffect(() => {
-    if (!notesDirty) setNotesDraft(liveTask?.status_notes ?? "");
-  }, [liveTask?.id, liveTask?.status_notes, notesDirty]);
 
   async function setStage(next: StaffTaskStatus) {
     if (!liveTask || !canMutate || next === liveTask.status) return;
