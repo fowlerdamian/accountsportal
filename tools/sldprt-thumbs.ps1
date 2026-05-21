@@ -128,6 +128,34 @@ namespace AGA {
 
 # -- Helpers -----------------------------------------------------------------
 
+# Retry wrapper for transient Supabase 5xx + network errors. Storage has been
+# observed returning 544 / 504 sporadically; without retries those files get
+# stuck until the next scheduled run (and may fail again). 3 attempts with
+# exponential backoff (1s, 2s, 4s) — only retries on 5xx / connection errors,
+# fails fast on 4xx (auth, bad request).
+function Invoke-WithRetry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [scriptblock] $Action,
+        [string] $What = 'request',
+        [int]    $MaxAttempts = 3
+    )
+    $delay = 1
+    for ($i = 1; $i -le $MaxAttempts; $i++) {
+        try { return & $Action }
+        catch {
+            $resp   = $_.Exception.Response
+            $status = if ($resp) { [int]$resp.StatusCode } else { 0 }
+            $isLast = ($i -eq $MaxAttempts)
+            $isTransient = ($status -eq 0) -or ($status -ge 500)
+            if ($isLast -or -not $isTransient) { throw }
+            Write-Host "    retry $i/$($MaxAttempts - 1) ($What status=$status) in ${delay}s" -ForegroundColor DarkYellow
+            Start-Sleep -Seconds $delay
+            $delay *= 2
+        }
+    }
+}
+
 function Get-PendingFiles {
     $url = "$SupabaseUrl/rest/v1/files?select=id,filename,project_id,drive_file_id" +
            "&thumbnail_url=is.null" +
@@ -136,7 +164,9 @@ function Get-PendingFiles {
         apikey        = $ServiceRoleKey
         Authorization = "Bearer $ServiceRoleKey"
     }
-    Invoke-RestMethod -Uri $url -Headers $headers -Method GET
+    Invoke-WithRetry -What 'list pending' -Action {
+        Invoke-RestMethod -Uri $url -Headers $headers -Method GET
+    }
 }
 
 function Get-AllSwFiles {
@@ -148,7 +178,9 @@ function Get-AllSwFiles {
         apikey        = $ServiceRoleKey
         Authorization = "Bearer $ServiceRoleKey"
     }
-    Invoke-RestMethod -Uri $url -Headers $headers -Method GET
+    Invoke-WithRetry -What 'list all sw files' -Action {
+        Invoke-RestMethod -Uri $url -Headers $headers -Method GET
+    }
 }
 
 function Update-ProjectThumbnail {
@@ -161,7 +193,9 @@ function Update-ProjectThumbnail {
         Prefer         = 'return=minimal'
     }
     $body = @{ thumbnail_url = $ThumbUrl } | ConvertTo-Json -Compress
-    Invoke-RestMethod -Uri $url -Headers $headers -Method PATCH -Body $body | Out-Null
+    Invoke-WithRetry -What 'patch project thumb' -Action {
+        Invoke-RestMethod -Uri $url -Headers $headers -Method PATCH -Body $body | Out-Null
+    }
 }
 
 function Save-Thumbnail {
@@ -184,8 +218,10 @@ function Upload-ToStorage {
         'x-upsert'     = 'true'
         'Content-Type' = 'image/jpeg'
     }
-    Invoke-RestMethod -Uri $url -Headers $headers -Method POST `
-                      -InFile $LocalPath -ContentType 'image/jpeg' | Out-Null
+    Invoke-WithRetry -What 'storage upload' -Action {
+        Invoke-RestMethod -Uri $url -Headers $headers -Method POST `
+                          -InFile $LocalPath -ContentType 'image/jpeg' | Out-Null
+    }
     return "$SupabaseUrl/storage/v1/object/public/$Bucket/$StoragePath"
 }
 
@@ -199,7 +235,9 @@ function Update-FileRow {
         Prefer         = 'return=minimal'
     }
     $body = @{ thumbnail_url = $ThumbUrl } | ConvertTo-Json -Compress
-    Invoke-RestMethod -Uri $url -Headers $headers -Method PATCH -Body $body | Out-Null
+    Invoke-WithRetry -What 'patch file row' -Action {
+        Invoke-RestMethod -Uri $url -Headers $headers -Method PATCH -Body $body | Out-Null
+    }
 }
 
 # -- Main --------------------------------------------------------------------
