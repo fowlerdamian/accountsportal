@@ -41,6 +41,15 @@ function tomorrowISO() {
   return d.toISOString().split('T')[0]
 }
 
+// "2026-05-23" → "23 May" — matches notify-task-assignee.js
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+function formatDueDate(iso) {
+  if (!iso) return ''
+  const [, m, d] = iso.split('-').map(Number)
+  if (!m || !d || !MONTHS[m - 1]) return iso
+  return `${String(d).padStart(2, '0')} ${MONTHS[m - 1]}`
+}
+
 export default async function handler(req, res) {
   try {
     const today    = todayISO()
@@ -90,7 +99,7 @@ export default async function handler(req, res) {
 
       const lines = []
       lines.push(`📋 *Daily task digest* — ${list.length} item${list.length === 1 ? '' : 's'}`)
-      if (overdue.length)  lines.push(`\n⚠️ *Overdue (${overdue.length}):*\n${overdue.slice(0,5).map(t => `  • ${t.title} (${t.due_date})`).join('\n')}`)
+      if (overdue.length)  lines.push(`\n⚠️ *Overdue (${overdue.length}):*\n${overdue.slice(0,5).map(t => `  • ${t.title} (${formatDueDate(t.due_date)})`).join('\n')}`)
       if (dueToday.length) lines.push(`\n📅 *Due today (${dueToday.length}):*\n${dueToday.slice(0,5).map(t => `  • ${t.title}`).join('\n')}`)
       if (dueTmrw.length)  lines.push(`\n🕐 *Due tomorrow (${dueTmrw.length}):*\n${dueTmrw.slice(0,5).map(t => `  • ${t.title}`).join('\n')}`)
       lines.push(`\n→ https://app.automotivegroup.com.au/tasks`)

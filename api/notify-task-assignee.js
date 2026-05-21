@@ -64,6 +64,15 @@ function quadrantLabel(urgency, importance) {
   return 'Drop'
 }
 
+// "2026-05-23" → "23 May". Single-digit days zero-padded to keep DD MMMM.
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+function formatDueDate(iso) {
+  if (!iso) return null
+  const [, m, d] = iso.split('-').map(Number)
+  if (!m || !d || !MONTHS[m - 1]) return iso
+  return `${String(d).padStart(2, '0')} ${MONTHS[m - 1]}`
+}
+
 /**
  * Mirrors the Support hub's 3-line notification pattern
  * (see src/apps/Support/lib/notifyGoogleChat.ts):
@@ -77,7 +86,7 @@ function formatMessage({ event, taskId, taskTitle, description, dueDate, urgency
   const titleLink = `*<${taskUrl}|${safeLinkText(taskTitle)}>*`
   const summary   = truncate(description, 100) || '_no description_'
   const quad      = quadrantLabel(urgency, importance)
-  const dueChip   = dueDate ? `Due ${dueDate}` : 'No due date'
+  const dueChip   = dueDate ? `Due ${formatDueDate(dueDate)}` : 'No due date'
 
   switch (event) {
     case 'assigned':
