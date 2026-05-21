@@ -46,6 +46,7 @@ export interface StaffTaskComment {
   task_id:    string;
   author_id:  string;
   body:       string;
+  mentions:   string[];
   created_at: string;
 }
 
@@ -266,10 +267,10 @@ export function useTaskComments(taskId: string | undefined) {
 export function useAddTaskComment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { task_id: string; author_id: string; body: string }) => {
+    mutationFn: async (payload: { task_id: string; author_id: string; body: string; mentions?: string[] }) => {
       const { data, error } = await supabase
         .from("staff_task_comments")
-        .insert(payload)
+        .insert({ ...payload, mentions: payload.mentions ?? [] })
         .select()
         .single();
       if (error) throw error;

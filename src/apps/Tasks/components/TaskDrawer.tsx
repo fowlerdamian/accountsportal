@@ -32,6 +32,7 @@ import { QuadrantPill } from "./QuadrantPill";
 import { ScorePicker } from "./ScorePicker";
 import { UserAvatar } from "./UserAvatar";
 import { DependencyPicker, emptyDependency, type DependencyDraft } from "./DependencyPicker";
+import { MentionTextarea, CommentBody } from "./MentionTextarea";
 import { notifyTaskAssignee } from "../lib/notifyTaskChat";
 
 interface TaskDrawerProps {
@@ -70,6 +71,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
   const [depDraft,      setDepDraft]      = useState<DependencyDraft>(emptyDependency());
   const [savingDep,     setSavingDep]     = useState(false);
   const [commentBody,   setCommentBody]   = useState("");
+  const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [postingComment, setPostingComment] = useState(false);
   // Local working copy of status_notes so typing doesn't fire a DB update on every keystroke.
   const [notesDraft,    setNotesDraft]    = useState<string>("");
@@ -215,10 +217,34 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
 
   async function handlePostComment() {
     if (!liveTask || !commentBody.trim() || !userId) return;
+    const body     = commentBody.trim();
+    // Only keep mentions whose @-name is still present in the body (handles
+    // backspace-after-insert cases).
+    const stillMentioned = commentMentions.filter((id) => {
+      const p = profiles.find((x) => x.id === id);
+      if (!p) return false;
+      const name = p.id === userId ? "Me" : (p.full_name ?? p.email ?? "");
+      return name && body.includes(`@${name}`);
+    });
+
     setPostingComment(true);
     try {
-      await addComment({ task_id: liveTask.id, author_id: userId, body: commentBody.trim() });
+      await addComment({ task_id: liveTask.id, author_id: userId, body, mentions: stillMentioned });
+      // Ping every mentioned profile via their personal Google Chat webhook.
+      // Skip self-mentions.
+      for (const recipientId of stillMentioned) {
+        if (recipientId === userId) continue;
+        notifyTaskAssignee({
+          task_id:      liveTask.id,
+          recipient_id: recipientId,
+          event:        "comment",
+          task_title:   liveTask.title,
+          actor_name:   myName,
+          comment_body: body,
+        });
+      }
       setCommentBody("");
+      setCommentMentions([]);
     } catch {
       toast.error("Failed to post comment");
     } finally {
@@ -533,7 +559,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                         <span className="text-xs font-medium">{nameFor(profiles, c.author_id, userId)}</span>
                         <span className="text-[10px] text-muted-foreground">{c.created_at.slice(0, 10)}</span>
                       </div>
-                      <p className="text-foreground/90 whitespace-pre-wrap">{c.body}</p>
+                      <CommentBody body={c.body} />
                     </div>
                   </li>
                 ))}
@@ -541,13 +567,21 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
             )}
 
             <div className="flex items-end gap-2">
-              <Textarea
-                value={commentBody}
-                onChange={(e) => setCommentBody(e.target.value)}
-                placeholder="Add a comment…"
-                rows={2}
-                className="resize-none text-sm"
-              />
+              <div className="flex-1 min-w-0">
+                <MentionTextarea
+                  value={commentBody}
+                  onChange={setCommentBody}
+                  mentionIds={commentMentions}
+                  onMentionIds={setCommentMentions}
+                  profiles={profiles}
+                  selfId={userId}
+                  placeholder="Add a comment… type @ to mention someone"
+                  rows={2}
+                />
+                <p className="text-[10px] text-muted-foreground/70 mt-1">
+                  Type <span className="font-mono">@</span> to mention — they'll get a Google Chat ping with this comment.
+                </p>
+              </div>
               <Button
                 size="sm"
                 onClick={handlePostComment}

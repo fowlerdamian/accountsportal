@@ -16,6 +16,8 @@ interface NotifyArgs {
   // Optional extras included in the card body.
   task_title?:  string;
   actor_name?:  string;
+  /** Body of the comment, used when event === 'comment'. */
+  comment_body?: string;
 }
 
 export function notifyTaskAssignee(args: NotifyArgs): void {
