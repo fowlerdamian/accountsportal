@@ -43,22 +43,28 @@ async function postChat(webhookUrl, text) {
   }
 }
 
-function formatMessage(event, taskTitle, dueDate, actorName, parentTitle) {
-  const due = dueDate ? `  (due ${dueDate})` : ''
-  const link = 'https://app.automotivegroup.com.au/tasks'
+// Google Chat link format is <URL|TEXT>; pipe / angle brackets in TEXT break it.
+function safeLinkText(s) {
+  return String(s ?? '').replace(/[|<>]/g, ' ').trim() || 'task'
+}
+
+function formatMessage(event, taskId, taskTitle, dueDate, actorName, parentTitle) {
+  const due       = dueDate ? `  (due ${dueDate})` : ''
+  const taskUrl   = `https://app.automotivegroup.com.au/tasks?task=${encodeURIComponent(taskId)}`
+  const titleLink = `<${taskUrl}|${safeLinkText(taskTitle)}>`
+  const parentLink = parentTitle ? safeLinkText(parentTitle) : null
   switch (event) {
     case 'assigned':
-      return `📋 *${actorName ?? 'Someone'}* assigned you a task: *${taskTitle}*${due}\n→ <${link}|Open Tasks>`
+      return `📋 *${actorName ?? 'Someone'}* assigned you a task: ${titleLink}${due}`
     case 'dependency_assigned':
-      return `🔗 *${actorName ?? 'Someone'}* is waiting on you: *${taskTitle}*${due}` +
-             (parentTitle ? `\n   for: ${parentTitle}` : '') +
-             `\n→ <${link}|Open Tasks>`
+      return `🔗 *${actorName ?? 'Someone'}* is waiting on you: ${titleLink}${due}` +
+             (parentLink ? `\n   for: ${parentLink}` : '')
     case 'blocker_done':
-      return `✅ Your blocker has been resolved — *${taskTitle}* is unblocked${due}\n→ <${link}|Open Tasks>`
+      return `✅ Your blocker has been resolved — ${titleLink} is unblocked${due}`
     case 'comment':
-      return `💬 *${actorName ?? 'Someone'}* commented on *${taskTitle}*${due}\n→ <${link}|Open Tasks>`
+      return `💬 *${actorName ?? 'Someone'}* commented on ${titleLink}${due}`
     default:
-      return `📋 Update on *${taskTitle}*${due}\n→ <${link}|Open Tasks>`
+      return `📋 Update on ${titleLink}${due}`
   }
 }
 
@@ -96,6 +102,7 @@ export default async function handler(req, res) {
 
     const message = formatMessage(
       event,
+      task_id,
       task_title ?? task.title,
       task.due_date,
       actor_name,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext } from "react";
-import { NavLink, Link } from "react-router-dom";
+import { NavLink, Link, useSearchParams } from "react-router-dom";
 import { LayoutGrid, Columns3, Grid2x2, LogOut, Menu, Plus } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "../../../context/AuthContext.jsx";
@@ -128,6 +128,15 @@ export function TasksLayout({ children }: TasksLayoutProps) {
   const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const { signOut } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link: /tasks?task=<id> opens the drawer for that task. Used by
+  // Google Chat notifications so clicking the linked title lands the user
+  // straight on the right task.
+  const urlTaskId = searchParams.get("task");
+  useEffect(() => {
+    if (urlTaskId && urlTaskId !== drawerTaskId) setDrawerTaskId(urlTaskId);
+  }, [urlTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ESC closes the drawer / new-task modal
   useEffect(() => {
@@ -144,7 +153,15 @@ export function TasksLayout({ children }: TasksLayoutProps) {
   const openNewTask  = useCallback(() => setNewTaskOpen(true), []);
   const closeNewTask = useCallback(() => setNewTaskOpen(false), []);
   const openDrawer   = useCallback((id: string) => setDrawerTaskId(id), []);
-  const closeDrawer  = useCallback(() => setDrawerTaskId(null), []);
+  const closeDrawer  = useCallback(() => {
+    setDrawerTaskId(null);
+    // Drop the ?task= param so back-button + reload don't reopen the drawer.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("task");
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const ctx: TasksContextValue = { openNewTask, closeNewTask, openDrawer, closeDrawer, drawerTaskId };
 
