@@ -112,14 +112,50 @@ function formatMessage({ event, taskId, taskTitle, description, dueDate, urgency
   }
 }
 
+// Verify the request bearer token against Supabase's /auth/v1/user. Returns
+// the authenticated user id, or null if the token is missing / invalid.
+// The endpoint is otherwise public — without this anyone with the URL could
+// fan out fake Chat pings.
+async function getAuthUserId(authHeader) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+  const token = authHeader.slice(7).trim()
+  if (!token) return null
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
+  const anon = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
+  if (!url || !anon) return null
+  try {
+    const r = await fetch(`${url}/auth/v1/user`, {
+      headers: { apikey: anon, Authorization: `Bearer ${token}` },
+    })
+    if (!r.ok) return null
+    const u = await r.json()
+    return u?.id ?? null
+  } catch {
+    return null
+  }
+}
+
+const VALID_EVENTS = new Set(['assigned', 'dependency_assigned', 'blocker_done', 'comment'])
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  // Caller must be an authenticated portal user.
+  const callerId = await getAuthUserId(req.headers.authorization)
+  if (!callerId) return res.status(401).json({ error: 'unauthorized' })
+
   const { task_id, recipient_id, event, task_title, actor_name, comment_body } = req.body ?? {}
   if (!task_id || !recipient_id || !event) {
     return res.status(400).json({ error: 'task_id, recipient_id, and event are required' })
+  }
+  if (!UUID_RE.test(task_id) || !UUID_RE.test(recipient_id)) {
+    return res.status(400).json({ error: 'task_id and recipient_id must be uuids' })
+  }
+  if (!VALID_EVENTS.has(event)) {
+    return res.status(400).json({ error: 'invalid event' })
   }
 
   try {

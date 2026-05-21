@@ -337,6 +337,11 @@ export function useAssignmentNotifications(userId: string | undefined, onToast: 
         (payload) => {
           const task = payload.new as StaffTask;
           if (!task || seenIds.current.has(task.id)) return;
+          // Belt + suspenders — the postgres_changes filter SHOULD already
+          // limit us to rows where assigned_to=userId, but if the filter
+          // is silently bypassed (transport-level or client-version bug)
+          // we'd start toasting on every task in the system. Re-check.
+          if (task.assigned_to !== userId) return;
           // Don't toast self-assignment from this session.
           if (task.created_by === userId) return;
           // Hard cap so the set doesn't grow unbounded over long sessions.

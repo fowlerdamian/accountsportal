@@ -856,8 +856,11 @@ function ProjectViewContent() {
                     value={newTaskDue || null}
                     onChange={(v) => setNewTaskDue(v ?? "")}
                     inputLike={false}
-                    placeholder="Due"
-                    className="bg-transparent border-transparent text-muted-foreground"
+                    placeholder="Due date"
+                    // Soft-styled so it sits in the row quietly but is
+                    // unmistakably interactive: subtle border + dashed
+                    // hint, brightens on hover.
+                    className="border-dashed border-border/60 text-muted-foreground hover:text-foreground hover:border-border"
                   />
                 </td>
                 <td className="p-3 text-right">

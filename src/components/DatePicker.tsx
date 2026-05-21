@@ -78,51 +78,64 @@ export function DatePicker({
   };
 
   return (
-    <Popover open={open} onOpenChange={(o) => !disabled && setOpen(o)}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          id={id}
-          disabled={disabled}
-          aria-haspopup="dialog"
-          className={cn(
-            // Match @guide/components/ui/input — same border, height, radius, focus ring
-            "flex w-full items-center justify-between rounded-md border border-input bg-background text-left",
-            inputLike ? "h-10 px-3 py-2 text-sm" : "h-8 px-2.5 py-1 text-xs",
-            "ring-offset-background placeholder:text-muted-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-            !value && "text-muted-foreground",
-            className,
-          )}
-        >
-          <span className="flex items-center gap-2 truncate">
-            <CalendarIcon className="h-4 w-4 opacity-60 shrink-0" />
-            <span className="truncate">{value ? formatLabel(value) : placeholder}</span>
-          </span>
-          {clearable && value && !disabled && (
-            <span
-              role="button"
-              tabIndex={-1}
-              onClick={(e) => { e.stopPropagation(); onChange(null); }}
-              className="ml-2 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Clear date"
-            >
-              <X className="h-3.5 w-3.5" />
+    // Wrapper so the clear (×) button can be a sibling of the trigger,
+    // not nested inside it (button-inside-button is invalid HTML and
+    // breaks keyboard tab order).
+    <div className={cn("relative w-full", inputLike ? "h-10" : "h-8")}>
+      <Popover open={open} onOpenChange={(o) => !disabled && setOpen(o)}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            id={id}
+            disabled={disabled}
+            aria-haspopup="listbox"
+            className={cn(
+              // Match @guide/components/ui/input — same border, height, radius, focus ring
+              "flex w-full items-center justify-between rounded-md border border-input bg-background text-left",
+              inputLike ? "h-10 px-3 py-2 text-sm" : "h-8 px-2.5 py-1 text-xs",
+              // Reserve room for the clear button on the right when one will render.
+              clearable && value && !disabled && (inputLike ? "pr-9" : "pr-7"),
+              "ring-offset-background placeholder:text-muted-foreground",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+              !value && "text-muted-foreground",
+              className,
+            )}
+          >
+            <span className="flex items-center gap-2 truncate">
+              <CalendarIcon className="h-4 w-4 opacity-60 shrink-0" />
+              <span className="truncate">{value ? formatLabel(value) : placeholder}</span>
             </span>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={selected}
-          onSelect={(d) => { onChange(toIso(d)); setOpen(false); }}
-          disabled={dayDisabled}
-          initialFocus
-          defaultMonth={selected ?? new Date()}
-        />
-      </PopoverContent>
-    </Popover>
+          </button>
+        </PopoverTrigger>
+        {clearable && value && !disabled && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            onMouseDown={(e) => e.stopPropagation()}
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 p-0.5 rounded",
+              "text-muted-foreground hover:text-foreground hover:bg-muted",
+              "transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+              inputLike ? "right-2.5" : "right-1.5",
+            )}
+            aria-label="Clear date"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={selected}
+            onSelect={(d) => { onChange(toIso(d)); setOpen(false); }}
+            disabled={dayDisabled}
+            initialFocus
+            defaultMonth={selected ?? new Date()}
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
