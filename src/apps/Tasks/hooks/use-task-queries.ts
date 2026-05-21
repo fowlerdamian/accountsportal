@@ -26,6 +26,7 @@ export interface StaffTask {
   parent_task_id:     string | null;
   completed_at:       string | null;
   ai_summary:         string | null;
+  status_notes:       string | null;
   created_at:         string;
   updated_at:         string;
 }

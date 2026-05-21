@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { X, Trash2, AlertTriangle, Link2, Send, Loader2 } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { Button } from "@guide/components/ui/button";
@@ -19,10 +19,15 @@ import {
 } from "../hooks/use-task-queries";
 import { quadrantOf, QUADRANT_LABEL } from "../lib/eisenhower";
 import { dueRingClass, formatDueChip, QUADRANT_DOT_CLASS } from "../lib/color";
-import {
-  StatusPill,
-  nextStaffTaskStatus,
-} from "@hub/components/StatusPill";
+import { StatusPill } from "@hub/components/StatusPill";
+
+// All four stages a task can be in — used by the stage selector.
+const STAGES: { key: StaffTaskStatus; label: string }[] = [
+  { key: "not_started", label: "Not Started" },
+  { key: "in_progress", label: "In Progress" },
+  { key: "blocked",     label: "Blocked"     },
+  { key: "done",        label: "Done"        },
+];
 import { QuadrantPill } from "./QuadrantPill";
 import { ScorePicker } from "./ScorePicker";
 import { UserAvatar } from "./UserAvatar";
@@ -66,6 +71,9 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
   const [savingDep,     setSavingDep]     = useState(false);
   const [commentBody,   setCommentBody]   = useState("");
   const [postingComment, setPostingComment] = useState(false);
+  // Local working copy of status_notes so typing doesn't fire a DB update on every keystroke.
+  const [notesDraft,    setNotesDraft]    = useState<string>("");
+  const [notesDirty,    setNotesDirty]    = useState(false);
 
   // Pull the live row from the list cache so status flips reflect instantly.
   const liveTask: StaffTask | undefined = useMemo(
@@ -95,17 +103,34 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
   const isCreator   = liveTask.created_by  === userId;
   const canMutate   = isAssignee || isCreator;
 
-  async function handleStatusClick() {
-    if (!liveTask || !canMutate) return;
-    if (liveTask.status === "blocked") {
-      toast.error("This task is blocked — mark its blocker done first");
-      return;
-    }
-    const next = nextStaffTaskStatus(liveTask.status);
+  // Pull status_notes from the live row into the local textarea whenever
+  // the open task changes or the row reloads, but only if the user hasn't
+  // touched the field yet (preserves in-flight edits).
+  useEffect(() => {
+    if (!notesDirty) setNotesDraft(liveTask?.status_notes ?? "");
+  }, [liveTask?.id, liveTask?.status_notes, notesDirty]);
+
+  async function setStage(next: StaffTaskStatus) {
+    if (!liveTask || !canMutate || next === liveTask.status) return;
     try {
       await updateTask({ id: liveTask.id, status: next });
     } catch {
-      toast.error("Failed to update status");
+      toast.error("Failed to update stage");
+    }
+  }
+
+  async function saveStatusNotes() {
+    if (!liveTask || !canMutate || !notesDirty) return;
+    const next = notesDraft.trim() || null;
+    if (next === (liveTask.status_notes ?? null)) {
+      setNotesDirty(false);
+      return;
+    }
+    try {
+      await updateTask({ id: liveTask.id, status_notes: next });
+      setNotesDirty(false);
+    } catch {
+      toast.error("Failed to save stage notes");
     }
   }
 
@@ -221,18 +246,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-base leading-snug">{liveTask.title}</h2>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <button
-                onClick={handleStatusClick}
-                disabled={!canMutate}
-                title={canMutate ? "Click to advance status" : "Read-only"}
-              >
-                <StatusPill
-                  status={liveTask.status}
-                  staff
-                  size="sm"
-                  className={canMutate ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}
-                />
-              </button>
+              <StatusPill status={liveTask.status} staff size="sm" />
               <QuadrantPill quadrant={quad} size="sm" />
               {liveTask.due_date && (
                 <span className={cn(
@@ -317,6 +331,55 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Created by</div>
                 <div className="text-foreground/70 text-xs">{nameFor(profiles, liveTask.created_by, userId)}</div>
               </div>
+            </div>
+          </div>
+
+          {/* Stage — four-button selector + notes-on-current-stage textarea */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Stage
+            </h3>
+            <div className="grid grid-cols-4 gap-1">
+              {STAGES.map((s) => {
+                const active = s.key === liveTask.status;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setStage(s.key)}
+                    disabled={!canMutate}
+                    className={cn(
+                      "px-2 py-1.5 rounded text-[11px] font-medium border transition-colors",
+                      active
+                        ? s.key === "not_started" ? "bg-muted text-foreground border-border"
+                        : s.key === "in_progress" ? "bg-blue-900/40 text-blue-300 border-blue-800/40"
+                        : s.key === "blocked"     ? "bg-amber-900/40 text-amber-300 border-amber-800/40"
+                        :                            "bg-green-900/40 text-green-300 border-green-800/40"
+                        : "text-muted-foreground border-transparent hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50",
+                    )}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3">
+              <label className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-medium">
+                Notes on current stage
+              </label>
+              <Textarea
+                value={notesDraft}
+                onChange={(e) => { setNotesDraft(e.target.value); setNotesDirty(true); }}
+                onBlur={saveStatusNotes}
+                placeholder={canMutate ? "e.g. waiting on supplier reply, sign-off pending, etc." : "—"}
+                rows={2}
+                disabled={!canMutate}
+                className="resize-none text-sm mt-1"
+              />
+              {notesDirty && (
+                <p className="text-[10px] text-muted-foreground/70 mt-1">Unsaved — saves on blur</p>
+              )}
             </div>
           </div>
 
