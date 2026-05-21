@@ -1,9 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
-import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/useAuth';
 import { useTileSettings } from '@portal/hooks/useTileSettings';
@@ -12,15 +10,13 @@ import { useTileSettings } from '@portal/hooks/useTileSettings';
 const WAREHOUSE_ONLY_ALLOWED = ['/support/warehouse', '/support/warehouse/profile'];
 
 export function AppLayout() {
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const showShortcuts = useCallback(() => setShortcutsOpen(true), []);
   const isMobile = useIsMobile();
   const { user, isLoading } = useAuth();
   const { settings: tileSettings } = useTileSettings(user?.id);
   const warehouseOnly = tileSettings?.['/support/dashboard-only'] === true;
 
-  useKeyboardShortcuts(() => {}, showShortcuts, { isWarehouseOnly: warehouseOnly });
+  // Keyboard shortcuts are now handled portal-wide by GlobalShortcuts in App.jsx.
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -51,7 +47,6 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
-      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>
   );
 }
