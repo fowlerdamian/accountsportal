@@ -6,6 +6,7 @@ import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
 import { Textarea } from "@guide/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
+import { DatePicker } from "@portal/components/DatePicker";
 import { toast } from "sonner";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import {
@@ -170,11 +171,7 @@ export function NewTaskModal({ open, onClose }: NewTaskModalProps) {
 
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Due date</Label>
-              <Input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
+              <DatePicker value={dueDate || null} onChange={(v) => setDueDate(v ?? "")} />
             </div>
           </div>
 

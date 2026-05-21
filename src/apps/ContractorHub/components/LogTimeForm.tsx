@@ -3,6 +3,7 @@ import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
+import { DatePicker } from "@portal/components/DatePicker";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@guide/contexts/AuthContext";
@@ -100,10 +101,10 @@ export function LogTimeForm({ projectId, taskId, contractorId: presetId, onClose
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Date</Label>
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
+          <DatePicker
+            value={date || null}
+            onChange={(v) => setDate(v ?? today)}
+            clearable={false}
             className="h-8 text-sm"
           />
         </div>

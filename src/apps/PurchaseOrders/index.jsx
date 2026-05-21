@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { ArrowUpDown, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@portal/lib/supabase'
+import { DatePicker } from '@portal/components/DatePicker'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -92,22 +93,15 @@ function EtaCell({ poId, eta, onSaved }) {
 
   if (editing) {
     return (
-      <input
-        ref={inputRef}
-        type="date"
-        value={value}
-        onChange={e => { setValue(e.target.value); save(e.target.value) }}
-        onBlur={e => save(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Escape') setEditing(false) }}
-        style={{
-          background: '#1a1a1a', border: '1px solid rgba(243,202,15,0.5)',
-          borderRadius: '4px', color: '#ffffff', fontSize: '13px',
-          padding: '6px 8px', outline: 'none',
-          fontFamily: '"JetBrains Mono", monospace',
-          opacity: saving ? 0.5 : 1, boxSizing: 'border-box',
-          colorScheme: 'dark',
-        }}
-      />
+      <div style={{ width: '160px', opacity: saving ? 0.5 : 1 }}>
+        <DatePicker
+          value={value || null}
+          autoOpen
+          clearable={false}
+          inputLike={false}
+          onChange={(v) => { setValue(v ?? ''); save(v ?? '') }}
+        />
+      </div>
     )
   }
 

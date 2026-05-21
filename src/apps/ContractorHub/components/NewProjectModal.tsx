@@ -6,6 +6,7 @@ import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
 import { Textarea } from "@guide/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
+import { DatePicker } from "@portal/components/DatePicker";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -124,11 +125,11 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Start Date</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <DatePicker value={startDate || null} onChange={(v) => setStartDate(v ?? "")} />
                 </div>
                 <div className="space-y-1.5 col-span-2">
                   <Label>Due Date</Label>
-                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                  <DatePicker value={dueDate || null} onChange={(v) => setDueDate(v ?? "")} />
                 </div>
               </>
             )}

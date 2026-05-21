@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { supabase } from '@portal/lib/supabase'
+import { DatePicker } from '@portal/components/DatePicker'
 import LogisticsNav from './LogisticsNav.jsx'
 import { aud, fmtDate, invoiceTotal, invoiceOvercharge } from '../utils/helpers.js'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
@@ -385,11 +386,11 @@ export default function InvoiceList() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div>
                       <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>Invoice date</label>
-                      <input type="date" value={uploadInvDate} onChange={e => setUploadInvDate(e.target.value)} style={inputStyle} />
+                      <DatePicker value={uploadInvDate || null} onChange={v => setUploadInvDate(v ?? '')} />
                     </div>
                     <div>
                       <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>Due date <span style={{ color: '#444' }}>(optional)</span></label>
-                      <input type="date" value={uploadDueDate} onChange={e => setUploadDueDate(e.target.value)} style={inputStyle} />
+                      <DatePicker value={uploadDueDate || null} onChange={v => setUploadDueDate(v ?? '')} />
                     </div>
                   </div>
 

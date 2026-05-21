@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@guide/compone
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
+import { DatePicker } from "@portal/components/DatePicker";
 import { toast } from "sonner";
 import {
   useProjects,
@@ -141,10 +142,9 @@ export function NewTaskModal({ open, onClose, projectId }: NewTaskModalProps) {
           {/* Due date */}
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Due date</label>
-            <Input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+            <DatePicker
+              value={dueDate || null}
+              onChange={(v) => setDueDate(v ?? "")}
             />
           </div>
         </div>

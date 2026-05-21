@@ -10,6 +10,7 @@ import { PriorityScorecardModal } from "@hub/components/PriorityScorecardModal";
 import { Button } from "@guide/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { Textarea } from "@guide/components/ui/textarea";
+import { DatePicker } from "@portal/components/DatePicker";
 import { toast } from "sonner";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useAuth } from "@guide/contexts/AuthContext";
@@ -851,11 +852,12 @@ function ProjectViewContent() {
                   </Select>
                 </td>
                 <td className="p-3">
-                  <input
-                    type="date"
-                    value={newTaskDue}
-                    onChange={e => setNewTaskDue(e.target.value)}
-                    className="bg-transparent text-xs outline-none text-muted-foreground"
+                  <DatePicker
+                    value={newTaskDue || null}
+                    onChange={(v) => setNewTaskDue(v ?? "")}
+                    inputLike={false}
+                    placeholder="Due"
+                    className="bg-transparent border-transparent text-muted-foreground"
                   />
                 </td>
                 <td className="p-3 text-right">

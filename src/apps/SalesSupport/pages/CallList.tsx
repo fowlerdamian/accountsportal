@@ -6,6 +6,7 @@ import { useCallList } from "../hooks/useSalesQueries";
 import { type Channel } from "../lib/constants";
 import { LeadScoreBadge } from "../components/LeadScoreBadge";
 import { supabase } from "@portal/lib/supabase";
+import { DatePicker } from "@portal/components/DatePicker";
 import { useQueryClient } from "@tanstack/react-query";
 
 const CALL_REASON_COLOR = (reason: string) => {
@@ -62,12 +63,14 @@ export default function CallList() {
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
         <h2 className="text-lg font-semibold">Call List</h2>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none"
-        />
+        <div className="w-[180px]">
+          <DatePicker
+            value={date || null}
+            onChange={(v) => setDate(v ?? "")}
+            clearable={false}
+            inputLike={false}
+          />
+        </div>
         <div className="ml-auto flex gap-2">
           <button onClick={() => refetch()} className="p-1.5 rounded hover:bg-muted/50 transition-colors">
             <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />

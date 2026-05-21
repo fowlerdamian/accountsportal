@@ -2,6 +2,7 @@ import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
 import { Textarea } from "@guide/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
+import { DatePicker } from "@portal/components/DatePicker";
 import { useStaffProfiles, type StaffProfile } from "../hooks/use-task-queries";
 
 export interface DependencyDraft {
@@ -65,10 +66,9 @@ export function DependencyPicker({ value, onChange, parentDue, excludeUser }: De
 
         <div className="space-y-1.5">
           <Label className="text-xs">They need it by</Label>
-          <Input
-            type="date"
-            value={value.due_date || defaultDepDue(parentDue)}
-            onChange={(e) => set({ due_date: e.target.value })}
+          <DatePicker
+            value={value.due_date || defaultDepDue(parentDue) || null}
+            onChange={(v) => set({ due_date: v ?? "" })}
             max={parentDue ?? undefined}
           />
         </div>
