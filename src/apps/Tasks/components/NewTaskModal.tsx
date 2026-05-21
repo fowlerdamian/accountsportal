@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, Link2, Link2Off } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@guide/components/ui/dialog";
 import { Button } from "@guide/components/ui/button";
@@ -41,6 +41,14 @@ export function NewTaskModal({ open, onClose }: NewTaskModalProps) {
   const { data: profiles = [] }            = useStaffProfiles();
   const { mutateAsync: createStaffTask }   = useCreateStaffTask();
   const { mutateAsync: addDependency }     = useAddDependency();
+
+  // Default the assignee to the signed-in user whenever the modal opens.
+  // `useState(userId)` only seeds on first mount; if user wasn't ready then
+  // (or the user picked someone else last time the modal was open), this
+  // syncs the picker back to "me" on each fresh open.
+  useEffect(() => {
+    if (open && userId) setAssignedTo(userId);
+  }, [open, userId]);
 
   function reset() {
     setTitle(""); setDescription(""); setAssignedTo(userId); setDueDate("");
