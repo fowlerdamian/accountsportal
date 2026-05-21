@@ -186,11 +186,17 @@ export function NewTaskModal({ open, onClose }: NewTaskModalProps) {
             />
           </div>
 
-          {/* Dependency toggle */}
+          {/* Dependency toggle — clearing state on toggle-off avoids zombie
+              values reappearing if the user toggles back on. */}
           <div>
             <button
               type="button"
-              onClick={() => setWithDep((v) => !v)}
+              onClick={() => {
+                setWithDep((v) => {
+                  if (v) setDep(emptyDependency());
+                  return !v;
+                });
+              }}
               className="flex items-center gap-2 text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors"
             >
               {withDep ? <Link2Off className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}

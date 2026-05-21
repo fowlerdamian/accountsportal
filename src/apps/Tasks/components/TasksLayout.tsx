@@ -6,7 +6,6 @@ import { useAuth } from "../../../context/AuthContext.jsx";
 import { useIsMobile } from "../../../hooks/useIsMobile.js";
 import { Sheet, SheetContent, SheetTitle } from "@guide/ui/sheet";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
-import { NewTaskModal } from "./NewTaskModal";
 import { TaskDrawer } from "./TaskDrawer";
 
 // Mirrors HubLayout (src/apps/ContractorHub/components/HubLayout.tsx).
@@ -14,7 +13,6 @@ import { TaskDrawer } from "./TaskDrawer";
 
 interface TasksContextValue {
   openNewTask:    () => void;
-  closeNewTask:   () => void;
   openDrawer:     (taskId: string) => void;
   closeDrawer:    () => void;
   drawerTaskId:   string | null;
@@ -22,7 +20,6 @@ interface TasksContextValue {
 
 const TasksContext = createContext<TasksContextValue>({
   openNewTask:  () => {},
-  closeNewTask: () => {},
   openDrawer:   () => {},
   closeDrawer:  () => {},
   drawerTaskId: null,
@@ -124,7 +121,6 @@ interface TasksLayoutProps {
 }
 
 export function TasksLayout({ children }: TasksLayoutProps) {
-  const [newTaskOpen,  setNewTaskOpen]  = useState(false);
   const [sidebarOpen,  setSidebarOpen]  = useState(false);
   const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
   const isMobile = useIsMobile();
@@ -139,20 +135,20 @@ export function TasksLayout({ children }: TasksLayoutProps) {
     if (urlTaskId && urlTaskId !== drawerTaskId) setDrawerTaskId(urlTaskId);
   }, [urlTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ESC closes the drawer / new-task modal
+  // ESC closes the drawer. The new-task modal is global (mounted by
+  // GlobalShortcuts) so its Escape handling lives there.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (drawerTaskId) setDrawerTaskId(null);
-        else if (newTaskOpen) setNewTaskOpen(false);
-      }
+      if (e.key === "Escape" && drawerTaskId) setDrawerTaskId(null);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [drawerTaskId, newTaskOpen]);
+  }, [drawerTaskId]);
 
-  const openNewTask  = useCallback(() => setNewTaskOpen(true), []);
-  const closeNewTask = useCallback(() => setNewTaskOpen(false), []);
+  // Fire the global event so we don't end up with two NewTaskModal
+  // instances mounted (one here, one in GlobalShortcuts) — the audit
+  // flagged this as a potential double-stack on /tasks.
+  const openNewTask  = useCallback(() => window.dispatchEvent(new CustomEvent("portal:new-task")), []);
   const openDrawer   = useCallback((id: string) => setDrawerTaskId(id), []);
   const closeDrawer  = useCallback(() => {
     setDrawerTaskId(null);
@@ -164,7 +160,7 @@ export function TasksLayout({ children }: TasksLayoutProps) {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const ctx: TasksContextValue = { openNewTask, closeNewTask, openDrawer, closeDrawer, drawerTaskId };
+  const ctx: TasksContextValue = { openNewTask, openDrawer, closeDrawer, drawerTaskId };
 
   const sidebarProps = {
     onNavClick: isMobile ? () => setSidebarOpen(false) : undefined,
@@ -237,7 +233,6 @@ export function TasksLayout({ children }: TasksLayoutProps) {
           </main>
         </div>
 
-        <NewTaskModal open={newTaskOpen} onClose={closeNewTask} />
         <TaskDrawer taskId={drawerTaskId} open={drawerTaskId !== null} onClose={closeDrawer} />
       </div>
     </TasksContext.Provider>

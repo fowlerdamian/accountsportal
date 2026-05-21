@@ -255,8 +255,9 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
 
   return (
     <>
-      {/* Backdrop */}
-      {open && <div className="fixed inset-0 z-30 bg-black/30" onClick={onClose} />}
+      {/* Backdrop — also flushes any dirty status_notes so the user
+          doesn't lose unsaved text by clicking away. */}
+      {open && <div className="fixed inset-0 z-30 bg-black/30" onClick={() => { saveStatusNotes(); onClose(); }} />}
 
       <div
         className={cn(
@@ -308,7 +309,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                   <Trash2 className="w-4 h-4" />
                 </button>
               )}
-              <button onClick={onClose}
+              <button onClick={() => { saveStatusNotes(); onClose(); }}
                 className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>

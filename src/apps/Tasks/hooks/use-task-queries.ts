@@ -228,7 +228,9 @@ export function useAddDependency() {
         .single();
       if (depErr) throw depErr;
 
-      // 2. Point the parent at it + flip to blocked
+      // 2. Point the parent at it + flip to blocked. If this fails we
+      //    roll back the dependency insert so the parent isn't left with
+      //    an orphan child that doesn't actually block anything.
       const { error: parErr } = await supabase
         .from("staff_tasks")
         .update({
@@ -236,7 +238,10 @@ export function useAddDependency() {
           status:             "blocked",
         })
         .eq("id", args.parent_task_id);
-      if (parErr) throw parErr;
+      if (parErr) {
+        await supabase.from("staff_tasks").delete().eq("id", (dep as StaffTask).id);
+        throw parErr;
+      }
 
       return dep as StaffTask;
     },
@@ -334,6 +339,8 @@ export function useAssignmentNotifications(userId: string | undefined, onToast: 
           if (!task || seenIds.current.has(task.id)) return;
           // Don't toast self-assignment from this session.
           if (task.created_by === userId) return;
+          // Hard cap so the set doesn't grow unbounded over long sessions.
+          if (seenIds.current.size > 1000) seenIds.current.clear();
           seenIds.current.add(task.id);
           onToast(task);
         },

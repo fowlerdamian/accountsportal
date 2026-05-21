@@ -48,6 +48,23 @@ export function MentionTextarea({
   const [mention,        setMention]        = useState<MentionState | null>(null);
   const [selectionIndex, setSelectionIndex] = useState(0);
 
+  // Keep mentionIds in sync with whatever is actually in the body — handles
+  // pasted "@Name" patterns the user never typed via the picker, and drops
+  // ids whose name was deleted. Recognises any profile whose name (or
+  // "Me" for self) appears as "@<name>" anywhere in the body.
+  useEffect(() => {
+    const ids: string[] = [];
+    for (const p of profiles) {
+      const name = nameOf(p, selfId);
+      if (!name) continue;
+      if (value.includes(`@${name}`)) ids.push(p.id);
+    }
+    const next = Array.from(new Set(ids));
+    const same = next.length === mentionIds.length &&
+                 next.every((id) => mentionIds.includes(id));
+    if (!same) onMentionIds(next);
+  }, [value, profiles, selfId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Whittle suggestions down based on what's been typed after the "@".
   const suggestions = useMemo(() => {
     const eligible = profiles.filter((p) => p.id !== selfId);
