@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext } from "react";
 import { NavLink, Link, useSearchParams } from "react-router-dom";
-import { LayoutGrid, Columns3, Grid2x2, LogOut, Menu, Plus } from "lucide-react";
+import { LayoutGrid, LogOut, Menu, Plus } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useIsMobile } from "../../../hooks/useIsMobile.js";
@@ -32,10 +32,11 @@ export function useTasksUi() {
   return useContext(TasksContext);
 }
 
+// Kanban + Matrix are view modes inside the Dashboard now — no separate nav
+// items. Keeping a single entry preserves the sidebar look-and-feel of the
+// other apps (HubLayout has Projects/Contractors/Settings as its three).
 const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, path: "/tasks",         end: true  },
-  { label: "Kanban",    icon: Columns3,   path: "/tasks/kanban",  end: false },
-  { label: "Matrix",    icon: Grid2x2,    path: "/tasks/matrix",  end: false },
+  { label: "Dashboard", icon: LayoutGrid, path: "/tasks", end: true },
 ];
 
 function SidebarContent({

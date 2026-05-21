@@ -25,8 +25,19 @@ export interface StaffTask {
   blocked_by_task_id: string | null;
   parent_task_id:     string | null;
   completed_at:       string | null;
+  ai_summary:         string | null;
   created_at:         string;
   updated_at:         string;
+}
+
+/**
+ * Fire-and-forget AI-summary generation. Writes back to staff_tasks.ai_summary;
+ * the realtime channel subscription will propagate the result to clients.
+ */
+function regenerateSummary(taskId: string): void {
+  supabase.functions
+    .invoke("generate-task-summary", { body: { task_id: taskId } })
+    .catch((err) => console.warn("[generate-task-summary]", err));
 }
 
 export interface StaffTaskComment {
@@ -129,8 +140,10 @@ export function useCreateStaffTask() {
       if (error) throw error;
       return data as StaffTask;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["staff_tasks"] });
+      // Fire-and-forget AI summary so the dock pill has a clean short label.
+      regenerateSummary(data.id);
     },
   });
 }
@@ -146,11 +159,16 @@ export function useUpdateStaffTask() {
         .select()
         .single();
       if (error) throw error;
-      return data as StaffTask;
+      return { task: data as StaffTask, changed: updates };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ task, changed }) => {
       qc.invalidateQueries({ queryKey: ["staff_tasks"] });
-      qc.invalidateQueries({ queryKey: ["staff_task", data.id] });
+      qc.invalidateQueries({ queryKey: ["staff_task", task.id] });
+      // Regenerate the dock-pill summary only when title or description
+      // actually changed — avoids burning tokens on status/assignee edits.
+      if ("title" in changed || "description" in changed) {
+        regenerateSummary(task.id);
+      }
     },
   });
 }

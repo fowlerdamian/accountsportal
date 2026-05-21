@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search, Loader2, Plus } from "lucide-react";
+import { Search, Loader2, Plus, LayoutGrid, Columns3, Grid2x2 } from "lucide-react";
 import { Input } from "@guide/components/ui/input";
 import { Button } from "@guide/components/ui/button";
 import { cn } from "@guide/lib/utils";
@@ -14,7 +14,11 @@ import {
 } from "../hooks/use-task-queries";
 import { quadrantOf, scoreSort, type Quadrant, QUADRANT_LABEL } from "../lib/eisenhower";
 import { TaskTile } from "../components/TaskTile";
+import { KanbanBoard } from "../components/KanbanBoard";
+import { EisenhowerMatrix } from "../components/EisenhowerMatrix";
 import { useTasksUi } from "../components/TasksLayout";
+
+type ViewMode = "grid" | "kanban" | "matrix";
 
 type Scope     = "mine" | "involving_me" | "all";
 type DueWindow = "overdue" | "today" | "week" | "later" | "done" | "none";
@@ -52,6 +56,7 @@ export function TasksDashboard() {
   const userId        = user?.id ?? "";
   const { openNewTask, openDrawer } = useTasksUi();
 
+  const [view,          setView]          = useState<ViewMode>("grid");
   const [scope,         setScope]         = useState<Scope>("mine");
   const [search,        setSearch]        = useState("");
   const [statusFilter,  setStatusFilter]  = useState<StaffTaskStatus | "all">("all");
@@ -126,6 +131,35 @@ export function TasksDashboard() {
           <FilterPill active={showDone} onClick={() => setShowDone((v) => !v)}>
             Show Done <span className="ml-1 opacity-50">{counts.done}</span>
           </FilterPill>
+
+          {/* View toggle — mirrors ProjectsList.tsx grid/kanban switch */}
+          <div className="flex items-center rounded-md border overflow-hidden">
+            <button
+              onClick={() => setView("grid")}
+              className={cn("p-1.5 transition-colors", view === "grid" ? "bg-muted" : "hover:bg-muted/50")}
+              title="Grid view"
+              aria-label="Grid view"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setView("kanban")}
+              className={cn("p-1.5 transition-colors", view === "kanban" ? "bg-muted" : "hover:bg-muted/50")}
+              title="Kanban view"
+              aria-label="Kanban view"
+            >
+              <Columns3 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setView("matrix")}
+              className={cn("p-1.5 transition-colors", view === "matrix" ? "bg-muted" : "hover:bg-muted/50")}
+              title="Eisenhower matrix view"
+              aria-label="Matrix view"
+            >
+              <Grid2x2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <Button size="sm" onClick={openNewTask}>
             <Plus className="w-3.5 h-3.5 mr-1.5" />
             New Task
@@ -157,7 +191,7 @@ export function TasksDashboard() {
         ))}
       </div>
 
-      {/* Groups */}
+      {/* Body — switches between grid / kanban / matrix views */}
       {filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed p-10 text-center">
           <p className="text-muted-foreground text-sm">No tasks match.</p>
@@ -165,6 +199,20 @@ export function TasksDashboard() {
             <Plus className="w-3.5 h-3.5 mr-1.5" />Create one
           </Button>
         </div>
+      ) : view === "kanban" ? (
+        <KanbanBoard
+          tasks={filtered}
+          profiles={profiles}
+          myId={userId}
+          onOpenTask={openDrawer}
+        />
+      ) : view === "matrix" ? (
+        <EisenhowerMatrix
+          tasks={filtered}
+          profiles={profiles}
+          myId={userId}
+          onOpenTask={openDrawer}
+        />
       ) : (
         WINDOW_ORDER.map((win) => {
           const list = groups[win];
