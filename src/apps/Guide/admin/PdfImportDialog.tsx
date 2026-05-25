@@ -45,7 +45,7 @@ export interface CategoryMatch {
 interface PdfImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onApply: (data: ParsedData, selected: Record<string, boolean>, extractedImages?: ExtractionResult, categoryMatch?: CategoryMatch) => void;
+  onApply: (data: ParsedData, selected: Record<string, boolean>, extractedImages?: ExtractionResult, categoryMatch?: CategoryMatch) => void | Promise<void>;
 }
 
 export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImportDialogProps) {
@@ -246,7 +246,7 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
     setSelected((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!parsed) return;
     // Filter out deselected images
     let filteredImageResult = imageResult ?? undefined;
@@ -255,15 +255,17 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
       filteredImageResult = { ...filteredImageResult, images: filtered, count: filtered.length };
       if (filtered.length === 0) filteredImageResult = undefined;
     }
-    onApply(
+    // Close + reset immediately so the user sees progress toasts from the
+    // parent (image uploads). `onApply` may be async — we don't block on it.
+    onOpenChange(false);
+    reset();
+    toast.success("PDF data imported!");
+    await onApply(
       parsed,
       selected,
       selected.images ? filteredImageResult : undefined,
       selected.category ? (categoryMatch ?? undefined) : undefined
     );
-    onOpenChange(false);
-    reset();
-    toast.success("PDF data imported!");
   };
 
   const handleClose = (val: boolean) => {

@@ -13,7 +13,15 @@ import * as pdfjsLib from "pdfjs-dist";
 
 export interface ExtractedImage {
   step: number;
-  url: string;       // object URL (blob)
+  /**
+   * Object URL for in-dialog preview ONLY. These are `blob:` URLs created via
+   * `URL.createObjectURL` — they are session-local and DIE on page reload.
+   * NEVER persist this string to the database. Use `blob` below to upload to
+   * storage and store the returned public URL instead.
+   */
+  url: string;
+  /** Raw image bytes — upload this to Supabase storage before persisting. */
+  blob: Blob;
   page: number;
   method: "cv2";
 }
@@ -71,6 +79,7 @@ export async function extractImagesFromPdf(
           images.push({
             step: stepNum++,
             url: URL.createObjectURL(blob),
+            blob,
             page: rect.page,
             method: "cv2",
           });

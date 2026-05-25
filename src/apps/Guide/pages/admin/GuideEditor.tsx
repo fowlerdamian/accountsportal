@@ -56,6 +56,28 @@ async function uploadToStorage(file: File, folder: string): Promise<string> {
   return data.publicUrl;
 }
 
+/**
+ * Upload a raw Blob (e.g. from PDF extraction) to storage and return its
+ * public URL. Wraps the blob as a File so we share one upload helper. The
+ * extension is inferred from the blob's MIME type — defaults to `.png` since
+ * the PDF extractor outputs PNGs.
+ */
+async function uploadBlobToStorage(blob: Blob, folder: string): Promise<string> {
+  const ext = (blob.type.split('/')[1] || 'png').split(';')[0];
+  const file = new File([blob], `extracted-${crypto.randomUUID()}.${ext}`, { type: blob.type || 'image/png' });
+  return uploadToStorage(file, folder);
+}
+
+/**
+ * Guard: returns true if any provided URL is a `blob:` ObjectURL. These are
+ * session-local and become dead links the moment the page reloads — they must
+ * NEVER be persisted to the database. See guide 0505e200-… for the bug that
+ * motivated this guard (12/15 step images lost on reload).
+ */
+function hasBlobUrl(...urls: (string | null | undefined)[]): boolean {
+  return urls.some(u => typeof u === 'string' && u.startsWith('blob:'));
+}
+
 // Module-level drag payload — avoids dataTransfer.getData limitations in dragover.
 // Safe since only one drag happens at a time.
 interface ImageDragPayload {
@@ -63,6 +85,15 @@ interface ImageDragPayload {
   originalUrl: string | null;
 }
 let _activeImageDrag: ImageDragPayload | null = null;
+
+// Module-level counter of in-flight image uploads (DropZone uploads + PDF
+// import batches). `saveDraft` refuses to write until this hits zero, so we
+// can't persist a guide while images are still uploading — that would either
+// drop the upload silently or persist a stale URL.
+let _pendingUploads = 0;
+function bumpPending() { _pendingUploads += 1; }
+function decPending() { _pendingUploads = Math.max(0, _pendingUploads - 1); }
+function hasPendingUploads() { return _pendingUploads > 0; }
 
 interface DropZoneProps {
   label: string;
@@ -92,6 +123,7 @@ function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder, dragPa
       return;
     }
     setUploading(true);
+    bumpPending();
     try {
       const url = await uploadToStorage(file, folder);
       onUpload(url);
@@ -99,6 +131,7 @@ function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder, dragPa
     } catch (err: any) {
       toast.error(err.message ?? "Upload failed");
     } finally {
+      decPending();
       setUploading(false);
     }
   };
@@ -387,7 +420,7 @@ export default function GuideEditor() {
     toast.success(`Moved step to position ${newIndex + 1}`);
   };
 
-  const handlePdfApply = (data: any, selected: Record<string, boolean>, extractedImages?: ExtractionResult, categoryMatchResult?: CategoryMatch) => {
+  const handlePdfApply = async (data: any, selected: Record<string, boolean>, extractedImages?: ExtractionResult, categoryMatchResult?: CategoryMatch) => {
     if (selected.title && data.title) setTitle(data.title);
     if (selected.product_code && data.product_code) setProductCode(data.product_code);
     if (selected.short_description && data.short_description) setDescription(data.short_description);
@@ -404,23 +437,53 @@ export default function GuideEditor() {
         year_to: v.year_to ? String(v.year_to) : '',
       })));
     }
+
+    // Upload extracted PDF images to storage BEFORE assigning them to step
+    // state. The extractor only yields blob: ObjectURLs — those are session-
+    // local and would die on reload. We resolve each blob to a real public
+    // storage URL here so the database only ever sees durable URLs. While
+    // the batch is in flight we bump `_pendingUploads` so `saveDraft` will
+    // block a concurrent save until all uploads land.
+    let publicUrls: (string | null)[] = [];
+    if (extractedImages?.success && extractedImages.images.length > 0) {
+      const uploadToast = toast.loading(`Uploading ${extractedImages.images.length} extracted image(s)…`);
+      bumpPending();
+      try {
+        publicUrls = await Promise.all(
+          extractedImages.images.map(async (img) => {
+            try {
+              return await uploadBlobToStorage(img.blob, 'steps');
+            } catch (err) {
+              console.error(`Failed to upload extracted step ${img.step} image`, err);
+              return null;
+            }
+          })
+        );
+        const okCount = publicUrls.filter(u => !!u).length;
+        toast.success(`Uploaded ${okCount}/${publicUrls.length} extracted image(s)`, { id: uploadToast });
+      } catch (err: any) {
+        toast.error(`Image upload failed: ${err.message ?? err}`, { id: uploadToast });
+      } finally {
+        decPending();
+      }
+    }
+
     if (selected.steps && data.steps?.length) {
       const newSteps = data.steps.map((s: any, i: number) => ({
         step_number: i + 1,
         subtitle: s.subtitle || `Step ${i + 1}`,
         description: s.description || '',
         order_index: i + 1,
-        // Auto-assign extracted images to matching steps
-        image_url: extractedImages?.success && extractedImages.images[i]
-          ? extractedImages.images[i].url
-          : undefined,
+        // Auto-assign extracted images to matching steps — using uploaded
+        // public URLs, never the transient blob: previews.
+        image_url: publicUrls[i] ?? undefined,
       }));
       setGuideSteps(newSteps);
-    } else if (extractedImages?.success && extractedImages.images.length > 0) {
+    } else if (publicUrls.length > 0) {
       // If only images were selected (no steps), assign to existing steps
       setGuideSteps(prev => prev.map((step, i) => ({
         ...step,
-        image_url: extractedImages.images[i]?.url ?? step.image_url,
+        image_url: publicUrls[i] ?? step.image_url,
       })));
     }
   };
@@ -505,6 +568,34 @@ export default function GuideEditor() {
       toast.error("Title and product code are required");
       return false;
     }
+
+    // Refuse to save while uploads are in flight — otherwise we'd either
+    // persist a stale image_url (whatever was in state before the upload
+    // started) or, after PDF import, persist nothing for steps whose blobs
+    // haven't finished uploading yet.
+    if (hasPendingUploads()) {
+      toast.error("Images are still uploading — wait for them to finish, then save.");
+      return false;
+    }
+
+    // Defence-in-depth: any `blob:` URL in image fields is a session-local
+    // ObjectURL that would die the moment another browser loads the guide.
+    // Refuse to persist them here regardless of how they got into state.
+    const blobOffenders: string[] = [];
+    if (hasBlobUrl(productImageUrl)) blobOffenders.push('Product image');
+    guideSteps.forEach((s, i) => {
+      if (hasBlobUrl(s.image_url, s.image2_url)) blobOffenders.push(`Step ${i + 1}`);
+    });
+    variants.forEach((v, vi) => {
+      v.steps.forEach((s, i) => {
+        if (hasBlobUrl(s.image_url, s.image2_url)) blobOffenders.push(`Variant ${vi + 1} step ${i + 1}`);
+      });
+    });
+    if (blobOffenders.length > 0) {
+      toast.error(`Cannot save — these images haven't finished uploading yet: ${blobOffenders.slice(0, 5).join(', ')}${blobOffenders.length > 5 ? '…' : ''}. Re-drop or wait for upload to complete.`);
+      return false;
+    }
+
     setSaving(true);
     try {
       const slug = id ? (existingGuide as any)?.slug || generateSlug() : generateSlug();
@@ -530,88 +621,61 @@ export default function GuideEditor() {
         guideId = data.id;
       }
 
-      // Save steps
+      // Replace all guide content (steps + variants + their steps + vehicles)
+      // atomically inside a single Postgres transaction via the
+      // `replace_guide_content` RPC. Previously these were 4+ separate
+      // DELETE/INSERT calls — if any failed mid-flight, every step row was
+      // already gone and we had no rollback. The RPC raises on any failure
+      // and the prior content is preserved untouched.
       if (guideId) {
-        if (isEditing) {
-          await supabase.from("instruction_steps").delete().eq("instruction_set_id", guideId);
-        }
-        const stepsToInsert = guideSteps
+        const stepsJson = guideSteps
           .filter(s => s.subtitle || s.description || s.is_divider)
           .map((s, i) => ({
-            instruction_set_id: guideId!,
             step_number: i + 1,
+            order_index: i + 1,
             subtitle: s.subtitle || (s.is_divider ? WIRING_BREAK_SUBTITLE : `Step ${i + 1}`),
             description: s.description || (s.is_divider ? WIRING_BREAK_DESCRIPTION : ''),
-            order_index: i + 1,
-            // Dividers keep their single image (the wiring kit illustration);
-            // we never show a second image on a divider.
             image_url: s.image_url || null,
             image_original_url: s.image_original_url || null,
+            // Dividers never carry a second image.
             image2_url: s.is_divider ? null : (s.image2_url || null),
             image2_original_url: s.is_divider ? null : (s.image2_original_url || null),
             is_divider: !!s.is_divider,
           }));
-        if (stepsToInsert.length > 0) {
-          const { error } = await supabase.from("instruction_steps").insert(stepsToInsert);
-          if (error) throw error;
-        }
-      }
 
-      // Save variants and their steps
-      if (guideId) {
-        // Delete old variants and their steps
-        const { data: oldVariants } = await supabase.from("guide_variants").select("id").eq("instruction_set_id", guideId);
-        if (oldVariants && oldVariants.length > 0) {
-          const oldIds = oldVariants.map((v: any) => v.id);
-          await supabase.from("instruction_steps").delete().in("variant_id", oldIds);
-          await supabase.from("guide_variants").delete().eq("instruction_set_id", guideId);
-        }
-        // Insert new variants
-        for (const variant of variants) {
-          const variantSlug = variant.slug || generateSlug();
-          const { data: vData, error: vErr } = await supabase.from("guide_variants").insert({
-            instruction_set_id: guideId,
-            variant_label: variant.variant_label,
-            slug: variantSlug,
-          }).select().single();
-          if (vErr) throw vErr;
-          // Insert variant steps
-          const vSteps = variant.steps.filter(s => s.subtitle || s.description).map((s, i) => ({
-            instruction_set_id: guideId!,
-            variant_id: vData.id,
-            step_number: i + 1,
-            subtitle: s.subtitle || `Step ${i + 1}`,
-            description: s.description || '',
-            order_index: i + 1,
-            image_url: s.image_url || null,
-            image_original_url: s.image_original_url || null,
-            image2_url: s.image2_url || null,
-            image2_original_url: s.image2_original_url || null,
-          }));
-          if (vSteps.length > 0) {
-            const { error: vsErr } = await supabase.from("instruction_steps").insert(vSteps);
-            if (vsErr) throw vsErr;
-          }
-        }
-      }
+        const variantsJson = variants.map(v => ({
+          variant_label: v.variant_label,
+          slug: v.slug || generateSlug(),
+          steps: v.steps
+            .filter(s => s.subtitle || s.description)
+            .map((s, i) => ({
+              step_number: i + 1,
+              order_index: i + 1,
+              subtitle: s.subtitle || `Step ${i + 1}`,
+              description: s.description || '',
+              image_url: s.image_url || null,
+              image_original_url: s.image_original_url || null,
+              image2_url: s.image2_url || null,
+              image2_original_url: s.image2_original_url || null,
+            })),
+        }));
 
-      // Save vehicles
-      if (guideId) {
-        const { error: delVehErr } = await (supabase.from("guide_vehicles" as any) as any).delete().eq("instruction_set_id", guideId);
-        if (delVehErr) console.warn("Vehicle delete error:", delVehErr);
-        const vehiclesToInsert = vehicles
+        const vehiclesJson = vehicles
           .filter(v => v.make && v.model && v.year_from)
           .map(v => ({
-            instruction_set_id: guideId!,
             make: v.make,
             model: v.model,
-            year_from: parseInt(v.year_from),
-            year_to: v.year_to ? parseInt(v.year_to) : 0,
+            year_from: v.year_from,
+            year_to: v.year_to || '',
           }));
-        if (vehiclesToInsert.length > 0) {
-          const { error: insVehErr } = await (supabase.from("guide_vehicles" as any) as any).insert(vehiclesToInsert);
-          if (insVehErr) throw insVehErr;
-        }
+
+        const { error: rpcErr } = await supabase.rpc('replace_guide_content', {
+          p_guide_id: guideId,
+          p_steps: stepsJson,
+          p_variants: variantsJson,
+          p_vehicles: vehiclesJson,
+        });
+        if (rpcErr) throw rpcErr;
       }
 
       queryClient.invalidateQueries({ queryKey: ["instruction_sets"] });
@@ -678,17 +742,16 @@ export default function GuideEditor() {
   };
 
   const updateStepImage = (index: number, field: 'image_url' | 'image2_url', value: string | null) => {
+    // This handler is invoked by the DropZone's upload/clear flow — every call
+    // represents a brand-new upload (or a clear). The edit flow goes through
+    // `handleEditorSave`, which preserves the original separately. So we
+    // ALWAYS resync `_original_url` here: a new upload IS the new original,
+    // and a clear nukes both. Previously we only set the original on the
+    // first upload, which left stale originals lying around — clicking Edit
+    // after replacing an image would open the editor with the OLD original.
     const updated = [...guideSteps];
-    // When first setting an image, also set the original
     const origField = field === 'image_url' ? 'image_original_url' : 'image2_original_url';
-    if (value && !updated[index][origField]) {
-      updated[index] = { ...updated[index], [field]: value, [origField]: value };
-    } else {
-      updated[index] = { ...updated[index], [field]: value };
-    }
-    if (!value) {
-      updated[index] = { ...updated[index], [origField]: null };
-    }
+    updated[index] = { ...updated[index], [field]: value, [origField]: value };
     setGuideSteps(updated);
   };
 
@@ -707,7 +770,9 @@ export default function GuideEditor() {
   const handleEditorSave = async (dataUrl: string) => {
     if (!editorTarget) return;
     setEditorOpen(false);
-    // Upload edited image to storage
+    // Upload edited image to storage. Bump `_pendingUploads` for the duration
+    // so a concurrent main-Save can't race past us with the pre-edit URL.
+    bumpPending();
     try {
       const res = await fetch(dataUrl);
       const blob = await res.blob();
@@ -719,6 +784,8 @@ export default function GuideEditor() {
       toast.success("Image saved");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to save edited image");
+    } finally {
+      decPending();
     }
   };
 
