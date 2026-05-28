@@ -85,10 +85,6 @@ export default function ComplianceDashboard() {
               <BookOpen className="h-4 w-4" />
               Knowledge Base
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/setup')} className="gap-2">
-              <Shield className="h-4 w-4" />
-              Company Profile
-            </Button>
           </div>
         </motion.div>
 
