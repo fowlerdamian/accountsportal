@@ -118,6 +118,61 @@ function sameJson(a: unknown, b: unknown): boolean {
   try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
 }
 
+// ───────── Merge logic — never lose work ─────────
+// Given two doc states for the same id, return the one with MORE progress.
+// Priority: complete > in_progress > not_started; tiebreak by message count,
+// then by generatedContent length, then by profileSnapshot key count.
+function pickRicherDoc(a: DocStateSlim | undefined, b: DocStateSlim | undefined): DocStateSlim | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  const statusRank = (s: string | undefined) => s === 'complete' ? 2 : s === 'in_progress' ? 1 : 0;
+  const aRank = statusRank(a.status);
+  const bRank = statusRank(b.status);
+  if (aRank !== bRank) return aRank > bRank ? a : b;
+  const aMsgs = a.messages?.length ?? 0;
+  const bMsgs = b.messages?.length ?? 0;
+  if (aMsgs !== bMsgs) return aMsgs > bMsgs ? a : b;
+  const aLen = a.generatedContent?.length ?? 0;
+  const bLen = b.generatedContent?.length ?? 0;
+  if (aLen !== bLen) return aLen > bLen ? a : b;
+  const aSnap = a.profileSnapshot ? Object.keys(a.profileSnapshot).length : 0;
+  const bSnap = b.profileSnapshot ? Object.keys(b.profileSnapshot).length : 0;
+  return aSnap >= bSnap ? a : b;
+}
+
+// Merge two SharedStates field-by-field. NEVER deletes data: for each doc id,
+// take the side with more progress; for overrides, union (non-empty wins);
+// for logo/signature, take whichever side has data.
+function mergeStates(a: SharedState, b: SharedState): SharedState {
+  const byId = new Map<string, DocStateSlim>();
+  const collect = (list: DocStateSlim[] | undefined) => {
+    if (!Array.isArray(list)) return;
+    for (const d of list) {
+      const existing = byId.get(d.id);
+      const winner = pickRicherDoc(existing, d);
+      if (winner) byId.set(d.id, winner);
+    }
+  };
+  collect(a.documents);
+  collect(b.documents);
+
+  const overrides: CompanyOverrides = { ...(a.overrides ?? {}) };
+  for (const [k, v] of Object.entries(b.overrides ?? {})) {
+    if (typeof v === 'string' && v.trim().length > 0) {
+      // Prefer the non-empty side; if both non-empty, leave the existing one
+      // (a was applied first). This avoids one user clobbering another's edits.
+      if (!overrides[k as keyof CompanyOverrides]) (overrides as any)[k] = v;
+    }
+  }
+
+  return {
+    documents: Array.from(byId.values()),
+    overrides,
+    logo: a.logo || b.logo || null,
+    signature: a.signature || b.signature || null,
+  };
+}
+
 // Snapshot the current local state to a timestamped backup key. Keep the last 5.
 function backupLocal(state: SharedState, reason: string) {
   try {
@@ -254,18 +309,22 @@ export function ISOProvider({ children }: { children: ReactNode }) {
 
       const remote = (data?.state ?? null) as SharedState | null;
       const local: SharedState = latestRef.current;
-      const remoteHasData = hasMeaningfulData(remote);
       const localHasData = hasMeaningfulData(local);
+      const remoteHasData = hasMeaningfulData(remote);
 
-      if (remoteHasData) {
-        // Server is the source of truth. Adopt it.
-        applyRemoteState(remote!, 'initial_load');
-        lastPushedRef.current = remote;
-      } else if (localHasData) {
-        // Server is empty/missing but we have data — seed the server with our local
-        // BEFORE allowing any other writes. This is what protects John's data
-        // when Damian (with empty local) would otherwise overwrite remote.
-        await pushLocalToRemote(local, 'seed_from_local');
+      // MERGE — never replace. Take the richest version of each doc, union
+      // overrides, prefer non-empty logo/signature. This way nobody loses
+      // work even if a previous buggy build seeded the wrong state.
+      const merged = mergeStates(local, remote ?? { documents: [], overrides: {}, logo: null, signature: null });
+
+      if (remoteHasData || localHasData) {
+        applyRemoteState(merged, 'merge_on_load');
+        // Push merged back up so the server reflects the union immediately.
+        if (!sameJson(merged, remote)) {
+          await pushLocalToRemote(merged, 'merge_seed');
+        } else {
+          lastPushedRef.current = merged;
+        }
       }
       // else: both empty → nothing to do.
 
@@ -288,18 +347,17 @@ export function ISOProvider({ children }: { children: ReactNode }) {
           if (sameJson(incoming, lastPushedRef.current)) return;
 
           const local = latestRef.current;
-          const incomingHasData = hasMeaningfulData(incoming);
-          const localHasData = hasMeaningfulData(local);
-
-          if (incomingHasData) {
-            applyRemoteState(incoming, 'realtime');
-            lastPushedRef.current = incoming;
-          } else if (localHasData) {
-            // Remote was wiped (or seeded empty by another client) but WE have
-            // real data. Recover by pushing local up.
-            void pushLocalToRemote(local, 'recover_from_empty_realtime');
+          // Merge incoming with our local — never overwrite our own work.
+          const merged = mergeStates(local, incoming);
+          if (!sameJson(merged, local)) {
+            applyRemoteState(merged, 'realtime_merge');
           }
-          // else: both empty → ignore.
+          // If our merge changed anything the remote didn't include, push it back.
+          if (!sameJson(merged, incoming)) {
+            void pushLocalToRemote(merged, 'realtime_recover');
+          } else {
+            lastPushedRef.current = incoming;
+          }
         }
       )
       .subscribe();
