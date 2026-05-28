@@ -1,15 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useISO } from '../contexts/ISOContext';
 import { CompanyOverrides } from '../lib/company-profile';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Upload, Building2, MapPin, User, Factory, Globe, Lock } from 'lucide-react';
+import { ArrowLeft, Save, Upload, Building2, MapPin, User, Factory, Globe, Lock, PenLine, RotateCcw, Check, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import SignatureCanvas from 'react-signature-canvas';
 
 const AUSTRALIAN_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'];
 const INDUSTRIES = [
@@ -28,7 +29,11 @@ const FIELD_KEYS: Array<keyof CompanyOverrides> = [
 
 export default function ComplianceCompanyDetails() {
   const navigate = useNavigate();
-  const { companyProfile, companyOverrides, setCompanyOverrides, pushProfileToDocuments, documents } = useISO();
+  const {
+    companyProfile, companyOverrides, setCompanyOverrides,
+    pushProfileToDocuments, documents,
+    directorSignature, setDirectorSignature,
+  } = useISO();
 
   const initialForm = useMemo<FormState>(() => {
     const f: FormState = {} as FormState;
@@ -38,8 +43,33 @@ export default function ComplianceCompanyDetails() {
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [isPushing, setIsPushing] = useState(false);
+  const sigPadRef = useRef<SignatureCanvas>(null);
+  const [sigDraft, setSigDraft] = useState<string | null>(null);
 
   const update = (field: keyof CompanyOverrides, value: string) => setForm((p) => ({ ...p, [field]: value }));
+
+  const handleSigEnd = () => {
+    setSigDraft(sigPadRef.current?.toDataURL('image/png') ?? null);
+  };
+
+  const handleSigClear = () => {
+    sigPadRef.current?.clear();
+    setSigDraft(null);
+  };
+
+  const handleSigSave = () => {
+    if (!sigDraft) { toast.error('Draw your signature first'); return; }
+    setDirectorSignature(sigDraft);
+    setSigDraft(null);
+    toast.success('Signature saved');
+  };
+
+  const handleSigRemove = () => {
+    setDirectorSignature(null);
+    setSigDraft(null);
+    sigPadRef.current?.clear();
+    toast.success('Signature removed');
+  };
 
   const handleSave = () => {
     const next: CompanyOverrides = {};
@@ -213,6 +243,55 @@ export default function ComplianceCompanyDetails() {
             <div className="sm:col-span-2">
               <Label htmlFor="mainProducts">Main Products / Services</Label>
               <Textarea id="mainProducts" value={form.mainProducts} onChange={(e) => update('mainProducts', e.target.value)} rows={3} className="mt-1" />
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-6">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-2">
+            <PenLine className="h-4 w-4" /> Director Signature
+          </h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Signing as <span className="font-semibold text-foreground">{companyProfile?.contactName || 'Director'}</span>
+            {companyProfile?.contactTitle && <> · {companyProfile.contactTitle}</>}. Appears on all generated ISO documents.
+          </p>
+
+          {directorSignature && !sigDraft && (
+            <div className="mb-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Current</p>
+              <div className="rounded-xl border border-border bg-white p-4 flex items-center justify-center">
+                <img src={directorSignature} alt="Director signature" className="max-h-28" />
+              </div>
+              <Button variant="ghost" size="sm" className="mt-2 gap-1.5 text-destructive hover:text-destructive" onClick={handleSigRemove}>
+                <Trash2 className="h-3.5 w-3.5" /> Remove signature
+              </Button>
+            </div>
+          )}
+
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+            {directorSignature ? 'Replace signature' : 'Draw signature'}
+          </p>
+          <div className="rounded-xl border border-border bg-white overflow-hidden">
+            <SignatureCanvas
+              ref={sigPadRef}
+              penColor="#1a1a2e"
+              canvasProps={{ className: 'w-full', height: 180, style: { width: '100%', display: 'block' } }}
+              onEnd={handleSigEnd}
+            />
+          </div>
+
+          <div className="flex items-center justify-between mt-3">
+            {sigDraft
+              ? <span className="text-xs text-success flex items-center gap-1"><PenLine className="h-3 w-3" /> Ready to save</span>
+              : <span className="text-xs text-muted-foreground">Sign in the box above with your mouse or touch screen</span>
+            }
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={handleSigClear}>
+                <RotateCcw className="h-3 w-3" /> Clear
+              </Button>
+              <Button type="button" size="sm" className="gap-1.5 text-xs glow-gold" disabled={!sigDraft} onClick={handleSigSave}>
+                <Check className="h-3 w-3" /> Save signature
+              </Button>
             </div>
           </div>
         </motion.section>
