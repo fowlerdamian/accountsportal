@@ -4,7 +4,7 @@ import { useActions } from '../contexts/ActionsContext';
 import { motion } from 'framer-motion';
 import {
   FileText, CheckCircle2, Clock, Circle, Shield, ArrowRight,
-  AlertTriangle, X, FolderOpen, FolderArchive, BookOpen,
+  AlertTriangle, X, FolderOpen, FolderArchive, BookOpen, Settings,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -50,10 +50,19 @@ export default function ComplianceDashboard() {
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
           )}
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-foreground">{companyProfile?.companyName || 'ISO 9001 QMS'}</h1>
             <p className="text-sm text-muted-foreground">ISO 9001:2015 QMS Documentation</p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/compliance/company-details')}
+            aria-label="Company settings"
+            className="h-8 w-8 text-muted-foreground/60 hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
 
         {/* Overall progress */}

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useISO } from '../contexts/ISOContext';
 import { CompanyOverrides } from '../lib/company-profile';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Upload, Building2, MapPin, User, Factory, Globe, Lock, PenLine, RotateCcw, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Upload, Building2, MapPin, User, Factory, Globe, Lock, PenLine, RotateCcw, Check, Trash2, Image as ImageIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,6 +33,7 @@ export default function ComplianceCompanyDetails() {
     companyProfile, companyOverrides, setCompanyOverrides,
     pushProfileToDocuments, documents,
     directorSignature, setDirectorSignature,
+    companyLogo, setCompanyLogo,
   } = useISO();
 
   const initialForm = useMemo<FormState>(() => {
@@ -45,6 +46,7 @@ export default function ComplianceCompanyDetails() {
   const [isPushing, setIsPushing] = useState(false);
   const sigPadRef = useRef<SignatureCanvas>(null);
   const [sigDraft, setSigDraft] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const update = (field: keyof CompanyOverrides, value: string) => setForm((p) => ({ ...p, [field]: value }));
 
@@ -69,6 +71,41 @@ export default function ComplianceCompanyDetails() {
     setSigDraft(null);
     sigPadRef.current?.clear();
     toast.success('Signature removed');
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('Logo must be under 5MB'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 400;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { toast.error('Could not process image'); return; }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const compressed = canvas.toDataURL('image/jpeg', 0.75);
+        setCompanyLogo(compressed);
+        toast.success('Logo updated');
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+    if (logoInputRef.current) logoInputRef.current.value = '';
+  };
+
+  const handleLogoRemove = () => {
+    setCompanyLogo(null);
+    if (logoInputRef.current) logoInputRef.current.value = '';
+    toast.success('Logo reset to brand default');
   };
 
   const handleSave = () => {
@@ -130,12 +167,52 @@ export default function ComplianceCompanyDetails() {
           <div className="rounded-xl border border-border/60 bg-secondary/30 p-4 text-sm text-muted-foreground flex items-start gap-3">
             <Lock className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
             <div>
-              Brand name and logo come from the staff portal and aren't editable here. Any field you change below
+              Brand name defaults to the staff portal value. Any field you change below
               overrides the portal default for ISO documents. Click <span className="font-semibold text-foreground">Push</span> to
               find and replace stale values in {completedDocs} already-generated document{completedDocs === 1 ? '' : 's'}.
             </div>
           </div>
         </motion.div>
+
+        <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-6">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
+            <ImageIcon className="h-4 w-4" /> Logo
+          </h3>
+          <div className="flex items-center gap-6">
+            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+            {companyProfile?.logoUrl ? (
+              <div className="relative">
+                <img src={companyProfile.logoUrl} alt="Logo" className="h-24 w-24 rounded-xl border border-border object-contain bg-secondary p-2" />
+                {companyLogo && (
+                  <button type="button" onClick={handleLogoRemove} aria-label="Reset to brand default" className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button type="button" onClick={() => logoInputRef.current?.click()} className="flex h-24 w-24 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                <Upload className="h-6 w-6 mb-1" />
+                <span className="text-xs">Upload</span>
+              </button>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-muted-foreground">PNG, JPG or SVG. Max 5MB. Will appear on document headers.</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                {companyLogo ? 'Using custom upload.' : 'Showing brand default — upload to override.'}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <Button type="button" size="sm" variant="secondary" className="gap-1.5 text-xs" onClick={() => logoInputRef.current?.click()}>
+                  <Upload className="h-3 w-3" /> {companyLogo ? 'Replace' : 'Upload'}
+                </Button>
+                {companyLogo && (
+                  <Button type="button" size="sm" variant="ghost" className="gap-1.5 text-xs text-destructive hover:text-destructive" onClick={handleLogoRemove}>
+                    <Trash2 className="h-3 w-3" /> Reset to brand
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.section>
 
         <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-6">
           <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">

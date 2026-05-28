@@ -10,6 +10,7 @@ import { useAuth as usePortalAuth } from '@portal/context/AuthContext';
 const DOCS_KEY = 'compliance_documents';
 const SIGNATURE_KEY = 'compliance_director_signature';
 const OVERRIDES_KEY = 'compliance_company_overrides';
+const LOGO_KEY = 'compliance_company_logo';
 
 interface PushResult {
   docsScanned: number;
@@ -31,6 +32,8 @@ interface ISOContextType {
   setDirectorSignature: (dataUrl: string | null) => void;
   companyOverrides: CompanyOverrides;
   setCompanyOverrides: (overrides: CompanyOverrides) => void;
+  companyLogo: string | null;
+  setCompanyLogo: (dataUrl: string | null) => void;
   snapshotProfileFor: (docId: string) => void;
   pushProfileToDocuments: () => PushResult;
 }
@@ -64,6 +67,10 @@ function loadOverrides(): CompanyOverrides {
   } catch { return {}; }
 }
 
+function loadLogo(): string | null {
+  try { return localStorage.getItem(LOGO_KEY); } catch { return null; }
+}
+
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -74,6 +81,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   const [auditResults, setAuditResults] = useState<AuditResult[] | null>(null);
   const [directorSignature, setDirectorSignatureState] = useState<string | null>(loadSignature);
   const [companyOverrides, setCompanyOverridesState] = useState<CompanyOverrides>(loadOverrides);
+  const [companyLogo, setCompanyLogoState] = useState<string | null>(loadLogo);
   const [brand, setBrand] = useState<any>(null);
   const [profileFullName, setProfileFullName] = useState<string | null>(null);
 
@@ -122,6 +130,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     { email: user?.email ?? '', fullName: profileFullName },
     { signatureDataUrl: directorSignature },
     companyOverrides,
+    { logoDataUrl: companyLogo },
   );
 
   const setDirectorSignature = useCallback((dataUrl: string | null) => {
@@ -140,6 +149,16 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
     } catch {
       console.warn('[Compliance] Could not persist company overrides to localStorage');
+    }
+  }, []);
+
+  const setCompanyLogo = useCallback((dataUrl: string | null) => {
+    setCompanyLogoState(dataUrl);
+    try {
+      if (dataUrl) localStorage.setItem(LOGO_KEY, dataUrl);
+      else localStorage.removeItem(LOGO_KEY);
+    } catch {
+      console.warn('[Compliance] Could not persist company logo to localStorage');
     }
   }, []);
 
@@ -221,6 +240,8 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       setDirectorSignature,
       companyOverrides,
       setCompanyOverrides,
+      companyLogo,
+      setCompanyLogo,
       snapshotProfileFor,
       pushProfileToDocuments,
     }}>

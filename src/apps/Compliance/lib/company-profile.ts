@@ -55,6 +55,10 @@ interface DirectorInfo {
   signatureDataUrl?: string | null;
 }
 
+interface AssetOverrides {
+  logoDataUrl?: string | null;
+}
+
 // Damian Fowler is the director of record for the portal tenant.
 // Used as the default when profiles.full_name is missing.
 export const DEFAULT_DIRECTOR_NAME = 'Damian Fowler';
@@ -90,6 +94,7 @@ export function deriveCompanyProfile(
   user: UserInfo,
   director: DirectorInfo = {},
   overrides: CompanyOverrides = {},
+  assets: AssetOverrides = {},
 ): CompanyProfile {
   const userDomain = user.email?.split('@')[1]?.toLowerCase() ?? '';
   const brandDomain = brand?.domain?.replace(/^(guide|support|www)\./, '') ?? '';
@@ -98,7 +103,7 @@ export function deriveCompanyProfile(
   const base: CompanyProfile = {
     ...BLANK_COMPANY_PROFILE,
     companyName: brand?.name ?? '',
-    logoUrl: brand?.logo_url || null,
+    logoUrl: assets.logoDataUrl ?? brand?.logo_url ?? null,
     phone: brand?.support_phone ?? '',
     email: brand?.support_email ?? user.email ?? '',
     website,
