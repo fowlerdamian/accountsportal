@@ -8,6 +8,8 @@ import ComplianceSupportingDocs from './pages/ComplianceSupportingDocs';
 import ComplianceFileManager from './pages/ComplianceFileManager';
 import ComplianceKnowledgeBase from './pages/ComplianceKnowledgeBase';
 import ComplianceCompanyDetails from './pages/ComplianceCompanyDetails';
+// TEMPORARY — remove after the post-2026-05-28 PDF recovery is done.
+import ComplianceRecoverPdfs from './pages/ComplianceRecoverPdfs';
 
 function ComplianceRoutes() {
   return (
@@ -20,6 +22,8 @@ function ComplianceRoutes() {
       <Route path="knowledge-base" element={<ComplianceKnowledgeBase />} />
       <Route path="company-details" element={<ComplianceCompanyDetails />} />
       <Route path="signature" element={<Navigate to="/compliance/company-details" replace />} />
+      {/* TEMPORARY — remove after PDF recovery done */}
+      <Route path="recover-pdfs" element={<ComplianceRecoverPdfs />} />
       <Route path="*" element={<Navigate to="/compliance" replace />} />
     </Routes>
   );
