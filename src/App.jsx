@@ -10,6 +10,7 @@ import LoginPage from './components/LoginPage.jsx'
 import PortalDashboard from './pages/Dashboard.jsx'
 import TileSettings from './pages/TileSettings.jsx'
 import Settings from './pages/Settings.jsx'
+import ResetPassword from './pages/ResetPassword.jsx'
 import ProfitProcessor from './apps/ProfitProcessor/index.jsx'
 import LogisticsDashboard from './apps/Logistics/components/LogisticsDashboard.jsx'
 import PurchaseOrders from './apps/PurchaseOrders/index.jsx'
@@ -137,6 +138,7 @@ export default function App() {
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             {/* Support Hub */}
             <Route path="/support/*" element={<ProtectedRoute><SupportApp /></ProtectedRoute>} />

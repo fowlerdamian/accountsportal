@@ -317,6 +317,7 @@ function UserManagement() {
   const [error,        setError]        = useState(null)
   const [expanded,     setExpanded]     = useState(null)
   const [resetSent,    setResetSent]    = useState({})
+  const [resetError,   setResetError]   = useState({})
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
@@ -362,10 +363,15 @@ function UserManagement() {
   }
 
   const sendPasswordReset = async (userId, email) => {
+    setResetError(prev => ({ ...prev, [userId]: null }))
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/settings`,
+      redirectTo: `${window.location.origin}/reset-password`,
     })
-    if (!error) setResetSent(prev => ({ ...prev, [userId]: true }))
+    if (error) {
+      setResetError(prev => ({ ...prev, [userId]: error.message || 'Failed to send reset email' }))
+      return
+    }
+    setResetSent(prev => ({ ...prev, [userId]: true }))
   }
 
   return (
@@ -512,6 +518,11 @@ function UserManagement() {
                       >
                         {resetSent[u.id] ? '✓ Reset email sent' : 'Send password reset'}
                       </button>
+                      {resetError[u.id] && (
+                        <div style={{ marginTop: '8px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#ff1744' }}>
+                          {resetError[u.id]}
+                        </div>
+                      )}
                     </div>
 
                   </div>
