@@ -11,6 +11,7 @@ const DOCS_KEY = 'compliance_documents';
 const SIGNATURE_KEY = 'compliance_director_signature';
 const OVERRIDES_KEY = 'compliance_company_overrides';
 const LOGO_KEY = 'compliance_company_logo';
+const BACKUP_KEY_PREFIX = 'compliance_pre_sync_backup_';
 const REMOTE_TABLE = 'compliance_app_state';
 
 interface PushResult {
@@ -96,6 +97,41 @@ function slimToDocs(slim: DocStateSlim[] | undefined | null): ISODocument[] {
   });
 }
 
+// True iff the state has any user-entered content worth protecting.
+function hasMeaningfulData(s: SharedState | null | undefined): boolean {
+  if (!s) return false;
+  if (s.signature && s.signature.length > 0) return true;
+  if (s.logo && s.logo.length > 0) return true;
+  if (s.overrides && Object.keys(s.overrides).length > 0) return true;
+  if (Array.isArray(s.documents)) {
+    for (const d of s.documents) {
+      if (d.status && d.status !== 'not_started') return true;
+      if (d.messages && d.messages.length > 0) return true;
+      if (d.generatedContent && d.generatedContent.length > 0) return true;
+    }
+  }
+  return false;
+}
+
+// Cheap deep-equal — used to decide whether realtime is reflecting our own save.
+function sameJson(a: unknown, b: unknown): boolean {
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
+
+// Snapshot the current local state to a timestamped backup key. Keep the last 5.
+function backupLocal(state: SharedState, reason: string) {
+  try {
+    const key = `${BACKUP_KEY_PREFIX}${new Date().toISOString()}_${reason}`;
+    localStorage.setItem(key, JSON.stringify(state));
+    // Trim to most-recent 5 backups
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(BACKUP_KEY_PREFIX)).sort();
+    while (keys.length > 5) {
+      const stale = keys.shift();
+      if (stale) localStorage.removeItem(stale);
+    }
+  } catch {}
+}
+
 export function ISOProvider({ children }: { children: ReactNode }) {
   const { user } = usePortalAuth();
   const [documents, setDocuments] = useState<ISODocument[]>(loadDocuments);
@@ -107,8 +143,29 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   const [profileFullName, setProfileFullName] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<ISOContextType['syncState']>('idle');
 
-  const remoteLoadedRef = useRef(false);
+  // ───────── refs for sync state ─────────
+  const remoteLoadedRef = useRef(false);    // false until initial fetch succeeds
+  const writesEnabledRef = useRef(false);   // false until we know it's safe to write
+  const lastPushedRef = useRef<SharedState | null>(null); // dedupe own-echoes from realtime
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Latest local — exposed to realtime callback via ref so we read fresh values
+  const latestRef = useRef<SharedState>({
+    documents: docsToSlim(documents),
+    overrides: companyOverrides,
+    logo: companyLogo,
+    signature: directorSignature,
+  });
+
+  useEffect(() => {
+    latestRef.current = {
+      documents: docsToSlim(documents),
+      overrides: companyOverrides,
+      logo: companyLogo,
+      signature: directorSignature,
+    };
+  }, [documents, companyOverrides, companyLogo, directorSignature]);
+
   const companyDomain = (user?.email ?? '').split('@')[1]?.toLowerCase() ?? '';
 
   // ───────── localStorage caches (offline + first-load) ─────────
@@ -140,21 +197,35 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [user?.email, (user as any)?.id]);
 
-  // ───────── Apply remote state into local React state ─────────
-  const applyRemoteState = useCallback((s: SharedState) => {
-    setDocuments(slimToDocs(s.documents));
-    setCompanyOverridesState(s.overrides ?? {});
-    setCompanyLogoState(s.logo ?? null);
-    setDirectorSignatureState(s.signature ?? null);
-
-    // Refresh localStorage caches so next cold load mirrors remote
+  // Replace local state with remote. Always backs up local first.
+  const applyRemoteState = useCallback((next: SharedState, reason: string) => {
+    backupLocal(latestRef.current, `before_${reason}`);
+    setDocuments(slimToDocs(next.documents));
+    setCompanyOverridesState(next.overrides ?? {});
+    setCompanyLogoState(next.logo ?? null);
+    setDirectorSignatureState(next.signature ?? null);
     try {
-      localStorage.setItem(DOCS_KEY, JSON.stringify(s.documents ?? []));
-      localStorage.setItem(OVERRIDES_KEY, JSON.stringify(s.overrides ?? {}));
-      if (s.logo) localStorage.setItem(LOGO_KEY, s.logo); else localStorage.removeItem(LOGO_KEY);
-      if (s.signature) localStorage.setItem(SIGNATURE_KEY, s.signature); else localStorage.removeItem(SIGNATURE_KEY);
+      localStorage.setItem(DOCS_KEY, JSON.stringify(next.documents ?? []));
+      localStorage.setItem(OVERRIDES_KEY, JSON.stringify(next.overrides ?? {}));
+      if (next.logo) localStorage.setItem(LOGO_KEY, next.logo); else localStorage.removeItem(LOGO_KEY);
+      if (next.signature) localStorage.setItem(SIGNATURE_KEY, next.signature); else localStorage.removeItem(SIGNATURE_KEY);
     } catch {}
   }, []);
+
+  const pushLocalToRemote = useCallback(async (snapshot: SharedState, reason: string) => {
+    setSyncState('saving');
+    const { error } = await portalSupabase
+      .from(REMOTE_TABLE)
+      .upsert({ company_domain: companyDomain, state: snapshot as any }, { onConflict: 'company_domain' });
+    if (error) {
+      setSyncState('error');
+      console.warn(`[Compliance] sync save failed (${reason})`, error.message);
+      return false;
+    }
+    lastPushedRef.current = snapshot;
+    setSyncState('idle');
+    return true;
+  }, [companyDomain]);
 
   // ───────── Initial fetch + realtime subscription ─────────
   useEffect(() => {
@@ -170,42 +241,65 @@ export function ISOProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (cancelled) return;
+
       if (error) {
-        console.warn('[Compliance] sync load failed', error.message);
+        // Fetch failed — we don't know what's on the server, so REFUSE TO WRITE.
+        // Local data stays intact; user can keep working offline.
+        console.warn('[Compliance] sync load failed — writes disabled until next reload', error.message);
         setSyncState('error');
-        remoteLoadedRef.current = true; // allow saves to proceed even on read failure
+        remoteLoadedRef.current = true;
+        writesEnabledRef.current = false;
         return;
       }
 
-      if (data?.state) {
-        applyRemoteState(data.state as SharedState);
-      } else {
-        // No remote row yet — seed it with whatever we have locally so the next
-        // user in the company picks it up.
-        const seed: SharedState = {
-          documents: docsToSlim(documents),
-          overrides: companyOverrides,
-          logo: companyLogo,
-          signature: directorSignature,
-        };
-        await portalSupabase
-          .from(REMOTE_TABLE)
-          .upsert({ company_domain: companyDomain, state: seed as any }, { onConflict: 'company_domain' });
+      const remote = (data?.state ?? null) as SharedState | null;
+      const local: SharedState = latestRef.current;
+      const remoteHasData = hasMeaningfulData(remote);
+      const localHasData = hasMeaningfulData(local);
+
+      if (remoteHasData) {
+        // Server is the source of truth. Adopt it.
+        applyRemoteState(remote!, 'initial_load');
+        lastPushedRef.current = remote;
+      } else if (localHasData) {
+        // Server is empty/missing but we have data — seed the server with our local
+        // BEFORE allowing any other writes. This is what protects John's data
+        // when Damian (with empty local) would otherwise overwrite remote.
+        await pushLocalToRemote(local, 'seed_from_local');
       }
+      // else: both empty → nothing to do.
 
       remoteLoadedRef.current = true;
+      writesEnabledRef.current = true;
       setSyncState('idle');
     })();
 
-    // Live updates from other users in the company
+    // Live updates from other users in the same company.
     const channel = portalSupabase
       .channel(`compliance-state-${companyDomain}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: REMOTE_TABLE, filter: `company_domain=eq.${companyDomain}` },
         (payload: any) => {
-          const next = payload?.new?.state as SharedState | undefined;
-          if (next) applyRemoteState(next);
+          const incoming = payload?.new?.state as SharedState | undefined;
+          if (!incoming) return;
+
+          // Ignore the echo of our own most-recent push.
+          if (sameJson(incoming, lastPushedRef.current)) return;
+
+          const local = latestRef.current;
+          const incomingHasData = hasMeaningfulData(incoming);
+          const localHasData = hasMeaningfulData(local);
+
+          if (incomingHasData) {
+            applyRemoteState(incoming, 'realtime');
+            lastPushedRef.current = incoming;
+          } else if (localHasData) {
+            // Remote was wiped (or seeded empty by another client) but WE have
+            // real data. Recover by pushing local up.
+            void pushLocalToRemote(local, 'recover_from_empty_realtime');
+          }
+          // else: both empty → ignore.
         }
       )
       .subscribe();
@@ -219,27 +313,16 @@ export function ISOProvider({ children }: { children: ReactNode }) {
 
   // ───────── Debounced save to remote whenever local state changes ─────────
   useEffect(() => {
-    if (!companyDomain || !remoteLoadedRef.current) return;
+    if (!companyDomain || !writesEnabledRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      setSyncState('saving');
-      const next: SharedState = {
-        documents: docsToSlim(documents),
-        overrides: companyOverrides,
-        logo: companyLogo,
-        signature: directorSignature,
-      };
-      const { error } = await portalSupabase
-        .from(REMOTE_TABLE)
-        .upsert({ company_domain: companyDomain, state: next as any }, { onConflict: 'company_domain' });
-      setSyncState(error ? 'error' : 'idle');
-      if (error) console.warn('[Compliance] sync save failed', error.message);
+    saveTimerRef.current = setTimeout(() => {
+      void pushLocalToRemote(latestRef.current, 'mutation');
     }, 400);
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [documents, companyOverrides, companyLogo, directorSignature, companyDomain]);
+  }, [documents, companyOverrides, companyLogo, directorSignature, companyDomain, pushLocalToRemote]);
 
   // ───────── Derived profile ─────────
   const companyProfile = deriveCompanyProfile(
@@ -250,7 +333,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     { logoDataUrl: companyLogo },
   );
 
-  // ───────── Setters (also write localStorage immediately for offline) ─────────
+  // ───────── Setters ─────────
   const setDirectorSignature = useCallback((dataUrl: string | null) => {
     setDirectorSignatureState(dataUrl);
     try {
