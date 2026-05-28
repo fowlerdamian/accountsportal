@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { ISODocument, ISO_DOCUMENTS, ChatMessage, AuditResult } from '../lib/iso-documents';
 import {
   CompanyProfile, CompanyOverrides,
@@ -11,6 +11,7 @@ const DOCS_KEY = 'compliance_documents';
 const SIGNATURE_KEY = 'compliance_director_signature';
 const OVERRIDES_KEY = 'compliance_company_overrides';
 const LOGO_KEY = 'compliance_company_logo';
+const REMOTE_TABLE = 'compliance_app_state';
 
 interface PushResult {
   docsScanned: number;
@@ -36,10 +37,12 @@ interface ISOContextType {
   setCompanyLogo: (dataUrl: string | null) => void;
   snapshotProfileFor: (docId: string) => void;
   pushProfileToDocuments: () => PushResult;
+  syncState: 'idle' | 'loading' | 'saving' | 'error';
 }
 
 const ISOContext = createContext<ISOContextType | undefined>(undefined);
 
+// ───────── localStorage helpers ─────────
 function loadDocuments(): ISODocument[] {
   try {
     const saved = localStorage.getItem(DOCS_KEY);
@@ -56,23 +59,41 @@ function loadDocuments(): ISODocument[] {
   return ISO_DOCUMENTS.map((doc) => ({ ...doc, status: 'not_started' as const, progress: 0, messages: [] }));
 }
 
-function loadSignature(): string | null {
-  try { return localStorage.getItem(SIGNATURE_KEY); } catch { return null; }
+function loadSignature(): string | null { try { return localStorage.getItem(SIGNATURE_KEY); } catch { return null; } }
+function loadOverrides(): CompanyOverrides { try { const raw = localStorage.getItem(OVERRIDES_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
+function loadLogo(): string | null { try { return localStorage.getItem(LOGO_KEY); } catch { return null; } }
+
+function escapeRegex(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Serializable subset of doc state stored in Supabase + localStorage
+type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot'>;
+
+interface SharedState {
+  documents: DocStateSlim[];
+  overrides: CompanyOverrides;
+  logo: string | null;
+  signature: string | null;
 }
 
-function loadOverrides(): CompanyOverrides {
-  try {
-    const raw = localStorage.getItem(OVERRIDES_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
+function docsToSlim(documents: ISODocument[]): DocStateSlim[] {
+  return documents.map((d) => ({
+    id: d.id,
+    status: d.status,
+    progress: d.progress,
+    messages: d.messages,
+    generatedContent: d.generatedContent,
+    profileSnapshot: d.profileSnapshot,
+  }));
 }
 
-function loadLogo(): string | null {
-  try { return localStorage.getItem(LOGO_KEY); } catch { return null; }
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function slimToDocs(slim: DocStateSlim[] | undefined | null): ISODocument[] {
+  const list = Array.isArray(slim) ? slim : [];
+  return ISO_DOCUMENTS.map((doc) => {
+    const s = list.find((d) => d.id === doc.id);
+    return s
+      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot }
+      : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
+  });
 }
 
 export function ISOProvider({ children }: { children: ReactNode }) {
@@ -84,22 +105,18 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   const [companyLogo, setCompanyLogoState] = useState<string | null>(loadLogo);
   const [brand, setBrand] = useState<any>(null);
   const [profileFullName, setProfileFullName] = useState<string | null>(null);
+  const [syncState, setSyncState] = useState<ISOContextType['syncState']>('idle');
 
-  // Persist documents whenever they change
+  const remoteLoadedRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const companyDomain = (user?.email ?? '').split('@')[1]?.toLowerCase() ?? '';
+
+  // ───────── localStorage caches (offline + first-load) ─────────
   useEffect(() => {
-    localStorage.setItem(DOCS_KEY, JSON.stringify(
-      documents.map((d) => ({
-        id: d.id,
-        status: d.status,
-        progress: d.progress,
-        messages: d.messages,
-        generatedContent: d.generatedContent,
-        profileSnapshot: d.profileSnapshot,
-      }))
-    ));
+    localStorage.setItem(DOCS_KEY, JSON.stringify(docsToSlim(documents)));
   }, [documents]);
 
-  // Pull portal knowledge once per user: brand matched to email domain + profile name.
+  // ───────── Brand + profile lookup (read-only, portal-wide) ─────────
   useEffect(() => {
     let cancelled = false;
     const userEmail = user?.email ?? '';
@@ -107,7 +124,6 @@ export function ISOProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       const domain = userEmail.split('@')[1]?.toLowerCase();
-
       const [{ data: brandRows }, { data: profileRow }] = await Promise.all([
         domain
           ? portalSupabase.from('brands').select('name, domain, logo_url, support_phone, support_email').ilike('domain', `%${domain}%`).limit(1)
@@ -116,7 +132,6 @@ export function ISOProvider({ children }: { children: ReactNode }) {
           ? portalSupabase.from('profiles').select('full_name').eq('user_id', userId).maybeSingle()
           : Promise.resolve({ data: null as any }),
       ]);
-
       if (cancelled) return;
       setBrand(brandRows && brandRows[0] ? brandRows[0] : null);
       setProfileFullName((profileRow as any)?.full_name ?? null);
@@ -125,6 +140,108 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [user?.email, (user as any)?.id]);
 
+  // ───────── Apply remote state into local React state ─────────
+  const applyRemoteState = useCallback((s: SharedState) => {
+    setDocuments(slimToDocs(s.documents));
+    setCompanyOverridesState(s.overrides ?? {});
+    setCompanyLogoState(s.logo ?? null);
+    setDirectorSignatureState(s.signature ?? null);
+
+    // Refresh localStorage caches so next cold load mirrors remote
+    try {
+      localStorage.setItem(DOCS_KEY, JSON.stringify(s.documents ?? []));
+      localStorage.setItem(OVERRIDES_KEY, JSON.stringify(s.overrides ?? {}));
+      if (s.logo) localStorage.setItem(LOGO_KEY, s.logo); else localStorage.removeItem(LOGO_KEY);
+      if (s.signature) localStorage.setItem(SIGNATURE_KEY, s.signature); else localStorage.removeItem(SIGNATURE_KEY);
+    } catch {}
+  }, []);
+
+  // ───────── Initial fetch + realtime subscription ─────────
+  useEffect(() => {
+    if (!companyDomain) return;
+    let cancelled = false;
+    setSyncState('loading');
+
+    (async () => {
+      const { data, error } = await portalSupabase
+        .from(REMOTE_TABLE)
+        .select('state')
+        .eq('company_domain', companyDomain)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error) {
+        console.warn('[Compliance] sync load failed', error.message);
+        setSyncState('error');
+        remoteLoadedRef.current = true; // allow saves to proceed even on read failure
+        return;
+      }
+
+      if (data?.state) {
+        applyRemoteState(data.state as SharedState);
+      } else {
+        // No remote row yet — seed it with whatever we have locally so the next
+        // user in the company picks it up.
+        const seed: SharedState = {
+          documents: docsToSlim(documents),
+          overrides: companyOverrides,
+          logo: companyLogo,
+          signature: directorSignature,
+        };
+        await portalSupabase
+          .from(REMOTE_TABLE)
+          .upsert({ company_domain: companyDomain, state: seed as any }, { onConflict: 'company_domain' });
+      }
+
+      remoteLoadedRef.current = true;
+      setSyncState('idle');
+    })();
+
+    // Live updates from other users in the company
+    const channel = portalSupabase
+      .channel(`compliance-state-${companyDomain}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: REMOTE_TABLE, filter: `company_domain=eq.${companyDomain}` },
+        (payload: any) => {
+          const next = payload?.new?.state as SharedState | undefined;
+          if (next) applyRemoteState(next);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      portalSupabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyDomain]);
+
+  // ───────── Debounced save to remote whenever local state changes ─────────
+  useEffect(() => {
+    if (!companyDomain || !remoteLoadedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      setSyncState('saving');
+      const next: SharedState = {
+        documents: docsToSlim(documents),
+        overrides: companyOverrides,
+        logo: companyLogo,
+        signature: directorSignature,
+      };
+      const { error } = await portalSupabase
+        .from(REMOTE_TABLE)
+        .upsert({ company_domain: companyDomain, state: next as any }, { onConflict: 'company_domain' });
+      setSyncState(error ? 'error' : 'idle');
+      if (error) console.warn('[Compliance] sync save failed', error.message);
+    }, 400);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [documents, companyOverrides, companyLogo, directorSignature, companyDomain]);
+
+  // ───────── Derived profile ─────────
   const companyProfile = deriveCompanyProfile(
     brand,
     { email: user?.email ?? '', fullName: profileFullName },
@@ -133,23 +250,18 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     { logoDataUrl: companyLogo },
   );
 
+  // ───────── Setters (also write localStorage immediately for offline) ─────────
   const setDirectorSignature = useCallback((dataUrl: string | null) => {
     setDirectorSignatureState(dataUrl);
     try {
       if (dataUrl) localStorage.setItem(SIGNATURE_KEY, dataUrl);
       else localStorage.removeItem(SIGNATURE_KEY);
-    } catch {
-      console.warn('[Compliance] Could not persist director signature to localStorage');
-    }
+    } catch {}
   }, []);
 
   const setCompanyOverrides = useCallback((overrides: CompanyOverrides) => {
     setCompanyOverridesState(overrides);
-    try {
-      localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
-    } catch {
-      console.warn('[Compliance] Could not persist company overrides to localStorage');
-    }
+    try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides)); } catch {}
   }, []);
 
   const setCompanyLogo = useCallback((dataUrl: string | null) => {
@@ -157,9 +269,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     try {
       if (dataUrl) localStorage.setItem(LOGO_KEY, dataUrl);
       else localStorage.removeItem(LOGO_KEY);
-    } catch {
-      console.warn('[Compliance] Could not persist company logo to localStorage');
-    }
+    } catch {}
   }, []);
 
   const updateDocument = useCallback((id: string, updates: Partial<ISODocument>) => {
@@ -177,17 +287,12 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     [documents]
   );
 
-  // Stamp the current profile values onto a doc so future "push" runs have a
-  // diff to work with. Call when generatedContent is created or updated.
   const snapshotProfileFor = useCallback((docId: string) => {
     setDocuments((prev) => prev.map((doc) =>
       doc.id === docId ? { ...doc, profileSnapshot: profileSnapshot(companyProfile) } : doc
     ));
   }, [companyProfile]);
 
-  // Apply current profile to all docs with generatedContent. For each pushable
-  // field where snapshot[field] !== current[field], do a global find/replace in
-  // the doc's generated content, then update the snapshot.
   const pushProfileToDocuments = useCallback((): PushResult => {
     let docsUpdated = 0;
     let replacements = 0;
@@ -244,6 +349,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       setCompanyLogo,
       snapshotProfileFor,
       pushProfileToDocuments,
+      syncState,
     }}>
       {children}
     </ISOContext.Provider>
