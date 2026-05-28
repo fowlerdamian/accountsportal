@@ -5,6 +5,7 @@ import { supabase as portalSupabase } from '@portal/lib/supabase';
 import { useAuth as usePortalAuth } from '@portal/context/AuthContext';
 
 const DOCS_KEY = 'compliance_documents';
+const SIGNATURE_KEY = 'compliance_director_signature';
 
 interface ISOContextType {
   documents: ISODocument[];
@@ -16,6 +17,8 @@ interface ISOContextType {
   completedCount: number;
   totalCount: number;
   companyProfile: CompanyProfile | null;
+  directorSignature: string | null;
+  setDirectorSignature: (dataUrl: string | null) => void;
 }
 
 const ISOContext = createContext<ISOContextType | undefined>(undefined);
@@ -36,11 +39,21 @@ function loadDocuments(): ISODocument[] {
   return ISO_DOCUMENTS.map((doc) => ({ ...doc, status: 'not_started' as const, progress: 0, messages: [] }));
 }
 
+function loadSignature(): string | null {
+  try {
+    return localStorage.getItem(SIGNATURE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function ISOProvider({ children }: { children: ReactNode }) {
   const { user } = usePortalAuth();
   const [documents, setDocuments] = useState<ISODocument[]>(loadDocuments);
   const [auditResults, setAuditResults] = useState<AuditResult[] | null>(null);
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
+  const [directorSignature, setDirectorSignatureState] = useState<string | null>(loadSignature);
+  const [brand, setBrand] = useState<any>(null);
+  const [profileFullName, setProfileFullName] = useState<string | null>(null);
 
   // Persist documents whenever they change
   useEffect(() => {
@@ -55,8 +68,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     ));
   }, [documents]);
 
-  // Derive the company profile from portal knowledge: brand matched to the
-  // user's email domain, plus the user's auth record + profile.
+  // Pull portal knowledge once per user: brand matched to email domain + profile name.
   useEffect(() => {
     let cancelled = false;
     const userEmail = user?.email ?? '';
@@ -75,13 +87,28 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       ]);
 
       if (cancelled) return;
-      const brand = brandRows && brandRows[0] ? brandRows[0] : null;
-      const fullName = (profileRow as any)?.full_name ?? null;
-      setCompanyProfile(deriveCompanyProfile(brand, { email: userEmail, fullName }));
+      setBrand(brandRows && brandRows[0] ? brandRows[0] : null);
+      setProfileFullName((profileRow as any)?.full_name ?? null);
     })();
 
     return () => { cancelled = true; };
   }, [user?.email, (user as any)?.id]);
+
+  const companyProfile = deriveCompanyProfile(
+    brand,
+    { email: user?.email ?? '', fullName: profileFullName },
+    { signatureDataUrl: directorSignature },
+  );
+
+  const setDirectorSignature = useCallback((dataUrl: string | null) => {
+    setDirectorSignatureState(dataUrl);
+    try {
+      if (dataUrl) localStorage.setItem(SIGNATURE_KEY, dataUrl);
+      else localStorage.removeItem(SIGNATURE_KEY);
+    } catch {
+      console.warn('[Compliance] Could not persist director signature to localStorage');
+    }
+  }, []);
 
   const updateDocument = useCallback((id: string, updates: Partial<ISODocument>) => {
     setDocuments((prev) => prev.map((doc) => (doc.id === id ? { ...doc, ...updates } : doc)));
@@ -112,6 +139,8 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       completedCount,
       totalCount,
       companyProfile,
+      directorSignature,
+      setDirectorSignature,
     }}>
       {children}
     </ISOContext.Provider>

@@ -51,11 +51,20 @@ interface UserInfo {
   fullName?: string | null;
 }
 
+interface DirectorInfo {
+  signatureDataUrl?: string | null;
+}
+
+// Damian Fowler is the director of record for the portal tenant.
+// Used as the default when profiles.full_name is missing.
+export const DEFAULT_DIRECTOR_NAME = 'Damian Fowler';
+export const DEFAULT_DIRECTOR_TITLE = 'Director';
+
 // Derive a CompanyProfile from portal-side knowledge: the brand record
 // matched to the user's email domain, plus the authenticated user.
 // Fields the portal doesn't track (ABN, address, etc.) stay blank — the
 // dashboard and PDF export skip blank values gracefully.
-export function deriveCompanyProfile(brand: BrandRow | null, user: UserInfo): CompanyProfile {
+export function deriveCompanyProfile(brand: BrandRow | null, user: UserInfo, director: DirectorInfo = {}): CompanyProfile {
   const userDomain = user.email?.split('@')[1]?.toLowerCase() ?? '';
   const brandDomain = brand?.domain?.replace(/^(guide|support|www)\./, '') ?? '';
   const website = brandDomain ? `www.${brandDomain}` : userDomain ? `www.${userDomain}` : '';
@@ -67,6 +76,8 @@ export function deriveCompanyProfile(brand: BrandRow | null, user: UserInfo): Co
     phone: brand?.support_phone ?? '',
     email: brand?.support_email ?? user.email ?? '',
     website,
-    contactName: user.fullName ?? '',
+    contactName: user.fullName?.trim() || DEFAULT_DIRECTOR_NAME,
+    contactTitle: DEFAULT_DIRECTOR_TITLE,
+    signatureDataUrl: director.signatureDataUrl ?? null,
   };
 }

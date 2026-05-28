@@ -7,6 +7,7 @@ import ComplianceSelfAudit from './pages/ComplianceSelfAudit';
 import ComplianceSupportingDocs from './pages/ComplianceSupportingDocs';
 import ComplianceFileManager from './pages/ComplianceFileManager';
 import ComplianceKnowledgeBase from './pages/ComplianceKnowledgeBase';
+import ComplianceDirectorSignature from './pages/ComplianceDirectorSignature';
 
 function ComplianceRoutes() {
   return (
@@ -17,6 +18,7 @@ function ComplianceRoutes() {
       <Route path="supporting-docs" element={<ComplianceSupportingDocs />} />
       <Route path="files" element={<ComplianceFileManager />} />
       <Route path="knowledge-base" element={<ComplianceKnowledgeBase />} />
+      <Route path="signature" element={<ComplianceDirectorSignature />} />
       <Route path="*" element={<Navigate to="/compliance" replace />} />
     </Routes>
   );
