@@ -26,11 +26,24 @@ interface DriveSyncPanelProps {
 }
 
 // Extract a Drive folder ID from any of the common URL shapes the user can paste.
+//   https://drive.google.com/drive/folders/<ID>
+//   https://drive.google.com/drive/folders/<ID>?usp=sharing
+//   https://drive.google.com/drive/u/0/folders/<ID>
+//   https://drive.google.com/open?id=<ID>&usp=drive_fs
+//   https://drive.google.com/file/d/<ID>/view
+//   <ID> on its own
 function extractFolderId(input: string): string | null {
   const raw = input.trim();
   if (!raw) return null;
-  const fromUrl = raw.match(/folders\/([a-zA-Z0-9_-]{20,})/);
-  if (fromUrl) return fromUrl[1];
+  const patterns = [
+    /folders\/([a-zA-Z0-9_-]{20,})/,
+    /[?&]id=([a-zA-Z0-9_-]{20,})/,
+    /file\/d\/([a-zA-Z0-9_-]{20,})/,
+  ];
+  for (const re of patterns) {
+    const m = raw.match(re);
+    if (m) return m[1];
+  }
   if (/^[a-zA-Z0-9_-]{20,}$/.test(raw)) return raw;
   return null;
 }
