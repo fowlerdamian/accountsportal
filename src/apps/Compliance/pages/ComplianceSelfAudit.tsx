@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 export default function ComplianceSelfAudit() {
   const navigate = useNavigate();
-  const { documents, auditResults, setAuditResults, updateDocument, companyProfile } = useISO();
+  const { documents, auditResults, setAuditResults, updateDocument, companyProfile, snapshotProfileFor } = useISO();
   const [isAuditing, setIsAuditing] = useState(false);
   const [fixingIds, setFixingIds] = useState<Set<string>>(new Set());
   const [fixingDocIds, setFixingDocIds] = useState<Set<string>>(new Set());
@@ -119,6 +119,7 @@ export default function ComplianceSelfAudit() {
         if (fenceMatch) cleanContent = fenceMatch[1];
 
         updateDocument(doc.id, { generatedContent: cleanContent });
+        snapshotProfileFor(doc.id);
         const newFixed = new Set(fixedIds);
         docFindings.forEach(f => newFixed.add(findingKey(f.result, f.index)));
         setFixedIds(newFixed);

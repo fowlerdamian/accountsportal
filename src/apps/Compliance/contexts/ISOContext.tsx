@@ -1,11 +1,21 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { ISODocument, ISO_DOCUMENTS, ChatMessage, AuditResult } from '../lib/iso-documents';
-import { CompanyProfile, deriveCompanyProfile } from '../lib/company-profile';
+import {
+  CompanyProfile, CompanyOverrides,
+  deriveCompanyProfile, profileSnapshot, PUSHABLE_FIELDS,
+} from '../lib/company-profile';
 import { supabase as portalSupabase } from '@portal/lib/supabase';
 import { useAuth as usePortalAuth } from '@portal/context/AuthContext';
 
 const DOCS_KEY = 'compliance_documents';
 const SIGNATURE_KEY = 'compliance_director_signature';
+const OVERRIDES_KEY = 'compliance_company_overrides';
+
+interface PushResult {
+  docsScanned: number;
+  docsUpdated: number;
+  replacements: number;
+}
 
 interface ISOContextType {
   documents: ISODocument[];
@@ -19,6 +29,10 @@ interface ISOContextType {
   companyProfile: CompanyProfile | null;
   directorSignature: string | null;
   setDirectorSignature: (dataUrl: string | null) => void;
+  companyOverrides: CompanyOverrides;
+  setCompanyOverrides: (overrides: CompanyOverrides) => void;
+  snapshotProfileFor: (docId: string) => void;
+  pushProfileToDocuments: () => PushResult;
 }
 
 const ISOContext = createContext<ISOContextType | undefined>(undefined);
@@ -27,11 +41,11 @@ function loadDocuments(): ISODocument[] {
   try {
     const saved = localStorage.getItem(DOCS_KEY);
     if (saved) {
-      const parsed: Array<{ id: string; status: string; progress: number; messages: ChatMessage[]; generatedContent?: string }> = JSON.parse(saved);
+      const parsed: Array<Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot'>> = JSON.parse(saved);
       return ISO_DOCUMENTS.map((doc) => {
         const s = parsed.find((d) => d.id === doc.id);
         return s
-          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent }
+          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot }
           : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
       });
     }
@@ -40,11 +54,18 @@ function loadDocuments(): ISODocument[] {
 }
 
 function loadSignature(): string | null {
+  try { return localStorage.getItem(SIGNATURE_KEY); } catch { return null; }
+}
+
+function loadOverrides(): CompanyOverrides {
   try {
-    return localStorage.getItem(SIGNATURE_KEY);
-  } catch {
-    return null;
-  }
+    const raw = localStorage.getItem(OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export function ISOProvider({ children }: { children: ReactNode }) {
@@ -52,6 +73,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   const [documents, setDocuments] = useState<ISODocument[]>(loadDocuments);
   const [auditResults, setAuditResults] = useState<AuditResult[] | null>(null);
   const [directorSignature, setDirectorSignatureState] = useState<string | null>(loadSignature);
+  const [companyOverrides, setCompanyOverridesState] = useState<CompanyOverrides>(loadOverrides);
   const [brand, setBrand] = useState<any>(null);
   const [profileFullName, setProfileFullName] = useState<string | null>(null);
 
@@ -64,6 +86,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
         progress: d.progress,
         messages: d.messages,
         generatedContent: d.generatedContent,
+        profileSnapshot: d.profileSnapshot,
       }))
     ));
   }, [documents]);
@@ -98,6 +121,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     brand,
     { email: user?.email ?? '', fullName: profileFullName },
     { signatureDataUrl: directorSignature },
+    companyOverrides,
   );
 
   const setDirectorSignature = useCallback((dataUrl: string | null) => {
@@ -107,6 +131,15 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       else localStorage.removeItem(SIGNATURE_KEY);
     } catch {
       console.warn('[Compliance] Could not persist director signature to localStorage');
+    }
+  }, []);
+
+  const setCompanyOverrides = useCallback((overrides: CompanyOverrides) => {
+    setCompanyOverridesState(overrides);
+    try {
+      localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
+    } catch {
+      console.warn('[Compliance] Could not persist company overrides to localStorage');
     }
   }, []);
 
@@ -125,6 +158,51 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     [documents]
   );
 
+  // Stamp the current profile values onto a doc so future "push" runs have a
+  // diff to work with. Call when generatedContent is created or updated.
+  const snapshotProfileFor = useCallback((docId: string) => {
+    setDocuments((prev) => prev.map((doc) =>
+      doc.id === docId ? { ...doc, profileSnapshot: profileSnapshot(companyProfile) } : doc
+    ));
+  }, [companyProfile]);
+
+  // Apply current profile to all docs with generatedContent. For each pushable
+  // field where snapshot[field] !== current[field], do a global find/replace in
+  // the doc's generated content, then update the snapshot.
+  const pushProfileToDocuments = useCallback((): PushResult => {
+    let docsUpdated = 0;
+    let replacements = 0;
+    let docsScanned = 0;
+    const current = profileSnapshot(companyProfile);
+
+    setDocuments((prev) => prev.map((doc) => {
+      if (!doc.generatedContent) return doc;
+      docsScanned++;
+      let content = doc.generatedContent;
+      const oldSnap = doc.profileSnapshot ?? {};
+      let touched = false;
+
+      for (const key of PUSHABLE_FIELDS) {
+        const oldValue = oldSnap[key as string];
+        const newValue = current[key as string];
+        if (!oldValue || !newValue || oldValue === newValue) continue;
+        const re = new RegExp(escapeRegex(oldValue), 'g');
+        const before = content;
+        content = content.replace(re, newValue);
+        if (content !== before) {
+          const matches = before.match(re);
+          replacements += matches ? matches.length : 0;
+          touched = true;
+        }
+      }
+
+      if (touched) docsUpdated++;
+      return { ...doc, generatedContent: content, profileSnapshot: current };
+    }));
+
+    return { docsScanned, docsUpdated, replacements };
+  }, [companyProfile]);
+
   const completedCount = documents.filter((d) => d.status === 'complete').length;
   const totalCount = documents.length;
 
@@ -141,6 +219,10 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       companyProfile,
       directorSignature,
       setDirectorSignature,
+      companyOverrides,
+      setCompanyOverrides,
+      snapshotProfileFor,
+      pushProfileToDocuments,
     }}>
       {children}
     </ISOContext.Provider>

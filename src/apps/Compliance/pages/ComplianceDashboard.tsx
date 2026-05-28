@@ -4,7 +4,7 @@ import { useActions } from '../contexts/ActionsContext';
 import { motion } from 'framer-motion';
 import {
   FileText, CheckCircle2, Clock, Circle, Shield, ArrowRight,
-  AlertTriangle, X, FolderOpen, FolderArchive, BookOpen, PenLine,
+  AlertTriangle, X, FolderOpen, FolderArchive, BookOpen, PenLine, Building2,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -84,6 +84,10 @@ export default function ComplianceDashboard() {
             <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/knowledge-base')} className="gap-2">
               <BookOpen className="h-4 w-4" />
               Knowledge Base
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/company-details')} className="gap-2">
+              <Building2 className="h-4 w-4" />
+              Company Details
             </Button>
             <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/signature')} className="gap-2">
               <PenLine className="h-4 w-4" />

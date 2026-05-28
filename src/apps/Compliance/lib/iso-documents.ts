@@ -9,6 +9,9 @@ export interface ISODocument {
   messages: ChatMessage[];
   generatedContent?: string;
   answers?: Record<number, string>;
+  /** Snapshot of company profile fields at the time generatedContent was created.
+   *  Used by the "push updates to older docs" flow to find/replace stale values. */
+  profileSnapshot?: Record<string, string>;
 }
 
 export interface ChatMessage {

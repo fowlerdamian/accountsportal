@@ -23,7 +23,7 @@ export default function ComplianceDocumentChat() {
   const { docId } = useParams<{ docId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { getDocument, updateDocument, addMessage, companyProfile } = useISO();
+  const { getDocument, updateDocument, addMessage, companyProfile, snapshotProfileFor } = useISO();
   const { createAction, closeAction } = useActions();
   const { user } = useAuth();
   const [input, setInput] = useState('');
@@ -381,6 +381,7 @@ export default function ComplianceDocumentChat() {
 
       if (!content) throw new Error('No content generated');
       updateDocument(docId, { status: 'complete', progress: 100, generatedContent: content });
+      snapshotProfileFor(docId);
       await parseAndInsertRequirements(content);
       toast.success('Document created successfully!');
     } catch (e: any) {

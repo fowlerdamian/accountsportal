@@ -1,0 +1,225 @@
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useISO } from '../contexts/ISOContext';
+import { CompanyOverrides } from '../lib/company-profile';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Save, Upload, Building2, MapPin, User, Factory, Globe, Lock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
+
+const AUSTRALIAN_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'];
+const INDUSTRIES = [
+  'Manufacturing', 'Construction', 'Transport, Postal & Warehousing',
+  'Professional, Scientific & Technical Services', 'Health Care & Social Assistance',
+  'Retail Trade', 'Wholesale Trade', 'Mining', 'Agriculture, Forestry & Fishing', 'Other Services',
+];
+const EMPLOYEE_BUCKETS = ['1-10', '11-50', '51-100', '101-250', '251-500', '500+'];
+
+type FormState = Record<keyof CompanyOverrides, string>;
+
+const FIELD_KEYS: Array<keyof CompanyOverrides> = [
+  'companyName', 'abn', 'industry', 'address', 'suburb', 'state', 'postcode', 'country',
+  'phone', 'email', 'website', 'contactName', 'contactTitle', 'employeeCount', 'mainProducts',
+];
+
+export default function ComplianceCompanyDetails() {
+  const navigate = useNavigate();
+  const { companyProfile, companyOverrides, setCompanyOverrides, pushProfileToDocuments, documents } = useISO();
+
+  const initialForm = useMemo<FormState>(() => {
+    const f: FormState = {} as FormState;
+    for (const key of FIELD_KEYS) f[key] = (companyProfile?.[key] as string) ?? '';
+    return f;
+  }, [companyProfile]);
+
+  const [form, setForm] = useState<FormState>(initialForm);
+  const [isPushing, setIsPushing] = useState(false);
+
+  const update = (field: keyof CompanyOverrides, value: string) => setForm((p) => ({ ...p, [field]: value }));
+
+  const handleSave = () => {
+    const next: CompanyOverrides = {};
+    for (const key of FIELD_KEYS) {
+      const value = form[key]?.trim() ?? '';
+      if (value) (next as any)[key] = value;
+    }
+    setCompanyOverrides(next);
+    toast.success('Company details saved');
+  };
+
+  const handlePush = () => {
+    handleSave();
+    setIsPushing(true);
+    try {
+      const result = pushProfileToDocuments();
+      if (result.replacements === 0) {
+        toast.info(`No stale references found across ${result.docsScanned} document(s)`);
+      } else {
+        toast.success(`Updated ${result.docsUpdated} document(s) · ${result.replacements} replacement(s)`);
+      }
+    } finally {
+      setIsPushing(false);
+    }
+  };
+
+  const completedDocs = documents.filter((d) => !!d.generatedContent).length;
+
+  return (
+    <div className="min-h-full overflow-y-auto">
+      <header className="border-b border-border px-6 py-4 sticky top-0 bg-background/80 backdrop-blur z-10">
+        <div className="mx-auto max-w-3xl flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/compliance')}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-base font-bold text-foreground flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-primary" /> Company Details
+              </h1>
+              <p className="text-xs text-muted-foreground">Contact details and address used in document headers</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" className="gap-1.5" onClick={handleSave}>
+              <Save className="h-3.5 w-3.5" /> Save
+            </Button>
+            <Button size="sm" className="gap-1.5 glow-gold" onClick={handlePush} disabled={isPushing || completedDocs === 0}>
+              <Upload className="h-3.5 w-3.5" />
+              {isPushing ? 'Pushing…' : `Push to ${completedDocs} doc${completedDocs === 1 ? '' : 's'}`}
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-3xl px-6 py-8 space-y-6">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="rounded-xl border border-border/60 bg-secondary/30 p-4 text-sm text-muted-foreground flex items-start gap-3">
+            <Lock className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+            <div>
+              Brand name and logo come from the staff portal and aren't editable here. Any field you change below
+              overrides the portal default for ISO documents. Click <span className="font-semibold text-foreground">Push</span> to
+              find and replace stale values in {completedDocs} already-generated document{completedDocs === 1 ? '' : 's'}.
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-6">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
+            <Building2 className="h-4 w-4" /> Company
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Label htmlFor="companyName">Company Name</Label>
+              <Input id="companyName" value={form.companyName} onChange={(e) => update('companyName', e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="abn">ABN</Label>
+              <Input id="abn" value={form.abn} onChange={(e) => update('abn', e.target.value)} placeholder="12 345 678 901" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="industry">Industry Sector</Label>
+              <Select value={form.industry} onValueChange={(v) => update('industry', v)}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select industry" /></SelectTrigger>
+                <SelectContent>
+                  {INDUSTRIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-6">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
+            <MapPin className="h-4 w-4" /> Address
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Label htmlFor="address">Street Address</Label>
+              <Input id="address" value={form.address} onChange={(e) => update('address', e.target.value)} placeholder="123 Industrial Drive" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="suburb">Suburb</Label>
+              <Input id="suburb" value={form.suburb} onChange={(e) => update('suburb', e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="state">State</Label>
+              <Select value={form.state} onValueChange={(v) => update('state', v)}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select state" /></SelectTrigger>
+                <SelectContent>
+                  {AUSTRALIAN_STATES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="postcode">Postcode</Label>
+              <Input id="postcode" value={form.postcode} onChange={(e) => update('postcode', e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="country">Country</Label>
+              <Input id="country" value={form.country} onChange={(e) => update('country', e.target.value)} className="mt-1" />
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-6">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
+            <User className="h-4 w-4" /> Contact
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="contactName">Contact Name</Label>
+              <Input id="contactName" value={form.contactName} onChange={(e) => update('contactName', e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="contactTitle">Title / Position</Label>
+              <Input id="contactTitle" value={form.contactTitle} onChange={(e) => update('contactTitle', e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="phone">Phone</Label>
+              <Input id="phone" value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="+61 3 9000 0000" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className="mt-1" />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="website">Website</Label>
+              <div className="relative mt-1">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input id="website" value={form.website} onChange={(e) => update('website', e.target.value)} className="pl-10" />
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-6">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
+            <Factory className="h-4 w-4" /> Business
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="employeeCount">Number of Employees</Label>
+              <Select value={form.employeeCount} onValueChange={(v) => update('employeeCount', v)}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select range" /></SelectTrigger>
+                <SelectContent>
+                  {EMPLOYEE_BUCKETS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="mainProducts">Main Products / Services</Label>
+              <Textarea id="mainProducts" value={form.mainProducts} onChange={(e) => update('mainProducts', e.target.value)} rows={3} className="mt-1" />
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Spacer so the bottom buttons aren't hidden */}
+        <div className="h-2" />
+      </main>
+    </div>
+  );
+}
