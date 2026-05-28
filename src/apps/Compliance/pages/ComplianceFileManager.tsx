@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react';
 import JSZip from 'jszip';
 import { loadHeaderConfig, generatePdf, savePdf } from '../lib/pdf-export';
 import { auditSupabase } from '../client';
+import DriveSyncPanel from '../components/DriveSyncPanel';
 
 const categoryLabels: Record<string, string> = { plan: 'Plan', do: 'Do', check: 'Check', act: 'Act' };
 
@@ -201,6 +202,9 @@ export default function ComplianceFileManager() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        {/* Google Drive sync */}
+        <DriveSyncPanel documents={documents} supportingDocs={supportingDocs} />
+
         {/* QMS Procedures */}
         <section className="mb-10">
           <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted-foreground">QMS Procedures ({completedDocs.length})</h3>

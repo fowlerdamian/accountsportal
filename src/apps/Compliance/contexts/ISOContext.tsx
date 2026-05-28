@@ -36,6 +36,8 @@ interface ISOContextType {
   setCompanyOverrides: (overrides: CompanyOverrides) => void;
   companyLogo: string | null;
   setCompanyLogo: (dataUrl: string | null) => void;
+  driveFolderId: string | null;
+  setDriveFolderId: (id: string | null) => void;
   snapshotProfileFor: (docId: string) => void;
   pushProfileToDocuments: () => PushResult;
   syncState: 'idle' | 'loading' | 'saving' | 'error';
@@ -74,6 +76,7 @@ interface SharedState {
   overrides: CompanyOverrides;
   logo: string | null;
   signature: string | null;
+  driveFolderId?: string | null;
 }
 
 function docsToSlim(documents: ISODocument[]): DocStateSlim[] {
@@ -102,6 +105,7 @@ function hasMeaningfulData(s: SharedState | null | undefined): boolean {
   if (!s) return false;
   if (s.signature && s.signature.length > 0) return true;
   if (s.logo && s.logo.length > 0) return true;
+  if (s.driveFolderId && s.driveFolderId.length > 0) return true;
   if (s.overrides && Object.keys(s.overrides).length > 0) return true;
   if (Array.isArray(s.documents)) {
     for (const d of s.documents) {
@@ -170,6 +174,7 @@ function mergeStates(a: SharedState, b: SharedState): SharedState {
     overrides,
     logo: a.logo || b.logo || null,
     signature: a.signature || b.signature || null,
+    driveFolderId: a.driveFolderId || b.driveFolderId || null,
   };
 }
 
@@ -194,6 +199,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   const [directorSignature, setDirectorSignatureState] = useState<string | null>(loadSignature);
   const [companyOverrides, setCompanyOverridesState] = useState<CompanyOverrides>(loadOverrides);
   const [companyLogo, setCompanyLogoState] = useState<string | null>(loadLogo);
+  const [driveFolderId, setDriveFolderIdState] = useState<string | null>(null);
   const [brand, setBrand] = useState<any>(null);
   const [profileFullName, setProfileFullName] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<ISOContextType['syncState']>('idle');
@@ -210,6 +216,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     overrides: companyOverrides,
     logo: companyLogo,
     signature: directorSignature,
+    driveFolderId,
   });
 
   useEffect(() => {
@@ -218,8 +225,9 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       overrides: companyOverrides,
       logo: companyLogo,
       signature: directorSignature,
+      driveFolderId,
     };
-  }, [documents, companyOverrides, companyLogo, directorSignature]);
+  }, [documents, companyOverrides, companyLogo, directorSignature, driveFolderId]);
 
   const companyDomain = (user?.email ?? '').split('@')[1]?.toLowerCase() ?? '';
 
@@ -259,6 +267,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     setCompanyOverridesState(next.overrides ?? {});
     setCompanyLogoState(next.logo ?? null);
     setDirectorSignatureState(next.signature ?? null);
+    setDriveFolderIdState(next.driveFolderId ?? null);
     try {
       localStorage.setItem(DOCS_KEY, JSON.stringify(next.documents ?? []));
       localStorage.setItem(OVERRIDES_KEY, JSON.stringify(next.overrides ?? {}));
@@ -380,7 +389,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [documents, companyOverrides, companyLogo, directorSignature, companyDomain, pushLocalToRemote]);
+  }, [documents, companyOverrides, companyLogo, directorSignature, driveFolderId, companyDomain, pushLocalToRemote]);
 
   // ───────── Derived profile ─────────
   const companyProfile = deriveCompanyProfile(
@@ -411,6 +420,10 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       if (dataUrl) localStorage.setItem(LOGO_KEY, dataUrl);
       else localStorage.removeItem(LOGO_KEY);
     } catch {}
+  }, []);
+
+  const setDriveFolderId = useCallback((id: string | null) => {
+    setDriveFolderIdState(id);
   }, []);
 
   const updateDocument = useCallback((id: string, updates: Partial<ISODocument>) => {
@@ -488,6 +501,8 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       setCompanyOverrides,
       companyLogo,
       setCompanyLogo,
+      driveFolderId,
+      setDriveFolderId,
       snapshotProfileFor,
       pushProfileToDocuments,
       syncState,
