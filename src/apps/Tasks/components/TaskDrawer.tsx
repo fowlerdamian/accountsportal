@@ -12,7 +12,7 @@ import {
   useDeleteStaffTask,
   useAddDependency,
   useStaffProfiles,
-  useTaskComments,
+  useThreadComments,
   useAddTaskComment,
   type StaffTask,
   type StaffTaskStatus,
@@ -55,7 +55,6 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
   const { data: task }              = useStaffTask(taskId ?? undefined);
   const { data: allTasks = [] }     = useStaffTasks({});
   const { data: profiles = [] }     = useStaffProfiles();
-  const { data: comments = [] }     = useTaskComments(taskId ?? undefined);
   const { mutateAsync: updateTask } = useUpdateStaffTask();
   const { mutateAsync: deleteTask } = useDeleteStaffTask();
   const { mutateAsync: addDependency } = useAddDependency();
@@ -91,6 +90,25 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
   const dependencies = useMemo(
     () => liveTask ? allTasks.filter((t) => t.parent_task_id === liveTask.id) : [],
     [allTasks, liveTask],
+  );
+
+  // The whole dependency "family" — the root task plus every dependency under
+  // it. Comments are pulled across all of them so a comment left on a
+  // dependency surfaces on the original/parent task (and vice-versa).
+  const familyIds = useMemo(() => {
+    if (!liveTask) return [] as string[];
+    const rootId = liveTask.parent_task_id ?? liveTask.id;
+    const ids = new Set<string>([rootId, liveTask.id]);
+    for (const t of allTasks) if (t.parent_task_id === rootId) ids.add(t.id);
+    return Array.from(ids);
+  }, [allTasks, liveTask]);
+
+  const { data: comments = [] } = useThreadComments(familyIds);
+
+  // Title lookup so cross-task comments can be labelled with their source task.
+  const titleById = useMemo(
+    () => Object.fromEntries(allTasks.map((t) => [t.id, t.title] as const)),
+    [allTasks],
   );
 
   // Pull status_notes from the live row into the local textarea whenever
@@ -328,8 +346,10 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
           </button>
         )}
 
-        {/* Blocked-by chip */}
-        {liveTask.blocked_by_task_id && blocker && (
+        {/* Blocked-by chip — only while still blocked. Once the blocker is
+            marked Done the DB trigger flips this task back to 'not_started',
+            so the chip must clear too (otherwise it looks like unblock failed). */}
+        {liveTask.status === "blocked" && liveTask.blocked_by_task_id && blocker && (
           <div className="mx-5 mt-3 flex items-start gap-2 rounded-md border border-amber-800/40 bg-amber-950/20 px-3 py-2">
             <Link2 className="w-3.5 h-3.5 text-amber-300 mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0 text-xs">
@@ -553,7 +573,11 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
               <p className="text-xs text-muted-foreground/60">No comments yet</p>
             ) : (
               <ul className="space-y-2.5 mb-3">
-                {comments.map((c) => (
+                {comments.map((c) => {
+                  // Comments carried over from a related task in the dependency
+                  // family — label which task they were posted on.
+                  const fromOther = c.task_id !== liveTask.id;
+                  return (
                   <li key={c.id} className="flex gap-2 text-sm">
                     <UserAvatar name={nameFor(profiles, c.author_id, userId)} size="xs" />
                     <div className="flex-1 min-w-0">
@@ -561,10 +585,17 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                         <span className="text-xs font-medium">{nameFor(profiles, c.author_id, userId)}</span>
                         <span className="text-[10px] text-muted-foreground">{c.created_at.slice(0, 10)}</span>
                       </div>
+                      {fromOther && (
+                        <div className="flex items-center gap-1 text-[10px] text-amber-400/80 mt-0.5">
+                          <Link2 className="w-2.5 h-2.5 shrink-0" />
+                          <span className="truncate">on: {titleById[c.task_id] ?? "related task"}</span>
+                        </div>
+                      )}
                       <CommentBody body={c.body} />
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
 

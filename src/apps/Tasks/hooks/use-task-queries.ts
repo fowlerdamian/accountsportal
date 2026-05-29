@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
+import { notifyTaskAssignee } from "../lib/notifyTaskChat";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,37 @@ function regenerateSummary(taskId: string): void {
   supabase.functions
     .invoke("generate-task-summary", { body: { task_id: taskId } })
     .catch((err) => console.warn("[generate-task-summary]", err));
+}
+
+/**
+ * When a blocker task is completed, the DB trigger
+ * (handle_staff_task_blocker_done) auto-flips any parent it was blocking back
+ * to 'not_started'. The trigger can't reach Google Chat, so here we alert each
+ * unblocked parent's *creator* — the person who was waiting on this work.
+ * Fire-and-forget; never throws.
+ */
+async function notifyBlockerDone(blockerId: string): Promise<void> {
+  try {
+    const { data, error } = await supabase
+      .from("staff_tasks")
+      .select("id, created_by, title")
+      .eq("blocked_by_task_id", blockerId);
+    if (error || !data || data.length === 0) return;
+    // Don't ping the person who just marked the blocker done about their own task.
+    const { data: { user } } = await supabase.auth.getUser();
+    const actorId = user?.id;
+    for (const parent of data as Pick<StaffTask, "id" | "created_by" | "title">[]) {
+      if (parent.created_by === actorId) continue;
+      notifyTaskAssignee({
+        task_id:      parent.id,
+        recipient_id: parent.created_by,
+        event:        "blocker_done",
+        task_title:   parent.title,
+      });
+    }
+  } catch (err) {
+    console.warn("[notifyBlockerDone]", err);
+  }
 }
 
 export interface StaffTaskComment {
@@ -171,6 +203,11 @@ export function useUpdateStaffTask() {
       if ("title" in changed || "description" in changed) {
         regenerateSummary(task.id);
       }
+      // A completed task may have been blocking others — alert their creators
+      // that they're now unblocked (mirrors the server-side auto-unblock trigger).
+      if (changed.status === "done") {
+        notifyBlockerDone(task.id);
+      }
     },
   });
 }
@@ -269,6 +306,30 @@ export function useTaskComments(taskId: string | undefined) {
   });
 }
 
+/**
+ * Comments across a whole dependency "family" (a parent task + all of its
+ * dependency children), merged into one chronological thread. This is what
+ * lets a comment posted on a dependency surface on the original/parent task —
+ * and vice-versa — so everyone working the blocked item sees one conversation.
+ * Each row keeps its own `task_id`, so callers can label cross-task comments.
+ */
+export function useThreadComments(taskIds: string[]) {
+  const ids = Array.from(new Set(taskIds.filter(Boolean))).sort();
+  return useQuery({
+    queryKey: ["staff_task_comments_thread", ids.join(",")],
+    enabled:  ids.length > 0,
+    queryFn:  async () => {
+      const { data, error } = await supabase
+        .from("staff_task_comments")
+        .select("*")
+        .in("task_id", ids)
+        .order("created_at");
+      if (error) throw error;
+      return data as StaffTaskComment[];
+    },
+  });
+}
+
 export function useAddTaskComment() {
   const qc = useQueryClient();
   return useMutation({
@@ -283,6 +344,8 @@ export function useAddTaskComment() {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["staff_task_comments", data.task_id] });
+      // The new comment may belong to a dependency family thread — refresh those too.
+      qc.invalidateQueries({ queryKey: ["staff_task_comments_thread"] });
     },
   });
 }
@@ -311,6 +374,8 @@ export function useStaffTasksRealtime(): void {
         (payload) => {
           const taskId = (payload.new as any)?.task_id ?? (payload.old as any)?.task_id;
           if (taskId) qc.invalidateQueries({ queryKey: ["staff_task_comments", taskId] });
+          // Family threads aggregate multiple task_ids — refresh them all.
+          qc.invalidateQueries({ queryKey: ["staff_task_comments_thread"] });
         },
       )
       .subscribe();
