@@ -10,6 +10,7 @@ import { Textarea } from "@guide/components/ui/textarea";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
 import { toast } from "sonner";
+import { notifyGuideComment, notifyGuideFlag } from "@guide/lib/notifyGoogleChat";
 
 function generateSessionId() {
   return 'sess-' + Math.random().toString(36).substring(2, 10);
@@ -122,41 +123,51 @@ export default function GuideViewer() {
   const submitRating = async (r: number) => {
     setRating(r);
     if (brand) {
+      const trimmed = comment.trim();
       await supabase.from("feedback").insert({
         instruction_set_id: guide.id,
         brand_id: brand.id,
         session_id: sessionId,
         rating: r,
-        comment: comment || null,
+        comment: trimmed || null,
         type: 'rating' as const,
       });
+      // Only ping chat when the user actually wrote something — bare ratings are noise.
+      if (trimmed && guide?.title) {
+        notifyGuideComment({ guideTitle: guide.title, comment: trimmed, rating: r });
+      }
     }
     toast.success("Thanks for your feedback!");
   };
 
   const submitComment = async () => {
     if (!comment.trim() || !brand) return;
+    const trimmed = comment.trim();
     await supabase.from("feedback").insert({
       instruction_set_id: guide.id,
       brand_id: brand.id,
       session_id: sessionId,
-      comment: comment.trim(),
+      comment: trimmed,
       type: 'comment' as const,
     });
+    if (guide?.title) notifyGuideComment({ guideTitle: guide.title, comment: trimmed });
     setComment("");
     toast.success("Comment submitted!");
   };
 
   const submitFlag = async () => {
     if (!flagDesc.trim() || !brand) return;
+    const trimmed = flagDesc.trim();
+    const step = flagStep ? parseInt(flagStep) : null;
     await supabase.from("feedback").insert({
       instruction_set_id: guide.id,
       brand_id: brand.id,
       session_id: sessionId,
-      flagged_step: flagStep ? parseInt(flagStep) : null,
-      comment: flagDesc.trim(),
+      flagged_step: step,
+      comment: trimmed,
       type: 'flag' as const,
     });
+    if (guide?.title) notifyGuideFlag({ guideTitle: guide.title, stepNumber: step, description: trimmed });
     setFlagStep("");
     setFlagDesc("");
     setFeedbackOpen(false);
