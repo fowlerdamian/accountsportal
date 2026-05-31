@@ -3,6 +3,7 @@ import { X, Trash2, AlertTriangle, Link2, Send, Loader2 } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { Button } from "@guide/components/ui/button";
 import { Textarea } from "@guide/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { toast } from "sonner";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import {
@@ -137,6 +138,26 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
       await updateTask({ id: liveTask.id, status: next });
     } catch {
       toast.error("Failed to update stage");
+    }
+  }
+
+  async function handleReassign(next: string) {
+    if (!liveTask || !canMutate || next === liveTask.assigned_to) return;
+    try {
+      await updateTask({ id: liveTask.id, assigned_to: next });
+      toast.success(`Assigned to ${nameFor(profiles, next, userId)}`);
+      // Ping the new assignee via their Google Chat webhook — skip self.
+      if (next !== userId) {
+        notifyTaskAssignee({
+          task_id:      liveTask.id,
+          recipient_id: next,
+          event:        "assigned",
+          task_title:   liveTask.title,
+          actor_name:   myName,
+        });
+      }
+    } catch {
+      toast.error("Failed to reassign");
     }
   }
 
@@ -367,14 +388,29 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
 
           {/* Assignee / Creator */}
           <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <UserAvatar name={nameFor(profiles, liveTask.assigned_to, userId)} size="sm" />
-              <div className="leading-tight">
+              <div className="leading-tight min-w-0">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Assigned</div>
-                <div className="text-foreground/90">{nameFor(profiles, liveTask.assigned_to, userId)}</div>
+                {canMutate ? (
+                  <Select value={liveTask.assigned_to} onValueChange={handleReassign}>
+                    <SelectTrigger className="h-6 px-1.5 py-0 -ml-1.5 border-none bg-transparent text-sm text-foreground/90 hover:bg-muted/50 focus:ring-0 shadow-none gap-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profiles.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.id === userId ? "Me" : (p.full_name ?? p.email ?? p.id.slice(0, 8))}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-foreground/90">{nameFor(profiles, liveTask.assigned_to, userId)}</div>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 ml-auto shrink-0">
               <div className="text-right leading-tight">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Created by</div>
                 <div className="text-foreground/70 text-xs">{nameFor(profiles, liveTask.created_by, userId)}</div>
