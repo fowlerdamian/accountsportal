@@ -243,7 +243,7 @@ type SortDir    = "asc" | "desc";
 
 // ── Page ─────────────────────────────────────────────────────
 
-export default function ProjectsList() {
+function ProjectsListBody() {
   const { openNewProject } = useHub();
   const [view,            setView]            = useState<ViewMode>("grid");
   const [search,          setSearch]          = useState("");
@@ -301,17 +301,14 @@ export default function ProjectsList() {
 
   if (isLoading || stagesLoading) {
     return (
-      <HubLayout>
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </HubLayout>
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 
   return (
-    <HubLayout>
-      <div className="space-y-4 animate-fade-in">
+    <div className="space-y-4 animate-fade-in">
 
         {/* ── Header row ── */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -506,6 +503,13 @@ export default function ProjectsList() {
           </>
         )}
       </div>
+  );
+}
+
+export default function ProjectsList() {
+  return (
+    <HubLayout>
+      <ProjectsListBody />
     </HubLayout>
   );
 }
