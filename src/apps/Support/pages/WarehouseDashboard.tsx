@@ -367,7 +367,9 @@ function GeneralTaskCard({ item, readOnly }: { item: WarehouseActionItem; readOn
 export default function WarehouseDashboard() {
   const { teamMember, isWarehouse, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
-  const readOnly = !isWarehouse && !isAdmin;
+  // Warehouse, admin and staff can all action picks/dispatch; only users
+  // without a recognized team role get the view-only board.
+  const readOnly = !isWarehouse && !isAdmin && teamMember?.role !== 'staff';
   const queryClient = useQueryClient();
 
   // Esc to go back to dashboard (non-warehouse users only)
