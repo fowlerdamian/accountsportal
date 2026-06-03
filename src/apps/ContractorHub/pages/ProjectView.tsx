@@ -137,6 +137,8 @@ function ProjectViewContent() {
   const [taskFilter,      setTaskFilter]      = useState<TaskStatus | "all">("all");
   const [editingName,     setEditingName]     = useState(false);
   const [nameValue,       setNameValue]       = useState("");
+  const [editingDesc,     setEditingDesc]     = useState(false);
+  const [descValue,       setDescValue]       = useState("");
   const [addingTask,      setAddingTask]      = useState(false);
   const [newTaskTitle,    setNewTaskTitle]    = useState("");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
@@ -226,6 +228,19 @@ function ProjectViewContent() {
       await updateProject({ id: project.id, name: nameValue.trim() });
       setEditingName(false);
     } catch { toast.error("Failed to save name"); }
+  }
+
+  async function handleSaveDesc() {
+    if (!project) return;
+    const trimmed = descValue.trim();
+    if (trimmed === (project.description ?? "")) {
+      setEditingDesc(false);
+      return;
+    }
+    try {
+      await updateProject({ id: project.id, description: trimmed || null });
+      setEditingDesc(false);
+    } catch { toast.error("Failed to save description"); }
   }
 
   async function handleTypeChange(newType: string) {
@@ -590,7 +605,32 @@ function ProjectViewContent() {
               Due: {project.due_date}
             </span>
           )}
-          {project.description && <p className="text-sm text-muted-foreground w-full">{project.description}</p>}
+          {editingDesc ? (
+            <textarea
+              value={descValue}
+              onChange={e => setDescValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSaveDesc();
+                if (e.key === "Escape") setEditingDesc(false);
+              }}
+              onBlur={handleSaveDesc}
+              rows={2}
+              placeholder="Add a description…"
+              className="text-sm text-muted-foreground w-full bg-transparent outline-none border-b border-primary/50 resize-none"
+              autoFocus
+            />
+          ) : (
+            <p
+              className={cn(
+                "text-sm w-full cursor-text hover:text-foreground/80 transition-colors",
+                project.description ? "text-muted-foreground" : "text-muted-foreground/50 italic",
+              )}
+              onClick={() => { setDescValue(project.description ?? ""); setEditingDesc(true); }}
+              title="Click to edit"
+            >
+              {project.description || "Add a description…"}
+            </p>
+          )}
         </div>
 
         {logTimeOpen && (
