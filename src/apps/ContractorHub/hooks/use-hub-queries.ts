@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
+import { notifyProjectCreated } from "@hub/lib/notifyHubChat";
 
 // ─────────────────────────────────────────────────────────────
 // Local types (schema not yet in auto-generated types.ts)
@@ -315,12 +316,23 @@ export function useCreateProject() {
       if (error) throw error;
       const project = data as Project;
 
-      // Fire-and-forget: create matching Google Drive folder
+      // Fire-and-forget: create matching Google Drive folder + ping Google Chat
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (!session) return;
         supabase.functions.invoke("google-drive", {
           body: { action: "create_folder", project_id: project.id, project_name: project.name },
         }).catch(() => {});
+
+        const user   = session.user;
+        const author = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Staff";
+        notifyProjectCreated({
+          project_name: project.name,
+          project_id:   project.id,
+          project_type: project.type,
+          status:       project.status,
+          description:  project.description,
+          author,
+        });
       });
 
       return project;

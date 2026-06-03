@@ -22,6 +22,17 @@ async function post(payload: Record<string, unknown>): Promise<void> {
   }
 }
 
+export function notifyProjectCreated(opts: {
+  project_name: string;
+  project_id:   string;
+  project_type?: string;
+  status?:      string;
+  description?: string | null;
+  author?:      string;
+}): void {
+  post({ type: "project_created", ...opts });
+}
+
 export function notifyTaskStatusChanged(opts: {
   task_title:   string;
   status:       string;

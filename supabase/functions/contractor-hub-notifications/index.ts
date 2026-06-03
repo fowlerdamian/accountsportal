@@ -72,6 +72,23 @@ serve(async (req) => {
       });
     }
 
+    // ── New project created ──────────────────────────────────────────────────
+    if (type === "project_created") {
+      const { project_name, project_id, project_type, status, description, author } = payload;
+      const projectUrl = `https://app.automotivegroup.com.au/hub/projects/${project_id}`;
+      const meta = [project_type, status].filter(Boolean).join(" · ");
+      const lines = [
+        `🆕 *New project* — <${projectUrl}|${project_name}>${author ? ` by ${author}` : ""}`,
+        truncate(description, 100) || "_no description_",
+      ];
+      if (meta) lines.push(meta);
+      await sendToChat(lines.join("\n"));
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Task status changed ──────────────────────────────────────────────────
     if (type === "task_status_changed") {
       const { task_title, status, author, project_name, project_id } = payload;
