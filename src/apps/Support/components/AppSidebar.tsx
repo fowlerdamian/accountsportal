@@ -181,8 +181,8 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
 
   return (
     <aside
-      className="fixed left-0 top-0 bottom-0 w-56 flex flex-col z-30"
-      style={{ background: '#000000', borderRight: '1px solid #222222' }}
+      className="fixed left-0 top-0 w-56 flex flex-col z-30"
+      style={{ background: '#000000', borderRight: '1px solid #222222', bottom: 'var(--task-dock-h, 0px)' }}
     >
       {sidebarContent}
     </aside>
