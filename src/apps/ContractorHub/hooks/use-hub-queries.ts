@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import { notifyProjectCreated } from "@hub/lib/notifyHubChat";
+import { localToday, localDateString } from "@portal/lib/dates";
 
 // ─────────────────────────────────────────────────────────────
 // Local types (schema not yet in auto-generated types.ts)
@@ -530,7 +531,9 @@ export function useReorderTasks() {
       const promises = updates.map(({ id, position }) =>
         supabase.from("tasks").update({ position }).eq("id", id),
       );
-      await Promise.all(promises);
+      const results = await Promise.all(promises);
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
     },
     onSuccess: (_data, variables) => {
       // Invalidate without knowing project_id — use partial key match
@@ -580,7 +583,7 @@ export function useLogTime() {
     }) => {
       const { data, error } = await supabase
         .from("time_entries")
-        .insert({ source: "manual", date: new Date().toISOString().split("T")[0], ...payload })
+        .insert({ source: "manual", date: localToday(), ...payload })
         .select()
         .single();
       if (error) throw error;
@@ -1141,7 +1144,7 @@ export function useHubDashboardMetrics() {
   return useQuery({
     queryKey: ["hub_dashboard_metrics"],
     queryFn:  async () => {
-      const today = new Date().toISOString().split("T")[0];
+      const today = localToday();
 
       // Monday of current week
       const now  = new Date();
@@ -1149,7 +1152,7 @@ export function useHubDashboardMetrics() {
       const diff = day === 0 ? -6 : 1 - day;
       const mon  = new Date(now);
       mon.setDate(now.getDate() + diff);
-      const monday = mon.toISOString().split("T")[0];
+      const monday = localDateString(mon);
 
       const [activeProjects, overdueTasks, weekHours, budgetSummaries] = await Promise.all([
         supabase
@@ -1215,7 +1218,7 @@ export function useOverdueTaskCount() {
   const channelName = useRef(`hub_overdue_tasks_${Math.random().toString(36).slice(2)}`);
 
   const fetchCount = async () => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = localToday();
     const { count: c } = await supabase
       .from("tasks")
       .select("id", { count: "exact", head: true })
@@ -1329,10 +1332,12 @@ export function useAiChatMessages(userId: string | undefined) {
         .from("ai_chat_messages")
         .select("*")
         .eq("user_id", userId!)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
-      return data as AiChatMessage[];
+      // Fetched newest-first so long chats show recent messages;
+      // reverse so display order stays oldest → newest.
+      return (data as AiChatMessage[]).slice().reverse();
     },
   });
 }

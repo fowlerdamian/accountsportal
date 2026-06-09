@@ -86,8 +86,13 @@ export default function GlobalChat() {
   const contextLabel = CONTEXT_LABELS[context]
   const suggestions  = CONTEXT_SUGGESTIONS[context]
 
+  // Tracks the CURRENT context so an in-flight request from a previous app
+  // can detect the switch and drop its stale reply.
+  const contextRef = useRef(context)
+
   // Reset conversation when context changes (user navigates to a different app)
   useEffect(() => {
+    contextRef.current = context
     setMessages([])
   }, [context])
 
@@ -135,11 +140,17 @@ export default function GlobalChat() {
 
       if (error) throw error
 
+      // If the user navigated to a different app while this request was in
+      // flight, the conversation was reset — drop the stale answer rather
+      // than injecting a reply about the OLD context into the new one.
+      if (contextRef.current !== context) return
+
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: data?.reply ?? 'No response.',
       }])
     } catch {
+      if (contextRef.current !== context) return
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: '⚠️ Something went wrong. Please try again.',
@@ -163,7 +174,7 @@ export default function GlobalChat() {
         <button
           onClick={() => setOpen(true)}
           style={{
-            position: 'fixed', bottom: '24px', right: '24px', zIndex: 50,
+            position: 'fixed', bottom: 'calc(16px + var(--task-dock-h, 0px))', right: '24px', zIndex: 50,
             display: 'flex', alignItems: 'center', gap: '8px',
             padding: '10px 16px', borderRadius: '24px',
             background: '#f3ca0f', color: '#000000',

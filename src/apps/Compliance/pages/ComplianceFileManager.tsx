@@ -132,8 +132,11 @@ export default function ComplianceFileManager() {
     if (!doc.file_path) return;
     setLoadingId(doc.id);
     try {
-      const { data } = auditSupabase.storage.from('evidence').getPublicUrl(doc.file_path);
-      window.open(data.publicUrl, '_blank');
+      // Signed URL — works whether or not the evidence bucket is public, and
+      // doesn't require compliance evidence to be world-readable.
+      const { data, error } = await auditSupabase.storage.from('evidence').createSignedUrl(doc.file_path, 3600);
+      if (error || !data?.signedUrl) throw error ?? new Error('No URL');
+      window.open(data.signedUrl, '_blank');
     } catch { toast.error('Failed to preview file'); }
     finally { setLoadingId(null); }
   };

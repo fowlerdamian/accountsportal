@@ -43,8 +43,15 @@ export default function ComplianceSupportingDocs() {
 
   useEffect(() => { fetchDocs(); }, [fetchDocs]);
 
-  const getUploadedDoc = (requirementId: string) =>
-    docs.find((d) => d.title === requirementId && d.status === 'uploaded');
+  // Rows are matched by HUMAN title (the convention the document-chat flow
+  // writes); also accept the legacy requirement-id convention this page used
+  // to write, so existing uploads still register.
+  const getUploadedDoc = (requirementId: string) => {
+    const req = SUPPORTING_DOC_REQUIREMENTS.find((r) => r.id === requirementId);
+    return docs.find(
+      (d) => (d.title === requirementId || (req && d.title === req.title)) && d.status === 'uploaded'
+    );
+  };
 
   const handleUploadClick = (requirementId: string) => {
     setActiveRequirementId(requirementId);
@@ -67,9 +74,19 @@ export default function ComplianceSupportingDocs() {
       const existing = getUploadedDoc(activeRequirementId);
       if (existing) await auditSupabase.from('supporting_docs').delete().eq('id', existing.id);
 
+      // Also fill any pre-existing 'required' row the document chat created for
+      // this requirement (matched by human title) instead of duplicating it.
+      const { data: requiredRow } = await auditSupabase
+        .from('supporting_docs').select('id')
+        .eq('document_id', requirement.documentId)
+        .eq('title', requirement.title)
+        .eq('status', 'required')
+        .maybeSingle();
+      if (requiredRow) await auditSupabase.from('supporting_docs').delete().eq('id', requiredRow.id);
+
       const { error: insertError } = await auditSupabase.from('supporting_docs').insert({
         document_id: requirement.documentId,
-        title: requirement.id,
+        title: requirement.title,
         description: requirement.description,
         clause: requirement.clause,
         file_name: file.name,

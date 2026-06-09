@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
 import { Textarea } from "@guide/components/ui/textarea";
@@ -27,7 +28,10 @@ function defaultDepDue(parentDue: string | null | undefined): string {
   if (!parentDue) return "";
   const d = new Date(parentDue + "T00:00:00");
   d.setDate(d.getDate() - 1);
-  return d.toISOString().split("T")[0];
+  // Format in LOCAL time — toISOString() converts to UTC, which in AEST
+  // shifted the date back an extra day (parent − 2 instead of − 1).
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export function DependencyPicker({ value, onChange, parentDue, excludeUser }: DependencyPickerProps) {
@@ -35,6 +39,17 @@ export function DependencyPicker({ value, onChange, parentDue, excludeUser }: De
   const eligible = profiles.filter((p: StaffProfile) => p.id !== excludeUser);
 
   const set = (patch: Partial<DependencyDraft>) => onChange({ ...value, ...patch });
+
+  // The DatePicker DISPLAYS the computed default, but the draft itself stayed
+  // "" so the save wrote null — commit the default into the draft so what the
+  // user sees is what gets saved.
+  useEffect(() => {
+    if (!value.due_date && parentDue) {
+      const def = defaultDepDue(parentDue);
+      if (def) onChange({ ...value, due_date: def });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parentDue]);
 
   return (
     <div className="space-y-3 rounded-md border border-dashed bg-amber-950/10 p-3">

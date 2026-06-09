@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import DropZone from './components/DropZone.jsx'
 import ProfitDashboard from './components/ProfitDashboard.jsx'
 import { readExcelFile, parseSheet } from './utils/excelParser.js'
@@ -11,10 +11,12 @@ import { processOrders } from './utils/processor.js'
 const BATCH_SIZE  = 5
 const BATCH_DELAY = 1200 // ms between batches — keeps well under 60 req/min
 
-async function fetchOrderLinks(soNumbers, setOrderLinks, setLinksLoading) {
+async function fetchOrderLinks(soNumbers, setOrderLinks, setLinksLoading, genRef, gen) {
   setLinksLoading(true)
   try {
     for (let i = 0; i < soNumbers.length; i += BATCH_SIZE) {
+      // A newer file was loaded — stop fetching and never merge stale batches
+      if (genRef.current !== gen) return
       const batch = soNumbers.slice(i, i + BATCH_SIZE)
       try {
         const resp = await fetch('/api/cin7-lookup', {
@@ -24,6 +26,7 @@ async function fetchOrderLinks(soNumbers, setOrderLinks, setLinksLoading) {
         })
         if (resp.ok) {
           const links = await resp.json()
+          if (genRef.current !== gen) return
           setOrderLinks((prev) => ({ ...prev, ...links }))
         }
       } catch {
@@ -35,7 +38,8 @@ async function fetchOrderLinks(soNumbers, setOrderLinks, setLinksLoading) {
       }
     }
   } finally {
-    setLinksLoading(false)
+    // Don't clobber the loading flag of a newer run
+    if (genRef.current === gen) setLinksLoading(false)
   }
 }
 
@@ -46,8 +50,11 @@ export default function ProfitProcessor() {
   const [fileName, setFileName]       = useState('')
   const [orderLinks, setOrderLinks]   = useState({})
   const [linksLoading, setLinksLoading] = useState(false)
+  // Generation counter — loading a new file invalidates any in-flight link loop
+  const linkGenRef = useRef(0)
 
   const handleFile = useCallback(async (file) => {
+    const gen = ++linkGenRef.current
     setLoading(true)
     setError(null)
     setResult(null)
@@ -72,7 +79,7 @@ export default function ProfitProcessor() {
 
       // Kick off link lookups in the background — doesn't block the table render
       const soNumbers = finalResult.orders.map((o) => o.orderNum)
-      fetchOrderLinks(soNumbers, setOrderLinks, setLinksLoading)
+      fetchOrderLinks(soNumbers, setOrderLinks, setLinksLoading, linkGenRef, gen)
     } catch (err) {
       setError(err.message || 'An unknown error occurred.')
     } finally {

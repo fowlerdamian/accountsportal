@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import { Search, Filter, Loader2, RefreshCw, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
@@ -26,6 +26,12 @@ export default function LeadList() {
   const [sortAsc, setSortAsc]     = useState(false);
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction]     = useState<string | null>(null);
+  const [bulkError, setBulkError]       = useState<string | null>(null);
+
+  // Selection refers to the visible rows — clear it whenever filter/search changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [channel, search, statusFilter, minScore, stateFilter, existingOnly]);
 
   const { data: leads = [], isLoading, refetch } = useLeads(channel, {
     status: statusFilter !== "all" ? statusFilter : undefined,
@@ -75,21 +81,33 @@ export default function LeadList() {
   async function executeBulk(action: string) {
     if (!selectedIds.size) return;
     setBulkAction(action);
+    setBulkError(null);
     const ids = [...selectedIds];
+    let failures = 0;
     try {
       if (action === "hubspot") {
         for (const id of ids) {
-          await supabase.functions.invoke("sales-hubspot-sync", { body: { lead_id: id } });
+          const { error } = await supabase.functions.invoke("sales-hubspot-sync", { body: { lead_id: id } });
+          if (error) failures++;
         }
       } else if (action === "enrich") {
         for (const id of ids) {
-          await supabase.functions.invoke("sales-lead-enrichment", { body: { lead_id: id } });
+          const { error } = await supabase.functions.invoke("sales-lead-enrichment", { body: { lead_id: id } });
+          if (error) failures++;
         }
       } else if (action === "disqualify") {
-        await supabase.from("sales_leads").update({ status: "disqualified" }).in("id", ids);
+        const { error } = await supabase.from("sales_leads").update({ status: "disqualified" }).in("id", ids);
+        if (error) failures = ids.length;
       }
-      setSelectedIds(new Set());
+      if (failures > 0) {
+        // Keep the selection so the user can retry
+        setBulkError(`Bulk action failed for ${failures} of ${ids.length} lead${ids.length !== 1 ? "s" : ""} — selection kept, try again.`);
+      } else {
+        setSelectedIds(new Set());
+      }
       qc.invalidateQueries({ queryKey: ["sales_leads", channel] });
+    } catch (err: any) {
+      setBulkError(err?.message ?? "Bulk action failed — selection kept, try again.");
     } finally {
       setBulkAction(null);
     }
@@ -163,6 +181,13 @@ export default function LeadList() {
           </div>
         </div>
       </div>
+
+      {/* Bulk action error */}
+      {bulkError && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          {bulkError}
+        </div>
+      )}
 
       {/* Bulk actions */}
       {selectedIds.size > 0 && (

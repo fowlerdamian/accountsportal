@@ -23,7 +23,9 @@ export function NewTaskModal({ open, onClose, projectId }: NewTaskModalProps) {
   const [title,       setTitle]       = useState("");
   const [selProject,  setSelProject]  = useState(projectId ?? "");
   const [priority,    setPriority]    = useState<TaskPriority>("medium");
-  const [assignedTo,  setAssignedTo]  = useState("");
+  // Radix Select v2 throws on <SelectItem value="">, so use a sentinel for "unassigned"
+  const UNASSIGNED = "unassigned";
+  const [assignedTo,  setAssignedTo]  = useState(UNASSIGNED);
   const [dueDate,     setDueDate]     = useState("");
   const [saving,      setSaving]      = useState(false);
 
@@ -35,7 +37,7 @@ export function NewTaskModal({ open, onClose, projectId }: NewTaskModalProps) {
     setTitle("");
     setSelProject(projectId ?? "");
     setPriority("medium");
-    setAssignedTo("");
+    setAssignedTo(UNASSIGNED);
     setDueDate("");
   }
 
@@ -55,7 +57,7 @@ export function NewTaskModal({ open, onClose, projectId }: NewTaskModalProps) {
         project_id:  pid,
         title:       title.trim(),
         priority,
-        assigned_to: assignedTo || null,
+        assigned_to: assignedTo === UNASSIGNED ? null : assignedTo,
         due_date:    dueDate || null,
         status:      "backlog",
         position:    9999,
@@ -130,7 +132,7 @@ export function NewTaskModal({ open, onClose, projectId }: NewTaskModalProps) {
                   <SelectValue placeholder="Unassigned" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
                   {contractors.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}

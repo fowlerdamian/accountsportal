@@ -153,25 +153,31 @@ export function ManualPickForm({ caseId, cin7SaleId, caseNumber }: Props) {
     enabled: !!cin7SaleId && !existingPick,
   });
 
+  // Reset form state from the saved pick request
+  const applySavedPick = useCallback(() => {
+    if (!existingPick) return;
+    setCustomerName(existingPick.customer_name || '');
+    setPhone((existingPick as any).phone || '');
+    setLine1(existingPick.address_line1 || '');
+    setLine2(existingPick.address_line2 || '');
+    setCity(existingPick.city || '');
+    setState(existingPick.state || '');
+    setPostcode(existingPick.postcode || '');
+    setCountry(existingPick.country || '');
+    setNotes(existingPick.notes || '');
+    const savedItems = existingPick.items as unknown as PickItem[];
+    if (Array.isArray(savedItems) && savedItems.length > 0) {
+      setItems(savedItems);
+    }
+  }, [existingPick]);
+
   // Populate from existing saved pick request
   useEffect(() => {
     if (existingPick) {
       setExistingId(existingPick.id);
-      setCustomerName(existingPick.customer_name || '');
-      setPhone((existingPick as any).phone || '');
-      setLine1(existingPick.address_line1 || '');
-      setLine2(existingPick.address_line2 || '');
-      setCity(existingPick.city || '');
-      setState(existingPick.state || '');
-      setPostcode(existingPick.postcode || '');
-      setCountry(existingPick.country || '');
-      setNotes(existingPick.notes || '');
-      const savedItems = existingPick.items as unknown as PickItem[];
-      if (Array.isArray(savedItems) && savedItems.length > 0) {
-        setItems(savedItems);
-      }
+      applySavedPick();
     }
-  }, [existingPick]);
+  }, [existingPick, applySavedPick]);
 
   // Pre-populate from Cin7 only once for new forms (no existing pick)
   useEffect(() => {
@@ -441,7 +447,11 @@ export function ManualPickForm({ caseId, cin7SaleId, caseNumber }: Props) {
         </button>
         {existingId && (
           <button
-            onClick={() => setEditing(false)}
+            onClick={() => {
+              // Revert unsaved edits back to the saved record
+              applySavedPick();
+              setEditing(false);
+            }}
             className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Cancel

@@ -10,8 +10,10 @@ import { useState } from "react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@guide/contexts/AuthContext";
 
 export default function Users() {
+  const { userRole, loading: authLoading } = useAuth();
   const { data: profiles = [], isLoading } = useProfiles();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -69,8 +71,19 @@ export default function Users() {
     }
   };
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
+  // User management is admin-only — editors must not reach this page even if
+  // they navigate to it directly.
+  if (userRole !== "admin") {
+    return (
+      <div className="text-center py-20 text-muted-foreground">
+        <p className="font-medium">Access denied</p>
+        <p className="text-sm">Only admins can manage users.</p>
+      </div>
+    );
   }
 
   return (

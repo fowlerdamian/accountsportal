@@ -24,6 +24,8 @@ export interface ISODocument {
    *  so edits never silently revert to an older copy. */
   updatedAt?: string;   // ISO timestamp of the last local change
   rev?: number;         // monotonic per-doc change counter
+  /** Titles of related documents parsed from the generated content. */
+  relatedDocuments?: string[];
 }
 
 /** Replace the "Version" row of a document's Markdown metadata table with the

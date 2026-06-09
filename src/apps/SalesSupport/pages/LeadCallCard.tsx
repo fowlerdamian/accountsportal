@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useParams, useOutletContext, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,6 +17,7 @@ import CallHistory from "../components/CallHistory";
 import CompanyIntel from "../components/CompanyIntel";
 import { type Channel } from "../lib/constants";
 import { supabase } from "@portal/lib/supabase";
+import { localToday } from "@portal/lib/dates";
 import { LeadScoreBadge } from "../components/LeadScoreBadge";
 
 const CHANNEL_PITCH: Record<string, string> = {
@@ -60,6 +61,7 @@ export default function LeadCallCard() {
   const saveNotes     = useSaveCallNotes();
 
   const [notes, setNotes]           = useState("");
+  const [notesDirty, setNotesDirty] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
   const [syncing, setSyncing]       = useState(false);
   const [syncingOutcome, setSyncingOutcome] = useState<string | null>(null);
@@ -68,6 +70,8 @@ export default function LeadCallCard() {
   const [numberRevealed, setNumberRevealed] = useState(false);
   // Track the live call entry ID (may be created on first outcome/save)
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
+  // In-flight insert guard — concurrent ensureCallEntry() calls share one insert
+  const callEntryInsertRef = useRef<Promise<string> | null>(null);
   // AI brief — auto-loads on first view; manual refresh button regenerates.
   const [briefBullets, setBriefBullets]   = useState<string[] | null>(null);
   const [briefLoading, setBriefLoading]   = useState(false);
@@ -77,10 +81,22 @@ export default function LeadCallCard() {
   const [rescoring, setRescoring]   = useState(false);
   const [rescoreError, setRescoreError] = useState<string | null>(null);
 
+  // Reset per-lead state when navigating to a different lead so notes/brief
+  // never attach to the wrong lead.
   useEffect(() => {
-    if (callEntry?.call_notes) setNotes(callEntry.call_notes);
+    setActiveCallId(null);
+    callEntryInsertRef.current = null;
+    setNotes("");
+    setNotesDirty(false);
+    setBriefBullets(null);
+  }, [leadId]);
+
+  useEffect(() => {
+    // Only sync notes from the server while the textarea is untouched —
+    // a background refetch must not clobber typed-but-unsaved notes.
+    if (callEntry?.call_notes && !notesDirty) setNotes(callEntry.call_notes);
     if (callEntry?.id) setActiveCallId(callEntry.id);
-  }, [callEntry?.id, callEntry?.call_notes]);
+  }, [callEntry?.id, callEntry?.call_notes, notesDirty]);
 
   // Seed bullets from cached lead row; auto-generate if missing.
   useEffect(() => {
@@ -203,6 +219,9 @@ export default function LeadCallCard() {
 
   async function ensureCallEntry(): Promise<string> {
     if (activeCallId) return activeCallId;
+    // Concurrent calls share the in-flight insert instead of double-inserting
+    if (callEntryInsertRef.current) return callEntryInsertRef.current;
+    const insertPromise = (async (): Promise<string> => {
     const { data, error } = await supabase
       .from("call_list")
       .insert({
@@ -210,7 +229,7 @@ export default function LeadCallCard() {
         channel,
         priority_rank:  99,
         call_reason:    "Direct",
-        scheduled_date: new Date().toISOString().split("T")[0],
+        scheduled_date: localToday(),
         is_complete:    false,
         context_brief: {
           company_name:        lead.company_name,
@@ -239,6 +258,14 @@ export default function LeadCallCard() {
     if (error) throw error;
     setActiveCallId(data.id);
     return data.id;
+    })();
+    callEntryInsertRef.current = insertPromise;
+    try {
+      return await insertPromise;
+    } catch (err) {
+      callEntryInsertRef.current = null; // allow retry after a failed insert
+      throw err;
+    }
   }
 
   async function markOutcome(outcome: string) {
@@ -251,6 +278,7 @@ export default function LeadCallCard() {
         notes,
         calledAt: new Date().toISOString(),
       });
+      setNotesDirty(false); // notes were persisted with the outcome
       if (lead.hubspot_company_id) {
         setSyncing(true);
         try {
@@ -267,6 +295,7 @@ export default function LeadCallCard() {
   async function handleSaveNotes() {
     const id = await ensureCallEntry();
     await saveNotes.mutateAsync({ callId: id, notes });
+    setNotesDirty(false);
     setNotesSaved(true);
     setTimeout(() => setNotesSaved(false), 2000);
   }
@@ -756,7 +785,7 @@ export default function LeadCallCard() {
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Call Notes</div>
         <textarea
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { setNotes(e.target.value); setNotesDirty(true); }}
           placeholder="Type your call notes here..."
           rows={5}
           className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none"

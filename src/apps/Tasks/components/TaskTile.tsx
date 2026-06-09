@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { cn } from "@guide/lib/utils";
 import { Link2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -36,14 +37,20 @@ export function TaskTile({ task, assigneeName, onClick, variant = "tile", classN
   const ringCls  = dueRingClass(task.due_date);
   const unscored = task.urgency == null || task.importance == null;
   const { mutateAsync: updateTask } = useUpdateStaffTask();
+  // Guards rapid double-clicks: a second click before the cache refreshes
+  // would compute "next" from the STALE value and re-send the same target.
+  const cycleBusy = useRef(false);
 
   async function cycleQuadrant(e: React.MouseEvent | React.KeyboardEvent) {
     e.stopPropagation();
     e.preventDefault();
+    if (cycleBusy.current) return;
+    cycleBusy.current = true;
     const next   = QUAD_ORDER[(QUAD_ORDER.indexOf(quad) + 1) % QUAD_ORDER.length];
     const scores = QUAD_SCORES[next];
     try { await updateTask({ id: task.id, urgency: scores.urgency, importance: scores.importance }); }
     catch { toast.error("Failed to change quadrant"); }
+    finally { cycleBusy.current = false; }
   }
 
   async function cycleStage(e: React.MouseEvent | React.KeyboardEvent) {
@@ -53,8 +60,11 @@ export function TaskTile({ task, assigneeName, onClick, variant = "tile", classN
       toast.error("Blocked — resolve the blocker first");
       return;
     }
+    if (cycleBusy.current) return;
+    cycleBusy.current = true;
     try { await updateTask({ id: task.id, status: nextStaffTaskStatus(task.status) }); }
     catch { toast.error("Failed to change stage"); }
+    finally { cycleBusy.current = false; }
   }
 
   if (variant === "dock") {

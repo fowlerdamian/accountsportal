@@ -391,6 +391,12 @@ export function useAssignmentNotifications(userId: string | undefined, onToast: 
   const seenIds = useRef<Set<string>>(new Set());
   const channelId = useRef(`staff_tasks_assign_${Math.random().toString(36).slice(2)}`);
 
+  // Keep the callback in a ref so an inline-arrow `onToast` prop doesn't tear
+  // down and recreate the websocket channel on every caller render (INSERTs
+  // arriving during the resubscribe gap were silently lost).
+  const onToastRef = useRef(onToast);
+  useEffect(() => { onToastRef.current = onToast; }, [onToast]);
+
   useEffect(() => {
     if (!userId) return;
 
@@ -412,10 +418,10 @@ export function useAssignmentNotifications(userId: string | undefined, onToast: 
           // Hard cap so the set doesn't grow unbounded over long sessions.
           if (seenIds.current.size > 1000) seenIds.current.clear();
           seenIds.current.add(task.id);
-          onToast(task);
+          onToastRef.current(task);
         },
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [userId, onToast]);
+  }, [userId]);
 }

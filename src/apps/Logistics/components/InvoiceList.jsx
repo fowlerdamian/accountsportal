@@ -5,7 +5,7 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { supabase } from '@portal/lib/supabase'
 import { DatePicker } from '@portal/components/DatePicker'
 import LogisticsNav from './LogisticsNav.jsx'
-import { aud, fmtDate, invoiceTotal, invoiceOvercharge } from '../utils/helpers.js'
+import { aud, fmtDate, invoiceTotal, invoiceOvercharge, parseDelimitedText, parseMoney } from '../utils/helpers.js'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
@@ -13,28 +13,30 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 // ─── CSV invoice parser ───────────────────────────────────────────────────────
 // Expected columns: description, detail, charged_total, contracted_total
 function parseCsvLines(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) return { rows: [], error: 'CSV has no data rows' }
+  // RFC-4180-ish parse — quoted fields may contain commas (e.g. "1,234.56")
+  const allRows = parseDelimitedText(text)
+  if (allRows.length < 2) return { rows: [], error: 'CSV has no data rows' }
 
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+  const headers = allRows[0].map(h => h.trim().toLowerCase())
   if (!headers.includes('description') || !headers.includes('charged_total')) {
     return { rows: [], error: 'Missing required columns: description, charged_total' }
   }
 
   const idx = k => headers.indexOf(k)
   const rows = []
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(',').map(c => c.trim())
+  let skipped = 0
+  for (let i = 1; i < allRows.length; i++) {
+    const cells = allRows[i].map(c => c.trim())
     const description    = cells[idx('description')]     ?? ''
     const detail         = cells[idx('detail')]          ?? ''
-    const charged_total  = parseFloat(cells[idx('charged_total')]  ?? '')
+    const charged_total  = parseMoney(cells[idx('charged_total')]  ?? '')
     const contracted_raw = idx('contracted_total') !== -1 ? cells[idx('contracted_total')] : ''
-    const contracted_total = contracted_raw ? parseFloat(contracted_raw) : null
+    const contracted_total = contracted_raw ? parseMoney(contracted_raw) : null
 
-    if (!description || isNaN(charged_total)) continue
+    if (!description || isNaN(charged_total)) { skipped++; continue }
     rows.push({ description, detail: detail || null, charged_total, contracted_total: isNaN(contracted_total) ? null : contracted_total })
   }
-  return { rows }
+  return { rows, skipped }
 }
 
 async function extractPdfText(buffer) {
@@ -161,10 +163,10 @@ export default function InvoiceList() {
 
     if (ext === 'csv') {
       const text = await file.text()
-      const { rows, error } = parseCsvLines(text)
+      const { rows, skipped = 0, error } = parseCsvLines(text)
       if (error) { setUploadError(error); return }
-      if (!rows.length) { setUploadError('No valid line items found in CSV'); return }
-      setUploadPreview({ lines: rows, _source: 'csv' })
+      if (!rows.length) { setUploadError(`No valid line items found in CSV${skipped ? ` (${skipped} row${skipped !== 1 ? 's' : ''} skipped)` : ''}`); return }
+      setUploadPreview({ lines: rows, _skipped: skipped, _source: 'csv' })
     } else if (ext === 'pdf') {
       const token = ++parseTokenRef.current
       setUploadParsing(true)
@@ -222,12 +224,19 @@ export default function InvoiceList() {
     setUploading(false)
 
     if (linesErr) {
-      await supabase.from('freight_invoices').delete().eq('id', inv.id)
-      setUploadError(linesErr.message)
+      // Roll back the header insert — and surface it if the rollback itself fails
+      const { error: rollbackErr } = await supabase.from('freight_invoices').delete().eq('id', inv.id)
+      if (rollbackErr) {
+        console.error('Invoice rollback failed:', rollbackErr)
+        setUploadError(`${linesErr.message} — rollback also failed (${rollbackErr.message}): invoice ${uploadInvRef.trim()} may exist without line items`)
+      } else {
+        setUploadError(linesErr.message)
+      }
       return
     }
     setUploadResult({ ref: uploadInvRef.trim(), lines: lineRows.length })
     setUploadStep('done')
+    fetchInvoices()
   }
 
   const filtered = invoices.filter(inv => {
@@ -362,6 +371,7 @@ export default function InvoiceList() {
                     {uploadPreview && !uploadParsing && (
                       <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#4ade80' }}>
                         {uploadPreview.lines.length} line{uploadPreview.lines.length !== 1 ? 's' : ''} ready
+                        {uploadPreview._skipped > 0 ? `, ${uploadPreview._skipped} skipped` : ''}
                         {uploadPreview._source === 'pdf' && uploadPreview.carrier_name ? ` · ${uploadPreview.carrier_name}` : ''}
                       </p>
                     )}
@@ -426,7 +436,13 @@ export default function InvoiceList() {
                   >
                     {uploading ? 'Importing…' : 'Import'}
                   </button>
-                  <button onClick={closeUploadModal} style={btnGhost}>Cancel</button>
+                  <button
+                    onClick={closeUploadModal}
+                    disabled={uploading}
+                    style={{ ...btnGhost, opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer' }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </>
             )}

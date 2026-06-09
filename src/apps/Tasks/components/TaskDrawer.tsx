@@ -120,6 +120,14 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
     if (!notesDirty) setNotesDraft(liveTask?.status_notes ?? "");
   }, [liveTask?.id, liveTask?.status_notes, notesDirty]);
 
+  // Opening a DIFFERENT task must drop any unsaved draft from the previous
+  // one — otherwise task A's dirty notes display under task B and the next
+  // blur writes A's text into B's status_notes.
+  useEffect(() => {
+    setNotesDirty(false);
+    setNotesDraft("");
+  }, [taskId]);
+
   if (!taskId || !liveTask) {
     return open ? (
       <div className="fixed inset-0 z-30 bg-black/30" onClick={onClose} />

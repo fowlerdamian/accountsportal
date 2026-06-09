@@ -45,7 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user,
       userRole,
-      loading: portalLoading || roleFetching,
+      // Stay "loading" until the role for the current user has actually been
+      // fetched — otherwise role-gated layouts render a frame with a null
+      // role and wrongly deny (or admit) the user.
+      loading: portalLoading || roleFetching || (!!user && roleFetchedFor.current !== user.id),
       signOut,
     }}>
       {children}

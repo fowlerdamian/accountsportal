@@ -59,7 +59,7 @@ function loadDocuments(): ISODocument[] {
       return ISO_DOCUMENTS.map((doc) => {
         const s = parsed.find((d) => d.id === doc.id);
         return s
-          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version, updatedAt: s.updatedAt, rev: s.rev }
+          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version, updatedAt: s.updatedAt, rev: s.rev, relatedDocuments: s.relatedDocuments }
           : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
       });
     }
@@ -75,7 +75,7 @@ function loadAuditedDocs(): Set<string> { try { const raw = localStorage.getItem
 function escapeRegex(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 // Serializable subset of doc state stored in Supabase + localStorage
-type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot' | 'approvedContent' | 'approvedAt' | 'approvedBy' | 'version' | 'updatedAt' | 'rev'>;
+type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot' | 'approvedContent' | 'approvedAt' | 'approvedBy' | 'version' | 'updatedAt' | 'rev' | 'relatedDocuments'>;
 
 const nowISO = () => new Date().toISOString();
 
@@ -101,6 +101,7 @@ function docsToSlim(documents: ISODocument[]): DocStateSlim[] {
     version: d.version,
     updatedAt: d.updatedAt,
     rev: d.rev,
+    relatedDocuments: d.relatedDocuments,
   }));
 }
 
@@ -109,7 +110,7 @@ function slimToDocs(slim: DocStateSlim[] | undefined | null): ISODocument[] {
   return ISO_DOCUMENTS.map((doc) => {
     const s = list.find((d) => d.id === doc.id);
     return s
-      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version, updatedAt: s.updatedAt, rev: s.rev }
+      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version, updatedAt: s.updatedAt, rev: s.rev, relatedDocuments: s.relatedDocuments }
       : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
   });
 }
@@ -623,19 +624,21 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   }, [companyProfile]);
 
   const pushProfileToDocuments = useCallback((): PushResult => {
+    // Compute the transform OUTSIDE the React updater — state updaters must be
+    // pure (StrictMode double-invokes them, and deferred runs made the returned
+    // counts read as 0 and skipped the audited-flag invalidation).
+    const current = profileSnapshot(companyProfile);
     let docsUpdated = 0;
     let replacements = 0;
     let docsScanned = 0;
-    const touchedIds: string[] = [];
-    const current = profileSnapshot(companyProfile);
+    const newContentById = new Map<string, string>();
 
-    setDocuments((prev) => prev.map((doc) => {
-      if (!doc.generatedContent) return doc;
+    for (const doc of latestRef.current.documents) {
+      if (!doc.generatedContent) continue;
       docsScanned++;
       let content = doc.generatedContent;
       const oldSnap = doc.profileSnapshot ?? {};
       let touched = false;
-
       for (const key of PUSHABLE_FIELDS) {
         const oldValue = oldSnap[key as string];
         const newValue = current[key as string];
@@ -649,17 +652,24 @@ export function ISOProvider({ children }: { children: ReactNode }) {
           touched = true;
         }
       }
-
       if (touched) {
         docsUpdated++;
-        touchedIds.push(doc.id);
-        return { ...doc, generatedContent: content, profileSnapshot: current, updatedAt: nowISO(), rev: (doc.rev ?? 0) + 1 };
+        newContentById.set(doc.id, content);
       }
-      return { ...doc, generatedContent: content, profileSnapshot: current };
+    }
+
+    setDocuments((prev) => prev.map((doc) => {
+      if (!doc.generatedContent) return doc;
+      const newContent = newContentById.get(doc.id);
+      if (newContent !== undefined) {
+        return { ...doc, generatedContent: newContent, profileSnapshot: current, updatedAt: nowISO(), rev: (doc.rev ?? 0) + 1 };
+      }
+      return { ...doc, profileSnapshot: current };
     }));
 
     // Content changed → those docs need re-auditing.
-    if (touchedIds.length > 0) {
+    if (newContentById.size > 0) {
+      const touchedIds = [...newContentById.keys()];
       setAuditedDocIds((prev) => {
         if (!touchedIds.some((id) => prev.has(id))) return prev;
         const next = new Set(prev);

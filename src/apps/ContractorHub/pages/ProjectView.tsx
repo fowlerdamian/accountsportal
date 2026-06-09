@@ -37,6 +37,7 @@ import {
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
 import { notifyBudgetThreshold } from "@hub/lib/notifyHubChat";
+import { localToday } from "@portal/lib/dates";
 
 // ── FileThumb ────────────────────────────────────────────────
 // Renders a uniform 36x36 tile for any file. If a thumbnail URL is set,
@@ -425,7 +426,7 @@ function ProjectViewContent() {
 
   // ── Task table rendering ──────────────────────────────────
 
-  const today       = new Date().toISOString().split("T")[0];
+  const today       = localToday();
   const parentTasks = [...tasks.filter(t => !t.parent_task_id)].sort((a, b) => a.position - b.position);
   const visibleParents = taskFilter === "all"
     ? parentTasks
@@ -560,7 +561,9 @@ function ProjectViewContent() {
                 title="Open project folder in Google Drive"
                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                 onClick={async (e) => {
-                  e.currentTarget.disabled = true;
+                  // e.currentTarget is null after an await (React pools events) — capture it now
+                  const btn = e.currentTarget;
+                  btn.disabled = true;
                   try {
                     const { data } = await supabase.functions.invoke("google-drive", {
                       body: { action: "ensure_folder", project_id: project.id, project_name: project.name, folder_id: project.drive_folder_id },
@@ -571,7 +574,7 @@ function ProjectViewContent() {
                   } catch {
                     window.open(`https://drive.google.com/drive/folders/${project.drive_folder_id}`, "_blank");
                   } finally {
-                    e.currentTarget.disabled = false;
+                    btn.disabled = false;
                   }
                 }}
               >

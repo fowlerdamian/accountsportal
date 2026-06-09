@@ -105,22 +105,27 @@ export default function CaseDetailPage() {
   // Delete case mutation
   const deleteCaseMutation = useMutation({
     mutationFn: async () => {
-      // 1. Delete attachments (files from storage would go here if bucket exists)
-      await supabase.from('case_attachments').delete().eq('case_id', id!);
-      // 2. Delete action items
-      await supabase.from('action_items').delete().eq('case_id', id!);
-      // 3. Delete case updates
-      await supabase.from('case_updates').delete().eq('case_id', id!);
+      // Delete children first, least-critical first, aborting on the first failure
+      // so attachments/history are only removed once the rest has succeeded.
+      // 1. Delete action items
+      const { error: actionItemsError } = await supabase.from('action_items').delete().eq('case_id', id!);
+      if (actionItemsError) throw new Error('Failed to delete action items — case was not deleted');
+      // 2. Delete case updates (history)
+      const { error: updatesError } = await supabase.from('case_updates').delete().eq('case_id', id!);
+      if (updatesError) throw new Error('Failed to delete case updates — case was not deleted');
+      // 3. Delete attachments (files from storage would go here if bucket exists)
+      const { error: attachmentsError } = await supabase.from('case_attachments').delete().eq('case_id', id!);
+      if (attachmentsError) throw new Error('Failed to delete attachments — case was not deleted');
       // 4. Delete the case
       const { error } = await supabase.from('cases').delete().eq('id', id!);
-      if (error) throw error;
+      if (error) throw new Error('Failed to delete case');
     },
     onSuccess: () => {
       toast.success('Case deleted');
       queryClient.invalidateQueries({ queryKey: ['cases'] });
       navigate('/support');
     },
-    onError: () => toast.error('Failed to delete case'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to delete case'),
   });
 
   // Mention filtering
@@ -180,6 +185,7 @@ export default function CaseDetailPage() {
       if (error) throw error;
 
       // Auto-create warehouse action items for @mentioned warehouse members
+      let failedWarehouseTasks = 0;
       const warehouseTagged = taggedMembers.filter(m => m.role === 'warehouse');
       if (warehouseTagged.length > 0 && caseData) {
         const contextLines = [
@@ -191,7 +197,7 @@ export default function CaseDetailPage() {
           msg,
         ].filter(Boolean).join('\n');
 
-        await Promise.all(
+        const insertResults = await Promise.all(
           warehouseTagged.map(wm =>
             supabase.from('action_items').insert({
               case_id: id!,
@@ -205,6 +211,7 @@ export default function CaseDetailPage() {
             })
           )
         );
+        failedWarehouseTasks = insertResults.filter(r => r.error).length;
       }
 
       if (taggedMembers.length > 0 && caseData) {
@@ -216,17 +223,23 @@ export default function CaseDetailPage() {
           },
         });
       }
+
+      return failedWarehouseTasks;
     },
-    onSuccess: () => {
+    onSuccess: (failedWarehouseTasks) => {
       const warehouseCount = taggedMembers.filter(m => m.role === 'warehouse').length;
+      const createdCount = warehouseCount - failedWarehouseTasks;
       const tagged = taggedMembers.length;
       setMessage(''); setTaggedMembers([]);
       queryClient.invalidateQueries({ queryKey: ['case-updates', id] });
       queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
       const parts = [];
       if (tagged > 0) parts.push(`${tagged} notified`);
-      if (warehouseCount > 0) parts.push(`${warehouseCount} warehouse task${warehouseCount > 1 ? 's' : ''} created`);
+      if (createdCount > 0) parts.push(`${createdCount} warehouse task${createdCount > 1 ? 's' : ''} created`);
       toast.success(parts.length > 0 ? `Update posted · ${parts.join(' · ')}` : 'Update posted');
+      if (failedWarehouseTasks > 0) {
+        toast.error(`${failedWarehouseTasks} of ${warehouseCount} warehouse task${warehouseCount > 1 ? 's' : ''} failed to create`);
+      }
     },
     onError: () => toast.error('Failed to post update'),
   });

@@ -90,8 +90,20 @@ function extractMetadata(rows, headerRowIndex) {
 
 function toNum(value) {
   if (typeof value === 'number') return isNaN(value) ? 0 : value
-  const n = parseFloat(String(value).replace(/[$,\s]/g, ''))
-  return isNaN(n) ? 0 : n
+  let s = String(value).trim()
+  let negative = false
+  // Accounting negatives: "(1,234.50)" → -1234.50
+  if (s.startsWith('(') && s.endsWith(')')) {
+    negative = true
+    s = s.slice(1, -1)
+  } else if (s.endsWith('-')) {
+    // Trailing-minus negatives: "1234.50-" → -1234.50
+    negative = true
+    s = s.slice(0, -1)
+  }
+  const n = parseFloat(s.replace(/[$,\s]/g, ''))
+  if (isNaN(n)) return 0
+  return negative ? -n : n
 }
 
 // ─── Main parse entry point ──────────────────────────────────────────────────

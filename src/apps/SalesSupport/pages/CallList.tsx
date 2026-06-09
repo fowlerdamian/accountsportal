@@ -6,6 +6,7 @@ import { useCallList } from "../hooks/useSalesQueries";
 import { type Channel } from "../lib/constants";
 import { LeadScoreBadge } from "../components/LeadScoreBadge";
 import { supabase } from "@portal/lib/supabase";
+import { localToday } from "@portal/lib/dates";
 import { DatePicker } from "@portal/components/DatePicker";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -28,7 +29,7 @@ export default function CallList() {
   const navigate    = useNavigate();
   const qc          = useQueryClient();
 
-  const [date, setDate]         = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate]         = useState(localToday());
   const [generating, setGen]    = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 

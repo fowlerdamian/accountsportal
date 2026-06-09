@@ -77,7 +77,7 @@ export default function ProfileSettingsPage() {
   const inner = (
     <div className="max-w-lg">
       <button
-        onClick={() => navigate(isWarehouse ? '/warehouse' : -1 as any)}
+        onClick={() => navigate(isWarehouse ? '/support/warehouse' : -1 as any)}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
       >
         <ArrowLeft className="h-4 w-4" /> Back

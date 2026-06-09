@@ -1,3 +1,5 @@
+import { localDateString } from '@portal/lib/dates';
+
 const PUBLIC_HOLIDAYS: string[] = [
   // 2025 Australian public holidays
   '2025-01-01', '2025-01-27', '2025-04-18', '2025-04-19',
@@ -12,8 +14,8 @@ const holidaySet = new Set(PUBLIC_HOLIDAYS);
 function isBusinessDay(date: Date): boolean {
   const day = date.getDay();
   if (day === 0 || day === 6) return false;
-  const iso = date.toISOString().slice(0, 10);
-  return !holidaySet.has(iso);
+  // Local calendar date — toISOString() would shift local-midnight dates to the previous UTC day
+  return !holidaySet.has(localDateString(date));
 }
 
 export function calculateBusinessDaysOpen(createdAt: Date): number {

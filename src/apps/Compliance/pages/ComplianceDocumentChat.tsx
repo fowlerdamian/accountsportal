@@ -172,8 +172,9 @@ export default function ComplianceDocumentChat() {
     if (!content || isTyping || isEvaluating) return;
 
     if (reanswerMode) {
-      if (!text) setInput(content);
-      handleReanswerSend();
+      // Pass the content through — handleReanswerSend previously read the
+      // (empty) input state, making "Keep suggestion" a silent no-op here.
+      handleReanswerSend(content);
       return;
     }
 
@@ -447,8 +448,8 @@ export default function ComplianceDocumentChat() {
     }, 50);
   };
 
-  const handleReanswerSend = async () => {
-    const content = input.trim();
+  const handleReanswerSend = async (text?: string) => {
+    const content = (text ?? input).trim();
     if (!content || !reanswerMode || !docId) return;
 
     if (isListeningRef.current) { isListeningRef.current = false; setIsListening(false); recognitionRef.current?.stop(); }

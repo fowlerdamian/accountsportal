@@ -479,14 +479,28 @@ export async function generatePdf(
         const numCols = Math.max(...allRows.map(r => r.length));
         const colWidth = contentWidth / numCols;
         const cellPadding = 2;
-        const rowHeight = 7;
+        const lineHeight = 4.5;
+        const baseRowHeight = 7;
 
         // Check if full table fits, else at least ensure header + 1 row
-        checkNewPage(rowHeight * Math.min(allRows.length, 3) + 4);
+        checkNewPage(baseRowHeight * Math.min(allRows.length, 3) + 4);
 
         for (let ri = 0; ri < allRows.length; ri++) {
           const row = allRows[ri];
           const isHeader = block.tableHeader && ri === 0;
+
+          // Wrap every cell and size the row to the tallest cell — long cells
+          // (risk registers, control plans) previously truncated to one line.
+          pdf.setFontSize(9);
+          const maxCellWidth = colWidth - cellPadding * 2;
+          const wrapped: string[][] = [];
+          let maxLines = 1;
+          for (let ci = 0; ci < numCols; ci++) {
+            const lines = pdf.splitTextToSize(row[ci] || '', maxCellWidth) as string[];
+            wrapped.push(lines.length ? lines : ['']);
+            if (lines.length > maxLines) maxLines = lines.length;
+          }
+          const rowHeight = Math.max(baseRowHeight, maxLines * lineHeight + 2.5);
 
           checkNewPage(rowHeight + 2);
 
@@ -508,17 +522,16 @@ export async function generatePdf(
 
           pdf.setFontSize(9);
 
-          // Draw cell borders
+          // Draw cell borders + all wrapped lines
           pdf.setDrawColor(200, 200, 200);
           pdf.setLineWidth(0.2);
           for (let ci = 0; ci < numCols; ci++) {
             const cellX = margin + ci * colWidth;
             pdf.rect(cellX, y - 4.5, colWidth, rowHeight);
-            const cellText = row[ci] || '';
-            // Truncate if too long for cell
-            const maxCellWidth = colWidth - cellPadding * 2;
-            const truncated = pdf.splitTextToSize(cellText, maxCellWidth);
-            pdf.text(truncated[0] || '', cellX + cellPadding, y);
+            const lines = wrapped[ci];
+            for (let li = 0; li < lines.length; li++) {
+              pdf.text(lines[li], cellX + cellPadding, y + li * lineHeight);
+            }
           }
 
           y += rowHeight;

@@ -107,17 +107,23 @@ function TimerSaveModal({
         description:   desc || undefined,
         source:        "timer",
       });
+      // Time entry is saved — the activity post is best-effort. If it fails we
+      // must still clear the timer, otherwise a retry duplicates the entry.
       if (user) {
-        const project = activeProjects.find(p => p.id === projectId);
-        await postActivity({
-          project_id:   projectId,
-          task_id:      taskId || null,
-          type:         "time_log",
-          content:      `${authorName} logged ${h} hr${h !== 1 ? "s" : ""} via timer${desc ? ` — ${desc}` : ""}`,
-          author_id:    user.id,
-          author_name:  authorName,
-          metadata:     { hours: h, source: "timer" },
-        });
+        try {
+          const project = activeProjects.find(p => p.id === projectId);
+          await postActivity({
+            project_id:   projectId,
+            task_id:      taskId || null,
+            type:         "time_log",
+            content:      `${authorName} logged ${h} hr${h !== 1 ? "s" : ""} via timer${desc ? ` — ${desc}` : ""}`,
+            author_id:    user.id,
+            author_name:  authorName,
+            metadata:     { hours: h, source: "timer" },
+          });
+        } catch (activityErr) {
+          console.warn("Time logged, but posting the activity entry failed:", activityErr);
+        }
       }
       toast.success(`Logged ${h} hrs`);
       onSave();

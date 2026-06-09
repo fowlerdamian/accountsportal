@@ -146,13 +146,17 @@ export default function DriveSyncPanel({ documents, supportingDocs }: DriveSyncP
         const filename = ev.file_name || `Evidence_${ev.id}`;
         setProgress({ current: ok + failed, total: totalToSync, label: filename });
         try {
-          const { data: urlData } = auditSupabase.storage.from('evidence').getPublicUrl(ev.file_path!);
+          // Signed URL (1h) — the drive function fetches it server-side; works
+          // even when the evidence bucket is private.
+          const { data: urlData, error: urlErr } = await auditSupabase.storage
+            .from('evidence').createSignedUrl(ev.file_path!, 3600);
+          if (urlErr || !urlData?.signedUrl) throw urlErr ?? new Error('No URL');
           const { data, error } = await portalSupabase.functions.invoke('compliance-drive', {
             body: {
               action: 'upload',
               folder_id: driveFolderId,
               filename,
-              file_url: urlData.publicUrl,
+              file_url: urlData.signedUrl,
               replace_existing: true,
             },
           });

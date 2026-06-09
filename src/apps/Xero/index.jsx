@@ -520,6 +520,9 @@ function XeroChatInner() {
 
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+  // Bumped whenever the active conversation changes (new/select/delete) so
+  // in-flight saves can detect the switch and avoid hijacking the session id.
+  const conversationEpochRef = useRef(0)
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)')
@@ -615,6 +618,11 @@ function XeroChatInner() {
   }
 
   async function saveSession(msgs, hist, currentSid) {
+    // Capture which conversation we're saving for BEFORE any await — if the
+    // user switches/clears conversations while the insert is in flight we
+    // must NOT reassign the active session id to the old conversation's row.
+    const epochAtStart = conversationEpochRef.current
+
     const authSession = await getValidSession()
     if (!authSession) return
 
@@ -636,7 +644,11 @@ function XeroChatInner() {
         .select('id, title, created_at, updated_at')
         .single()
       if (data) {
-        setSessionId(data.id)
+        // Only adopt the new row as the active session if the user is still
+        // on the same conversation that triggered this save.
+        if (conversationEpochRef.current === epochAtStart) {
+          setSessionId(data.id)
+        }
         setSessions(prev => [data, ...prev])
         return data.id
       }
@@ -652,6 +664,7 @@ function XeroChatInner() {
       .eq('id', s.id)
       .single()
     if (data) {
+      conversationEpochRef.current++
       setSessionId(data.id)
       setMessages(data.messages ?? [])
       setApiHistory(data.api_history ?? [])
@@ -664,6 +677,7 @@ function XeroChatInner() {
     await supabase.from('xero_chat_sessions').delete().eq('id', id)
     setSessions(prev => prev.filter(s => s.id !== id))
     if (id === sessionId) {
+      conversationEpochRef.current++
       setSessionId(null)
       setMessages([])
       setApiHistory([])
@@ -672,6 +686,7 @@ function XeroChatInner() {
   }
 
   function handleNewConversation() {
+    conversationEpochRef.current++
     setSessionId(null)
     setMessages([])
     setApiHistory([])
@@ -689,10 +704,15 @@ function XeroChatInner() {
     const userText = (text ?? input).trim()
     if (!userText || loading) return
 
-    const newMessages = [...messages, { role: 'user', content: userText }]
+    const userMsg = { role: 'user', content: userText }
+    // Track the latest message list as the functional updates apply, so the
+    // session save below persists flags set concurrently on other messages
+    // (e.g. `confirmed` from handleConfirm) instead of clobbering them with
+    // a stale render-time snapshot.
+    let latestMessages = [...messages, userMsg]
     setInput('')
     setError(null)
-    setMessages(newMessages)
+    setMessages(prev => { latestMessages = [...prev, userMsg]; return latestMessages })
     setLoading(true)
 
     // Capture sessionId at call time to avoid closure issues
@@ -726,14 +746,15 @@ function XeroChatInner() {
 
       const responseText = res.data?.text ?? res.data?.error ?? 'No response received.'
       const returnedHistory = res.data?.history
-      const finalMessages = [...newMessages, { role: 'assistant', content: responseText }]
+      const assistantMsg = { role: 'assistant', content: responseText }
 
-      setMessages(finalMessages)
+      latestMessages = [...latestMessages, assistantMsg]
+      setMessages(prev => { latestMessages = [...prev, assistantMsg]; return latestMessages })
 
       if (returnedHistory) {
         setApiHistory(returnedHistory)
         // Fire and forget — don't block the UI
-        saveSession(finalMessages, returnedHistory, currentSid)
+        saveSession(latestMessages, returnedHistory, currentSid)
       }
     } catch (err) {
       const errMsg = err.message || 'An unexpected error occurred.'

@@ -139,6 +139,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
         .eq("id", lead.id);
       if (error) return;
       qc.invalidateQueries({ queryKey: ["sales_leads"] });
+      qc.invalidateQueries({ queryKey: ["sales_lead", lead.id] });
       onLeadUpdated();
       onClose();
     } finally {

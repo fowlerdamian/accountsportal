@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@portal/lib/supabase";
+import { localToday } from "@portal/lib/dates";
 import type { Channel } from "../lib/constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -152,7 +153,7 @@ export function useLeads(channel: Channel, filters?: {
       // FleetCraft requires an installer — same pattern: keep unscored leads visible.
       if (channel === "fleetcraft") q = q.or("score_breakdown.is.null,score_breakdown->confirmed_non_installer.neq.true");
 
-      const { data, error } = await q.limit(200);
+      const { data, error } = await q.limit(1000);
       if (error) throw error;
       return data as SalesLead[];
     },
@@ -195,7 +196,7 @@ export function useOrderHistory(cin7CustomerId: string | null) {
 // ─── Call list queries ────────────────────────────────────────────────────────
 
 export function useCallList(channel: Channel, date?: string) {
-  const targetDate = date ?? new Date().toISOString().split("T")[0];
+  const targetDate = date ?? localToday();
   return useQuery({
     queryKey: ["call_list", channel, targetDate],
     queryFn: async () => {
@@ -271,7 +272,7 @@ export function useDashboardMetrics() {
   return useQuery({
     queryKey: ["sales_dashboard_metrics"],
     queryFn: async () => {
-      const today   = new Date().toISOString().split("T")[0];
+      const today   = localToday();
       const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
       const [leadsRes, callsRes, winbackRes, jobsRes] = await Promise.all([
@@ -357,6 +358,7 @@ export function useUpdateCallOutcome() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["call_list"] });
       qc.invalidateQueries({ queryKey: ["call_entry"] });
+      qc.invalidateQueries({ queryKey: ["call_entry_by_lead"] });
     },
   });
 }
@@ -373,6 +375,7 @@ export function useSaveCallNotes() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["call_entry", vars.callId] });
+      qc.invalidateQueries({ queryKey: ["call_entry_by_lead"] });
     },
   });
 }
@@ -387,6 +390,9 @@ export function useDisqualifyLead() {
         .eq("id", params.leadId);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sales_leads"] }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["sales_leads"] });
+      qc.invalidateQueries({ queryKey: ["sales_lead", vars.leadId] });
+    },
   });
 }

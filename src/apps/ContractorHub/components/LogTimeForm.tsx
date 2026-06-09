@@ -7,10 +7,11 @@ import { DatePicker } from "@portal/components/DatePicker";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@guide/contexts/AuthContext";
-import { useLogTime, usePostActivity, useContractors } from "@hub/hooks/use-hub-queries";
+import { useLogTime, usePostActivity, useContractors, useProjects } from "@hub/hooks/use-hub-queries";
+import { localToday } from "@portal/lib/dates";
 
 interface LogTimeFormProps {
-  projectId:     string;
+  projectId:     string; // pass "" to let the user pick a project
   taskId?:       string;
   contractorId?: string; // pre-set for contractor users; shown as dropdown for staff
   onClose:       () => void;
@@ -18,24 +19,28 @@ interface LogTimeFormProps {
 
 export function LogTimeForm({ projectId, taskId, contractorId: presetId, onClose }: LogTimeFormProps) {
   const { user } = useAuth();
-  const today    = new Date().toISOString().split("T")[0];
+  const today    = localToday();
 
   const [hours,       setHours]       = useState("1");
   const [date,        setDate]        = useState(today);
   const [description, setDescription] = useState("");
   const [selectedCid, setSelectedCid] = useState(presetId ?? "");
+  const [selectedPid, setSelectedPid] = useState(projectId);
   const [saving,      setSaving]      = useState(false);
 
   const { data: contractors = [] }   = useContractors();
+  const { data: projects = [] }      = useProjects();
   const { mutateAsync: logTime }     = useLogTime();
   const { mutateAsync: postActivity } = usePostActivity();
 
   const authorName = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Staff";
-  const isPreset   = !!presetId;
+  const isPreset        = !!presetId;
+  const isProjectPreset = !!projectId;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const h = parseFloat(hours);
+    if (!selectedPid) { toast.error("Select a project"); return; }
     if (!selectedCid) { toast.error("Select a contractor"); return; }
     if (isNaN(h) || h < 0.25 || h > 24) { toast.error("Hours must be between 0.25 and 24"); return; }
 
@@ -43,7 +48,7 @@ export function LogTimeForm({ projectId, taskId, contractorId: presetId, onClose
     try {
       const entry = await logTime({
         contractor_id: selectedCid,
-        project_id:    projectId,
+        project_id:    selectedPid,
         task_id:       taskId ?? null,
         hours:         h,
         date,
@@ -53,7 +58,7 @@ export function LogTimeForm({ projectId, taskId, contractorId: presetId, onClose
       const contractor = contractors.find((c) => c.id === selectedCid);
       if (user) {
         await postActivity({
-          project_id:  projectId,
+          project_id:  selectedPid,
           task_id:     taskId ?? null,
           type:        "time_log",
           content:     `${contractor?.name ?? "Contractor"} logged ${h} hrs${taskId ? " on task" : ""}`,
@@ -76,6 +81,19 @@ export function LogTimeForm({ projectId, taskId, contractorId: presetId, onClose
     <form onSubmit={handleSubmit} className="rounded-lg border bg-muted/20 p-4 space-y-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Log Time</p>
       <div className="grid grid-cols-2 gap-3">
+        {!isProjectPreset && (
+          <div className="space-y-1 col-span-2">
+            <Label className="text-xs">Project</Label>
+            <Select value={selectedPid} onValueChange={setSelectedPid}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectContent>
+                {projects.filter((p) => p.status !== "archived").map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {!isPreset && (
           <div className="space-y-1 col-span-2">
             <Label className="text-xs">Contractor</Label>

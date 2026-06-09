@@ -96,8 +96,16 @@ function Toggle({ checked, onChange, disabled }) {
 }
 
 export default function TileSettings() {
-  const { isAdmin } = useIsAdmin()
+  const { isAdmin, checking } = useIsAdmin()
   const { users, settings, saving, error, toggle } = useAllUserTileSettings()
+
+  if (checking) {
+    return (
+      <div style={{ padding: '40px 24px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>
+        Checking access…
+      </div>
+    )
+  }
 
   if (!isAdmin) {
     return (

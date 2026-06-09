@@ -35,13 +35,15 @@ export function EscalationPanel({ caseId, caseNumber, caseTitle, onClose }: Prop
     mutationFn: async () => {
       if (!assigneeId || !note.trim()) throw new Error('Select an admin and provide a reason');
 
-      await supabase.from('cases').update({
+      const { error: updateError } = await supabase.from('cases').update({
         is_escalated: true,
         escalated_to_id: assigneeId,
         escalated_at: new Date().toISOString(),
         escalation_note: note,
         priority: 'urgent',
       } as any).eq('id', caseId);
+      // Bail out if the case wasn't actually escalated — no activity row, no notifications
+      if (updateError) throw new Error('Failed to escalate case — please try again');
 
       const admin = admins.find(a => a.id === assigneeId);
 

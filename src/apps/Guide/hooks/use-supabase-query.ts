@@ -63,6 +63,7 @@ export function useInstructionSteps(instructionSetId: string | undefined) {
         .from("instruction_steps")
         .select("*")
         .eq("instruction_set_id", instructionSetId!)
+        .is("variant_id", null)
         .order("order_index");
       if (error) throw error;
       return data as Tables<"instruction_steps">[];

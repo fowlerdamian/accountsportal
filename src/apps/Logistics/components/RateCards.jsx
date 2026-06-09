@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
+import { parseDelimitedText } from '../utils/helpers.js'
 
 // ─── Shared row validator ─────────────────────────────────────────────────────
 
@@ -38,18 +39,19 @@ function validateRows(rawRows) {
 // ─── Format parsers ───────────────────────────────────────────────────────────
 
 function parseDelimited(text, sep) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) return { rows: [], skipped: [{ row: '—', reason: 'File has no data rows' }] }
+  // RFC-4180-ish parse — quoted fields may contain the separator
+  const allRows = parseDelimitedText(text, sep)
+  if (allRows.length < 2) return { rows: [], skipped: [{ row: '—', reason: 'File has no data rows' }] }
 
-  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase())
+  const headers = allRows[0].map(h => h.trim().toLowerCase())
   const required = ['service', 'lane', 'rate']
   const missing = required.filter(k => !headers.includes(k))
   if (missing.length) return { rows: [], skipped: [{ row: '—', reason: `Missing required columns: ${missing.join(', ')}` }] }
 
   const idx = k => headers.indexOf(k)
   const rawRows = []
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(sep).map(c => c.trim())
+  for (let i = 1; i < allRows.length; i++) {
+    const cells = allRows[i].map(c => c.trim())
     rawRows.push({
       service:        cells[idx('service')]        ?? '',
       lane:           cells[idx('lane')]           ?? '',
@@ -227,39 +229,47 @@ export default function RateCards() {
     const today = new Date().toISOString().slice(0, 10)
 
     setUploading(true)
-    let added = 0, superseded = 0
+    let added = 0, superseded = 0, failed = 0
 
     for (const row of rows) {
-      // Find existing active rates for same carrier + service + lane
-      const { data: existing } = await supabase
-        .from('rate_cards')
-        .select('id')
-        .eq('carrier_id', uploadCarrierId)
-        .eq('service', row.service)
-        .eq('lane', row.lane)
-        .is('effective_to', null)
-
-      if (existing && existing.length > 0) {
-        await supabase
-          .from('rate_cards')
-          .update({ effective_to: today })
-          .in('id', existing.map(e => e.id))
-        superseded += existing.length
-      }
-
-      const { error } = await supabase.from('rate_cards').insert({
+      // Insert the new rate FIRST — if it fails, the old rate stays active
+      // (closing old rates before a failed insert would leave the lane rateless)
+      const { data: inserted, error: insErr } = await supabase.from('rate_cards').insert({
         carrier_id:     uploadCarrierId,
         service:        row.service,
         lane:           row.lane,
         rate:           row.rate,
         effective_from: row.effective_from,
         effective_to:   row.effective_to,
-      })
-      if (!error) added++
+      }).select('id').single()
+
+      if (insErr || !inserted) { failed++; continue }
+      added++
+
+      // Only on successful insert: close the superseded active rates
+      const { data: existing, error: selErr } = await supabase
+        .from('rate_cards')
+        .select('id')
+        .eq('carrier_id', uploadCarrierId)
+        .eq('service', row.service)
+        .eq('lane', row.lane)
+        .is('effective_to', null)
+        .neq('id', inserted.id)
+
+      if (selErr) { failed++; continue }
+
+      if (existing && existing.length > 0) {
+        const { error: updErr } = await supabase
+          .from('rate_cards')
+          .update({ effective_to: today })
+          .in('id', existing.map(e => e.id))
+        if (updErr) { failed++; continue }
+        superseded += existing.length
+      }
     }
 
     setUploading(false)
-    setUploadResult({ added, superseded, skipped })
+    setUploadResult({ added, superseded, skipped, failed })
     setUploadDone(true)
   }
 
@@ -571,6 +581,7 @@ export default function RateCards() {
                 <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
                   <p style={{ margin: '0 0 4px', color: '#4ade80' }}>{uploadResult.added} rate{uploadResult.added !== 1 ? 's' : ''} added</p>
                   {uploadResult.superseded > 0 && <p style={{ margin: '0 0 4px', color: '#f3ca0f' }}>{uploadResult.superseded} existing rate{uploadResult.superseded !== 1 ? 's' : ''} superseded</p>}
+                  {uploadResult.failed > 0 && <p style={{ margin: '0 0 4px', color: '#ff1744' }}>{uploadResult.failed} row{uploadResult.failed !== 1 ? 's' : ''} failed to save — old rates left active</p>}
                   {uploadResult.skipped.length > 0 && <p style={{ margin: '0 0 4px', color: '#ff1744' }}>{uploadResult.skipped.length} row{uploadResult.skipped.length !== 1 ? 's' : ''} skipped</p>}
                 </div>
 

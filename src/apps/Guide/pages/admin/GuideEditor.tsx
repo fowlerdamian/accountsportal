@@ -444,23 +444,27 @@ export default function GuideEditor() {
     // storage URL here so the database only ever sees durable URLs. While
     // the batch is in flight we bump `_pendingUploads` so `saveDraft` will
     // block a concurrent save until all uploads land.
-    let publicUrls: (string | null)[] = [];
+    // Each upload entry carries its image's own step number so assignment
+    // matches by step — never by array position, which shifts when some
+    // images were excluded in the import dialog.
+    let uploadedImages: { url: string; step: number }[] = [];
     if (extractedImages?.success && extractedImages.images.length > 0) {
       const uploadToast = toast.loading(`Uploading ${extractedImages.images.length} extracted image(s)…`);
       bumpPending();
       try {
-        publicUrls = await Promise.all(
+        const results = await Promise.all(
           extractedImages.images.map(async (img) => {
             try {
-              return await uploadBlobToStorage(img.blob, 'steps');
+              const url = await uploadBlobToStorage(img.blob, 'steps');
+              return url ? { url, step: img.step } : null;
             } catch (err) {
               console.error(`Failed to upload extracted step ${img.step} image`, err);
               return null;
             }
           })
         );
-        const okCount = publicUrls.filter(u => !!u).length;
-        toast.success(`Uploaded ${okCount}/${publicUrls.length} extracted image(s)`, { id: uploadToast });
+        uploadedImages = results.filter((r): r is { url: string; step: number } => !!r);
+        toast.success(`Uploaded ${uploadedImages.length}/${extractedImages.images.length} extracted image(s)`, { id: uploadToast });
       } catch (err: any) {
         toast.error(`Image upload failed: ${err.message ?? err}`, { id: uploadToast });
       } finally {
@@ -475,15 +479,16 @@ export default function GuideEditor() {
         description: s.description || '',
         order_index: i + 1,
         // Auto-assign extracted images to matching steps — using uploaded
-        // public URLs, never the transient blob: previews.
-        image_url: publicUrls[i] ?? undefined,
+        // public URLs, never the transient blob: previews. Match on the
+        // image's own step number, not array position.
+        image_url: uploadedImages.find(u => u.step === (s.step_number ?? i + 1))?.url ?? undefined,
       }));
       setGuideSteps(newSteps);
-    } else if (publicUrls.length > 0) {
+    } else if (uploadedImages.length > 0) {
       // If only images were selected (no steps), assign to existing steps
       setGuideSteps(prev => prev.map((step, i) => ({
         ...step,
-        image_url: publicUrls[i] ?? step.image_url,
+        image_url: uploadedImages.find(u => u.step === i + 1)?.url ?? step.image_url,
       })));
     }
   };
@@ -629,7 +634,7 @@ export default function GuideEditor() {
       // and the prior content is preserved untouched.
       if (guideId) {
         const stepsJson = guideSteps
-          .filter(s => s.subtitle || s.description || s.is_divider)
+          .filter(s => s.subtitle || s.description || s.is_divider || s.image_url || s.image2_url)
           .map((s, i) => ({
             step_number: i + 1,
             order_index: i + 1,
@@ -749,10 +754,12 @@ export default function GuideEditor() {
     // and a clear nukes both. Previously we only set the original on the
     // first upload, which left stale originals lying around — clicking Edit
     // after replacing an image would open the editor with the OLD original.
-    const updated = [...guideSteps];
     const origField = field === 'image_url' ? 'image_original_url' : 'image2_original_url';
-    updated[index] = { ...updated[index], [field]: value, [origField]: value };
-    setGuideSteps(updated);
+    setGuideSteps(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value, [origField]: value };
+      return updated;
+    });
   };
 
   const openEditor = (stepIndex: number, field: 'image_url' | 'image2_url') => {
@@ -778,9 +785,11 @@ export default function GuideEditor() {
       const blob = await res.blob();
       const file = new File([blob], `edited-${Date.now()}.jpg`, { type: 'image/jpeg' });
       const url = await uploadToStorage(file, 'steps');
-      const updated = [...guideSteps];
-      updated[editorTarget.stepIndex] = { ...updated[editorTarget.stepIndex], [editorTarget.field]: url };
-      setGuideSteps(updated);
+      setGuideSteps(prev => {
+        const updated = [...prev];
+        updated[editorTarget.stepIndex] = { ...updated[editorTarget.stepIndex], [editorTarget.field]: url };
+        return updated;
+      });
       toast.success("Image saved");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to save edited image");
@@ -1234,7 +1243,8 @@ export default function GuideEditor() {
                       {brand.domain}/{(existingGuide as any)?.slug || '...'}
                     </p>
                     <Button size="sm" className="w-full" disabled={saving} onClick={async () => {
-                      await saveDraft();
+                      const saved = await saveDraft();
+                      if (!saved) { toast.error("Publish cancelled — the guide could not be saved."); return; }
                       if (!id) { toast.error("Save the guide first"); return; }
                       try {
                         if (pub) {

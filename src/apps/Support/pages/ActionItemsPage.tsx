@@ -65,8 +65,8 @@ export default function ActionItemsPage() {
     },
   });
 
-  // Filter items
-  let filtered = items;
+  // Filter items (copy first — sorting below must not mutate the react-query cache)
+  let filtered = [...items];
   if (assigneeFilter === 'mine' && teamMember) {
     filtered = filtered.filter(i => i.assigned_to_email === teamMember.email);
   }
@@ -190,7 +190,7 @@ export default function ActionItemsPage() {
                   {/* Case link */}
                   {item.cases && (
                     <button
-                      onClick={() => navigate(`/cases/${item.case_id}`)}
+                      onClick={() => navigate(`/support/cases/${item.case_id}`)}
                       className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                     >
                       #{item.cases.case_number}

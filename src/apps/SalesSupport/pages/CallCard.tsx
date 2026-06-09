@@ -37,6 +37,7 @@ export default function CallCard() {
   const saveNotes                 = useSaveCallNotes();
 
   const [notes, setNotes]           = useState("");
+  const [notesDirty, setNotesDirty] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
   const [syncing, setSyncing]       = useState(false);
   const [syncingOutcome, setSyncingOutcome] = useState<string | null>(null);
@@ -45,8 +46,10 @@ export default function CallCard() {
   const [numberRevealed, setNumberRevealed] = useState(false);
 
   useEffect(() => {
-    if (call?.call_notes) setNotes(call.call_notes);
-  }, [call?.call_notes]);
+    // Only sync notes from the server while the textarea is untouched —
+    // a background refetch must not clobber typed-but-unsaved notes.
+    if (call?.call_notes && !notesDirty) setNotes(call.call_notes);
+  }, [call?.call_notes, notesDirty]);
 
   if (isLoading || !call) {
     return (
@@ -85,6 +88,7 @@ export default function CallCard() {
         notes,
         calledAt: new Date().toISOString(),
       });
+      setNotesDirty(false); // notes were persisted with the outcome
       // Sync note to HubSpot
       if (lead?.hubspot_company_id) {
         setSyncing(true);
@@ -141,6 +145,7 @@ export default function CallCard() {
 
   async function handleSaveNotes() {
     await saveNotes.mutateAsync({ callId: call.id, notes });
+    setNotesDirty(false);
     setNotesSaved(true);
     setTimeout(() => setNotesSaved(false), 2000);
   }
@@ -406,7 +411,7 @@ export default function CallCard() {
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Call Notes</div>
         <textarea
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { setNotes(e.target.value); setNotesDirty(true); }}
           placeholder="Type your call notes here..."
           rows={5}
           className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none"

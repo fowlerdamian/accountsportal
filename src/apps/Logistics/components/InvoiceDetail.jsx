@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from 'react'
+import { useEffect, useState, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useParams } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
@@ -54,6 +54,8 @@ export default function InvoiceDetail() {
   const [loading,          setLoading]          = useState(true)
   const [notes,            setNotes]            = useState('')
   const [savingNotes,      setSavingNotes]      = useState(false)
+  // Typed-but-unsaved notes must survive background refetches
+  const notesDirty = useRef(false)
   const [updatingStatus,   setUpdatingStatus]   = useState(false)
   const [generatingLetter, setGeneratingLetter] = useState(false)
   const [letter,           setLetter]           = useState('')
@@ -77,7 +79,7 @@ export default function InvoiceDetail() {
     if (!error && data) {
       const sorted = { ...data, freight_invoice_lines: [...(data.freight_invoice_lines ?? [])].sort((a, b) => a.sort_order - b.sort_order) }
       setInvoice(sorted)
-      setNotes(sorted.notes ?? '')
+      if (!notesDirty.current) setNotes(sorted.notes ?? '')
     }
     setLoading(false)
   }
@@ -92,7 +94,7 @@ export default function InvoiceDetail() {
     if (data) setDisputeEmails(data)
   }
 
-  useEffect(() => { fetchInvoice(); fetchDisputeEmails() }, [id])
+  useEffect(() => { notesDirty.current = false; fetchInvoice(); fetchDisputeEmails() }, [id])
 
   const flash = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 3000) }
 
@@ -199,6 +201,7 @@ export default function InvoiceDetail() {
     const { error } = await supabase.from('freight_invoices').update({ notes }).eq('id', invoice.id)
     setSavingNotes(false)
     if (error) { flash('err', error.message); return }
+    notesDirty.current = false
     flash('ok', 'Notes saved')
   }
 
@@ -430,7 +433,7 @@ export default function InvoiceDetail() {
       <div style={{ marginBottom: '24px' }}>
         <textarea
           value={notes}
-          onChange={e => setNotes(e.target.value)}
+          onChange={e => { notesDirty.current = true; setNotes(e.target.value) }}
           placeholder="Add internal notes about this invoice…"
           rows={3}
           style={{

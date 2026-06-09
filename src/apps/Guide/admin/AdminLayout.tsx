@@ -17,6 +17,18 @@ export function AdminLayout() {
 
   if (!user) return <Navigate to="/login" replace />;
 
+  // Only staff with an admin or editor role may enter the Guide admin area.
+  if (userRole !== "admin" && userRole !== "editor") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <div className="text-center space-y-2">
+          <h1 className="text-lg font-semibold">Access denied</h1>
+          <p className="text-sm text-muted-foreground">You don't have permission to access the Guide admin area. Contact an admin to be granted a role.</p>
+        </div>
+      </div>
+    );
+  }
+
   const initials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name.split(" ").map((n: string) => n[0]).join("").toUpperCase()
     : user?.email?.substring(0, 2).toUpperCase() ?? "??";

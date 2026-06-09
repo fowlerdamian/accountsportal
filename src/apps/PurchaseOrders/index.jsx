@@ -313,8 +313,12 @@ export default function PurchaseOrders() {
   const [sortCol, setSortCol] = useState('due_date')
   const [sortDir, setSortDir] = useState('asc')
   const isMobile = useIsMobile()
+  // Request token — rapid filter changes can resolve out of order; only the
+  // latest fetch is allowed to apply its results.
+  const fetchTokenRef = useRef(0)
 
   const fetchOrders = useCallback(async (dbStatuses) => {
+    const token = ++fetchTokenRef.current
     const sixMonthsAgo = new Date(Date.now() - 183 * 86_400_000).toISOString().slice(0, 10)
     const { data, error } = await supabase
       .from('purchase_orders')
@@ -322,6 +326,7 @@ export default function PurchaseOrders() {
       .in('status', dbStatuses)
       .or(`order_date.gte.${sixMonthsAgo},order_date.is.null`)
       .order('due_date', { ascending: true, nullsFirst: false })
+    if (token !== fetchTokenRef.current) return // stale response — a newer fetch is in flight
     if (error) {
       setFetchError(error.message ?? 'Failed to load orders')
     } else if (data) {

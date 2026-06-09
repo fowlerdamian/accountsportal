@@ -1,5 +1,42 @@
 export const aud = (n) =>
-  n == null ? '—' : `$${Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  n == null ? '—' : `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+// ─── Delimited-text parsing ───────────────────────────────────────────────────
+
+// RFC-4180-ish parser — handles double-quoted fields, escaped quotes ("") and
+// separators/newlines inside quotes. Returns an array of rows (string[] cells).
+export function parseDelimitedText(text, sep = ',') {
+  const rows = []
+  let row = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++ }  // escaped quote
+        else inQuotes = false
+      } else field += ch
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === sep) {
+      row.push(field); field = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(field); field = ''
+      if (row.length > 1 || row[0].trim() !== '') rows.push(row)
+      row = []
+    } else field += ch
+  }
+  row.push(field)
+  if (row.length > 1 || row[0].trim() !== '') rows.push(row)
+  return rows
+}
+
+// Strip currency symbols and thousands separators before parsing:
+// "$1,234.56" → 1234.56. Returns NaN for non-numeric input.
+export const parseMoney = (str) =>
+  parseFloat(String(str ?? '').replace(/[$\s]/g, '').replace(/,/g, ''))
 
 // Parse "YYYY-MM-DD" as local time to avoid UTC midnight → previous day in positive-offset zones
 export const fmtDate = (str) => {

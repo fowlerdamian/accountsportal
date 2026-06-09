@@ -99,11 +99,16 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
     onSuccess: async (data) => {
       // Auto-mark as dispatched after successful ShipStation order
       const now = new Date().toISOString();
-      await supabase.from('action_items').update({
+      const { error: updateError } = await supabase.from('action_items').update({
         status: 'done' as any,
         completed_at: now,
         dispatched_at: now,
       }).eq('id', item.id);
+      if (updateError) {
+        toast.error(`ShipStation order ${data.orderNumber} created, but failed to mark task as dispatched`);
+        queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
+        return;
+      }
 
       // Log activity
       const msg = `Order dispatched — SS ${data.orderNumber}\nBy: ${teamMember?.name || 'Warehouse'}`;
@@ -129,11 +134,12 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
   const markDispatched = useMutation({
     mutationFn: async () => {
       const now = new Date().toISOString();
-      await supabase.from('action_items').update({
+      const { error: updateError } = await supabase.from('action_items').update({
         status: 'done' as any,
         completed_at: now,
         dispatched_at: now,
       }).eq('id', item.id);
+      if (updateError) throw updateError;
 
       // Log activity
       const ssNum = item.shipstation_order_number;
@@ -153,6 +159,7 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
       queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
       toast.success('Marked as dispatched');
     },
+    onError: () => toast.error('Failed to mark as dispatched'),
   });
 
   return (
@@ -290,11 +297,12 @@ function GeneralTaskCard({ item, readOnly }: { item: WarehouseActionItem; readOn
   const markDone = useMutation({
     mutationFn: async () => {
       const now = new Date().toISOString();
-      await supabase.from('action_items').update({
+      const { error: updateError } = await supabase.from('action_items').update({
         status: 'done' as any,
         completed_at: now,
         warehouse_result: note || null,
       }).eq('id', item.id);
+      if (updateError) throw updateError;
 
       const msg = note
         ? `Warehouse: ${item.description}\nNote: ${note}\nBy: ${teamMember?.name || 'Warehouse'}`
@@ -318,6 +326,7 @@ function GeneralTaskCard({ item, readOnly }: { item: WarehouseActionItem; readOn
       queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
       toast.success('Task marked done');
     },
+    onError: () => toast.error('Failed to mark task done'),
   });
 
   const isUrgent = item.priority === 'urgent';

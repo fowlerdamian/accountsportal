@@ -14,6 +14,7 @@ import {
   type Task,
   type TaskStatus,
 } from "@hub/hooks/use-hub-queries";
+import { localToday } from "@portal/lib/dates";
 
 // ── Task status bubble config ─────────────────────────────────
 
@@ -259,19 +260,29 @@ export function ProductStagesView({ projectId }: ProductStagesViewProps) {
     }
 
     setActivating(true);
-    const today      = new Date().toISOString().split("T")[0];
+    const today      = localToday();
     const current    = stages.find(s => s.is_active);
     const isRollback = !stage.is_active && !!stage.end_date;
     const isSkip     = !isRollback && current && stage.position > current.position + 1;
 
     try {
+      // Activate the target stage FIRST. If a later update fails we're left
+      // with two active stages (visible + recoverable) rather than none.
+      await updateStage({
+        id:         stage.id,
+        project_id: stage.project_id,
+        start_date: stage.start_date ?? today,
+        end_date:   null,
+        is_active:  true,
+      });
+
       if (isRollback) {
         // Deactivate current (clear end_date so it looks unfinished again)
         if (current) {
           await updateStage({ id: current.id, project_id: current.project_id, end_date: null, is_active: false });
         }
         // Clear end_date from all stages after target too
-        const laterStages = stages.filter(s => s.position > stage.position);
+        const laterStages = stages.filter(s => s.position > stage.position && s.id !== current?.id);
         for (const s of laterStages) {
           await updateStage({ id: s.id, project_id: s.project_id, end_date: null, is_active: false });
         }
@@ -296,15 +307,6 @@ export function ProductStagesView({ projectId }: ProductStagesViewProps) {
           }
         }
       }
-
-      // Activate target stage
-      await updateStage({
-        id:         stage.id,
-        project_id: stage.project_id,
-        start_date: stage.start_date ?? today,
-        end_date:   null,
-        is_active:  true,
-      });
 
       toast.success(isRollback ? `Rolled back to "${stage.name}"` : `Moved to "${stage.name}"`);
     } catch {

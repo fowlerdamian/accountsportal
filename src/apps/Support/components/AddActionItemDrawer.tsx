@@ -256,7 +256,12 @@ export function AddActionItemDrawer({ caseId, caseNumber, caseTitle, customerNam
                       mode="single"
                       selected={dueDate}
                       onSelect={setDueDate}
-                      disabled={(date) => date < new Date()}
+                      disabled={(date) => {
+                        // Compare against local midnight so TODAY stays selectable
+                        const startOfToday = new Date();
+                        startOfToday.setHours(0, 0, 0, 0);
+                        return date < startOfToday;
+                      }}
                       initialFocus
                       className="p-3 pointer-events-auto"
                     />

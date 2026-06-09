@@ -62,12 +62,20 @@ export default function GuidesList() {
 
   const deleteGuide = async (id: string) => {
     try {
-      await supabase.from("instruction_steps").delete().eq("instruction_set_id", id);
-      await supabase.from("guide_publications").delete().eq("instruction_set_id", id);
-      await supabase.from("guide_variants").delete().eq("instruction_set_id", id);
+      // Delete every child table first, checking each result — abort on the
+      // first failure so we never orphan rows or hit FK violations silently.
+      const { error: stepsErr } = await supabase.from("instruction_steps").delete().eq("instruction_set_id", id);
+      if (stepsErr) throw stepsErr;
+      const { error: pubsErr } = await supabase.from("guide_publications").delete().eq("instruction_set_id", id);
+      if (pubsErr) throw pubsErr;
+      const { error: variantsErr } = await supabase.from("guide_variants").delete().eq("instruction_set_id", id);
+      if (variantsErr) throw variantsErr;
+      const { error: vehiclesErr } = await supabase.from("guide_vehicles").delete().eq("instruction_set_id", id);
+      if (vehiclesErr) throw vehiclesErr;
       const { error } = await supabase.from("instruction_sets").delete().eq("id", id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["instruction_sets"] });
+      queryClient.invalidateQueries({ queryKey: ["guide_vehicles_all"] });
       toast.success("Guide deleted");
     } catch (err: any) {
       toast.error(err.message);
