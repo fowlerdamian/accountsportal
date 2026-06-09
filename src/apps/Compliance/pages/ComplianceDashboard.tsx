@@ -139,7 +139,7 @@ export default function ComplianceDashboard() {
                           ) : (
                             <Button
                               size="sm"
-                              className="h-7 gap-1 text-xs bg-warning text-warning-foreground hover:bg-warning/90"
+                              className="h-7 gap-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                               onClick={(e) => { e.stopPropagation(); navigate(`/compliance/audit/${doc.id}`); }}
                             >
                               <Shield className="h-3 w-3" /> Audit

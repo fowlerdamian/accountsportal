@@ -40,6 +40,29 @@ async function callGemini(apiKey: string, systemInstruction: string, userPrompt:
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 }
 
+// Deterministic scan for content that would render visibly broken. Conservative —
+// only flags unambiguous artifacts so it won't false-positive on legitimate prose.
+function detectBrokenFormatting(content: string): string[] {
+  const issues: string[] = [];
+  const checks: Array<{ re: RegExp; label: string }> = [
+    { re: /```/, label: 'leftover Markdown code fence (```)' },
+    { re: /\[object Object\]/i, label: 'serialization artifact "[object Object]"' },
+    { re: /\{\{[\s\S]*?\}\}/, label: 'unresolved template placeholder ({{ ... }})' },
+    { re: /: ?undefined\b|>undefined<|\bundefinedundefined\b/, label: 'serialization artifact (stray undefined value)' },
+    { re: /â€|Ã[-¿]|ï»¿|ï¿½/, label: 'text-encoding artifact (mojibake)' },
+    { re: /&(nbsp|lt|gt|amp);/i, label: 'escaped HTML entity rendering literally' },
+    { re: /<\/?(div|span|p|br|hr|table|tr|td|th|thead|tbody|ul|ol|li|h[1-6]|strong|em|img|a)\b[^>]*>/i, label: 'raw HTML tag that may render literally' },
+  ];
+  for (const { re, label } of checks) {
+    const m = content.match(re);
+    if (m && m.index !== undefined) {
+      const snippet = content.slice(Math.max(0, m.index - 25), m.index + 45).replace(/\s+/g, ' ').trim();
+      issues.push(`${label} — near: "…${snippet}…"`);
+    }
+  }
+  return issues;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -99,6 +122,16 @@ EVIDENCE & RELATED DOCS (fail if missing):
 - Each ✗ NOT UPLOADED item above = mandatory fail finding
 - Any document referenced in the Related Documents section that is NOT in the EXISTING QMS DOCUMENTS list = fail
 
+FORMATTING & RENDERING — how the document would look when rendered (fail if it breaks readability, observation if minor):
+- Raw or escaped HTML tags that would display literally instead of rendering (e.g. <div>, <br>, &lt;p&gt;, &nbsp;)
+- Leftover Markdown code fences (\`\`\`) or text trapped inside a stray code block
+- Broken or malformed Markdown tables (misaligned or missing pipes, no header-separator row, cells that won't render)
+- Unclosed or mismatched emphasis markers (**, *, or backticks) that bleed into surrounding text
+- Serialization or placeholder artifacts: "undefined", "null", "NaN", "[object Object]", or unresolved {{ template tokens }}
+- Text-encoding artifacts / mojibake (e.g. Â, â€™, ï»¿, ï¿½)
+- Broken links or images (empty () or [], missing URLs)
+Quote the exact broken snippet in the finding text.
+
 If there are no genuine findings, return an empty array [].
 
 Respond ONLY with a JSON array. No preamble, no explanation, no markdown fences:
@@ -144,6 +177,24 @@ Respond ONLY with a JSON array. No preamble, no explanation, no markdown fences:
             status: 'fail',
             finding: `Required evidence not uploaded: "${missing.title}" is listed as a required record but has not been provided.`,
             recommendation: `Upload "${missing.title}" via the Supporting Documentation section of this document before the audit.`,
+          });
+        }
+      }
+
+      // Hard-inject fails for unambiguous broken text/HTML the model may overlook
+      for (const issue of detectBrokenFormatting(doc.generatedContent || '')) {
+        const tag = issue.split('—')[0].trim().toLowerCase();
+        const alreadyFlagged = results.some(
+          (r) => r.documentId === doc.id && r.finding?.toLowerCase().includes(tag)
+        );
+        if (!alreadyFlagged) {
+          results.push({
+            documentId: doc.id,
+            documentTitle: doc.title,
+            clause: doc.clause,
+            status: 'fail',
+            finding: `Formatting/rendering issue — ${issue}`,
+            recommendation: 'Remove the broken markup and regenerate the affected section so the document renders cleanly.',
           });
         }
       }
