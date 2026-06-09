@@ -57,17 +57,22 @@ export default function ComplianceSelfAudit() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+      let imagesCaptured = 0;
       for (let b = 0; b < batches.length; b++) {
         // Render each document to an image so the auditor can visually check formatting.
         const documentsPayload = await Promise.all(
-          batches[b].map(async (d) => ({
-            id: d.id, title: d.title, clause: d.clause, generatedContent: d.generatedContent,
-            messages: d.messages.map((m) => ({ role: m.role, content: m.content })),
-            requiredEvidence: supportingDocs
-              .filter((sd) => sd.document_id === d.id)
-              .map((sd) => ({ title: sd.title, uploaded: sd.status === 'uploaded' })),
-            renderedImage: await renderMarkdownToImage(d.generatedContent || ''),
-          }))
+          batches[b].map(async (d) => {
+            const renderedImage = await renderMarkdownToImage(d.generatedContent || '');
+            if (renderedImage) imagesCaptured++;
+            return {
+              id: d.id, title: d.title, clause: d.clause, generatedContent: d.generatedContent,
+              messages: d.messages.map((m) => ({ role: m.role, content: m.content })),
+              requiredEvidence: supportingDocs
+                .filter((sd) => sd.document_id === d.id)
+                .map((sd) => ({ title: sd.title, uploaded: sd.status === 'uploaded' })),
+              renderedImage,
+            };
+          })
         );
         const res = await fetch(`${supabaseUrl}/functions/v1/iso-audit`, {
           method: 'POST',
@@ -85,6 +90,9 @@ export default function ComplianceSelfAudit() {
         setAuditProgress({ current: Math.min((b + 1) * BATCH_SIZE, completedDocs.length), total: completedDocs.length });
       }
 
+      if (completedDocs.length > 0 && imagesCaptured === 0) {
+        toast.warning('Visual preview could not be generated — audited text only.');
+      }
       setAuditResults(allResults);
       if (docId) markDocAudited(docId);
     } catch (e: any) {
