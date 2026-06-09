@@ -442,6 +442,16 @@ export function ISOProvider({ children }: { children: ReactNode }) {
 
   const updateDocument = useCallback((id: string, updates: Partial<ISODocument>) => {
     setDocuments((prev) => prev.map((doc) => (doc.id === id ? { ...doc, ...updates } : doc)));
+    // A content change invalidates any prior audit — flip the doc back to "needs audit".
+    if (updates.generatedContent !== undefined) {
+      setAuditedDocIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        try { localStorage.setItem(AUDITED_KEY, JSON.stringify([...next])); } catch {}
+        return next;
+      });
+    }
   }, []);
 
   const addMessage = useCallback((docId: string, message: ChatMessage) => {
@@ -465,6 +475,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     let docsUpdated = 0;
     let replacements = 0;
     let docsScanned = 0;
+    const touchedIds: string[] = [];
     const current = profileSnapshot(companyProfile);
 
     setDocuments((prev) => prev.map((doc) => {
@@ -488,9 +499,20 @@ export function ISOProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (touched) docsUpdated++;
+      if (touched) { docsUpdated++; touchedIds.push(doc.id); }
       return { ...doc, generatedContent: content, profileSnapshot: current };
     }));
+
+    // Content changed → those docs need re-auditing.
+    if (touchedIds.length > 0) {
+      setAuditedDocIds((prev) => {
+        if (!touchedIds.some((id) => prev.has(id))) return prev;
+        const next = new Set(prev);
+        touchedIds.forEach((id) => next.delete(id));
+        try { localStorage.setItem(AUDITED_KEY, JSON.stringify([...next])); } catch {}
+        return next;
+      });
+    }
 
     return { docsScanned, docsUpdated, replacements };
   }, [companyProfile]);
