@@ -103,7 +103,8 @@ function formatMessage({ event, taskId, taskTitle, description, dueDate, urgency
     }
 
     case 'comment': {
-      const body = truncate(commentBody, 100) || summary
+      // No character cap on comments — show the full body (whitespace-normalised, uncapped).
+      const body = truncate(commentBody, Infinity) || summary
       return `💬 ${titleLink} — comment from ${actorName ?? 'someone'}\n${body}\n${dueChip} · ${quad}`
     }
 
