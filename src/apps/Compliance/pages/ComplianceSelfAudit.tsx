@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 export default function ComplianceSelfAudit() {
   const navigate = useNavigate();
   const { docId } = useParams<{ docId: string }>();
-  const { documents, auditResults, setAuditResults, updateDocument, companyProfile, snapshotProfileFor } = useISO();
+  const { documents, auditResults, setAuditResults, updateDocument, companyProfile, snapshotProfileFor, markDocAudited } = useISO();
   const [isAuditing, setIsAuditing] = useState(false);
   const [fixingIds, setFixingIds] = useState<Set<string>>(new Set());
   const [fixingDocIds, setFixingDocIds] = useState<Set<string>>(new Set());
@@ -83,6 +83,7 @@ export default function ComplianceSelfAudit() {
       }
 
       setAuditResults(allResults);
+      if (docId) markDocAudited(docId);
     } catch (e: any) {
       toast.error(e.message || 'Audit failed. Please try again.');
     } finally {

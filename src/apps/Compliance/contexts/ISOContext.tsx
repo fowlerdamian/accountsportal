@@ -11,6 +11,7 @@ const DOCS_KEY = 'compliance_documents';
 const SIGNATURE_KEY = 'compliance_director_signature';
 const OVERRIDES_KEY = 'compliance_company_overrides';
 const LOGO_KEY = 'compliance_company_logo';
+const AUDITED_KEY = 'compliance_audited_docs';
 const BACKUP_KEY_PREFIX = 'compliance_pre_sync_backup_';
 const REMOTE_TABLE = 'compliance_app_state';
 
@@ -27,6 +28,8 @@ interface ISOContextType {
   getDocument: (id: string) => ISODocument | undefined;
   auditResults: AuditResult[] | null;
   setAuditResults: (results: AuditResult[] | null) => void;
+  auditedDocIds: Set<string>;
+  markDocAudited: (id: string) => void;
   completedCount: number;
   totalCount: number;
   companyProfile: CompanyProfile | null;
@@ -65,6 +68,7 @@ function loadDocuments(): ISODocument[] {
 function loadSignature(): string | null { try { return localStorage.getItem(SIGNATURE_KEY); } catch { return null; } }
 function loadOverrides(): CompanyOverrides { try { const raw = localStorage.getItem(OVERRIDES_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
 function loadLogo(): string | null { try { return localStorage.getItem(LOGO_KEY); } catch { return null; } }
+function loadAuditedDocs(): Set<string> { try { const raw = localStorage.getItem(AUDITED_KEY); return new Set(raw ? JSON.parse(raw) : []); } catch { return new Set(); } }
 
 function escapeRegex(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
@@ -196,6 +200,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   const { user } = usePortalAuth();
   const [documents, setDocuments] = useState<ISODocument[]>(loadDocuments);
   const [auditResults, setAuditResults] = useState<AuditResult[] | null>(null);
+  const [auditedDocIds, setAuditedDocIds] = useState<Set<string>>(loadAuditedDocs);
   const [directorSignature, setDirectorSignatureState] = useState<string | null>(loadSignature);
   const [companyOverrides, setCompanyOverridesState] = useState<CompanyOverrides>(loadOverrides);
   const [companyLogo, setCompanyLogoState] = useState<string | null>(loadLogo);
@@ -426,6 +431,15 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     setDriveFolderIdState(id);
   }, []);
 
+  const markDocAudited = useCallback((id: string) => {
+    setAuditedDocIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev).add(id);
+      try { localStorage.setItem(AUDITED_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, []);
+
   const updateDocument = useCallback((id: string, updates: Partial<ISODocument>) => {
     setDocuments((prev) => prev.map((doc) => (doc.id === id ? { ...doc, ...updates } : doc)));
   }, []);
@@ -492,6 +506,8 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       getDocument,
       auditResults,
       setAuditResults,
+      auditedDocIds,
+      markDocAudited,
       completedCount,
       totalCount,
       companyProfile,

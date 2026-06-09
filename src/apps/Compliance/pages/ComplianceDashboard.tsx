@@ -26,7 +26,7 @@ const statusConfig = {
 };
 
 export default function ComplianceDashboard() {
-  const { documents, completedCount, totalCount, auditResults, companyProfile } = useISO();
+  const { documents, completedCount, totalCount, auditResults, companyProfile, auditedDocIds } = useISO();
   const { actions, closeAction, deleteAction } = useActions();
   const navigate = useNavigate();
   const overallProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -127,14 +127,24 @@ export default function ComplianceDashboard() {
                       <span className="text-xs font-mono text-muted-foreground">Clause {doc.clause}</span>
                       <div className="flex items-center gap-1.5">
                         {doc.status === 'complete' && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="h-7 gap-1 text-xs"
-                            onClick={(e) => { e.stopPropagation(); navigate(`/compliance/audit/${doc.id}`); }}
-                          >
-                            <Shield className="h-3 w-3" /> Audit
-                          </Button>
+                          auditedDocIds.has(doc.id) ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 text-xs border-success text-success hover:bg-success/10 hover:text-success"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/compliance/audit/${doc.id}`); }}
+                            >
+                              <Shield className="h-3 w-3" /> Audited
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-7 gap-1 text-xs bg-warning text-warning-foreground hover:bg-warning/90"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/compliance/audit/${doc.id}`); }}
+                            >
+                              <Shield className="h-3 w-3" /> Audit
+                            </Button>
+                          )
                         )}
                         <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
                       </div>
