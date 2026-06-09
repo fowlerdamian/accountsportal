@@ -17,6 +17,23 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Verify caller is an authenticated admin — this endpoint invites users and
+    // changes roles, so it must never be invocable with just the anon key.
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Unauthorized" }, 401);
+    const callerClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user: caller } } = await callerClient.auth.getUser();
+    if (!caller) return json({ error: "Unauthorized" }, 401);
+    const [{ data: tm }, { data: prof }] = await Promise.all([
+      supabase.from("team_members").select("role").eq("id", caller.id).maybeSingle(),
+      supabase.from("profiles").select("role").eq("id", caller.id).maybeSingle(),
+    ]);
+    if (tm?.role !== "admin" && prof?.role !== "admin") return json({ error: "Forbidden" }, 403);
+
     const body = await req.json();
     const { action } = body;
 
