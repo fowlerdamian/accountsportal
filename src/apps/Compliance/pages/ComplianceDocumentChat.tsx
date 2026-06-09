@@ -518,7 +518,7 @@ export default function ComplianceDocumentChat() {
               <h1 className="text-lg font-bold text-foreground">{doc.title}</h1>
               {hasContent && (isApproved ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
-                  <CheckCircle2 className="h-3 w-3" /> Approved{doc.approvedAt ? ` · ${new Date(doc.approvedAt).toLocaleDateString('en-AU')}` : ''}
+                  <CheckCircle2 className="h-3 w-3" /> Approved{doc.version ? ` v${doc.version}.0` : ''}{doc.approvedAt ? ` · ${new Date(doc.approvedAt).toLocaleDateString('en-AU')}` : ''}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">

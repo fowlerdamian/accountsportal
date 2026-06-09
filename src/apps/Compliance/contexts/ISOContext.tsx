@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
-import { ISODocument, ISO_DOCUMENTS, ChatMessage, AuditResult } from '../lib/iso-documents';
+import { ISODocument, ISO_DOCUMENTS, ChatMessage, AuditResult, stampVersionRow } from '../lib/iso-documents';
 import {
   CompanyProfile, CompanyOverrides,
   deriveCompanyProfile, profileSnapshot, PUSHABLE_FIELDS,
@@ -58,7 +58,7 @@ function loadDocuments(): ISODocument[] {
       return ISO_DOCUMENTS.map((doc) => {
         const s = parsed.find((d) => d.id === doc.id);
         return s
-          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy }
+          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version }
           : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
       });
     }
@@ -74,7 +74,7 @@ function loadAuditedDocs(): Set<string> { try { const raw = localStorage.getItem
 function escapeRegex(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 // Serializable subset of doc state stored in Supabase + localStorage
-type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot' | 'approvedContent' | 'approvedAt' | 'approvedBy'>;
+type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot' | 'approvedContent' | 'approvedAt' | 'approvedBy' | 'version'>;
 
 interface SharedState {
   documents: DocStateSlim[];
@@ -95,6 +95,7 @@ function docsToSlim(documents: ISODocument[]): DocStateSlim[] {
     approvedContent: d.approvedContent,
     approvedAt: d.approvedAt,
     approvedBy: d.approvedBy,
+    version: d.version,
   }));
 }
 
@@ -103,7 +104,7 @@ function slimToDocs(slim: DocStateSlim[] | undefined | null): ISODocument[] {
   return ISO_DOCUMENTS.map((doc) => {
     const s = list.find((d) => d.id === doc.id);
     return s
-      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy }
+      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version }
       : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
   });
 }
@@ -164,6 +165,7 @@ function pickRicherDoc(a: DocStateSlim | undefined, b: DocStateSlim | undefined)
     approvedContent: latestApproval.approvedContent,
     approvedAt: latestApproval.approvedAt,
     approvedBy: latestApproval.approvedBy,
+    version: latestApproval.version,
   };
 }
 
@@ -474,11 +476,21 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const approveDocument = useCallback((id: string, approvedBy: string) => {
-    setDocuments((prev) => prev.map((doc) =>
-      doc.id === id && doc.generatedContent
-        ? { ...doc, approvedContent: doc.generatedContent, approvedAt: new Date().toISOString(), approvedBy }
-        : doc
-    ));
+    setDocuments((prev) => prev.map((doc) => {
+      if (doc.id !== id || !doc.generatedContent) return doc;
+      // Version advances only here — bump, then stamp the number into the content
+      // so the approved snapshot and live content carry the same version.
+      const version = (doc.version ?? 0) + 1;
+      const stamped = stampVersionRow(doc.generatedContent, `${version}.0`);
+      return {
+        ...doc,
+        version,
+        generatedContent: stamped,
+        approvedContent: stamped,
+        approvedAt: new Date().toISOString(),
+        approvedBy,
+      };
+    }));
   }, []);
 
   const addMessage = useCallback((docId: string, message: ChatMessage) => {

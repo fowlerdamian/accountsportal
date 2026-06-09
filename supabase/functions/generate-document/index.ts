@@ -72,7 +72,7 @@ FORMAT (Markdown):
 |---|---|
 | **Document No.** | QMS-${clause}-001 |
 | **Clause** | ${clause} |
-| **Version** | 1.0 |
+| **Version** | Draft |
 | **Issue Date** | ${issueDate} |
 | **Review Date** | ${reviewDate} |
 | **Prepared by** | ${company.contactName || 'Quality Manager'} |

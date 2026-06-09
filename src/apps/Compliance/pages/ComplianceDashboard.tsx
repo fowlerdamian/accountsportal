@@ -126,7 +126,7 @@ export default function ComplianceDashboard() {
                     {doc.generatedContent && (
                       (doc.approvedContent !== undefined && doc.approvedContent === doc.generatedContent) ? (
                         <span className="mb-3 inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
-                          <CheckCircle2 className="h-3 w-3" /> Approved
+                          <CheckCircle2 className="h-3 w-3" /> Approved{doc.version ? ` v${doc.version}.0` : ''}
                         </span>
                       ) : (
                         <span className="mb-3 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">

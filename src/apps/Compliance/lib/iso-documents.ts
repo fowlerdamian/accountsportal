@@ -17,6 +17,16 @@ export interface ISODocument {
   approvedContent?: string;
   approvedAt?: string;   // ISO timestamp of approval
   approvedBy?: string;   // approver identifier (email/name)
+  /** Approved version count. Bumps ONLY on approval (1, 2, 3…), shown as "N.0".
+   *  Regenerating/editing never changes it — drafts read "Draft". */
+  version?: number;
+}
+
+/** Replace the "Version" row of a document's Markdown metadata table with the
+ *  given label (e.g. "2.0" or "Draft"). Leaves content unchanged if no row found. */
+export function stampVersionRow(content: string, versionLabel: string): string {
+  if (!content) return content;
+  return content.replace(/(\|\s*\*\*Version\*\*\s*\|)[^|]*(\|)/i, `$1 ${versionLabel} $2`);
 }
 
 export interface ChatMessage {
