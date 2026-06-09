@@ -8,6 +8,11 @@ interface EvidenceItem {
   uploaded: boolean;
 }
 
+interface RenderedImage {
+  mime: string;
+  data: string; // base64, no data: prefix
+}
+
 interface DocumentInput {
   id: string;
   title: string;
@@ -15,11 +20,22 @@ interface DocumentInput {
   generatedContent: string;
   messages: Array<{ role: string; content: string }>;
   requiredEvidence: EvidenceItem[];
+  renderedImage?: RenderedImage | null;
 }
 
 const GEMINI_MODEL = 'gemini-2.5-pro';
 
-async function callGemini(apiKey: string, systemInstruction: string, userPrompt: string): Promise<string> {
+async function callGemini(
+  apiKey: string,
+  systemInstruction: string,
+  userPrompt: string,
+  image?: RenderedImage | null,
+): Promise<string> {
+  const parts: any[] = [{ text: userPrompt }];
+  // Attach the rendered document image so Gemini can visually inspect formatting.
+  if (image?.data) {
+    parts.push({ inline_data: { mime_type: image.mime || 'image/jpeg', data: image.data } });
+  }
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
     {
@@ -27,7 +43,7 @@ async function callGemini(apiKey: string, systemInstruction: string, userPrompt:
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        contents: [{ role: 'user', parts }],
         generationConfig: { maxOutputTokens: 8192, temperature: 0 },
       }),
     }
@@ -137,6 +153,8 @@ FORMATTING & RENDERING — how the document would look when rendered (fail if it
 - Text-encoding artifacts / mojibake (e.g. Â, â€™, ï»¿, ï¿½)
 - Broken links or images (empty () or [], missing URLs)
 Quote the exact broken snippet in the finding text.
+${doc.renderedImage ? `
+VISUAL INSPECTION — an IMAGE of the rendered document is attached. Look at it and flag anything that appears visually broken: literal HTML tags or entities shown as text, broken/overflowing/misaligned tables, columns that don't line up, missing or cut-off content, overlapping text, or garbled/garbage characters. For rendering issues, trust what you SEE in the image over the raw text. Report each visual problem as a "fail" finding describing what looks wrong and where.` : ''}
 
 If there are no genuine findings, return an empty array [].
 
@@ -154,7 +172,8 @@ Respond ONLY with a JSON array. No preamble, no explanation, no markdown fences:
       const text = await callGemini(
         apiKey,
         `You are a senior ISO 9001:2015 lead auditor preparing an organisation for third-party certification. Your role is to conduct a thorough, honest gap analysis — finding real non-conformances and observations while recognising genuinely compliant content. You are rigorous and precise. You do not invent problems, but you do not miss real ones either. Your findings must be specific and actionable.`,
-        prompt
+        prompt,
+        doc.renderedImage
       );
 
       const jsonMatch = text.match(/\[[\s\S]*\]/);

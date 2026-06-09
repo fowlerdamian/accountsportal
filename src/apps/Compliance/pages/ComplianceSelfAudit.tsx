@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Shield, CheckCircle2, XCircle, AlertTriangle, Loader2, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { auditSupabase } from '../client';
+import { renderMarkdownToImage } from '../lib/render-preview';
 import { toast } from 'sonner';
 
 export default function ComplianceSelfAudit() {
@@ -57,6 +58,17 @@ export default function ComplianceSelfAudit() {
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
       for (let b = 0; b < batches.length; b++) {
+        // Render each document to an image so the auditor can visually check formatting.
+        const documentsPayload = await Promise.all(
+          batches[b].map(async (d) => ({
+            id: d.id, title: d.title, clause: d.clause, generatedContent: d.generatedContent,
+            messages: d.messages.map((m) => ({ role: m.role, content: m.content })),
+            requiredEvidence: supportingDocs
+              .filter((sd) => sd.document_id === d.id)
+              .map((sd) => ({ title: sd.title, uploaded: sd.status === 'uploaded' })),
+            renderedImage: await renderMarkdownToImage(d.generatedContent || ''),
+          }))
+        );
         const res = await fetch(`${supabaseUrl}/functions/v1/iso-audit`, {
           method: 'POST',
           headers: {
@@ -64,16 +76,7 @@ export default function ComplianceSelfAudit() {
             'Authorization': `Bearer ${supabaseKey}`,
             'apikey': supabaseKey,
           },
-          body: JSON.stringify({
-            allDocTitles,
-            documents: batches[b].map((d) => ({
-              id: d.id, title: d.title, clause: d.clause, generatedContent: d.generatedContent,
-              messages: d.messages.map((m) => ({ role: m.role, content: m.content })),
-              requiredEvidence: supportingDocs
-                .filter((sd) => sd.document_id === d.id)
-                .map((sd) => ({ title: sd.title, uploaded: sd.status === 'uploaded' })),
-            })),
-          }),
+          body: JSON.stringify({ allDocTitles, documents: documentsPayload }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || `Audit request failed (${res.status})`);
