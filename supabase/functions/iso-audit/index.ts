@@ -28,7 +28,7 @@ async function callGemini(apiKey: string, systemInstruction: string, userPrompt:
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemInstruction }] },
         contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig: { maxOutputTokens: 8192, temperature: 1 },
+        generationConfig: { maxOutputTokens: 8192, temperature: 0 },
       }),
     }
   );
@@ -101,6 +101,12 @@ ${doc.generatedContent}
 AUDIT INSTRUCTIONS:
 
 Return only genuine findings — real non-conformances or observations. If the document genuinely meets a requirement well, do not fabricate a finding for it. Quality over quantity.
+
+STABILITY (critical — avoids endless re-audit churn):
+- Judge only against the objective ISO 9001:2015 requirements below. Do NOT flag wording, phrasing, tone, ordering, or stylistic preferences.
+- If a requirement is satisfied in substance, do NOT raise it even if you would have written it differently.
+- Do NOT invent new requirements beyond the checklist. A requirement that was met stays met regardless of how the text is phrased.
+- Only raise a finding where a required element is genuinely missing, factually wrong, or internally contradictory.
 
 Check ALL of the following and raise a finding only where there is a real gap:
 

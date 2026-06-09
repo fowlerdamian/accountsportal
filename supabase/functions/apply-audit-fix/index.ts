@@ -32,7 +32,13 @@ ${recommendation}
 CURRENT DOCUMENT:
 ${currentContent}
 
-Revise the document to address all findings while maintaining the existing structure and company-specific content. Return the complete updated document in Markdown format only — no preamble or explanation.`,
+Make the SMALLEST possible edits that resolve the findings — this is a targeted fix, not a rewrite:
+- Change ONLY the specific sections the findings call out. Add the missing element or correct the specific error.
+- Preserve every other sentence, heading, table, and wording EXACTLY as-is, character for character. Do not rephrase, reorder, "improve", or re-flow unaffected text.
+- Do not touch the metadata table (Document No., Version, dates).
+This keeps the document stable so a re-audit doesn't surface new issues from changed wording.
+
+Return the complete updated document in Markdown format only — no preamble or explanation.`,
       }],
     });
 
