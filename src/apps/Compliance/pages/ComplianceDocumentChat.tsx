@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Send, Download, FileText, Mic, Upload,
   CheckCircle2, Loader2, Sparkles, Check, Pencil, RotateCcw, RefreshCw,
+  ShieldCheck, Clock,
 } from 'lucide-react';
 import SupportingDocUploadTile from '../components/SupportingDocUploadTile';
 import { SUPPORTING_DOC_REQUIREMENTS } from '../lib/supporting-docs';
@@ -23,9 +24,9 @@ export default function ComplianceDocumentChat() {
   const { docId } = useParams<{ docId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { getDocument, updateDocument, addMessage, companyProfile, snapshotProfileFor } = useISO();
+  const { getDocument, updateDocument, addMessage, companyProfile, snapshotProfileFor, approveDocument } = useISO();
   const { createAction, closeAction } = useActions();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -494,6 +495,16 @@ export default function ComplianceDocumentChat() {
 
   const isAllAnswered = doc.progress >= 100;
 
+  const isAdmin = userRole === 'admin';
+  const hasContent = !!doc.generatedContent;
+  const isApproved = doc.approvedContent !== undefined && doc.approvedContent === doc.generatedContent;
+  const hasUnapprovedChanges = hasContent && doc.approvedContent !== doc.generatedContent;
+
+  const handleApprove = () => {
+    approveDocument(doc.id, user?.email || 'admin');
+    toast.success('Document approved');
+  };
+
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Header */}
@@ -502,8 +513,19 @@ export default function ComplianceDocumentChat() {
           <Button variant="ghost" size="icon" onClick={() => navigate('/compliance')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="flex-1">
-            <h1 className="text-lg font-bold text-foreground">{doc.title}</h1>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-bold text-foreground">{doc.title}</h1>
+              {hasContent && (isApproved ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
+                  <CheckCircle2 className="h-3 w-3" /> Approved{doc.approvedAt ? ` · ${new Date(doc.approvedAt).toLocaleDateString('en-AU')}` : ''}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
+                  <Clock className="h-3 w-3" /> Draft — pending approval
+                </span>
+              ))}
+            </div>
             <p className="text-xs text-muted-foreground font-mono">
               Clause {doc.clause}{user?.email ? ` · ${user.email.split('@')[0]}` : ''}
             </p>
@@ -511,6 +533,12 @@ export default function ComplianceDocumentChat() {
           <Button variant="ghost" size="icon" onClick={handleResetDocument} title="Reset chat">
             <RefreshCw className="h-4 w-4" />
           </Button>
+          {isAdmin && hasUnapprovedChanges && (
+            <Button onClick={handleApprove} variant="secondary" className="gap-2 border-success/40 text-success hover:bg-success/10" size="sm">
+              <ShieldCheck className="h-4 w-4" />
+              Approve
+            </Button>
+          )}
           {doc.status === 'complete' && (
             <Button onClick={handleDownload} className="gap-2" size="sm">
               <Download className="h-4 w-4" />

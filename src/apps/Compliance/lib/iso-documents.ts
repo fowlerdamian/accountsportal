@@ -12,6 +12,11 @@ export interface ISODocument {
   /** Snapshot of company profile fields at the time generatedContent was created.
    *  Used by the "push updates to older docs" flow to find/replace stale values. */
   profileSnapshot?: Record<string, string>;
+  /** Management-approved content snapshot. Edits to generatedContent are treated
+   *  as drafts until an admin approves, which copies generatedContent here. */
+  approvedContent?: string;
+  approvedAt?: string;   // ISO timestamp of approval
+  approvedBy?: string;   // approver identifier (email/name)
 }
 
 export interface ChatMessage {

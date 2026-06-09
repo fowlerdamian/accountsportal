@@ -123,6 +123,17 @@ export default function ComplianceDashboard() {
                     </div>
                     <h4 className="text-sm font-semibold text-foreground mb-1">{doc.title}</h4>
                     <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{doc.description}</p>
+                    {doc.generatedContent && (
+                      (doc.approvedContent !== undefined && doc.approvedContent === doc.generatedContent) ? (
+                        <span className="mb-3 inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
+                          <CheckCircle2 className="h-3 w-3" /> Approved
+                        </span>
+                      ) : (
+                        <span className="mb-3 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
+                          <Clock className="h-3 w-3" /> Draft
+                        </span>
+                      )
+                    )}
                     <div className="mt-auto flex w-full items-center justify-between gap-2">
                       <span className="text-xs font-mono text-muted-foreground">Clause {doc.clause}</span>
                       <div className="flex items-center gap-1.5">

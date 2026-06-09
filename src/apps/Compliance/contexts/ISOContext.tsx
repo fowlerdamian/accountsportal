@@ -30,6 +30,7 @@ interface ISOContextType {
   setAuditResults: (results: AuditResult[] | null) => void;
   auditedDocIds: Set<string>;
   markDocAudited: (id: string) => void;
+  approveDocument: (id: string, approvedBy: string) => void;
   completedCount: number;
   totalCount: number;
   companyProfile: CompanyProfile | null;
@@ -53,11 +54,11 @@ function loadDocuments(): ISODocument[] {
   try {
     const saved = localStorage.getItem(DOCS_KEY);
     if (saved) {
-      const parsed: Array<Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot'>> = JSON.parse(saved);
+      const parsed: DocStateSlim[] = JSON.parse(saved);
       return ISO_DOCUMENTS.map((doc) => {
         const s = parsed.find((d) => d.id === doc.id);
         return s
-          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot }
+          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy }
           : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
       });
     }
@@ -73,7 +74,7 @@ function loadAuditedDocs(): Set<string> { try { const raw = localStorage.getItem
 function escapeRegex(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 // Serializable subset of doc state stored in Supabase + localStorage
-type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot'>;
+type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot' | 'approvedContent' | 'approvedAt' | 'approvedBy'>;
 
 interface SharedState {
   documents: DocStateSlim[];
@@ -91,6 +92,9 @@ function docsToSlim(documents: ISODocument[]): DocStateSlim[] {
     messages: d.messages,
     generatedContent: d.generatedContent,
     profileSnapshot: d.profileSnapshot,
+    approvedContent: d.approvedContent,
+    approvedAt: d.approvedAt,
+    approvedBy: d.approvedBy,
   }));
 }
 
@@ -99,7 +103,7 @@ function slimToDocs(slim: DocStateSlim[] | undefined | null): ISODocument[] {
   return ISO_DOCUMENTS.map((doc) => {
     const s = list.find((d) => d.id === doc.id);
     return s
-      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot }
+      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy }
       : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
   });
 }
@@ -136,16 +140,31 @@ function pickRicherDoc(a: DocStateSlim | undefined, b: DocStateSlim | undefined)
   const statusRank = (s: string | undefined) => s === 'complete' ? 2 : s === 'in_progress' ? 1 : 0;
   const aRank = statusRank(a.status);
   const bRank = statusRank(b.status);
-  if (aRank !== bRank) return aRank > bRank ? a : b;
-  const aMsgs = a.messages?.length ?? 0;
-  const bMsgs = b.messages?.length ?? 0;
-  if (aMsgs !== bMsgs) return aMsgs > bMsgs ? a : b;
-  const aLen = a.generatedContent?.length ?? 0;
-  const bLen = b.generatedContent?.length ?? 0;
-  if (aLen !== bLen) return aLen > bLen ? a : b;
-  const aSnap = a.profileSnapshot ? Object.keys(a.profileSnapshot).length : 0;
-  const bSnap = b.profileSnapshot ? Object.keys(b.profileSnapshot).length : 0;
-  return aSnap >= bSnap ? a : b;
+  let richer: DocStateSlim;
+  if (aRank !== bRank) {
+    richer = aRank > bRank ? a : b;
+  } else {
+    const aMsgs = a.messages?.length ?? 0;
+    const bMsgs = b.messages?.length ?? 0;
+    const aLen = a.generatedContent?.length ?? 0;
+    const bLen = b.generatedContent?.length ?? 0;
+    const aSnap = a.profileSnapshot ? Object.keys(a.profileSnapshot).length : 0;
+    const bSnap = b.profileSnapshot ? Object.keys(b.profileSnapshot).length : 0;
+    if (aMsgs !== bMsgs) richer = aMsgs > bMsgs ? a : b;
+    else if (aLen !== bLen) richer = aLen > bLen ? a : b;
+    else richer = aSnap >= bSnap ? a : b;
+  }
+  // Preserve the most recent approval across both sides — approval can live on the
+  // less-rich side if someone edited the draft after it was approved elsewhere.
+  const latestApproval =
+    a.approvedAt && b.approvedAt ? (a.approvedAt >= b.approvedAt ? a : b)
+    : a.approvedAt ? a : b.approvedAt ? b : (a.approvedContent ? a : b);
+  return {
+    ...richer,
+    approvedContent: latestApproval.approvedContent,
+    approvedAt: latestApproval.approvedAt,
+    approvedBy: latestApproval.approvedBy,
+  };
 }
 
 // Merge two SharedStates field-by-field. NEVER deletes data: for each doc id,
@@ -454,6 +473,14 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const approveDocument = useCallback((id: string, approvedBy: string) => {
+    setDocuments((prev) => prev.map((doc) =>
+      doc.id === id && doc.generatedContent
+        ? { ...doc, approvedContent: doc.generatedContent, approvedAt: new Date().toISOString(), approvedBy }
+        : doc
+    ));
+  }, []);
+
   const addMessage = useCallback((docId: string, message: ChatMessage) => {
     setDocuments((prev) =>
       prev.map((doc) => doc.id === docId ? { ...doc, messages: [...doc.messages, message] } : doc)
@@ -530,6 +557,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
       setAuditResults,
       auditedDocIds,
       markDocAudited,
+      approveDocument,
       completedCount,
       totalCount,
       companyProfile,
