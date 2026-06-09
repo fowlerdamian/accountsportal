@@ -20,6 +20,10 @@ export interface ISODocument {
   /** Approved version count. Bumps ONLY on approval (1, 2, 3…), shown as "N.0".
    *  Regenerating/editing never changes it — drafts read "Draft". */
   version?: number;
+  /** Sync recency. Bumped on EVERY change; the merge keeps the newest version
+   *  so edits never silently revert to an older copy. */
+  updatedAt?: string;   // ISO timestamp of the last local change
+  rev?: number;         // monotonic per-doc change counter
 }
 
 /** Replace the "Version" row of a document's Markdown metadata table with the

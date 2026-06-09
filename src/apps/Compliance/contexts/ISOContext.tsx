@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useLayoutEffect, useRef, ReactNode } from 'react';
 import { ISODocument, ISO_DOCUMENTS, ChatMessage, AuditResult, stampVersionRow } from '../lib/iso-documents';
 import {
   CompanyProfile, CompanyOverrides,
@@ -58,7 +58,7 @@ function loadDocuments(): ISODocument[] {
       return ISO_DOCUMENTS.map((doc) => {
         const s = parsed.find((d) => d.id === doc.id);
         return s
-          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version }
+          ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version, updatedAt: s.updatedAt, rev: s.rev }
           : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
       });
     }
@@ -74,7 +74,9 @@ function loadAuditedDocs(): Set<string> { try { const raw = localStorage.getItem
 function escapeRegex(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 // Serializable subset of doc state stored in Supabase + localStorage
-type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot' | 'approvedContent' | 'approvedAt' | 'approvedBy' | 'version'>;
+type DocStateSlim = Pick<ISODocument, 'id' | 'status' | 'progress' | 'messages' | 'generatedContent' | 'profileSnapshot' | 'approvedContent' | 'approvedAt' | 'approvedBy' | 'version' | 'updatedAt' | 'rev'>;
+
+const nowISO = () => new Date().toISOString();
 
 interface SharedState {
   documents: DocStateSlim[];
@@ -96,6 +98,8 @@ function docsToSlim(documents: ISODocument[]): DocStateSlim[] {
     approvedAt: d.approvedAt,
     approvedBy: d.approvedBy,
     version: d.version,
+    updatedAt: d.updatedAt,
+    rev: d.rev,
   }));
 }
 
@@ -104,7 +108,7 @@ function slimToDocs(slim: DocStateSlim[] | undefined | null): ISODocument[] {
   return ISO_DOCUMENTS.map((doc) => {
     const s = list.find((d) => d.id === doc.id);
     return s
-      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version }
+      ? { ...doc, status: s.status as ISODocument['status'], progress: s.progress ?? 0, messages: s.messages ?? [], generatedContent: s.generatedContent, profileSnapshot: s.profileSnapshot, approvedContent: s.approvedContent, approvedAt: s.approvedAt, approvedBy: s.approvedBy, version: s.version, updatedAt: s.updatedAt, rev: s.rev }
       : { ...doc, status: 'not_started' as const, progress: 0, messages: [] };
   });
 }
@@ -132,40 +136,63 @@ function sameJson(a: unknown, b: unknown): boolean {
 }
 
 // ───────── Merge logic — never lose work ─────────
-// Given two doc states for the same id, return the one with MORE progress.
-// Priority: complete > in_progress > not_started; tiebreak by message count,
-// then by generatedContent length, then by profileSnapshot key count.
+// Conflict resolution for one document id, in priority order:
+//   1. CONTENT PRESERVATION — a version WITH generated content always beats an
+//      empty/cleared one. We never drop a written document to a blank version.
+//   2. RECENCY — otherwise the version with the newer `updatedAt` wins (newest
+//      edit, even if it is SHORTER). This is what stops "revert to earlier".
+//   3. LEGACY FALLBACK — for old records that predate `updatedAt`, fall back to
+//      richness (status > messages > content length).
+// Approval metadata + the newest sync stamp are always carried onto the winner.
+const docHasContent = (d: DocStateSlim) => !!(d.generatedContent && d.generatedContent.length > 0);
+const docRecency = (d: DocStateSlim) => (d.updatedAt ? Date.parse(d.updatedAt) || 0 : 0);
+
 function pickRicherDoc(a: DocStateSlim | undefined, b: DocStateSlim | undefined): DocStateSlim | undefined {
   if (!a) return b;
   if (!b) return a;
-  const statusRank = (s: string | undefined) => s === 'complete' ? 2 : s === 'in_progress' ? 1 : 0;
-  const aRank = statusRank(a.status);
-  const bRank = statusRank(b.status);
-  let richer: DocStateSlim;
-  if (aRank !== bRank) {
-    richer = aRank > bRank ? a : b;
+
+  let winner: DocStateSlim;
+  const aHas = docHasContent(a);
+  const bHas = docHasContent(b);
+
+  if (aHas !== bHas) {
+    // (1) Never lose document content to an empty/cleared copy.
+    winner = aHas ? a : b;
   } else {
-    const aMsgs = a.messages?.length ?? 0;
-    const bMsgs = b.messages?.length ?? 0;
-    const aLen = a.generatedContent?.length ?? 0;
-    const bLen = b.generatedContent?.length ?? 0;
-    const aSnap = a.profileSnapshot ? Object.keys(a.profileSnapshot).length : 0;
-    const bSnap = b.profileSnapshot ? Object.keys(b.profileSnapshot).length : 0;
-    if (aMsgs !== bMsgs) richer = aMsgs > bMsgs ? a : b;
-    else if (aLen !== bLen) richer = aLen > bLen ? a : b;
-    else richer = aSnap >= bSnap ? a : b;
+    const ra = docRecency(a);
+    const rb = docRecency(b);
+    if (ra !== rb) {
+      // (2) Newest edit wins — even if shorter.
+      winner = ra > rb ? a : b;
+    } else {
+      // (3) Legacy / identical-timestamp fallback.
+      const statusRank = (s: string | undefined) => s === 'complete' ? 2 : s === 'in_progress' ? 1 : 0;
+      const sa = statusRank(a.status), sb = statusRank(b.status);
+      const ma = a.messages?.length ?? 0, mb = b.messages?.length ?? 0;
+      const la = a.generatedContent?.length ?? 0, lb = b.generatedContent?.length ?? 0;
+      if (sa !== sb) winner = sa > sb ? a : b;
+      else if (ma !== mb) winner = ma > mb ? a : b;
+      else if (la !== lb) winner = la > lb ? a : b;
+      else winner = a;
+    }
   }
+
   // Preserve the most recent approval across both sides — approval can live on the
-  // less-rich side if someone edited the draft after it was approved elsewhere.
+  // side that did NOT win the content/recency contest.
   const latestApproval =
     a.approvedAt && b.approvedAt ? (a.approvedAt >= b.approvedAt ? a : b)
     : a.approvedAt ? a : b.approvedAt ? b : (a.approvedContent ? a : b);
+  // Carry the newest stamp so the merged doc reads as recent in later merges.
+  const newerStamp = docRecency(a) >= docRecency(b) ? a : b;
+
   return {
-    ...richer,
+    ...winner,
     approvedContent: latestApproval.approvedContent,
     approvedAt: latestApproval.approvedAt,
     approvedBy: latestApproval.approvedBy,
-    version: latestApproval.version,
+    version: latestApproval.version ?? winner.version,
+    updatedAt: newerStamp.updatedAt ?? winner.updatedAt,
+    rev: Math.max(a.rev ?? 0, b.rev ?? 0) || winner.rev,
   };
 }
 
@@ -208,9 +235,9 @@ function backupLocal(state: SharedState, reason: string) {
   try {
     const key = `${BACKUP_KEY_PREFIX}${new Date().toISOString()}_${reason}`;
     localStorage.setItem(key, JSON.stringify(state));
-    // Trim to most-recent 5 backups
+    // Trim to most-recent 15 backups (recovery points if anything goes wrong).
     const keys = Object.keys(localStorage).filter(k => k.startsWith(BACKUP_KEY_PREFIX)).sort();
-    while (keys.length > 5) {
+    while (keys.length > 15) {
       const stale = keys.shift();
       if (stale) localStorage.removeItem(stale);
     }
@@ -245,7 +272,10 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     driveFolderId,
   });
 
-  useEffect(() => {
+  // Layout effect (not passive) so latestRef is current the instant a render
+  // commits — before any incoming realtime websocket message can read it and
+  // merge against a stale snapshot of the user's in-progress edits.
+  useLayoutEffect(() => {
     latestRef.current = {
       documents: docsToSlim(documents),
       overrides: companyOverrides,
@@ -289,13 +319,38 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   // Replace local state with remote. Always backs up local first.
   const applyRemoteState = useCallback((next: SharedState, reason: string) => {
     backupLocal(latestRef.current, `before_${reason}`);
-    setDocuments(slimToDocs(next.documents));
+
+    // HARD GUARD (independent of the merge): never let an apply blank out a
+    // document that currently has content locally. If `next` would drop content
+    // for an id we still hold, keep the local content. Last line of defence.
+    const localById = new Map((latestRef.current.documents ?? []).map((d) => [d.id, d]));
+    const guardedDocs = (next.documents ?? []).map((d) => {
+      const local = localById.get(d.id);
+      if (local && docHasContent(local) && !docHasContent(d)) {
+        console.warn(`[Compliance] sync guard: kept local content for "${d.id}" (${reason} would have blanked it)`);
+        return {
+          ...d,
+          status: local.status,
+          progress: local.progress,
+          messages: local.messages,
+          generatedContent: local.generatedContent,
+          profileSnapshot: local.profileSnapshot,
+          version: local.version,
+          updatedAt: local.updatedAt,
+          rev: local.rev,
+        } as DocStateSlim;
+      }
+      return d;
+    });
+    const docs = guardedDocs;
+
+    setDocuments(slimToDocs(docs));
     setCompanyOverridesState(next.overrides ?? {});
     setCompanyLogoState(next.logo ?? null);
     setDirectorSignatureState(next.signature ?? null);
     setDriveFolderIdState(next.driveFolderId ?? null);
     try {
-      localStorage.setItem(DOCS_KEY, JSON.stringify(next.documents ?? []));
+      localStorage.setItem(DOCS_KEY, JSON.stringify(docs));
       localStorage.setItem(OVERRIDES_KEY, JSON.stringify(next.overrides ?? {}));
       if (next.logo) localStorage.setItem(LOGO_KEY, next.logo); else localStorage.removeItem(LOGO_KEY);
       if (next.signature) localStorage.setItem(SIGNATURE_KEY, next.signature); else localStorage.removeItem(SIGNATURE_KEY);
@@ -462,7 +517,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateDocument = useCallback((id: string, updates: Partial<ISODocument>) => {
-    setDocuments((prev) => prev.map((doc) => (doc.id === id ? { ...doc, ...updates } : doc)));
+    setDocuments((prev) => prev.map((doc) => (doc.id === id ? { ...doc, ...updates, updatedAt: nowISO(), rev: (doc.rev ?? 0) + 1 } : doc)));
     // A content change invalidates any prior audit — flip the doc back to "needs audit".
     if (updates.generatedContent !== undefined) {
       setAuditedDocIds((prev) => {
@@ -487,15 +542,17 @@ export function ISOProvider({ children }: { children: ReactNode }) {
         version,
         generatedContent: stamped,
         approvedContent: stamped,
-        approvedAt: new Date().toISOString(),
+        approvedAt: nowISO(),
         approvedBy,
+        updatedAt: nowISO(),
+        rev: (doc.rev ?? 0) + 1,
       };
     }));
   }, []);
 
   const addMessage = useCallback((docId: string, message: ChatMessage) => {
     setDocuments((prev) =>
-      prev.map((doc) => doc.id === docId ? { ...doc, messages: [...doc.messages, message] } : doc)
+      prev.map((doc) => doc.id === docId ? { ...doc, messages: [...doc.messages, message], updatedAt: nowISO(), rev: (doc.rev ?? 0) + 1 } : doc)
     );
   }, []);
 
@@ -506,7 +563,7 @@ export function ISOProvider({ children }: { children: ReactNode }) {
 
   const snapshotProfileFor = useCallback((docId: string) => {
     setDocuments((prev) => prev.map((doc) =>
-      doc.id === docId ? { ...doc, profileSnapshot: profileSnapshot(companyProfile) } : doc
+      doc.id === docId ? { ...doc, profileSnapshot: profileSnapshot(companyProfile), updatedAt: nowISO(), rev: (doc.rev ?? 0) + 1 } : doc
     ));
   }, [companyProfile]);
 
@@ -538,7 +595,11 @@ export function ISOProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (touched) { docsUpdated++; touchedIds.push(doc.id); }
+      if (touched) {
+        docsUpdated++;
+        touchedIds.push(doc.id);
+        return { ...doc, generatedContent: content, profileSnapshot: current, updatedAt: nowISO(), rev: (doc.rev ?? 0) + 1 };
+      }
       return { ...doc, generatedContent: content, profileSnapshot: current };
     }));
 
