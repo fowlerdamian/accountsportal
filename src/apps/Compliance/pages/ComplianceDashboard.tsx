@@ -79,12 +79,6 @@ export default function ComplianceDashboard() {
           <p className="mt-2 text-sm text-muted-foreground">{completedCount} of {totalCount} documents completed</p>
           <div className="mt-4 flex gap-2 flex-wrap">
             {completedCount > 0 && (
-              <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/audit')} className="gap-2">
-                <Shield className="h-4 w-4" />
-                {completedCount === totalCount ? 'Run Self-Audit' : 'Self-Audit (Preview)'}
-              </Button>
-            )}
-            {completedCount > 0 && (
               <Button variant="secondary" size="sm" onClick={() => navigate('/compliance/files')} className="gap-2">
                 <FolderArchive className="h-4 w-4" />
                 File Manager
@@ -113,10 +107,13 @@ export default function ComplianceDashboard() {
               {grouped[cat].map((doc) => {
                 const StatusIcon = statusConfig[doc.status].icon;
                 return (
-                  <button
+                  <div
                     key={doc.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => navigate(`/compliance/document/${doc.id}`)}
-                    className={`group relative flex flex-col items-start rounded-xl border p-5 text-left transition-all hover:shadow-lg hover:border-primary/50 ${categoryColors[cat]}`}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/compliance/document/${doc.id}`); } }}
+                    className={`group relative flex flex-col items-start rounded-xl border p-5 text-left transition-all cursor-pointer hover:shadow-lg hover:border-primary/50 ${categoryColors[cat]}`}
                   >
                     <div className="flex w-full items-start justify-between mb-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary">
@@ -126,16 +123,28 @@ export default function ComplianceDashboard() {
                     </div>
                     <h4 className="text-sm font-semibold text-foreground mb-1">{doc.title}</h4>
                     <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{doc.description}</p>
-                    <div className="mt-auto flex w-full items-center justify-between">
+                    <div className="mt-auto flex w-full items-center justify-between gap-2">
                       <span className="text-xs font-mono text-muted-foreground">Clause {doc.clause}</span>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                      <div className="flex items-center gap-1.5">
+                        {doc.status === 'complete' && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            onClick={(e) => { e.stopPropagation(); navigate(`/compliance/audit/${doc.id}`); }}
+                          >
+                            <Shield className="h-3 w-3" /> Audit
+                          </Button>
+                        )}
+                        <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                      </div>
                     </div>
                     {doc.status === 'in_progress' && (
                       <div className="mt-3 w-full">
                         <Progress value={doc.progress} className="h-1" />
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>

@@ -16,7 +16,8 @@ function ComplianceRoutes() {
     <Routes>
       <Route index element={<ComplianceDashboard />} />
       <Route path="document/:docId" element={<ComplianceDocumentChat />} />
-      <Route path="audit" element={<ComplianceSelfAudit />} />
+      <Route path="audit/:docId" element={<ComplianceSelfAudit />} />
+      <Route path="audit" element={<Navigate to="/compliance" replace />} />
       <Route path="supporting-docs" element={<ComplianceSupportingDocs />} />
       <Route path="files" element={<ComplianceFileManager />} />
       <Route path="knowledge-base" element={<ComplianceKnowledgeBase />} />

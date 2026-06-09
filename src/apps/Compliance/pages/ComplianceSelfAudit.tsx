@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useISO } from '../contexts/ISOContext';
 import { AuditResult } from '../lib/iso-documents';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 export default function ComplianceSelfAudit() {
   const navigate = useNavigate();
+  const { docId } = useParams<{ docId: string }>();
   const { documents, auditResults, setAuditResults, updateDocument, companyProfile, snapshotProfileFor } = useISO();
   const [isAuditing, setIsAuditing] = useState(false);
   const [fixingIds, setFixingIds] = useState<Set<string>>(new Set());
@@ -17,8 +18,18 @@ export default function ComplianceSelfAudit() {
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
   const [auditProgress, setAuditProgress] = useState({ current: 0, total: 0 });
 
-  const completedDocs = documents.filter((d) => d.status === 'complete');
+  // Single-document audit — only the document selected from the dashboard is audited.
+  const targetDoc = documents.find((d) => d.id === docId);
+  const completedDocs = targetDoc && targetDoc.status === 'complete' ? [targetDoc] : [];
   const findingKey = (result: AuditResult, index: number) => `${result.documentId}-${index}`;
+
+  // Start fresh whenever a different document is opened for audit.
+  useEffect(() => {
+    setAuditResults(null);
+    setFixedIds(new Set());
+    setAuditProgress({ current: 0, total: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docId]);
 
   const runAudit = async () => {
     setIsAuditing(true);
@@ -175,7 +186,7 @@ export default function ComplianceSelfAudit() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground">Self-Audit Tool</h1>
-              <p className="text-sm text-muted-foreground">AI-powered ISO 9001 compliance audit</p>
+              <p className="text-sm text-muted-foreground">{targetDoc ? targetDoc.title : 'AI-powered ISO 9001 compliance audit'}</p>
             </div>
           </div>
         </div>
@@ -185,16 +196,16 @@ export default function ComplianceSelfAudit() {
         {completedDocs.length === 0 ? (
           <div className="rounded-xl border border-border card-gradient p-12 text-center">
             <Shield className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h2 className="text-lg font-semibold text-foreground mb-2">No Documents to Audit</h2>
-            <p className="text-muted-foreground mb-6">Complete at least one document to run the self-audit.</p>
-            <Button onClick={() => navigate('/compliance')}>Go to Dashboard</Button>
+            <h2 className="text-lg font-semibold text-foreground mb-2">Document Not Ready</h2>
+            <p className="text-muted-foreground mb-6">This document must be completed before it can be audited.</p>
+            <Button onClick={() => navigate('/compliance')}>Back to Dashboard</Button>
           </div>
         ) : !auditResults && !isAuditing ? (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-8 text-center">
             <Shield className="mx-auto h-16 w-16 text-primary mb-6" />
             <h2 className="text-2xl font-bold text-foreground mb-3">Ready to Audit</h2>
-            <p className="text-muted-foreground mb-2">{completedDocs.length} of {documents.length} documents will be audited.</p>
-            <p className="text-sm text-muted-foreground mb-8">AI will thoroughly evaluate each document against ISO 9001:2015 requirements.</p>
+            <p className="text-muted-foreground mb-2">Audit <span className="font-semibold text-foreground">{targetDoc?.title}</span> against ISO 9001:2015 Clause {targetDoc?.clause}.</p>
+            <p className="text-sm text-muted-foreground mb-8">AI will thoroughly evaluate this document and report any findings.</p>
             <Button onClick={runAudit} className="gap-2 px-8 py-6 text-lg font-bold glow-gold" size="lg">
               <Shield className="h-5 w-5" /> START AUDIT
             </Button>
@@ -203,7 +214,7 @@ export default function ComplianceSelfAudit() {
           <div className="rounded-xl border border-border card-gradient p-8 text-center">
             <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary mb-6" />
             <h2 className="text-xl font-bold text-foreground mb-4">AI Auditing in Progress...</h2>
-            <p className="text-sm text-muted-foreground mb-6">Evaluating {completedDocs.length} documents against ISO 9001:2015</p>
+            <p className="text-sm text-muted-foreground mb-6">Evaluating {targetDoc?.title} against ISO 9001:2015</p>
             {auditProgress.total > 0 && (
               <div className="mx-auto max-w-sm">
                 <div className="flex justify-between text-xs text-muted-foreground mb-2">
