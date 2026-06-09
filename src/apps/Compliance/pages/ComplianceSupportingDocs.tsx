@@ -123,7 +123,7 @@ export default function ComplianceSupportingDocs() {
   }
 
   return (
-    <div className="min-h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto">
       <header className="border-b border-border px-6 py-5">
         <div className="mx-auto max-w-6xl flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/compliance')}>

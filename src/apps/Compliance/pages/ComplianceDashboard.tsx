@@ -39,7 +39,7 @@ export default function ComplianceDashboard() {
   };
 
   return (
-    <div className="min-h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto">
       <main className="mx-auto max-w-6xl px-6 py-8">
         {/* Header */}
         <div className="mb-8 flex items-center gap-3">
