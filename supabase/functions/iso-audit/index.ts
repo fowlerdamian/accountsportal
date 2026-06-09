@@ -162,7 +162,9 @@ Report a "fail" finding for EVERY visual defect visible in the image, including:
 - raw Markdown symbols (|, #, *, backticks) showing instead of being formatted
 - text trapped inside a code block, or stray code fences
 - cut-off, overlapping, or overflowing text; garbled or garbage characters
-For each, describe what looks wrong and roughly where. These are real defects — do NOT suppress them under the stability rules. If the rendered image genuinely looks clean and correct, do not invent problems.` : ''}
+For each, describe what looks wrong and roughly where. These are real defects — do NOT suppress them under the stability rules.
+Do NOT report these — they are intentional, correct formatting, NOT defects: horizontal divider/separator lines (rendered from "---"), underlined hyperlinks, table cell/row borders and gridlines, heading underlines, and normal bold/italic emphasis. Only flag a line/underline if it is clearly misplaced (e.g. cutting through the middle of a word or paragraph).
+If the rendered image genuinely looks clean and correct, do not invent problems.` : ''}
 
 If there are no genuine findings, return an empty array [].
 
