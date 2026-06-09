@@ -1,6 +1,6 @@
-// Generates a very-short AI summary for a staff_task and writes it to
-// staff_tasks.ai_summary. Targets ~22 characters so the bottom dock pill
-// can show it without ellipsis-truncating mid-word.
+// Generates a short AI summary for a staff_task and writes it to
+// staff_tasks.ai_summary. Targets ~40 characters — a concise but readable
+// label for the bottom dock pill (the dock no longer hard-truncates).
 //
 // Pattern mirrors supabase/functions/generate-case-summary/index.ts.
 
@@ -12,7 +12,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MAX_CHARS = 22;
+const MAX_CHARS = 40;
 
 function truncate(s: string, n: number): string {
   const t = (s ?? "").replace(/\s+/g, " ").trim();
