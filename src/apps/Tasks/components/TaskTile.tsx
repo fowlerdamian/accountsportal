@@ -58,10 +58,10 @@ export function TaskTile({ task, assigneeName, onClick, variant = "tile", classN
   }
 
   if (variant === "dock") {
-    // Prefer the AI summary; otherwise show the full title and let CSS ellipsis
-    // cap it at a sensible width (the dock strip scrolls horizontally and spills
-    // into the "+N" popover, so there's no need to hard-cut the name short).
-    const label = task.ai_summary?.trim() || task.title;
+    // Dock labels use ONLY the AI summary (generated to fit). No title fallback,
+    // no hard truncation — if the summary hasn't been generated yet, show a
+    // neutral placeholder (full title is still available on hover via title attr).
+    const label = task.ai_summary?.trim() || '…';
     return (
       <button
         onClick={onClick}
@@ -75,7 +75,7 @@ export function TaskTile({ task, assigneeName, onClick, variant = "tile", classN
         )}
       >
         <span className={cn("w-2 h-2 rounded-full shrink-0", QUADRANT_DOT_CLASS[quad])} />
-        <span className="text-xs text-foreground/90 truncate max-w-[260px]">{label}</span>
+        <span className="text-xs text-foreground/90 whitespace-nowrap">{label}</span>
         {task.due_date && (
           <span className="font-mono tabular-nums text-[10px] text-muted-foreground shrink-0">
             {formatDueChip(task.due_date)}
