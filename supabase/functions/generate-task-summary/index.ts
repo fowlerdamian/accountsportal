@@ -12,11 +12,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MAX_CHARS = 40;
+const MAX_CHARS = 40;    // soft target the model aims for
+const SAFETY_MAX = 64;   // hard cap, only ever trimmed at a word boundary
 
-function truncate(s: string, n: number): string {
+/** Trim to `max` at the LAST word boundary — never cuts a word mid-way. */
+function wordTrim(s: string, max: number): string {
   const t = (s ?? "").replace(/\s+/g, " ").trim();
-  return t.length > n ? t.slice(0, n) : t;
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max + 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut.slice(0, max)).trim();
 }
 
 // Fallback: drop filler words, keep the salient nouns/verbs at the start.
@@ -65,10 +70,11 @@ serve(async (req) => {
       summary = naiveSummary(t.title, t.description);
     } else {
       const prompt =
-        `Summarise this task in ≤${MAX_CHARS} characters total. ` +
-        `No quotes, no punctuation at the end, no ellipsis. ` +
-        `Use action verbs. Prefer concrete nouns over generic words like "task" or "item". ` +
-        `Return only the summary text.\n\n` +
+        `Write a short label for this task — aim for about ${MAX_CHARS} characters, and never exceed ${SAFETY_MAX}. ` +
+        `Keep it short by using common abbreviations (PO, qty, approx, #, &, w/, hrs, mgr, doc, req, info) and by dropping filler words — NOT by cutting words off. ` +
+        `It must read as a complete phrase: no clipped or truncated words, no ellipsis, no quotes, no trailing punctuation. ` +
+        `Use action verbs and concrete nouns; avoid generic words like "task" or "item". ` +
+        `Return only the label text.\n\n` +
         `Title: ${t.title}\n` +
         (t.description ? `Description: ${t.description.slice(0, 400)}` : "");
 
@@ -92,10 +98,11 @@ serve(async (req) => {
         } else {
           const data = await res.json();
           const raw  = data.content?.[0]?.text?.trim() ?? "";
-          // Strip quotes the model sometimes adds, trim trailing punctuation,
-          // hard-cap at MAX_CHARS to protect the layout regardless of model.
+          // Strip quotes the model sometimes adds, trim trailing punctuation.
+          // Safety net only: trim at a word boundary if the model overshoots —
+          // never clip mid-word.
           const cleaned = raw.replace(/^["'`]|["'`]$/g, "").replace(/[.,;:!]+$/, "").trim();
-          summary = truncate(cleaned, MAX_CHARS) || naiveSummary(t.title, t.description);
+          summary = wordTrim(cleaned, SAFETY_MAX) || naiveSummary(t.title, t.description);
         }
       } catch {
         summary = naiveSummary(t.title, t.description);
