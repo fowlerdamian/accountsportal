@@ -45,8 +45,10 @@ export function KanbanBoard({ tasks, profiles, myId, onOpenTask }: KanbanBoardPr
     setOverCol(null);
     if (!t || t.status === target) return;
 
-    // Don't let users force a task out of 'blocked' until its blocker is done.
-    if (t.status === "blocked" && target !== "done") {
+    // Don't let users force a task out of 'blocked' until its blocker is done —
+    // but only when there IS a blocker. A task dragged into Blocked manually
+    // (no blocked_by_task_id) must stay freely movable, or it's trapped forever.
+    if (t.status === "blocked" && t.blocked_by_task_id && target !== "done") {
       toast.error("Resolve the blocker first");
       return;
     }

@@ -138,7 +138,7 @@ export function NewTaskModal({ open, onClose }: NewTaskModalProps) {
               placeholder="What needs to be done?"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSave()}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && !saving && handleSave()}
             />
           </div>
 

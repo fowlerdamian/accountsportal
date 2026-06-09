@@ -150,6 +150,15 @@ async function postToChat(webhook: string, text: string): Promise<boolean> {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Service-role only: this endpoint posts to staff Google Chat spaces and
+  // spends AI tokens — it must not be invocable with the public anon key.
+  const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!SERVICE_KEY || bearer !== SERVICE_KEY) {
+    return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
+      status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const dryRun = body?.dry_run === true;
@@ -169,6 +178,9 @@ serve(async (req) => {
     const results: { name: string; tasks: number; posted: boolean; text?: string }[] = [];
 
     for (const profile of recipients as Profile[]) {
+      // Per-profile isolation: one bad webhook / fetch failure must never stop
+      // the remaining staff from getting their digest.
+      try {
       const [taskRes, caseRes, actionRes] = await Promise.all([
         sb.from("staff_tasks")
           .select("title, ai_summary, status, urgency, importance, due_date, description")
@@ -204,6 +216,10 @@ serve(async (req) => {
         posted,
         ...(dryRun ? { text } : {}),
       });
+      } catch (profileErr) {
+        console.error(`daily-focus-digest: failed for ${profile.email ?? profile.id}:`, profileErr);
+        results.push({ name: profile.full_name || profile.email || profile.id, tasks: 0, posted: false });
+      }
     }
 
     return new Response(

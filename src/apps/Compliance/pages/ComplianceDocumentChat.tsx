@@ -482,7 +482,9 @@ export default function ComplianceDocumentChat() {
         });
       }
     } catch {
-      if (reanswerMode.actionId) { await closeAction(reanswerMode.actionId); toast.success('Action item closed'); }
+      // Evaluation failed (network/service) — do NOT close the action item;
+      // a failure must never auto-resolve an open compliance action.
+      toast.error('Could not evaluate the answer — the action item stays open. Please try again.');
     } finally {
       setIsEvaluating(false);
       const savedIndex = pendingQuestionIndexRef.current;

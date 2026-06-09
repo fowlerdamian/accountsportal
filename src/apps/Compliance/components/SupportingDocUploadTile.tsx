@@ -50,14 +50,18 @@ export default function SupportingDocUploadTile({ documentId }: SupportingDocUpl
     try {
       const filePath = `${user.id}/${documentId}/${docId}_${file.name}`;
 
-      if (doc.file_path) {
-        await auditSupabase.storage.from('evidence').remove([doc.file_path]);
-      }
-
+      // Upload FIRST, delete the old object only after the new one is safely
+      // stored — deleting first would destroy the only copy of the evidence
+      // if the upload then fails.
       const { error: uploadError } = await auditSupabase.storage
         .from('evidence')
         .upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
+
+      if (doc.file_path && doc.file_path !== filePath) {
+        // Best-effort cleanup of the superseded object; never fail the upload over it.
+        try { await auditSupabase.storage.from('evidence').remove([doc.file_path]); } catch {}
+      }
 
       const { error } = await auditSupabase
         .from('supporting_docs')

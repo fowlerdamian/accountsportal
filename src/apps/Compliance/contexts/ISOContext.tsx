@@ -12,6 +12,7 @@ const SIGNATURE_KEY = 'compliance_director_signature';
 const OVERRIDES_KEY = 'compliance_company_overrides';
 const LOGO_KEY = 'compliance_company_logo';
 const AUDITED_KEY = 'compliance_audited_docs';
+const STATE_DOMAIN_KEY = 'compliance_state_owner_domain';
 const BACKUP_KEY_PREFIX = 'compliance_pre_sync_backup_';
 const REMOTE_TABLE = 'compliance_app_state';
 
@@ -130,9 +131,18 @@ function hasMeaningfulData(s: SharedState | null | undefined): boolean {
   return false;
 }
 
-// Cheap deep-equal — used to decide whether realtime is reflecting our own save.
+// Deep-equal that is stable under jsonb key reordering — Postgres jsonb does NOT
+// preserve object key order, so a naive JSON.stringify comparison of local state
+// vs a round-tripped remote row is effectively always false (breaking own-echo
+// detection and causing redundant pushes). Sort keys recursively before comparing.
+function stableStringify(v: unknown): string {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+  const keys = Object.keys(v as Record<string, unknown>).sort();
+  return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify((v as Record<string, unknown>)[k])).join(',') + '}';
+}
 function sameJson(a: unknown, b: unknown): boolean {
-  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+  try { return stableStringify(a) === stableStringify(b); } catch { return false; }
 }
 
 // ───────── Merge logic — never lose work ─────────
@@ -156,8 +166,13 @@ function pickRicherDoc(a: DocStateSlim | undefined, b: DocStateSlim | undefined)
   const bHas = docHasContent(b);
 
   if (aHas !== bHas) {
-    // (1) Never lose document content to an empty/cleared copy.
-    winner = aHas ? a : b;
+    // (1) Never lose document content to a STALE empty/cleared copy — but a
+    // stamped clear that is NEWER than the content side is an intentional
+    // user action ("Reset" / "Edit Answers") and must win, or resets revert.
+    const empty = aHas ? b : a;
+    const full = aHas ? a : b;
+    const intentionalClear = (empty.rev ?? 0) > 0 && docRecency(empty) > docRecency(full);
+    winner = intentionalClear ? empty : full;
   } else {
     const ra = docRecency(a);
     const rb = docRecency(b);
@@ -288,9 +303,48 @@ export function ISOProvider({ children }: { children: ReactNode }) {
   const companyDomain = (user?.email ?? '').split('@')[1]?.toLowerCase() ?? '';
 
   // ───────── localStorage caches (offline + first-load) ─────────
+  // try/catch: this state (logos/signatures are base64, docs hold full chat
+  // histories) can exceed the storage quota — a throw here would escape the
+  // effect and unmount the whole app.
   useEffect(() => {
-    localStorage.setItem(DOCS_KEY, JSON.stringify(docsToSlim(documents)));
-  }, [documents]);
+    try {
+      localStorage.setItem(DOCS_KEY, JSON.stringify(docsToSlim(documents)));
+      if (companyDomain) localStorage.setItem(STATE_DOMAIN_KEY, companyDomain);
+    } catch (e) {
+      console.warn('[Compliance] local cache write failed (quota?)', e);
+    }
+  }, [documents, companyDomain]);
+
+  // ───────── Cross-tenant guard ─────────
+  // localStorage keys are global to the browser profile. If a user from a
+  // DIFFERENT company signs in on the same machine, the previous company's
+  // cached docs/signature/logo must never seed (and then sync into) the new
+  // company's remote state. Back them up, then reset local state to empty.
+  useEffect(() => {
+    if (!companyDomain) return;
+    let owner: string | null = null;
+    try { owner = localStorage.getItem(STATE_DOMAIN_KEY); } catch {}
+    if (owner && owner !== companyDomain) {
+      console.warn(`[Compliance] local state belongs to "${owner}" but user is "${companyDomain}" — resetting local cache`);
+      backupLocal(latestRef.current, `owner_mismatch_${owner}`);
+      const empty: SharedState = { documents: [], overrides: {}, logo: null, signature: null, driveFolderId: null };
+      latestRef.current = empty;
+      setDocuments(slimToDocs([]));
+      setCompanyOverridesState({});
+      setCompanyLogoState(null);
+      setDirectorSignatureState(null);
+      setDriveFolderIdState(null);
+      setAuditedDocIds(new Set());
+      try {
+        localStorage.removeItem(DOCS_KEY);
+        localStorage.removeItem(OVERRIDES_KEY);
+        localStorage.removeItem(LOGO_KEY);
+        localStorage.removeItem(SIGNATURE_KEY);
+        localStorage.removeItem(AUDITED_KEY);
+        localStorage.setItem(STATE_DOMAIN_KEY, companyDomain);
+      } catch {}
+    }
+  }, [companyDomain]);
 
   // ───────── Brand + profile lookup (read-only, portal-wide) ─────────
   useEffect(() => {
@@ -326,7 +380,8 @@ export function ISOProvider({ children }: { children: ReactNode }) {
     const localById = new Map((latestRef.current.documents ?? []).map((d) => [d.id, d]));
     const guardedDocs = (next.documents ?? []).map((d) => {
       const local = localById.get(d.id);
-      if (local && docHasContent(local) && !docHasContent(d)) {
+      const incomingIsIntentionalClear = (d.rev ?? 0) > 0 && docRecency(d) > docRecency(local ?? d);
+      if (local && docHasContent(local) && !docHasContent(d) && !incomingIsIntentionalClear) {
         console.warn(`[Compliance] sync guard: kept local content for "${d.id}" (${reason} would have blanked it)`);
         return {
           ...d,
