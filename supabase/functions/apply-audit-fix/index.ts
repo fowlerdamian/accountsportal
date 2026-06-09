@@ -14,8 +14,8 @@ Deno.serve(async (req) => {
     const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
+      model: 'claude-opus-4-8',
+      max_tokens: 8000,
       messages: [{
         role: 'user',
         content: `You are an ISO 9001:2015 QMS documentation expert. Update the following document to address audit findings.

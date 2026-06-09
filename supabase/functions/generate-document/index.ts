@@ -92,8 +92,8 @@ Write the full document now. Do not include any preamble or explanation — outp
 
 
     const stream = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
+      model: 'claude-opus-4-8',
+      max_tokens: 8000,
       stream: true,
       messages: [{ role: 'user', content: prompt }],
     });
