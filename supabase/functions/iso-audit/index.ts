@@ -1,5 +1,3 @@
-import Anthropic from 'npm:@anthropic-ai/sdk';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -19,16 +17,27 @@ interface DocumentInput {
   requiredEvidence: EvidenceItem[];
 }
 
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const GEMINI_MODEL = 'gemini-2.5-pro';
 
-async function callClaude(client: Anthropic, systemInstruction: string, userPrompt: string): Promise<string> {
-  const msg = await client.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 8192,
-    system: systemInstruction,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
-  return msg.content.map((b: any) => (b.type === 'text' ? b.text : '')).join('');
+async function callGemini(apiKey: string, systemInstruction: string, userPrompt: string): Promise<string> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { maxOutputTokens: 8192, temperature: 1 },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini API error ${res.status}: ${err}`);
+  }
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 }
 
 Deno.serve(async (req) => {
@@ -37,9 +46,8 @@ Deno.serve(async (req) => {
   try {
     const { documents, allDocTitles = [] }: { documents: DocumentInput[]; allDocTitles: string[] } = await req.json();
 
-    const apiKey = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
-    const client = new Anthropic({ apiKey });
+    const apiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
+    if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
 
     const results = [];
 
@@ -104,8 +112,8 @@ Respond ONLY with a JSON array. No preamble, no explanation, no markdown fences:
   }
 ]`;
 
-      const text = await callClaude(
-        client,
+      const text = await callGemini(
+        apiKey,
         `You are a senior ISO 9001:2015 lead auditor preparing an organisation for third-party certification. Your role is to conduct a thorough, honest gap analysis — finding real non-conformances and observations while recognising genuinely compliant content. You are rigorous and precise. You do not invent problems, but you do not miss real ones either. Your findings must be specific and actionable.`,
         prompt
       );
