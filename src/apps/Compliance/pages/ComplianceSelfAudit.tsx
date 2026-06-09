@@ -260,10 +260,8 @@ export default function ComplianceSelfAudit() {
             <AnimatePresence>
               {auditResults.map((result, i) => {
                 const key = findingKey(result, i);
-                const isFixing = fixingIds.has(key);
                 const isDocFixing = fixingDocIds.has(result.documentId);
                 const isFixed = fixedIds.has(key);
-                const canFix = result.status !== 'pass' && !isFixed;
                 return (
                   <motion.div
                     key={key}
@@ -286,19 +284,13 @@ export default function ComplianceSelfAudit() {
                         </div>
                         <p className="text-sm text-muted-foreground mb-2">{result.finding}</p>
                         <p className="text-sm text-primary"><strong>Recommendation:</strong> {result.recommendation}</p>
-                        {isDocFixing && isFixing && (
+                        {isDocFixing && (
                           <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
                             <Loader2 className="h-3 w-3 animate-spin" />
                             Rewriting document with all fixes — this takes ~60 seconds, please wait…
                           </p>
                         )}
                       </div>
-                      {canFix && (
-                        <Button variant="secondary" size="sm" className="gap-1.5 shrink-0" disabled={isDocFixing} onClick={() => handleApplyFix(result, i)}>
-                          {isDocFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-                          {isDocFixing ? 'Rewriting...' : 'Apply Fix'}
-                        </Button>
-                      )}
                     </div>
                   </motion.div>
                 );
