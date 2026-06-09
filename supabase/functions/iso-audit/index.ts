@@ -123,6 +123,7 @@ STABILITY (critical — avoids endless re-audit churn):
 - If a requirement is satisfied in substance, do NOT raise it even if you would have written it differently.
 - Do NOT invent new requirements beyond the checklist. A requirement that was met stays met regardless of how the text is phrased.
 - Only raise a finding where a required element is genuinely missing, factually wrong, or internally contradictory.
+- EXCEPTION: visual formatting / rendering defects (see FORMATTING & RENDERING and the VISUAL INSPECTION step) are real defects, NOT style preferences — always report them when present.
 
 Check ALL of the following and raise a finding only where there is a real gap:
 
@@ -154,7 +155,14 @@ FORMATTING & RENDERING — how the document would look when rendered (fail if it
 - Broken links or images (empty () or [], missing URLs)
 Quote the exact broken snippet in the finding text.
 ${doc.renderedImage ? `
-VISUAL INSPECTION — an IMAGE of the rendered document is attached. Look at it and flag anything that appears visually broken: literal HTML tags or entities shown as text, broken/overflowing/misaligned tables, columns that don't line up, missing or cut-off content, overlapping text, or garbled/garbage characters. For rendering issues, trust what you SEE in the image over the raw text. Report each visual problem as a "fail" finding describing what looks wrong and where.` : ''}
+MANDATORY VISUAL INSPECTION — an IMAGE of the RENDERED document is attached. You MUST examine it carefully and base all rendering judgements ONLY on the image. The raw DOCUMENT CONTENT above can look fine as source text while the rendered result is broken — so do NOT conclude the formatting is fine just because the source text reads cleanly; look at the picture.
+Report a "fail" finding for EVERY visual defect visible in the image, including:
+- literal HTML tags or entities shown as text (e.g. <div>, </p>, &nbsp;, &lt;)
+- tables that did not render as a table, or whose rows/columns are misaligned, merged, or split
+- raw Markdown symbols (|, #, *, backticks) showing instead of being formatted
+- text trapped inside a code block, or stray code fences
+- cut-off, overlapping, or overflowing text; garbled or garbage characters
+For each, describe what looks wrong and roughly where. These are real defects — do NOT suppress them under the stability rules. If the rendered image genuinely looks clean and correct, do not invent problems.` : ''}
 
 If there are no genuine findings, return an empty array [].
 
