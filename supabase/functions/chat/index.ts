@@ -356,6 +356,20 @@ interface ToolCtx {
   userJwt: string | null;
 }
 
+// Tasks created server-side bypass the client's regenerateSummary() hook, so
+// the dock pill would show "…" forever — queue the summary ourselves.
+function queueTaskSummary(taskId: string): void {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return;
+  const work = fetch(`${url}/functions/v1/generate-task-summary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: key, Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ task_id: taskId }),
+  }).catch((err) => console.warn("[chat] summary failed:", err));
+  (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil?.(work);
+}
+
 function notifyTask(userJwt: string | null, payload: Record<string, unknown>): void {
   if (!userJwt) return;
   fetch(`${PORTAL_URL}/api/notify-task-assignee`, {
@@ -416,6 +430,8 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: To
         status:      "not_started",
       }).select("id, title").single();
       if (error) return { ok: false, error: error.message };
+
+      queueTaskSummary(task.id);
 
       if (assignee.id !== ctx.requester.id) {
         notifyTask(ctx.userJwt, {

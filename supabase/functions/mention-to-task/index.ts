@@ -117,6 +117,20 @@ async function composeTask(
   }
 }
 
+// Tasks created server-side bypass the client's regenerateSummary() hook, so
+// the dock pill would show "…" forever — queue the summary ourselves.
+function queueTaskSummary(taskId: string): void {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return;
+  const work = fetch(`${url}/functions/v1/generate-task-summary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: key, Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ task_id: taskId }),
+  }).catch((err) => console.warn("[mention-to-task] summary failed:", err));
+  (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil?.(work);
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -189,6 +203,7 @@ serve(async (req) => {
       }
 
       created.push({ task_id: task.id, title: task.title, assignee: recipient.full_name ?? recipient.email ?? "staff" });
+      queueTaskSummary(task.id);
 
       if (userJwt) {
         fetch(`${PORTAL_URL}/api/notify-task-assignee`, {
