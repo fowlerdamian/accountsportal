@@ -297,6 +297,188 @@ Answer any question about the business across all these apps. Summarise, identif
   }
 }
 
+// ── Write tools ───────────────────────────────────────────────────────────────
+// The chat can act, not just answer: create staff tasks, update their status,
+// and comment on them. All writes run under the service role but are stamped
+// with the requesting user's profile id (resolved from their email), and
+// assignee notifications reuse the portal's /api/notify-task-assignee endpoint
+// with the caller's own JWT forwarded.
+
+const PORTAL_URL = Deno.env.get("PORTAL_URL") ?? "https://app.automotivegroup.com.au";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const TOOLS = [
+  {
+    name: "create_task",
+    description: "Create a staff task and assign it to a staff member. When the user says 'make a task for <person> re this', derive a concise title and a description capturing the specifics (names, IDs, amounts, what needs doing) from the current screen content.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title:         { type: "string", description: "Short, specific task title" },
+        description:   { type: "string", description: "What needs doing and the relevant context from the screen (IDs, customers, amounts, links)" },
+        assignee_name: { type: "string", description: "Name of the staff member to assign to (first name is fine)" },
+        due_date:      { type: "string", description: "Optional due date, YYYY-MM-DD" },
+        urgency:       { type: "integer", minimum: 1, maximum: 5, description: "1–5, Eisenhower urgency" },
+        importance:    { type: "integer", minimum: 1, maximum: 5, description: "1–5, Eisenhower importance" },
+      },
+      required: ["title", "assignee_name"],
+    },
+  },
+  {
+    name: "update_task_status",
+    description: "Update the status of an existing staff task. Identify the task by its uuid or a distinctive fragment of its title.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task:   { type: "string", description: "Task uuid or title fragment" },
+        status: { type: "string", enum: ["not_started", "in_progress", "blocked", "done"] },
+      },
+      required: ["task", "status"],
+    },
+  },
+  {
+    name: "add_task_comment",
+    description: "Add a comment to an existing staff task. Identify the task by its uuid or a distinctive fragment of its title.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task:    { type: "string", description: "Task uuid or title fragment" },
+        comment: { type: "string" },
+      },
+      required: ["task", "comment"],
+    },
+  },
+];
+
+interface ToolCtx {
+  sb: ReturnType<typeof createClient>;
+  requester: { id: string; full_name: string | null; email: string | null } | null;
+  userJwt: string | null;
+}
+
+function notifyTask(userJwt: string | null, payload: Record<string, unknown>): void {
+  if (!userJwt) return;
+  fetch(`${PORTAL_URL}/api/notify-task-assignee`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: userJwt },
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn("[chat] notify failed:", err));
+}
+
+async function resolveAssignee(sb: ToolCtx["sb"], name: string) {
+  const { data } = await sb.from("profiles").select("id, full_name, email");
+  const q = name.toLowerCase().trim();
+  const all = (data ?? []) as { id: string; full_name: string | null; email: string | null }[];
+  const matches = all.filter((p) =>
+    (p.full_name ?? "").toLowerCase().includes(q) ||
+    (p.email ?? "").toLowerCase().split("@")[0] === q
+  );
+  return { matches, all };
+}
+
+async function findTask(sb: ToolCtx["sb"], identifier: string) {
+  const cols = "id, title, status, assigned_to, created_by";
+  if (UUID_RE.test(identifier.trim())) {
+    const { data } = await sb.from("staff_tasks").select(cols).eq("id", identifier.trim());
+    return data ?? [];
+  }
+  const { data } = await sb.from("staff_tasks")
+    .select(cols)
+    .ilike("title", `%${identifier}%`)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  return data ?? [];
+}
+
+async function executeTool(name: string, input: Record<string, unknown>, ctx: ToolCtx): Promise<Record<string, unknown>> {
+  try {
+    if (!ctx.requester) {
+      return { ok: false, error: "Could not match your login email to a staff profile — task actions are unavailable." };
+    }
+
+    if (name === "create_task") {
+      const { matches, all } = await resolveAssignee(ctx.sb, String(input.assignee_name ?? ""));
+      if (matches.length === 0) {
+        return { ok: false, error: `No staff member matches "${input.assignee_name}". Staff: ${all.map((p) => p.full_name).filter(Boolean).join(", ")}` };
+      }
+      if (matches.length > 1) {
+        return { ok: false, error: `"${input.assignee_name}" is ambiguous: ${matches.map((p) => p.full_name).join(", ")}. Ask the user which one.` };
+      }
+      const assignee = matches[0];
+      const { data: task, error } = await ctx.sb.from("staff_tasks").insert({
+        title:       String(input.title),
+        description: input.description ? String(input.description) : null,
+        assigned_to: assignee.id,
+        created_by:  ctx.requester.id,
+        due_date:    input.due_date ? String(input.due_date) : null,
+        urgency:     input.urgency ?? null,
+        importance:  input.importance ?? null,
+        status:      "not_started",
+      }).select("id, title").single();
+      if (error) return { ok: false, error: error.message };
+
+      if (assignee.id !== ctx.requester.id) {
+        notifyTask(ctx.userJwt, {
+          task_id:      task.id,
+          recipient_id: assignee.id,
+          event:        "assigned",
+          task_title:   task.title,
+          actor_name:   ctx.requester.full_name ?? ctx.requester.email,
+        });
+      }
+      return { ok: true, task_id: task.id, title: task.title, assigned_to: assignee.full_name, url: `${PORTAL_URL}/tasks?task=${task.id}` };
+    }
+
+    if (name === "update_task_status") {
+      const found = await findTask(ctx.sb, String(input.task ?? ""));
+      if (found.length === 0) return { ok: false, error: `No task found matching "${input.task}".` };
+      if (found.length > 1) {
+        return { ok: false, error: `Multiple tasks match: ${found.map((t) => `"${t.title}" (${t.status})`).join("; ")}. Ask the user which one.` };
+      }
+      const status = String(input.status);
+      const { error } = await ctx.sb.from("staff_tasks")
+        .update({ status, completed_at: status === "done" ? new Date().toISOString() : null })
+        .eq("id", found[0].id);
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, task_id: found[0].id, title: found[0].title, status };
+    }
+
+    if (name === "add_task_comment") {
+      const found = await findTask(ctx.sb, String(input.task ?? ""));
+      if (found.length === 0) return { ok: false, error: `No task found matching "${input.task}".` };
+      if (found.length > 1) {
+        return { ok: false, error: `Multiple tasks match: ${found.map((t) => `"${t.title}" (${t.status})`).join("; ")}. Ask the user which one.` };
+      }
+      const task = found[0];
+      const { error } = await ctx.sb.from("staff_task_comments").insert({
+        task_id:   task.id,
+        author_id: ctx.requester.id,
+        body:      String(input.comment),
+        mentions:  [],
+      });
+      if (error) return { ok: false, error: error.message };
+
+      const recipient = task.assigned_to === ctx.requester.id ? task.created_by : task.assigned_to;
+      if (recipient && recipient !== ctx.requester.id) {
+        notifyTask(ctx.userJwt, {
+          task_id:      task.id,
+          recipient_id: recipient,
+          event:        "comment",
+          task_title:   task.title,
+          actor_name:   ctx.requester.full_name ?? ctx.requester.email,
+          comment_body: String(input.comment),
+        });
+      }
+      return { ok: true, task_id: task.id, title: task.title };
+    }
+
+    return { ok: false, error: `Unknown tool: ${name}` };
+  } catch (err) {
+    console.error(`[chat] tool ${name} failed:`, err);
+    return { ok: false, error: String(err) };
+  }
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -305,10 +487,11 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, context = "dashboard", userEmail = "Staff" } = await req.json() as {
+    const { messages, context = "dashboard", userEmail = "Staff", screen } = await req.json() as {
       messages: { role: string; content: string }[];
       context: AppContext;
       userEmail: string;
+      screen?: { path?: string; title?: string; text?: string };
     };
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -377,38 +560,92 @@ serve(async (req) => {
       // Continue with empty data — the AI can still answer general questions
     }
 
-    const systemPrompt = buildSystemPrompt(context as AppContext, data, userEmail);
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      signal: AbortSignal.timeout(25000),
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error("Anthropic error:", err);
-      return new Response(
-        JSON.stringify({ reply: "AI service error. Please try again." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
+    // Resolve the requesting user's profile — writes are stamped with it.
+    let requester: ToolCtx["requester"] = null;
+    try {
+      const { data: rows } = await sb.from("profiles")
+        .select("id, full_name, email")
+        .ilike("email", userEmail)
+        .limit(1);
+      requester = (rows?.[0] as ToolCtx["requester"]) ?? null;
+    } catch (err) {
+      console.warn("[chat] requester lookup failed:", err);
     }
 
-    const result = await response.json();
-    const reply = result.content?.[0]?.text ?? "No response.";
+    let systemPrompt = buildSystemPrompt(context as AppContext, data, userEmail);
+
+    if (screen?.text) {
+      systemPrompt += `\n\n## Current screen (what the user is looking at RIGHT NOW)
+Path: ${screen.path ?? "unknown"}
+Page title: ${screen.title ?? "unknown"}
+Visible text:
+${String(screen.text).slice(0, 8000)}
+
+When the user says "this", "this page", or "what I'm working on", they mean the screen content above.`;
+    }
+
+    systemPrompt += `\n\n## Actions
+You can act, not just answer: create staff tasks, update task status, and comment on tasks using the provided tools.
+- "Make a task for <person> re this" → write a concise, specific title and a description capturing the key details from the current screen (IDs, customer/product names, amounts, what needs doing). Set sensible urgency/importance (1–5).
+- Don't ask for confirmation when the request is clear; only ask if the assignee or target task is ambiguous.
+- After acting, confirm briefly what you did, including the task title and assignee.`;
+
+    const ctx: ToolCtx = { sb, requester, userJwt: req.headers.get("Authorization") };
+
+    // Tool loop — keep calling until the model stops requesting tools.
+    const apiMessages: Record<string, unknown>[] = messages.map((m) => ({ role: m.role, content: m.content }));
+    let reply = "No response.";
+    let didWrite = false;
+
+    for (let round = 0; round < 5; round++) {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        signal: AbortSignal.timeout(25000),
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 2048,
+          system: systemPrompt,
+          tools: TOOLS,
+          messages: apiMessages,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        console.error("Anthropic error:", err);
+        return new Response(
+          JSON.stringify({ reply: "AI service error. Please try again.", didWrite }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        );
+      }
+
+      const result = await response.json();
+      const text = (result.content ?? [])
+        .filter((b: { type: string }) => b.type === "text")
+        .map((b: { text: string }) => b.text)
+        .join("\n")
+        .trim();
+      if (text) reply = text;
+
+      if (result.stop_reason !== "tool_use") break;
+
+      apiMessages.push({ role: "assistant", content: result.content });
+      const toolResults = [];
+      for (const block of result.content.filter((b: { type: string }) => b.type === "tool_use")) {
+        const outcome = await executeTool(block.name, block.input ?? {}, ctx);
+        if (outcome.ok) didWrite = true;
+        toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(outcome) });
+      }
+      apiMessages.push({ role: "user", content: toolResults });
+    }
 
     return new Response(
-      JSON.stringify({ reply }),
+      JSON.stringify({ reply, didWrite }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

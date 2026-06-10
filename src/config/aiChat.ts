@@ -41,7 +41,7 @@ export const APP_CHAT_CONTEXTS: ChatContextEntry[] = [
   },
   {
     prefix: '/tasks', context: 'tasks', label: 'Tasks',
-    suggestions: ['What are my open tasks?', "What's blocked right now?", 'What is due this week?'],
+    suggestions: ['What are my open tasks?', "What's blocked right now?", 'Create a task from this screen'],
   },
   {
     prefix: '/compliance', context: 'compliance', label: 'Compliance',

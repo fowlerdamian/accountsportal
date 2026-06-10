@@ -80,6 +80,7 @@ export function TaskDock() {
     return (
       <>
         <div
+          data-ai-ignore
           className="fixed bottom-0 inset-x-0 z-30 flex items-center px-3"
           style={{
             height:     DOCK_HEIGHT,
@@ -127,6 +128,7 @@ export function TaskDock() {
   return (
     <>
       <div
+        data-ai-ignore
         className="fixed bottom-0 inset-x-0 z-30 flex items-center gap-2 px-3"
         style={{
           height:     DOCK_HEIGHT,

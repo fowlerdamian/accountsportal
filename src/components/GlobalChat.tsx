@@ -9,6 +9,8 @@ import remarkGfm from 'remark-gfm'
 // Context detection + visibility live in src/config/aiChat.ts — the chat shows
 // on every authenticated route by default, so new apps get it automatically.
 import { detectChatContext, shouldShowChat } from '../config/aiChat'
+import { captureScreen } from '../utils/captureScreen'
+import { useQueryClient } from '@tanstack/react-query'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +24,7 @@ interface Message {
 export default function GlobalChat() {
   const { user } = useAuth()
   const { pathname } = useLocation()
+  const queryClient = useQueryClient()
 
   const [open, setOpen]         = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -82,10 +85,22 @@ export default function GlobalChat() {
           messages: history,
           context,
           userEmail: user?.email ?? 'Staff',
+          // What the user is looking at right now — lets the AI create tasks
+          // like "make a task for John re this" from the on-screen content.
+          screen: captureScreen(),
         },
       })
 
       if (error) throw error
+
+      // The chat can now write (create/update tasks, comments) — refresh any
+      // task queries so the dock and Tasks app reflect changes immediately.
+      if (data?.didWrite) {
+        queryClient.invalidateQueries({ queryKey: ['staff_tasks'] })
+        queryClient.invalidateQueries({ queryKey: ['staff_task'] })
+        queryClient.invalidateQueries({ queryKey: ['staff_task_comments'] })
+        queryClient.invalidateQueries({ queryKey: ['staff_task_comments_thread'] })
+      }
 
       // If the user navigated to a different app while this request was in
       // flight, the conversation was reset — drop the stale answer rather
@@ -119,6 +134,7 @@ export default function GlobalChat() {
       {/* ── Floating trigger ──────────────────────────────────── */}
       {!open && (
         <button
+          data-ai-ignore
           onClick={() => setOpen(true)}
           style={{
             position: 'fixed', bottom: 'calc(16px + var(--task-dock-h, 0px))', right: '24px', zIndex: 50,
@@ -140,6 +156,7 @@ export default function GlobalChat() {
 
       {/* ── Slide-in panel ────────────────────────────────────── */}
       <div
+        data-ai-ignore
         style={{
           position: 'fixed', top: 0, right: 0, bottom: 0,
           width: '420px', zIndex: 50,
