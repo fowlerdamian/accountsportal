@@ -619,10 +619,11 @@ export default function CaseDetailPage() {
               </div>
               <div className="flex gap-2">
                 <textarea
+                  data-mentions="submit"
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
                   rows={2}
-                  placeholder="Add an internal note..."
+                  placeholder="Add an internal note... (type @ to tag someone)"
                   className="flex-1 bg-background border border-input text-sm px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors resize-none"
                 />
                 <button
@@ -659,6 +660,7 @@ export default function CaseDetailPage() {
             <div className="flex-1 relative">
               <input
                 ref={inputRef}
+                data-mentions="native"
                 type="text"
                 value={message}
                 onChange={handleInputChange}

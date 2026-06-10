@@ -36,12 +36,13 @@ interface ComposedTask {
 // Ambiguous first names are skipped (reported in `notes`) rather than guessed.
 
 function parseMentions(text: string, profiles: Profile[], authorId: string | null) {
-  const re = /@([A-Za-z][A-Za-z'’-]*(?:[ ][A-Za-z][A-Za-z'’-]*)?)/g;
+  // Word boundary before '@' so email addresses (user@domain) never match.
+  const re = /(^|[^A-Za-z0-9._%+-])@([A-Za-z][A-Za-z'’-]*(?:[ ][A-Za-z][A-Za-z'’-]*)?)/g;
   const found = new Map<string, Profile>();
   const notes: string[] = [];
 
   for (const match of text.matchAll(re)) {
-    const raw = match[1];
+    const raw = match[2];
     const full = raw.toLowerCase().trim();
     const first = full.split(" ")[0];
 

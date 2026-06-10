@@ -144,6 +144,7 @@ export function MentionTextarea({
     <div className={cn("relative", className)}>
       <Textarea
         ref={ref}
+        data-mentions="native"
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}

@@ -327,6 +327,7 @@ export default function GlobalChat() {
           <div style={{ position: 'relative' }}>
             <textarea
               ref={inputRef}
+              data-mentions="submit"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}

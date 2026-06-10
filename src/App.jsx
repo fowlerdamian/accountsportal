@@ -36,6 +36,7 @@ import HubSettings from './apps/ContractorHub/pages/HubSettings'
 import TasksApp from './apps/Tasks/TasksApp'
 import { TaskDock } from './components/TaskDock'
 import { GlobalShortcuts } from './components/GlobalShortcuts'
+import { GlobalMentions } from './components/GlobalMentions'
 
 // Guide Portal
 import { AdminLayout } from './apps/Guide/admin/AdminLayout'
@@ -135,6 +136,7 @@ export default function App() {
           <GlobalChat />
           <TaskDock />
           <GlobalShortcuts />
+          <GlobalMentions />
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />

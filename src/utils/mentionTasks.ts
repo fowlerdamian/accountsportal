@@ -10,7 +10,8 @@
 import { supabase } from '../lib/supabase'
 import { captureScreen } from './captureScreen'
 
-const MENTION_RE = /@[A-Za-z]/
+// Word boundary before '@' so email addresses don't trigger an invocation.
+const MENTION_RE = /(^|[^A-Za-z0-9._%+-])@[A-Za-z]/
 
 export interface MentionSource {
   /** Where the text was written, e.g. 'Comment on task "Fix freight rates"' */
