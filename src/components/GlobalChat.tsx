@@ -6,60 +6,9 @@ import { useAuth } from '../context/AuthContext'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-// ── Context detection ─────────────────────────────────────────────────────────
-
-type AppContext =
-  | 'dashboard' | 'support' | 'sales-support' | 'logistics'
-  | 'compliance' | 'accounts' | 'purchase-orders' | 'projects' | 'guide'
-
-function detectContext(pathname: string): AppContext {
-  if (pathname.startsWith('/sales-support')) return 'sales-support'
-  if (pathname.startsWith('/support'))       return 'support'
-  if (pathname.startsWith('/logistics'))     return 'logistics'
-  if (pathname.startsWith('/projects'))      return 'projects'
-  if (pathname.startsWith('/compliance'))    return 'compliance'
-  if (pathname.startsWith('/accounts'))      return 'accounts'
-  if (pathname.startsWith('/purchase-orders')) return 'purchase-orders'
-  if (pathname.startsWith('/guide'))         return 'guide'
-  return 'dashboard'
-}
-
-const CONTEXT_LABELS: Record<AppContext, string> = {
-  'dashboard':       'Portal',
-  'support':         'Customer Service',
-  'sales-support':   'Sales Support',
-  'logistics':       'Logistics',
-  'compliance':      'Compliance',
-  'accounts':        'Accounts',
-  'purchase-orders': 'Purchasing',
-  'projects':        'Projects',
-  'guide':           'Guide Portal',
-}
-
-const CONTEXT_SUGGESTIONS: Record<AppContext, string[]> = {
-  'dashboard':       ["What needs attention today?", "Show me open cases", "What's on the call list?"],
-  'support':         ["How many open cases?", "What's overdue?", "Show me urgent cases"],
-  'sales-support':   ["What's on today's call list?", "Show me top leads by score", "How many leads per channel?"],
-  'logistics':       ["Show disputed invoices", "What's our freight spend this month?", "Any unresolved disputes?"],
-  'compliance':      ["Which documents need updating?", "What's our ISO audit status?", "Show incomplete sections"],
-  'accounts':        ["Show me the latest profit report", "Flag any low-margin lines", "Compare this month to last"],
-  'purchase-orders': ["What POs are overdue?", "Show POs due this week", "Any critical outstanding orders?"],
-  'projects':        ["What tasks are overdue?", "Show active projects", "Who has the most open tasks?"],
-  'guide':           ["How many guides are published?", "Show recent feedback", "Which guides need updating?"],
-}
-
-// Routes where the chat should not appear
-const HIDDEN_ROUTES = ['/login']
-const APP_ROUTE_PREFIXES = [
-  '/dashboard', '/accounts', '/logistics', '/purchase-orders',
-  '/sales-support', '/support', '/projects', '/guide', '/compliance', '/settings',
-]
-
-function shouldShowChat(pathname: string, isAuthenticated: boolean): boolean {
-  if (!isAuthenticated) return false
-  if (HIDDEN_ROUTES.includes(pathname)) return false
-  return APP_ROUTE_PREFIXES.some(r => pathname === r || pathname.startsWith(r + '/'))
-}
+// Context detection + visibility live in src/config/aiChat.ts — the chat shows
+// on every authenticated route by default, so new apps get it automatically.
+import { detectChatContext, shouldShowChat } from '../config/aiChat'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,9 +31,7 @@ export default function GlobalChat() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLTextAreaElement>(null)
 
-  const context     = detectContext(pathname)
-  const contextLabel = CONTEXT_LABELS[context]
-  const suggestions  = CONTEXT_SUGGESTIONS[context]
+  const { context, label: contextLabel, suggestions } = detectChatContext(pathname)
 
   // Tracks the CURRENT context so an in-flight request from a previous app
   // can detect the switch and drop its stale reply.

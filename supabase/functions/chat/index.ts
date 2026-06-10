@@ -8,7 +8,8 @@ const corsHeaders = {
 
 type AppContext =
   | "dashboard" | "support" | "sales-support" | "logistics"
-  | "compliance" | "accounts" | "purchase-orders" | "projects" | "guide";
+  | "compliance" | "accounts" | "purchase-orders" | "projects"
+  | "guide" | "tasks";
 
 // ── Data loaders ──────────────────────────────────────────────────────────────
 
@@ -85,6 +86,18 @@ async function loadProjectsData(sb: ReturnType<typeof createClient>) {
       .limit(30),
   ]);
   return { projects, tasks, contractors };
+}
+
+async function loadStaffTasksData(sb: ReturnType<typeof createClient>) {
+  const [{ data: staffTasks }, { data: staff }] = await Promise.all([
+    sb.from("staff_tasks")
+      .select("id, title, description, status, created_by, assigned_to, due_date, urgency, importance, blocked_by_task_id, parent_task_id, completed_at, status_notes, created_at")
+      .order("created_at", { ascending: false })
+      .limit(80),
+    sb.from("profiles")
+      .select("id, full_name, email"),
+  ]);
+  return { staffTasks, staff };
 }
 
 async function loadComplianceData(sb: ReturnType<typeof createClient>) {
@@ -196,6 +209,19 @@ ${JSON.stringify(d.tasks ?? [], null, 2)}
 ${JSON.stringify(d.contractors ?? [], null, 2)}
 
 Answer questions about project status, overdue tasks, contractor workload, and deadlines.`;
+    }
+
+    case "tasks": {
+      const d = data as { staffTasks: unknown; staff: unknown };
+      return base + `You are a staff task assistant with full visibility of the cross-staff task tracker. Tasks use Eisenhower scoring (urgency × importance) and can block each other via blocked_by_task_id / parent_task_id. created_by and assigned_to are profile ids — resolve them to names using the staff list.
+
+## Staff Tasks (most recent 80)
+${JSON.stringify(d.staffTasks ?? [], null, 2)}
+
+## Staff
+${JSON.stringify(d.staff ?? [], null, 2)}
+
+Answer questions about open tasks, who is overloaded, what is blocked, overdue items, and priorities.`;
     }
 
     case "compliance": {
@@ -311,6 +337,8 @@ serve(async (req) => {
         data = await loadPurchaseOrdersData(sb);
       } else if (context === "projects") {
         data = await loadProjectsData(sb);
+      } else if (context === "tasks") {
+        data = await loadStaffTasksData(sb);
       } else if (context === "compliance") {
         data = await loadComplianceData(sb);
       } else if (context === "guide") {
