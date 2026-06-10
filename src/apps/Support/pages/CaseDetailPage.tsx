@@ -20,6 +20,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { processMentions } from '../../../utils/mentionTasks';
 import type { Case, CaseUpdate, ActionItem } from '@/lib/types';
 
 const statusIcons: Record<ActionItemStatus, typeof Circle> = {
@@ -224,6 +225,14 @@ export default function CaseDetailPage() {
         });
       }
 
+      // Universal @mention → staff task pipeline (fire-and-forget).
+      processMentions(msg, {
+        label: `Case #${caseData?.case_number}: ${caseData?.title}`,
+        url:   `/support/cases/${id}`,
+      }).then((created) => {
+        for (const t of created) toast.success(`Task created for ${t.assignee}: ${t.title}`);
+      });
+
       return failedWarehouseTasks;
     },
     onSuccess: (failedWarehouseTasks) => {
@@ -254,6 +263,14 @@ export default function CaseDetailPage() {
         message: `[Internal note] ${noteText}`,
       });
       if (error) throw error;
+
+      // Universal @mention → staff task pipeline (fire-and-forget).
+      processMentions(noteText, {
+        label: `Internal note on case #${caseData?.case_number}: ${caseData?.title}`,
+        url:   `/support/cases/${id}`,
+      }).then((created) => {
+        for (const t of created) toast.success(`Task created for ${t.assignee}: ${t.title}`);
+      });
     },
     onSuccess: () => {
       setNoteText('');

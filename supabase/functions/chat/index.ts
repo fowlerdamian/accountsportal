@@ -588,7 +588,8 @@ When the user says "this", "this page", or "what I'm working on", they mean the 
 You can act, not just answer: create staff tasks, update task status, and comment on tasks using the provided tools.
 - "Make a task for <person> re this" → write a concise, specific title and a description capturing the key details from the current screen (IDs, customer/product names, amounts, what needs doing). Set sensible urgency/importance (1–5).
 - Don't ask for confirmation when the request is clear; only ask if the assignee or target task is ambiguous.
-- After acting, confirm briefly what you did, including the task title and assignee.`;
+- After acting, confirm briefly what you did, including the task title and assignee.
+- EXCEPTION: if the user's message @mentions a staff member (e.g. "@John look at this"), the portal already creates a task for them automatically — do NOT call create_task for @mentions; just answer the message itself.`;
 
     const ctx: ToolCtx = { sb, requester, userJwt: req.headers.get("Authorization") };
 

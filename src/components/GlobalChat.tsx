@@ -10,6 +10,7 @@ import remarkGfm from 'remark-gfm'
 // on every authenticated route by default, so new apps get it automatically.
 import { detectChatContext, shouldShowChat } from '../config/aiChat'
 import { captureScreen } from '../utils/captureScreen'
+import { processMentions } from '../utils/mentionTasks'
 import { useQueryClient } from '@tanstack/react-query'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -78,6 +79,17 @@ export default function GlobalChat() {
     setMessages(history)
     setInput('')
     setLoading(true)
+
+    // Universal @mention → staff task pipeline (runs alongside the AI reply;
+    // the AI is told not to double-create tasks for @mentions).
+    processMentions(content, { label: 'Ask AI chat', url: pathname }).then(created => {
+      if (created.length === 0) return
+      queryClient.invalidateQueries({ queryKey: ['staff_tasks'] })
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: created.map(t => `✓ Task created for ${t.assignee}: **${t.title}**`).join('\n'),
+      }])
+    })
 
     try {
       const { data, error } = await supabase.functions.invoke('chat', {

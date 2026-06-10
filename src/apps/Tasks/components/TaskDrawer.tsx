@@ -35,6 +35,7 @@ import { UserAvatar } from "./UserAvatar";
 import { DependencyPicker, emptyDependency, type DependencyDraft } from "./DependencyPicker";
 import { MentionTextarea, CommentBody } from "./MentionTextarea";
 import { notifyTaskAssignee } from "../lib/notifyTaskChat";
+import { processMentions } from "../../../utils/mentionTasks";
 
 interface TaskDrawerProps {
   taskId: string | null;
@@ -304,6 +305,16 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
           comment_body: body,
         });
       }
+      // Universal @mention → staff task pipeline (fire-and-forget). Runs on
+      // top of the comment ping above — the mentioned person also gets a task
+      // with context pulled from this comment and the screen.
+      processMentions(body, {
+        label: `Comment on task "${liveTask.title}"`,
+        url:   `/tasks?task=${liveTask.id}`,
+      }).then((created) => {
+        for (const t of created) toast.success(`Task created for ${t.assignee}: ${t.title}`);
+      });
+
       setCommentBody("");
       setCommentMentions([]);
     } catch {
