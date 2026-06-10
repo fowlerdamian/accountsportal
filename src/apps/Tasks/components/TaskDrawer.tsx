@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { X, Trash2, AlertTriangle, Link2, Send, Loader2 } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { Button } from "@guide/components/ui/button";
@@ -112,21 +112,34 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
     [allTasks],
   );
 
-  // Pull status_notes from the live row into the local textarea whenever
-  // the open task changes or the row reloads, but only if the user hasn't
-  // touched the field yet (preserves in-flight edits).
+  // Notes draft lifecycle. The draft is OWNED by one task id at a time:
+  //  - switching to a different task always reloads the draft from that task's
+  //    row (dropping any unsaved draft from the previous task — never carry a
+  //    draft across tasks, it would save under the wrong row);
+  //  - while on the same task, server refreshes only sync in when the user
+  //    hasn't touched the field (preserves in-flight edits).
   // MUST sit before the early return below — hook order must stay stable.
+  const draftOwnerRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!notesDirty) setNotesDraft(liveTask?.status_notes ?? "");
-  }, [liveTask?.id, liveTask?.status_notes, notesDirty]);
+    if (!taskId || !liveTask || liveTask.id !== taskId) return;
+    if (draftOwnerRef.current !== taskId) {
+      draftOwnerRef.current = taskId;
+      setNotesDirty(false);
+      setNotesDraft(liveTask.status_notes ?? "");
+      return;
+    }
+    if (!notesDirty) setNotesDraft(liveTask.status_notes ?? "");
+  }, [taskId, liveTask?.id, liveTask?.status_notes, notesDirty]);
 
-  // Opening a DIFFERENT task must drop any unsaved draft from the previous
-  // one — otherwise task A's dirty notes display under task B and the next
-  // blur writes A's text into B's status_notes.
+  // Autosave: persist the note ~1.2s after the user stops typing (blur and the
+  // Save button also save). The timer is cancelled if the draft changes again,
+  // the task switches, or the drawer unmounts.
   useEffect(() => {
-    setNotesDirty(false);
-    setNotesDraft("");
-  }, [taskId]);
+    if (!notesDirty) return;
+    const id = setTimeout(() => { void saveStatusNotes(); }, 1200);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesDraft, notesDirty]);
 
   if (!taskId || !liveTask) {
     return open ? (
@@ -470,7 +483,16 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                 className="resize-none text-sm mt-1"
               />
               {notesDirty && (
-                <p className="text-[10px] text-muted-foreground/70 mt-1">Unsaved — saves on blur</p>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-[10px] text-muted-foreground/70">Unsaved — autosaves as you type</p>
+                  <button
+                    type="button"
+                    onClick={() => void saveStatusNotes()}
+                    className="text-[10px] font-medium text-primary hover:underline"
+                  >
+                    Save note
+                  </button>
+                </div>
               )}
             </div>
           </div>
