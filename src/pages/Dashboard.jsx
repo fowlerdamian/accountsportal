@@ -20,11 +20,13 @@ export default function PortalDashboard() {
   const liveCount = visibleApps.filter(a => a.status === 'live' || a.status === 'beta').length
 
   return (
-    <div style={{
-      flex: 1, overflowY: 'auto',
-      padding: isMobile ? '20px 16px' : '32px 24px',
-      maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box',
-    }}>
+    // Full-width scroll container so the scrollbar sits flush against the
+    // window edge, not partway across at the centred content's right margin.
+    <div style={{ flex: 1, overflowY: 'auto', width: '100%' }}>
+      <div style={{
+        padding: isMobile ? '20px 16px' : '32px 24px',
+        maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box',
+      }}>
 
       {/* Page heading */}
       <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -63,6 +65,7 @@ export default function PortalDashboard() {
         {visibleApps.map((app) => (
           <AppTile key={app.name} app={app} />
         ))}
+      </div>
       </div>
     </div>
   )
