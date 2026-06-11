@@ -180,6 +180,7 @@ export function GlobalMentions() {
       {/* ── Autocomplete dropdown ─────────────────────────────── */}
       {rect && (
         <div
+          data-mentions-open="true"
           onMouseDown={e => e.preventDefault()}
           style={{
             position: 'fixed',

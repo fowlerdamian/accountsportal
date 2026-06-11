@@ -75,6 +75,13 @@ export function useGlobalKeyboardShortcuts({ onShowShortcuts }: Opts): void {
       }
 
       if (inInput) return;
+
+      // A modal, menu, or listbox is open (Radix dialog/dropdown, cmdk, the
+      // mention picker) — those own the keyboard while visible. Don't hijack
+      // navigation/new-task keys out from under them.
+      if (document.querySelector(
+        '[role="dialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"], [data-mentions-open="true"]'
+      )) return;
       // Any other modifier — bail (don't hijack browser/system shortcuts)
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
@@ -127,9 +134,13 @@ export function useGlobalKeyboardShortcuts({ onShowShortcuts }: Opts): void {
       }
     };
 
-    window.addEventListener("keydown", handler);
+    // Capture phase: fire BEFORE focused widgets (Radix dialogs, dropdowns,
+    // comboboxes) that stopPropagation on keydown and would otherwise swallow
+    // global shortcuts. The inInput / open-overlay guards above keep us from
+    // hijacking keys those widgets legitimately need.
+    window.addEventListener("keydown", handler, true);
     return () => {
-      window.removeEventListener("keydown", handler);
+      window.removeEventListener("keydown", handler, true);
       clearTimeout(gTimeout);
     };
   }, [navigate, location, onShowShortcuts]);
