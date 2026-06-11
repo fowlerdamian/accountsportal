@@ -1,5 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+
+// Press Esc this many times within ESC_WINDOW_MS to jump straight to the
+// dashboard instead of stepping back one page at a time.
+const ESC_TO_DASHBOARD = 3;
+const ESC_WINDOW_MS = 600;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Portal-wide keyboard shortcuts. Mounted once at the App root so they fire
@@ -46,7 +51,7 @@ export const SHORTCUTS: Shortcut[] = [
   { key: "n",      label: "N",      description: "New task (or new case/project when in those apps)", group: "Actions" },
   { key: "?",      label: "Shift+/", description: "Show keyboard shortcuts",                          group: "Actions" },
   { key: "ctrl+k", label: "Ctrl+K", description: "Show keyboard shortcuts",                            group: "Actions" },
-  { key: "esc",    label: "Esc",    description: "Close open panel / clear field focus",               group: "Actions" },
+  { key: "esc",    label: "Esc",    description: "Back one page (×3 quickly → Dashboard)",              group: "Actions" },
 ];
 
 interface Opts {
@@ -56,6 +61,11 @@ interface Opts {
 export function useGlobalKeyboardShortcuts({ onShowShortcuts }: Opts): void {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Rapid-Esc counter. Lives in refs so it survives the listener re-binding
+  // on every route change (each Esc navigates, which changes location).
+  const escCount = useRef(0);
+  const escTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let gPressed   = false;
@@ -82,11 +92,25 @@ export function useGlobalKeyboardShortcuts({ onShowShortcuts }: Opts): void {
         return;
       }
 
-      // Esc — let any open overlay close itself; otherwise drop focus out of
-      // the current field so keyboard nav resumes. Never preventDefault, so
-      // native/Radix Esc handling still runs.
+      // Esc navigates back one page; pressing it ESC_TO_DASHBOARD times in
+      // quick succession jumps straight to the dashboard. Overlays (which
+      // close themselves on Esc) and focused fields (where Esc just drops
+      // focus) take priority and reset the rapid-press counter.
       if (e.key === "Escape") {
-        if (!overlayOpen && inInput) target.blur();
+        if (overlayOpen) { escCount.current = 0; return; }
+        if (inInput) { target.blur(); escCount.current = 0; return; }
+
+        escCount.current += 1;
+        if (escTimer.current) clearTimeout(escTimer.current);
+        escTimer.current = setTimeout(() => { escCount.current = 0; }, ESC_WINDOW_MS);
+
+        if (escCount.current >= ESC_TO_DASHBOARD) {
+          escCount.current = 0;
+          clearTimeout(escTimer.current);
+          navigate("/dashboard");
+        } else {
+          navigate(-1);
+        }
         return;
       }
 
