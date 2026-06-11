@@ -46,6 +46,7 @@ export const SHORTCUTS: Shortcut[] = [
   { key: "n",      label: "N",      description: "New task (or new case/project when in those apps)", group: "Actions" },
   { key: "?",      label: "Shift+/", description: "Show keyboard shortcuts",                          group: "Actions" },
   { key: "ctrl+k", label: "Ctrl+K", description: "Show keyboard shortcuts",                            group: "Actions" },
+  { key: "esc",    label: "Esc",    description: "Close open panel / clear field focus",               group: "Actions" },
 ];
 
 interface Opts {
@@ -67,6 +68,13 @@ export function useGlobalKeyboardShortcuts({ onShowShortcuts }: Opts): void {
         target.tagName === "TEXTAREA" ||
         target.isContentEditable;
 
+      // An overlay owns the keyboard while visible (Radix dialog/dropdown, cmdk
+      // listbox, the mention picker). They close themselves on Esc and handle
+      // their own keys — we must not interfere.
+      const overlayOpen = !!document.querySelector(
+        '[role="dialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"], [data-mentions-open="true"]'
+      );
+
       // Ctrl/Cmd+K opens the shortcuts dialog — works even inside inputs
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -74,14 +82,16 @@ export function useGlobalKeyboardShortcuts({ onShowShortcuts }: Opts): void {
         return;
       }
 
-      if (inInput) return;
+      // Esc — let any open overlay close itself; otherwise drop focus out of
+      // the current field so keyboard nav resumes. Never preventDefault, so
+      // native/Radix Esc handling still runs.
+      if (e.key === "Escape") {
+        if (!overlayOpen && inInput) target.blur();
+        return;
+      }
 
-      // A modal, menu, or listbox is open (Radix dialog/dropdown, cmdk, the
-      // mention picker) — those own the keyboard while visible. Don't hijack
-      // navigation/new-task keys out from under them.
-      if (document.querySelector(
-        '[role="dialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"], [data-mentions-open="true"]'
-      )) return;
+      if (inInput) return;
+      if (overlayOpen) return;
       // Any other modifier — bail (don't hijack browser/system shortcuts)
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
