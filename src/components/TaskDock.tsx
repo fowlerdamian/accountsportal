@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Inbox, ChevronUp } from "lucide-react";
+import { Inbox, ChevronUp, Plus } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@guide/components/ui/popover";
@@ -73,6 +73,10 @@ export function TaskDock() {
   const topN    = sorted.slice(0, TOP_N);
   const overflow = sorted.slice(TOP_N);
 
+  // Opens the global NewTaskModal (mounted by GlobalShortcuts) — same path the
+  // "n" shortcut and the in-app New Task buttons use.
+  const openNewTask = () => window.dispatchEvent(new CustomEvent("portal:new-task"));
+
   if (!user) return null;
 
   // Mobile: collapse to a single pill that opens a popover with the full list.
@@ -113,6 +117,21 @@ export function TaskDock() {
               </PopoverContent>
             </Popover>
           )}
+
+          <button
+            onClick={openNewTask}
+            title="New task"
+            aria-label="New task"
+            className="ml-auto flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider px-3 py-1.5 rounded shrink-0"
+            style={{
+              color: "#f3ca0f",
+              background: "rgba(243,202,15,0.06)",
+              border: "1px solid rgba(243,202,15,0.4)",
+            }}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New
+          </button>
         </div>
 
         <TaskDrawer
@@ -196,6 +215,20 @@ export function TaskDock() {
             </PopoverContent>
           </Popover>
         )}
+
+        <button
+          onClick={openNewTask}
+          title="New task [N]"
+          className="flex items-center gap-1.5 px-2.5 h-9 rounded-md text-xs font-medium uppercase tracking-wider shrink-0 transition-colors"
+          style={{
+            color: "#f3ca0f",
+            background: "rgba(243,202,15,0.06)",
+            border: "1px solid rgba(243,202,15,0.4)",
+          }}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          New Task
+        </button>
       </div>
 
       <TaskDrawer
