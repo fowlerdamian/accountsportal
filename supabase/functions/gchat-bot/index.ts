@@ -6,6 +6,13 @@
 //   3. forwards the question to the chat function (context: dashboard),
 //   4. reformats the reply for Google Chat and stores both turns.
 //
+// The Chat app is configured as a Workspace add-on (the Cloud Console default),
+// so events arrive in add-on format: auth is an ID token for the project's
+// add-ons service agent with audience = this function's URL, the payload nests
+// under event.chat, and replies must use the hostAppDataAction envelope. The
+// classic chat@system.gserviceaccount.com format is still accepted in case the
+// app config is ever switched off add-on mode.
+//
 // Deployed with verify_jwt = false — Google can't send a Supabase JWT, so we
 // authenticate by validating Google's bearer ID token instead.
 
@@ -13,22 +20,19 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const HISTORY_LIMIT = 12;
-const CHAT_ISSUER = "chat@system.gserviceaccount.com";
+const CLASSIC_ISSUER = "chat@system.gserviceaccount.com";
 
-interface ChatEvent {
-  type: string;
-  message?: {
-    text?: string;
-    argumentText?: string;
-    thread?: { name?: string };
-  };
-  user?: { email?: string; displayName?: string };
-  space?: { name?: string; type?: string };
+const WELCOME =
+  "G'day! I'm the AGA portal assistant. Ask me about cases, tasks, leads, freight, POs or compliance — or say \"make a task for <person> re ...\" and I'll create it.";
+
+interface ChatMessage {
+  text?: string;
+  argumentText?: string;
+  thread?: { name?: string };
 }
 
-// Google signs every request with an ID token issued to chat@system.
-// tokeninfo validates signature + expiry server-side; we check the issuer
-// email and, when GCHAT_PROJECT_NUMBER is set, the audience too.
+// Google signs every request with an ID token. tokeninfo validates signature +
+// expiry server-side; we pin the issuer identity to this app's project number.
 async function isFromGoogleChat(req: Request): Promise<boolean> {
   const auth = req.headers.get("Authorization") ?? "";
   const token = auth.replace(/^Bearer\s+/i, "");
@@ -38,12 +42,29 @@ async function isFromGoogleChat(req: Request): Promise<boolean> {
       `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`,
       { signal: AbortSignal.timeout(5000) }
     );
-    if (!res.ok) return false;
+    if (!res.ok) {
+      console.warn("[gchat-bot] tokeninfo rejected token:", res.status, await res.text());
+      return false;
+    }
     const info = await res.json() as { email?: string; aud?: string };
-    if (info.email !== CHAT_ISSUER) return false;
-    const expectedAud = Deno.env.get("GCHAT_PROJECT_NUMBER");
-    if (expectedAud && info.aud !== expectedAud) return false;
-    return true;
+    const projectNumber = Deno.env.get("GCHAT_PROJECT_NUMBER");
+
+    // Workspace add-on style: per-project service agent, aud = endpoint URL.
+    const addonAgent = projectNumber
+      ? `service-${projectNumber}@gcp-sa-gsuiteaddons.iam.gserviceaccount.com`
+      : null;
+    if (addonAgent && info.email === addonAgent) return true;
+    if (!projectNumber && /^service-\d+@gcp-sa-gsuiteaddons\.iam\.gserviceaccount\.com$/.test(info.email ?? "")) {
+      return true;
+    }
+
+    // Classic Chat app style: chat@system, aud = project number.
+    if (info.email === CLASSIC_ISSUER) {
+      return !projectNumber || info.aud === projectNumber;
+    }
+
+    console.warn("[gchat-bot] rejected issuer:", info.email, "aud:", info.aud);
+    return false;
   } catch (err) {
     console.error("[gchat-bot] token verification failed:", err);
     return false;
@@ -60,6 +81,19 @@ function toGoogleChatMarkup(md: string): string {
     .trim();
 }
 
+// Add-on events must be answered with a hostAppDataAction envelope; classic
+// events take a bare { text } message.
+function reply(text: string, isAddon: boolean): Response {
+  if (!isAddon) return Response.json({ text });
+  return Response.json({
+    hostAppDataAction: {
+      chatDataAction: {
+        createMessageAction: { message: { text } },
+      },
+    },
+  });
+}
+
 serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
@@ -70,24 +104,37 @@ serve(async (req) => {
   }
 
   try {
-    const event = await req.json() as ChatEvent;
+    const event = await req.json();
 
-    if (event.type === "ADDED_TO_SPACE") {
-      return Response.json({
-        text: "G'day! I'm the AGA portal assistant. Ask me about cases, tasks, leads, freight, POs or compliance — or say \"make a task for <person> re ...\" and I'll create it.",
-      });
-    }
-    if (event.type !== "MESSAGE") {
-      return new Response("{}", { headers: { "Content-Type": "application/json" } });
+    // Normalise the two event formats into message/userEmail/isAddon.
+    const isAddon = !!event.chat;
+    let message: ChatMessage | undefined;
+    let userEmail = "Staff";
+    let spaceName: string | undefined;
+
+    if (isAddon) {
+      if (event.chat.addedToSpacePayload) return reply(WELCOME, true);
+      message = event.chat.messagePayload?.message as ChatMessage | undefined;
+      userEmail = event.chat.user?.email ?? userEmail;
+      spaceName = event.chat.messagePayload?.space?.name;
+      if (!message) {
+        return new Response("{}", { headers: { "Content-Type": "application/json" } });
+      }
+    } else {
+      if (event.type === "ADDED_TO_SPACE") return reply(WELCOME, false);
+      if (event.type !== "MESSAGE") {
+        return new Response("{}", { headers: { "Content-Type": "application/json" } });
+      }
+      message = event.message as ChatMessage | undefined;
+      userEmail = event.user?.email ?? userEmail;
+      spaceName = event.space?.name;
     }
 
-    const question = (event.message?.argumentText ?? event.message?.text ?? "").trim();
+    const question = (message?.argumentText ?? message?.text ?? "").trim();
     if (!question) {
-      return Response.json({ text: "Ask me a question — e.g. \"how many open cases?\"" });
+      return reply('Ask me a question — e.g. "how many open cases?"', isAddon);
     }
-
-    const userEmail = event.user?.email ?? "Staff";
-    const threadName = event.message?.thread?.name ?? event.space?.name ?? "unknown";
+    const threadName = message?.thread?.name ?? spaceName ?? "unknown";
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -115,18 +162,18 @@ serve(async (req) => {
     });
     if (!chatRes.ok) {
       console.error("[gchat-bot] chat function error:", await chatRes.text());
-      return Response.json({ text: "Sorry — the assistant hit an error. Try again in a moment." });
+      return reply("Sorry — the assistant hit an error. Try again in a moment.", isAddon);
     }
-    const { reply } = await chatRes.json() as { reply: string };
+    const { reply: answer } = await chatRes.json() as { reply: string };
 
     // Persist both turns; failures here shouldn't block the reply.
     const { error: insertErr } = await sb.from("gchat_messages").insert([
       { thread_name: threadName, role: "user", content: question, user_email: userEmail },
-      { thread_name: threadName, role: "assistant", content: reply, user_email: userEmail },
+      { thread_name: threadName, role: "assistant", content: answer, user_email: userEmail },
     ]);
     if (insertErr) console.warn("[gchat-bot] history insert failed:", insertErr.message);
 
-    return Response.json({ text: toGoogleChatMarkup(reply) });
+    return reply(toGoogleChatMarkup(answer), isAddon);
   } catch (err) {
     console.error("[gchat-bot] error:", err);
     return Response.json({ text: "Something went wrong. Please try again." });
