@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@guide/components/ui/textarea";
 import { DatePicker } from "@portal/components/DatePicker";
 import { toast } from "sonner";
+import { processMentions } from "../../../utils/mentionTasks";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useAuth } from "@guide/contexts/AuthContext";
 import { HubLayout, useHub } from "@hub/components/HubLayout";
@@ -328,6 +329,15 @@ function ProjectViewContent() {
         ).catch(() => {});
       }
       sendNotification({ type: "activity_posted", author: authorName, project_name: project?.name ?? "", project_id: id ?? "", content: activityInput });
+
+      // Universal @mention → staff task pipeline (fire-and-forget).
+      processMentions(activityInput.trim(), {
+        label: `Project "${project?.name ?? "project"}" activity`,
+        url:   `/projects/list/${id}`,
+      }).then((created) => {
+        for (const t of created) toast.success(`Task created for ${t.assignee}: ${t.title}`);
+      });
+
       setActivityInput(""); setSendToUpwork(false);
     } catch { toast.error("Failed to post note"); }
     finally { setPostingSaving(false); }
@@ -1099,10 +1109,11 @@ function ProjectViewContent() {
         {/* Post form — below the feed */}
         <div className="border-t px-5 py-4 space-y-2 bg-muted/10">
           <Textarea
+            data-mentions="submit"
             value={activityInput}
             onChange={e => setActivityInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePostActivity(); }}
-            placeholder="Add a note or update… (Ctrl+Enter to post)"
+            placeholder="Add a note or update… (type @ to assign a task, Ctrl+Enter to post)"
             rows={2}
             className="resize-none bg-background"
           />
