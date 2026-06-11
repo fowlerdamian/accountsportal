@@ -36,6 +36,7 @@ import { DependencyPicker, emptyDependency, type DependencyDraft } from "./Depen
 import { MentionTextarea, CommentBody } from "./MentionTextarea";
 import { notifyTaskAssignee } from "../lib/notifyTaskChat";
 import { processMentions } from "../../../utils/mentionTasks";
+import { DatePicker } from "@portal/components/DatePicker";
 
 interface TaskDrawerProps {
   taskId: string | null;
@@ -160,6 +161,16 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
       await updateTask({ id: liveTask.id, status: next });
     } catch {
       toast.error("Failed to update stage");
+    }
+  }
+
+  async function handleDueDateChange(next: string | null) {
+    if (!liveTask || !canMutate || next === (liveTask.due_date ?? null)) return;
+    try {
+      await updateTask({ id: liveTask.id, due_date: next });
+      toast.success(next ? `Due date set to ${next}` : "Due date cleared");
+    } catch {
+      toast.error("Failed to update due date");
     }
   }
 
@@ -448,6 +459,24 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                 <div className="text-foreground/70 text-xs">{nameFor(profiles, liveTask.created_by, userId)}</div>
               </div>
             </div>
+          </div>
+
+          {/* Due date — editable after creation */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Due date
+            </h3>
+            {canMutate ? (
+              <DatePicker
+                value={liveTask.due_date}
+                onChange={handleDueDateChange}
+                placeholder="No due date — pick one"
+              />
+            ) : (
+              <div className="text-sm text-foreground/90">
+                {liveTask.due_date ? formatDueChip(liveTask.due_date) : "No due date"}
+              </div>
+            )}
           </div>
 
           {/* Stage — four-button selector + notes-on-current-stage textarea */}
