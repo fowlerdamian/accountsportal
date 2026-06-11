@@ -37,6 +37,7 @@ import TasksApp from './apps/Tasks/TasksApp'
 import { TaskDock } from './components/TaskDock'
 import { GlobalShortcuts } from './components/GlobalShortcuts'
 import { GlobalMentions } from './components/GlobalMentions'
+import { DelegatePromptDialog } from './apps/Tasks/components/DelegatePromptDialog'
 
 // Guide Portal
 import { AdminLayout } from './apps/Guide/admin/AdminLayout'
@@ -137,6 +138,7 @@ export default function App() {
           <TaskDock />
           <GlobalShortcuts />
           <GlobalMentions />
+          <DelegatePromptDialog />
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />

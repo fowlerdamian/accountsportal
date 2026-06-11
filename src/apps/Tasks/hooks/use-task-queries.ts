@@ -8,6 +8,17 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import { notifyTaskAssignee } from "../lib/notifyTaskChat";
+import { quadrantOf } from "../lib/eisenhower";
+
+/**
+ * Fire the global DelegatePromptDialog (mounted next to TaskDock) for a task
+ * that just landed in the Delegate quadrant — urgent but not important, so
+ * the right move is handing it to someone else. Same window-event pattern as
+ * "portal:new-task".
+ */
+function promptDelegate(taskId: string): void {
+  window.dispatchEvent(new CustomEvent("portal:delegate-prompt", { detail: { taskId } }));
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,6 +189,15 @@ export function useCreateStaffTask() {
       qc.invalidateQueries({ queryKey: ["staff_tasks"] });
       // Fire-and-forget AI summary so the dock pill has a clean short label.
       regenerateSummary(data.id);
+      // Created straight into the delegate quadrant and kept for themselves —
+      // ask who it should actually go to. (If they already picked another
+      // assignee in the modal, it's delegated; don't nag.)
+      if (
+        quadrantOf(data.urgency, data.importance) === "delegate" &&
+        data.assigned_to === data.created_by
+      ) {
+        promptDelegate(data.id);
+      }
     },
   });
 }
@@ -196,6 +216,22 @@ export function useUpdateStaffTask() {
       return { task: data as StaffTask, changed: updates };
     },
     onSuccess: ({ task, changed }) => {
+      // Did this edit move the task INTO the delegate quadrant? Check the
+      // still-stale cache (pre-invalidation) so edits already inside the
+      // quadrant don't re-prompt.
+      if (
+        ("urgency" in changed || "importance" in changed) &&
+        quadrantOf(task.urgency, task.importance) === "delegate"
+      ) {
+        const cached =
+          qc.getQueryData<StaffTask>(["staff_task", task.id]) ??
+          qc.getQueriesData<StaffTask[]>({ queryKey: ["staff_tasks"] })
+            .flatMap(([, list]) => list ?? [])
+            .find((t) => t.id === task.id);
+        if (!cached || quadrantOf(cached.urgency, cached.importance) !== "delegate") {
+          promptDelegate(task.id);
+        }
+      }
       qc.invalidateQueries({ queryKey: ["staff_tasks"] });
       qc.invalidateQueries({ queryKey: ["staff_task", task.id] });
       // Regenerate the dock-pill summary only when title or description
