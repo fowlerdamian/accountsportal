@@ -35,7 +35,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
       'flex items-center gap-3 px-3 py-2.5 text-xs font-medium transition-colors duration-150 border-l-2',
-      'font-mono tracking-wide uppercase',
+      'font-sans tracking-wide uppercase',
       isActive
         ? 'text-[#f3ca0f] border-[#f3ca0f] bg-[rgba(243,202,15,0.06)]'
         : 'text-[#555] border-transparent hover:text-[#ffffff] hover:border-[#333]'
