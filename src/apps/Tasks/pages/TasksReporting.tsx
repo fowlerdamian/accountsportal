@@ -10,8 +10,6 @@ import { useAuth } from "../../../context/AuthContext.jsx";
 import {
   useStaffTasks,
   useStaffProfiles,
-  type StaffTask,
-  type StaffProfile,
 } from "../hooks/use-task-queries";
 import { quadrantOf, QUADRANT_LABEL, type Quadrant } from "../lib/eisenhower";
 import { scoreFor, statsForDay, localDay, lastNDays } from "../lib/score";
@@ -67,11 +65,6 @@ function ChartCard({ title, children, className }: { title: string; children: Re
       {children}
     </div>
   );
-}
-
-function nameFor(profiles: StaffProfile[], id: string): string {
-  const p = profiles.find((x) => x.id === id);
-  return p?.full_name ?? p?.email ?? id.slice(0, 8);
 }
 
 export function TasksReporting() {
@@ -141,7 +134,8 @@ export function TasksReporting() {
       .map((q) => ({ name: QUADRANT_LABEL[q], value: counts[q], quadrant: q }));
   }, [open]);
 
-  // Leaderboard — completions this week per person, always team-wide
+  // Leaderboard — completions this week, always team-wide. Seeded from the
+  // full staff list so everyone shows, zeros included.
   const leaderboard = useMemo(() => {
     const counts = new Map<string, number>();
     for (const t of allTasks) {
@@ -149,10 +143,12 @@ export function TasksReporting() {
       if (d === null || d < weekAgo) continue;
       counts.set(t.assigned_to, (counts.get(t.assigned_to) ?? 0) + 1);
     }
-    return Array.from(counts.entries())
-      .map(([id, completed]) => ({ name: nameFor(profiles, id), completed }))
-      .sort((a, b) => b.completed - a.completed)
-      .slice(0, 10);
+    return profiles
+      .map((p) => ({
+        name:      p.full_name ?? p.email ?? p.id.slice(0, 8),
+        completed: counts.get(p.id) ?? 0,
+      }))
+      .sort((a, b) => b.completed - a.completed || a.name.localeCompare(b.name));
   }, [allTasks, profiles, weekAgo]);
 
   if (isLoading) {
@@ -215,13 +211,13 @@ export function TasksReporting() {
         {/* Leaderboard */}
         <ChartCard title="Team leaderboard — completed this week">
           {leaderboard.length === 0 ? (
-            <p className="text-muted-foreground text-sm py-8 text-center">No completions yet this week.</p>
+            <p className="text-muted-foreground text-sm py-8 text-center">No staff profiles found.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={Math.max(220, leaderboard.length * 28)}>
               <BarChart data={leaderboard} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#222" horizontal={false} />
                 <XAxis type="number" allowDecimals={false} {...AXIS} />
-                <YAxis type="category" dataKey="name" width={110} {...AXIS} />
+                <YAxis type="category" dataKey="name" width={110} interval={0} {...AXIS} />
                 <Tooltip {...TOOLTIP_STYLE} />
                 <Bar dataKey="completed" name="Completed" fill={GOLD} radius={[0, 3, 3, 0]} barSize={14} />
               </BarChart>
