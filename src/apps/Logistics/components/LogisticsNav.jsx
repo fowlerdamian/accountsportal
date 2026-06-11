@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@portal/lib/supabase'
 
 const tabs = [
-  { label: 'Dashboard',  to: '/logistics',          end: true  },
+  { label: 'Overview',   to: '/logistics',          end: true  },
   { label: 'Invoices',   to: '/logistics/invoices', end: false, flagKey: 'flagged'   },
   { label: 'Rate Cards', to: '/logistics/rate-cards', end: false },
   { label: 'Disputes',   to: '/logistics/disputes', end: false, flagKey: 'disputed'  },

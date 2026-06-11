@@ -33,7 +33,7 @@ export function useTasksUi() {
 // items. Keeping a single entry preserves the sidebar look-and-feel of the
 // other apps (HubLayout has Projects/Contractors/Settings as its three).
 const navItems = [
-  { label: "Dashboard", icon: LayoutGrid, path: "/tasks", end: true },
+  { label: "Tasks", icon: LayoutGrid, path: "/tasks", end: true },
 ];
 
 function SidebarContent({

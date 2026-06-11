@@ -10,7 +10,7 @@ import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { useTileSettings } from '@portal/hooks/useTileSettings';
 
 const navItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/support' },
+  { label: 'Overview', icon: LayoutDashboard, path: '/support' },
   { label: 'Action Items', icon: ClipboardList, path: '/support/actions' },
   { label: 'New Case', icon: PlusCircle, path: '/support/cases/new' },
   { label: 'Warehouse', icon: Package, path: '/support/warehouse' },
