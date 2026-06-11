@@ -35,6 +35,22 @@ interface ComposedTask {
 // against full names first, then falls back to first-name / email-prefix.
 // Ambiguous first names are skipped (reported in `notes`) rather than guessed.
 
+// Prefix-based so partial names resolve: "@kyle" matches "kylef", "@john"
+// matches "John Paguio". Exact full-name matches win outright.
+function matchProfiles(profiles: Profile[], candidate: string): Profile[] {
+  const q = candidate.toLowerCase().trim();
+  if (!q) return [];
+  const exact = profiles.filter((p) => (p.full_name ?? "").toLowerCase() === q);
+  if (exact.length > 0) return exact;
+  return profiles.filter((p) => {
+    const name = (p.full_name ?? "").toLowerCase();
+    const emailPrefix = (p.email ?? "").toLowerCase().split("@")[0];
+    return name.startsWith(q) ||
+      name.split(" ")[0].startsWith(q) ||
+      emailPrefix.startsWith(q);
+  });
+}
+
 function parseMentions(text: string, profiles: Profile[], authorId: string | null) {
   // Word boundary before '@' so email addresses (user@domain) never match.
   const re = /(^|[^A-Za-z0-9._%+-])@([A-Za-z][A-Za-z'’-]*(?:[ ][A-Za-z][A-Za-z'’-]*)?)/g;
@@ -43,18 +59,12 @@ function parseMentions(text: string, profiles: Profile[], authorId: string | nul
 
   for (const match of text.matchAll(re)) {
     const raw = match[2];
-    const full = raw.toLowerCase().trim();
-    const first = full.split(" ")[0];
-
-    let matches = profiles.filter((p) => (p.full_name ?? "").toLowerCase() === full);
-    if (matches.length === 0) {
-      matches = profiles.filter((p) => (p.full_name ?? "").toLowerCase().startsWith(full));
-    }
-    if (matches.length === 0) {
-      matches = profiles.filter((p) =>
-        (p.full_name ?? "").toLowerCase().split(" ")[0] === first ||
-        (p.email ?? "").toLowerCase().split("@")[0] === first
-      );
+    // The regex may grab a following word ("kyle do") — try the full token
+    // first (handles "@John Paguio"), then just the first word.
+    let matches: Profile[] = [];
+    for (const candidate of [raw, raw.split(" ")[0]]) {
+      matches = matchProfiles(profiles, candidate);
+      if (matches.length === 1) break;
     }
 
     if (matches.length === 1) {
