@@ -177,6 +177,9 @@ export function TaskDock() {
                 assigneeName={nameFor(profiles, t.assigned_to, userId)}
                 onClick={() => setDrawerTaskId(t.id)}
                 variant="dock"
+                // Cap pill width so more tasks fit in the strip — the label
+                // truncates with an ellipsis and the full title is on hover.
+                className="max-w-[180px]"
               />
             ))
           )}

@@ -77,7 +77,7 @@ export function TaskTile({ task, assigneeName, onClick, variant = "tile", classN
         onClick={onClick}
         title={task.title}
         className={cn(
-          "group flex items-center gap-2 h-9 px-3 rounded-md shrink-0",
+          "group flex items-center gap-1.5 h-9 px-2.5 rounded-md shrink-0",
           "border border-border/60 bg-[var(--bg-elevated)]",
           "hover:border-border transition-colors text-left",
           ringCls,
@@ -85,7 +85,7 @@ export function TaskTile({ task, assigneeName, onClick, variant = "tile", classN
         )}
       >
         <span className={cn("w-2 h-2 rounded-full shrink-0", QUADRANT_DOT_CLASS[quad])} />
-        <span className="text-xs text-foreground/90 whitespace-nowrap">{label}</span>
+        <span className="text-xs text-foreground/90 truncate min-w-0">{label}</span>
         {task.due_date && (
           <span className="font-mono tabular-nums text-[10px] text-muted-foreground shrink-0">
             {formatDueChip(task.due_date)}
