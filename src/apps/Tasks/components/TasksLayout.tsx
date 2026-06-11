@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, createContext, useContext } from "react";
 import { NavLink, Link, useSearchParams } from "react-router-dom";
-import { LayoutGrid, LogOut, Menu, Plus } from "lucide-react";
+import { BarChart3, LayoutGrid, LogOut, Menu, Plus } from "lucide-react";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useIsMobile } from "../../../hooks/useIsMobile.js";
@@ -33,7 +33,8 @@ export function useTasksUi() {
 // items. Keeping a single entry preserves the sidebar look-and-feel of the
 // other apps (HubLayout has Projects/Contractors/Settings as its three).
 const navItems = [
-  { label: "Tasks", icon: LayoutGrid, path: "/tasks", end: true },
+  { label: "Tasks",     icon: LayoutGrid, path: "/tasks",           end: true },
+  { label: "Reporting", icon: BarChart3,  path: "/tasks/reporting", end: true },
 ];
 
 function SidebarContent({
