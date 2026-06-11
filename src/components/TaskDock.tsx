@@ -111,6 +111,7 @@ export function TaskDock() {
                     key={t.id}
                     task={t}
                     assigneeName={nameFor(profiles, t.assigned_to, userId)}
+                    creatorName={nameFor(profiles, t.created_by, userId)}
                     onClick={() => setDrawerTaskId(t.id)}
                   />
                 ))}

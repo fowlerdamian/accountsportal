@@ -95,6 +95,7 @@ export function KanbanBoard({ tasks, profiles, myId, onOpenTask }: KanbanBoardPr
                   <TaskTile
                     task={t}
                     assigneeName={nameFor(profiles, t.assigned_to, myId)}
+                    creatorName={nameFor(profiles, t.created_by, myId)}
                     onClick={() => onOpenTask(t.id)}
                   />
                 </div>

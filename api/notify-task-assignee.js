@@ -102,6 +102,9 @@ function formatMessage({ event, taskId, taskTitle, description, dueDate, urgency
       return `✅ ${titleLink} — unblocked\n${summary}\n${meta} · ${dueChip}`
     }
 
+    case 'completed':
+      return `🎉 ${titleLink} — completed by ${actorName ?? 'someone'}\n${summary}\n${dueChip} · ${quad}`
+
     case 'comment': {
       // No character cap on comments — show the full body (whitespace-normalised, uncapped).
       const body = truncate(commentBody, Infinity) || summary
@@ -136,7 +139,7 @@ async function getAuthUserId(authHeader) {
   }
 }
 
-const VALID_EVENTS = new Set(['assigned', 'dependency_assigned', 'blocker_done', 'comment'])
+const VALID_EVENTS = new Set(['assigned', 'dependency_assigned', 'blocker_done', 'comment', 'completed'])
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export default async function handler(req, res) {

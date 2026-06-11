@@ -13,7 +13,8 @@ export type TaskNotifyEvent =
   | "assigned"
   | "dependency_assigned"
   | "blocker_done"
-  | "comment";
+  | "comment"
+  | "completed";
 
 interface NotifyArgs {
   task_id:      string;

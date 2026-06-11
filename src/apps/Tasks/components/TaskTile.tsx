@@ -23,6 +23,8 @@ const QUAD_SCORES: Record<Quadrant, { urgency: number; importance: number }> = {
 interface TaskTileProps {
   task:          StaffTask;
   assigneeName:  string;
+  /** Shown as "from {name}" on the tile when the creator isn't the assignee. */
+  creatorName?:  string;
   onClick:       () => void;
   /**
    * Compact horizontal variant used inside the bottom dock.
@@ -32,7 +34,7 @@ interface TaskTileProps {
   className?:    string;
 }
 
-export function TaskTile({ task, assigneeName, onClick, variant = "tile", className }: TaskTileProps) {
+export function TaskTile({ task, assigneeName, creatorName, onClick, variant = "tile", className }: TaskTileProps) {
   const quad     = quadrantOf(task.urgency, task.importance);
   const ringCls  = dueRingClass(task.due_date);
   const unscored = task.urgency == null || task.importance == null;
@@ -137,6 +139,11 @@ export function TaskTile({ task, assigneeName, onClick, variant = "tile", classN
         <div className="flex items-center gap-1.5 min-w-0">
           <UserAvatar name={assigneeName} size="xs" />
           <span className="text-[11px] text-muted-foreground truncate">{assigneeName}</span>
+          {creatorName && task.created_by !== task.assigned_to && (
+            <span className="text-[11px] text-muted-foreground/60 truncate" title={`Created by ${creatorName}`}>
+              · from {creatorName}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {unscored && <AlertTriangle className="w-3 h-3 text-amber-400" />}

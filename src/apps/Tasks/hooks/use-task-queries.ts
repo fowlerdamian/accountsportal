@@ -84,6 +84,27 @@ async function notifyBlockerDone(blockerId: string): Promise<void> {
   }
 }
 
+/**
+ * When a task is marked done, ping the person who created it (they asked for
+ * the work, so they should hear it's finished). Skips self-created tasks.
+ * Fire-and-forget; never throws.
+ */
+async function notifyCreatorDone(task: StaffTask): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || task.created_by === user.id) return;
+    notifyTaskAssignee({
+      task_id:      task.id,
+      recipient_id: task.created_by,
+      event:        "completed",
+      task_title:   task.title,
+      actor_name:   user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "Someone",
+    });
+  } catch (err) {
+    console.warn("[notifyCreatorDone]", err);
+  }
+}
+
 export interface StaffTaskComment {
   id:         string;
   task_id:    string;
@@ -241,8 +262,10 @@ export function useUpdateStaffTask() {
       }
       // A completed task may have been blocking others — alert their creators
       // that they're now unblocked (mirrors the server-side auto-unblock trigger).
+      // Also tell whoever created this task that it's finished.
       if (changed.status === "done") {
         notifyBlockerDone(task.id);
+        notifyCreatorDone(task);
       }
     },
   });
