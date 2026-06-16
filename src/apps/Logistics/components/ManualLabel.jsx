@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
+import AddressAutocomplete from '@portal/components/AddressAutocomplete.jsx'
+import SavedAddressPicker from '@portal/components/SavedAddressPicker.jsx'
 import { AGA_LOGO, TRAILBAIT_LOGO } from '../utils/labelLogos.js'
 
 const BRAND_LOGO = { AGA: AGA_LOGO, TrailBait: TRAILBAIT_LOGO }
@@ -147,8 +149,6 @@ export default function ManualLabel() {
   const [size,      setSize]      = useState('4x6')
   const [to,        setTo]        = useState(EMPTY_TO)
   const [saveAddr,  setSaveAddr]  = useState(false)
-  const [saved,     setSaved]     = useState([])
-  const [selectedSaved, setSelectedSaved] = useState('')
   const [msg,       setMsg]       = useState(null)
   const [saving,    setSaving]    = useState(false)
 
@@ -161,12 +161,6 @@ export default function ManualLabel() {
   })
   const [editFrom, setEditFrom] = useState(false)
 
-  const fetchSaved = async () => {
-    const { data } = await supabase.from('shipping_addresses').select('*').order('created_at', { ascending: false })
-    if (data) setSaved(data)
-  }
-  useEffect(() => { fetchSaved() }, [])
-
   const flash = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 3000) }
 
   const updTo   = (field, value) => setTo(t => ({ ...t, [field]: value }))
@@ -176,13 +170,6 @@ export default function ManualLabel() {
     try { localStorage.setItem(TRAILBAIT_FROM_KEY, JSON.stringify(trailbaitFrom)) } catch { /* ignore */ }
     setEditFrom(false)
     flash('ok', 'TrailBait return address saved')
-  }
-
-  const loadSaved = (id) => {
-    setSelectedSaved(id)
-    if (!id) { return }
-    const a = saved.find(s => s.id === id)
-    if (a) setTo({ label: a.label ?? '', name: a.name ?? '', company: a.company ?? '', line1: a.line1 ?? '', line2: a.line2 ?? '', suburb: a.suburb ?? '', state: a.state ?? '', postcode: a.postcode ?? '', phone: a.phone ?? '' })
   }
 
   const validTo = to.name.trim() && to.line1.trim() && to.suburb.trim() && to.state.trim() && to.postcode.trim()
@@ -209,7 +196,6 @@ export default function ManualLabel() {
       setSaving(false)
       if (error) { flash('err', `Could not save address: ${error.message}`); return }
       setSaveAddr(false)
-      fetchSaved()
     }
 
     const brandObj = BRANDS.find(b => b.key === brand)
@@ -358,16 +344,17 @@ export default function ManualLabel() {
           <div style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <label style={{ ...labelStyle, marginBottom: 0 }}>Ship to</label>
-              {saved.length > 0 && (
-                <select
-                  value={selectedSaved}
-                  onChange={e => loadSaved(e.target.value)}
-                  style={{ ...inputStyle, cursor: 'pointer', width: 'auto', fontSize: '12px', padding: '6px 8px' }}
-                >
-                  <option value="">Load saved…</option>
-                  {saved.map(s => <option key={s.id} value={s.id}>{s.label || s.name}{s.suburb ? ` — ${s.suburb}` : ''}</option>)}
-                </select>
-              )}
+              <SavedAddressPicker onSelect={addr => { setTo(t => ({ ...t, ...addr })); flash('ok', 'Address loaded') }} />
+            </div>
+
+            {/* Google Maps address search — prefills the fields below */}
+            <div style={{ marginBottom: '10px' }}>
+              <AddressAutocomplete
+                onResolved={addr => {
+                  setTo(t => ({ ...t, line1: addr.line1 || t.line1, line2: addr.line2 || t.line2, suburb: addr.suburb || t.suburb, state: addr.state || t.state, postcode: addr.postcode || t.postcode }))
+                  flash('ok', 'Address picked up from Google Maps')
+                }}
+              />
             </div>
 
             <div style={{ display: 'grid', gap: '10px' }}>
