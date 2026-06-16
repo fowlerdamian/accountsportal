@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
       }
       const url = `${PLACES_BASE}/details/json`
         + `?place_id=${encodeURIComponent(place_id)}`
-        + `&fields=address_component,formatted_address,name`
+        + `&fields=address_component,formatted_address,name,type,formatted_phone_number,international_phone_number`
         + (sessiontoken ? `&sessiontoken=${encodeURIComponent(sessiontoken)}` : '')
         + `&key=${key}`;
       const data = await (await fetch(url)).json();
@@ -92,9 +92,17 @@ Deno.serve(async (req) => {
           status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      const result = data.result ?? {};
+      const address = parseAddress(result.address_components ?? []);
+      // Only treat the place name as a company for actual businesses — for plain
+      // residential addresses Google returns the street as `name`, which we skip.
+      const types = result.types ?? [];
+      const isBusiness = types.includes('establishment') || types.includes('point_of_interest');
+      address.company = isBusiness ? (result.name ?? '') : '';
+      address.phone   = result.formatted_phone_number || result.international_phone_number || '';
       return new Response(JSON.stringify({
-        address:   parseAddress(data.result.address_components ?? []),
-        formatted: data.result.formatted_address ?? '',
+        address,
+        formatted: result.formatted_address ?? '',
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

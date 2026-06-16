@@ -351,7 +351,16 @@ export default function ManualLabel() {
             <div style={{ marginBottom: '10px' }}>
               <AddressAutocomplete
                 onResolved={addr => {
-                  setTo(t => ({ ...t, line1: addr.line1 || t.line1, line2: addr.line2 || t.line2, suburb: addr.suburb || t.suburb, state: addr.state || t.state, postcode: addr.postcode || t.postcode }))
+                  setTo(t => ({
+                    ...t,
+                    company:  addr.company  || t.company,
+                    line1:    addr.line1    || t.line1,
+                    line2:    addr.line2    || t.line2,
+                    suburb:   addr.suburb   || t.suburb,
+                    state:    addr.state    || t.state,
+                    postcode: addr.postcode || t.postcode,
+                    phone:    addr.phone    || t.phone,
+                  }))
                   flash('ok', 'Address picked up from Google Maps')
                 }}
               />
