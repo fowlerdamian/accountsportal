@@ -137,14 +137,15 @@ export default function SavedAddressPicker({ onSelect, buttonLabel = 'Saved addr
                     </button>
                     {confirmId === a.id ? (
                       <span style={{ display: 'flex', gap: '4px', paddingRight: '12px' }}>
-                        <button type="button" onClick={() => remove(a.id)} style={{ fontSize: '11px', color: '#ff1744', background: 'none', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '4px', padding: '3px 8px', cursor: 'pointer' }}>Delete</button>
-                        <button type="button" onClick={() => setConfirmId(null)} style={{ fontSize: '11px', color: '#888', background: 'none', border: '1px solid #222', borderRadius: '4px', padding: '3px 8px', cursor: 'pointer' }}>Cancel</button>
+                        <button type="button" onClick={() => remove(a.id)} style={{ fontSize: '11px', fontWeight: 600, color: '#fff', background: '#ef4444', border: '1px solid #ef4444', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer' }}>Delete</button>
+                        <button type="button" onClick={() => setConfirmId(null)} style={{ fontSize: '11px', color: '#888', background: 'none', border: '1px solid #222', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer' }}>Cancel</button>
                       </span>
                     ) : (
-                      <button type="button" onClick={() => setConfirmId(a.id)} title="Delete" style={{ background: 'none', border: 'none', color: '#444', fontSize: '13px', cursor: 'pointer', padding: '11px 14px' }}
-                        onMouseEnter={e => e.currentTarget.style.color = '#ff1744'}
-                        onMouseLeave={e => e.currentTarget.style.color = '#444'}
-                      >🗑</button>
+                      <button type="button" onClick={() => setConfirmId(a.id)} title="Delete address"
+                        style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#999', fontSize: '12px', cursor: 'pointer', padding: '6px 10px', margin: '0 12px' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#ff1744'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#999'; e.currentTarget.style.borderColor = '#2a2a2a' }}
+                      >🗑 Delete</button>
                     )}
                   </div>
                 ))
