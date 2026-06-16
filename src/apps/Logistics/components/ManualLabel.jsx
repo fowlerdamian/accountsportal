@@ -80,18 +80,18 @@ function drawLabel(doc, ox, oy, { brand, from, to }) {
     y += 6
   }
 
-  // FROM block (TrailBait only)
+  // FROM block (TrailBait only) — kept small/secondary.
   if (from) {
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
+    doc.setFontSize(6.5)
     doc.text('FROM:', ox + m, y)
-    y += 4
+    y += 3
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
+    doc.setFontSize(7)
     const fromLines = [from.name, ...addressLines(from)]
     for (const line of fromLines) {
       doc.text(line, ox + m, y)
-      y += 4
+      y += 3
     }
     y += 2
   } else {
@@ -101,24 +101,24 @@ function drawLabel(doc, ox, oy, { brand, from, to }) {
   // Divider
   doc.setLineWidth(0.3)
   doc.line(ox + m, y, ox + W - m, y)
-  y += 8
+  y += 9
 
-  // SHIP TO block
+  // SHIP TO block — the dominant element on the label.
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
+  doc.setFontSize(11)
   doc.text('SHIP TO:', ox + m, y)
-  y += 8
+  y += 10
 
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(15)
+  doc.setFontSize(20)
   doc.text(to.name || '', ox + m, y)
-  y += 8
+  y += 10
 
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(13)
+  doc.setFontSize(16)
   for (const line of addressLines(to)) {
     doc.text(line, ox + m, y)
-    y += 7
+    y += 8.5
   }
 
   // Footer: generated date
