@@ -7,6 +7,7 @@ const tabs = [
   { label: 'Invoices',   to: '/logistics/invoices', end: false, flagKey: 'flagged'   },
   { label: 'Rate Cards', to: '/logistics/rate-cards', end: false },
   { label: 'Disputes',   to: '/logistics/disputes', end: false, flagKey: 'disputed'  },
+  { label: 'Manual Label', to: '/logistics/manual-label', end: false },
 ]
 
 export default function LogisticsNav() {

@@ -18,6 +18,7 @@ import InvoiceList from './apps/Logistics/components/InvoiceList.jsx'
 import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
 import RateCards from './apps/Logistics/components/RateCards.jsx'
 import Disputes from './apps/Logistics/components/Disputes.jsx'
+import ManualLabel from './apps/Logistics/components/ManualLabel.jsx'
 import SupportApp from './apps/Support/SupportApp'
 import SalesSupport from './apps/SalesSupport/index.jsx'
 import ComplianceApp from './apps/Compliance/index'
@@ -105,6 +106,7 @@ const PATH_TITLES = [
   ['/logistics/invoices',    'Invoices'],
   ['/logistics/rate-cards',  'Rate Cards'],
   ['/logistics/disputes',    'Disputes'],
+  ['/logistics/manual-label','Manual Label'],
   ['/logistics',             'Logistics'],
   ['/purchase-orders',       'Purchasing'],
   ['/sales-support',         'Sales Support'],
@@ -209,6 +211,7 @@ export default function App() {
               <Route path="logistics/invoices/:id" element={<InvoiceDetail />} />
               <Route path="logistics/rate-cards" element={<RateCards />} />
               <Route path="logistics/disputes" element={<Disputes />} />
+              <Route path="logistics/manual-label" element={<ManualLabel />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
               <Route path="compliance/*" element={<GuideAuthProvider><ComplianceApp /></GuideAuthProvider>} />
