@@ -55,7 +55,7 @@ function addressLines(addr) {
   return lines
 }
 
-function drawLabel(doc, ox, oy, { brand, from, to }) {
+function drawLabel(doc, ox, oy, { brand, from, to, courier }) {
   const m = 6                       // inner margin
   const W = LABEL_W, H = LABEL_H
 
@@ -121,15 +121,25 @@ function drawLabel(doc, ox, oy, { brand, from, to }) {
     y += 8.5
   }
 
-  // Footer: generated date
+  // Footer — Courier sits at the very bottom (bold, with a separator); the
+  // generated timestamp is tucked just above it.
+  if (courier) {
+    doc.setDrawColor(0)
+    doc.setLineWidth(0.3)
+    doc.line(ox + m, oy + H - 13, ox + W - m, oy + H - 13)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+    doc.setTextColor(0)
+    doc.text(`Courier: ${courier}`, ox + m, oy + H - 4)
+  }
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
   doc.setTextColor(120)
-  doc.text(new Date().toLocaleString('en-AU'), ox + m, oy + H - 4)
+  doc.text(new Date().toLocaleString('en-AU'), ox + m, courier ? oy + H - 16 : oy + H - 4)
   doc.setTextColor(0)
 }
 
-function generatePdf({ size, brand, from, to }) {
+function generatePdf({ size, brand, from, to, courier }) {
   let doc, ox, oy
   if (size === '4x6') {
     doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [LABEL_W, LABEL_H] })
@@ -138,15 +148,16 @@ function generatePdf({ size, brand, from, to }) {
     doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
     ox = 10; oy = 10
   }
-  drawLabel(doc, ox, oy, { brand, from, to })
+  drawLabel(doc, ox, oy, { brand, from, to, courier })
   const fname = `label_${brand}_${(to.name || 'recipient').replace(/[^a-z0-9]+/gi, '_')}_${size}.pdf`
   doc.save(fname)
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 export default function ManualLabel() {
-  const [brand,     setBrand]     = useState('AGA')
+  const [brand,     setBrand]     = useState('TrailBait')
   const [size,      setSize]      = useState('4x6')
+  const [courier,   setCourier]   = useState('')
   const [to,        setTo]        = useState(EMPTY_TO)
   const [saveAddr,  setSaveAddr]  = useState(false)
   const [msg,       setMsg]       = useState(null)
@@ -202,6 +213,7 @@ export default function ManualLabel() {
     generatePdf({
       size,
       brand,
+      courier: courier.trim(),
       from: brandObj.hasFrom ? trailbaitFrom : null,
       to:   { ...to, country: 'Australia' },
     })
@@ -335,6 +347,20 @@ export default function ManualLabel() {
             <Toggle options={SIZES} value={size} onChange={setSize} />
             <p style={{ fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace', margin: '14px 0 0' }}>
               {size === '4x6' ? 'Thermal printer format (101.6 × 152.4 mm).' : 'Label printed top-left of an A4 sheet with a cut border.'}
+            </p>
+          </div>
+
+          {/* Courier */}
+          <div style={cardStyle}>
+            <label style={labelStyle}>Courier</label>
+            <input
+              style={inputStyle}
+              placeholder="e.g. Australia Post, StarTrack, Aramex"
+              value={courier}
+              onChange={e => setCourier(e.target.value)}
+            />
+            <p style={{ fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace', margin: '12px 0 0' }}>
+              Printed in bold at the very bottom of the label.
             </p>
           </div>
         </div>
