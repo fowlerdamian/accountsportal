@@ -66,6 +66,7 @@ export default function SavedAddressPicker({ onSelect, buttonLabel = 'Saved addr
       label: a.label ?? '', name: a.name ?? '', company: a.company ?? '',
       line1: a.line1 ?? '', line2: a.line2 ?? '', suburb: a.suburb ?? '',
       state: a.state ?? '', postcode: a.postcode ?? '', phone: a.phone ?? '',
+      courier: a.courier ?? '',
     })
     setOpen(false)
   }

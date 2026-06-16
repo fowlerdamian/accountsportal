@@ -35,7 +35,7 @@ const SIZES = [
 
 const AU_STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT']
 
-const EMPTY_TO = { label: '', name: '', company: '', line1: '', line2: '', suburb: '', state: '', postcode: '', phone: '' }
+const EMPTY_TO = { label: '', name: '', company: '', line1: '', line2: '', suburb: '', state: '', postcode: '', phone: '', courier: '' }
 
 // ─── PDF generation ───────────────────────────────────────────────────────────
 // A label is drawn inside a 101.6 × 152.4 mm (4×6") area. For the 4×6 size the
@@ -157,7 +157,6 @@ function generatePdf({ size, brand, from, to, courier }) {
 export default function ManualLabel() {
   const [brand,     setBrand]     = useState('TrailBait')
   const [size,      setSize]      = useState('4x6')
-  const [courier,   setCourier]   = useState('')
   const [to,        setTo]        = useState(EMPTY_TO)
   const [saveAddr,  setSaveAddr]  = useState(false)
   const [msg,       setMsg]       = useState(null)
@@ -202,6 +201,7 @@ export default function ManualLabel() {
         state:    to.state.trim(),
         postcode: to.postcode.trim(),
         phone:    to.phone.trim() || null,
+        courier:  to.courier.trim() || null,
         created_by: user?.id ?? null,
       })
       setSaving(false)
@@ -213,7 +213,7 @@ export default function ManualLabel() {
     generatePdf({
       size,
       brand,
-      courier: courier.trim(),
+      courier: to.courier.trim(),
       from: brandObj.hasFrom ? trailbaitFrom : null,
       to:   { ...to, country: 'Australia' },
     })
@@ -349,20 +349,6 @@ export default function ManualLabel() {
               {size === '4x6' ? 'Thermal printer format (101.6 × 152.4 mm).' : 'Label printed top-left of an A4 sheet with a cut border.'}
             </p>
           </div>
-
-          {/* Courier */}
-          <div style={cardStyle}>
-            <label style={labelStyle}>Courier</label>
-            <input
-              style={inputStyle}
-              placeholder="e.g. Australia Post, StarTrack, Aramex"
-              value={courier}
-              onChange={e => setCourier(e.target.value)}
-            />
-            <p style={{ fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace', margin: '12px 0 0' }}>
-              Printed in bold at the very bottom of the label.
-            </p>
-          </div>
         </div>
 
         {/* ── Right column: to address ───────────────────────────────────────── */}
@@ -406,6 +392,7 @@ export default function ManualLabel() {
                 <input style={inputStyle} placeholder="Postcode *" value={to.postcode} onChange={e => updTo('postcode', e.target.value)} />
               </div>
               <input style={inputStyle} placeholder="Phone (optional)" value={to.phone} onChange={e => updTo('phone', e.target.value)} />
+              <input style={inputStyle} placeholder="Courier (optional) — printed at the bottom of the label" value={to.courier} onChange={e => updTo('courier', e.target.value)} />
             </div>
 
             {/* Save address */}
