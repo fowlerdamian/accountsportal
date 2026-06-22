@@ -389,7 +389,7 @@ export default function GuideEditor() {
   const [pdfImportOpen, setPdfImportOpen] = useState(false);
   const [vehicles, setVehicles] = useState<{ make: string; model: string; year_from: string; year_to: string }[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editorTarget, setEditorTarget] = useState<{ stepIndex: number; field: 'image_url' | 'image2_url'; variantId?: string | null } | null>(null);
+  const [editorTarget, setEditorTarget] = useState<{ stepIndex: number; field: 'image_url' | 'image2_url'; variantIdx?: number | null } | null>(null);
   const [editorImageUrl, setEditorImageUrl] = useState("");
   const [editorOriginalUrl, setEditorOriginalUrl] = useState<string | null>(null);
 
@@ -785,11 +785,22 @@ export default function GuideEditor() {
       const blob = await res.blob();
       const file = new File([blob], `edited-${Date.now()}.jpg`, { type: 'image/jpeg' });
       const url = await uploadToStorage(file, 'steps');
-      setGuideSteps(prev => {
-        const updated = [...prev];
-        updated[editorTarget.stepIndex] = { ...updated[editorTarget.stepIndex], [editorTarget.field]: url };
-        return updated;
-      });
+      if (editorTarget.variantIdx != null) {
+        const vIdx = editorTarget.variantIdx;
+        setVariants(prev => {
+          const updated = [...prev];
+          const steps = [...updated[vIdx].steps];
+          steps[editorTarget.stepIndex] = { ...steps[editorTarget.stepIndex], [editorTarget.field]: url };
+          updated[vIdx] = { ...updated[vIdx], steps };
+          return updated;
+        });
+      } else {
+        setGuideSteps(prev => {
+          const updated = [...prev];
+          updated[editorTarget.stepIndex] = { ...updated[editorTarget.stepIndex], [editorTarget.field]: url };
+          return updated;
+        });
+      }
       toast.success("Image saved");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to save edited image");
@@ -801,6 +812,30 @@ export default function GuideEditor() {
   const removeStep = (index: number) => {
     if (guideSteps.length <= 1) return;
     setGuideSteps(guideSteps.filter((_, i) => i !== index).map((s, i) => ({ ...s, step_number: i + 1, order_index: i + 1 })));
+  };
+
+  // --- Variant step image handlers (mirror updateStepImage / openEditor for variant steps) ---
+  const updateVariantStepImage = (vIdx: number, sIdx: number, field: 'image_url' | 'image2_url', value: string | null) => {
+    const origField = field === 'image_url' ? 'image_original_url' : 'image2_original_url';
+    setVariants(prev => {
+      const updated = [...prev];
+      const steps = [...updated[vIdx].steps];
+      steps[sIdx] = { ...steps[sIdx], [field]: value, [origField]: value };
+      updated[vIdx] = { ...updated[vIdx], steps };
+      return updated;
+    });
+  };
+
+  const openVariantEditor = (vIdx: number, sIdx: number, field: 'image_url' | 'image2_url') => {
+    const step = variants[vIdx]?.steps[sIdx];
+    if (!step) return;
+    const origField = field === 'image_url' ? 'image_original_url' : 'image2_original_url';
+    const imageUrl = step[field];
+    if (!imageUrl) return;
+    setEditorTarget({ stepIndex: sIdx, field, variantIdx: vIdx });
+    setEditorImageUrl(imageUrl);
+    setEditorOriginalUrl((step as any)[origField] || null);
+    setEditorOpen(true);
   };
 
   if (isEditing && (loadingGuide || loadingSteps || loadingVehicles)) {
@@ -1116,6 +1151,24 @@ export default function GuideEditor() {
                           rows={3}
                           className="text-sm"
                         />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <DropZone
+                            label="Primary image"
+                            currentUrl={step.image_url}
+                            onUpload={(url) => updateVariantStepImage(vIdx, sIdx, 'image_url', url)}
+                            onClear={() => updateVariantStepImage(vIdx, sIdx, 'image_url', null)}
+                            onEdit={step.image_url ? () => openVariantEditor(vIdx, sIdx, 'image_url') : undefined}
+                            folder="steps"
+                          />
+                          <DropZone
+                            label="Add second image"
+                            currentUrl={step.image2_url}
+                            onUpload={(url) => updateVariantStepImage(vIdx, sIdx, 'image2_url', url)}
+                            onClear={() => updateVariantStepImage(vIdx, sIdx, 'image2_url', null)}
+                            onEdit={step.image2_url ? () => openVariantEditor(vIdx, sIdx, 'image2_url') : undefined}
+                            folder="steps"
+                          />
+                        </div>
                       </div>
                     ))}
 
