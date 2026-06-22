@@ -145,19 +145,44 @@ export function useGuideBySlug(slug: string | undefined) {
   });
 }
 
-export function useGuideStepsBySetId(instructionSetId: string | undefined) {
+// variantId: undefined/null → Standard steps (variant_id IS NULL); a string → that variant's steps.
+export function useGuideStepsBySetId(instructionSetId: string | undefined, variantId?: string | null) {
   return useQuery({
-    queryKey: ["guide_steps_public", instructionSetId],
+    queryKey: ["guide_steps_public", instructionSetId, variantId ?? null],
+    enabled: !!instructionSetId,
+    queryFn: async () => {
+      let q = supabase
+        .from("instruction_steps")
+        .select("*")
+        .eq("instruction_set_id", instructionSetId!);
+      q = variantId ? q.eq("variant_id", variantId) : q.is("variant_id", null);
+      const { data, error } = await q.order("order_index");
+      if (error) throw error;
+      return data as Tables<"instruction_steps">[];
+    },
+  });
+}
+
+// Customer-facing: list the variants available for a guide (Standard is implicit, not a row).
+export interface PublicGuideVariant {
+  id: string;
+  instruction_set_id: string;
+  variant_label: string;
+  slug: string;
+}
+
+export function useGuideVariants(instructionSetId: string | undefined) {
+  return useQuery({
+    queryKey: ["guide_variants_public", instructionSetId],
     enabled: !!instructionSetId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("instruction_steps")
+        .from("guide_variants" as any)
         .select("*")
         .eq("instruction_set_id", instructionSetId!)
-        .is("variant_id", null)
-        .order("order_index");
+        .order("variant_label");
       if (error) throw error;
-      return data as Tables<"instruction_steps">[];
+      return data as unknown as PublicGuideVariant[];
     },
   });
 }

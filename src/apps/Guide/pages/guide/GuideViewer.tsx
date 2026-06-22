@@ -1,11 +1,11 @@
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { useGuideBySlug, useGuideStepsBySetId, useBrands, useGuideVehicles } from "@guide/hooks/use-supabase-query";
+import { useGuideBySlug, useGuideStepsBySetId, useGuideVariants, useBrands, useGuideVehicles } from "@guide/hooks/use-supabase-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
 import { Clock, Wrench, ChevronLeft, ChevronRight, Check, Star, ArrowLeft, Loader2, Flag, X, Send, Car, Zap } from "lucide-react";
-import { BookIcon, MessageCircleIcon } from "@portal/components/icons";
+import { BookIcon, MessageCircleIcon, LayersIcon } from "@portal/components/icons";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@guide/components/ui/sheet";
 import { Textarea } from "@guide/components/ui/textarea";
 import { Input } from "@guide/components/ui/input";
@@ -20,7 +20,10 @@ function generateSessionId() {
 export default function GuideViewer() {
   const { slug } = useParams();
   const { data: guide, isLoading: loadingGuide } = useGuideBySlug(slug);
-  const { data: guideSteps = [] } = useGuideStepsBySetId(guide?.id);
+  const { data: variants = [] } = useGuideVariants(guide?.id);
+  // undefined = not chosen yet (show picker); null = Standard; string = a variant id
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null | undefined>(undefined);
+  const { data: guideSteps = [] } = useGuideStepsBySetId(guide?.id, selectedVariantId);
   const { data: brands = [] } = useBrands();
   const { data: vehicles = [] } = useGuideVehicles(guide?.id);
 
@@ -51,18 +54,20 @@ export default function GuideViewer() {
     return () => { document.title = 'Staff Portal'; };
   }, [guide?.title]);
 
-  useEffect(() => {
-    if (guide?.id) {
-      const saved = localStorage.getItem(`guide-progress-${guide.id}`);
-      if (saved) setCompletedSteps(new Set(JSON.parse(saved)));
-    }
-  }, [guide?.id]);
+  const variantKey = selectedVariantId ?? 'standard';
 
   useEffect(() => {
     if (guide?.id) {
-      localStorage.setItem(`guide-progress-${guide.id}`, JSON.stringify([...completedSteps]));
+      const saved = localStorage.getItem(`guide-progress-${guide.id}-${variantKey}`);
+      setCompletedSteps(saved ? new Set(JSON.parse(saved)) : new Set());
     }
-  }, [completedSteps, guide?.id]);
+  }, [guide?.id, variantKey]);
+
+  useEffect(() => {
+    if (guide?.id) {
+      localStorage.setItem(`guide-progress-${guide.id}-${variantKey}`, JSON.stringify([...completedSteps]));
+    }
+  }, [completedSteps, guide?.id, variantKey]);
 
   if (loadingGuide) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -90,6 +95,12 @@ export default function GuideViewer() {
 
   const brandColour = brand?.primary_colour ?? '#F59E0B';
   const chatEnabled = (brand as any)?.chat_enabled ?? true;
+
+  // When a guide has variants, make the customer pick one before the overview.
+  const needsVariantChoice = variants.length > 0 && selectedVariantId === undefined;
+  const selectedVariantLabel = selectedVariantId
+    ? variants.find(v => v.id === selectedVariantId)?.variant_label
+    : 'Standard';
 
   const markDone = (stepIndex: number) => {
     const newCompleted = new Set(completedSteps);
@@ -225,9 +236,74 @@ export default function GuideViewer() {
       </header>
 
       <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
-        {/* Overview */}
-        {currentStep === null && !finished && (
+        {/* Variant selection — shown first when the guide has variants */}
+        {needsVariantChoice && currentStep === null && !finished && (
           <div className="space-y-5 sm:space-y-6 animate-fade-in">
+            <div className="w-full rounded-xl bg-muted flex items-center justify-center overflow-hidden">
+              {guide.product_image_url ? (
+                <img src={guide.product_image_url} alt={guide.title} className="w-full h-auto object-contain bg-white" />
+              ) : (
+                <BookIcon className="w-12 h-12 text-muted-foreground/30" />
+              )}
+            </div>
+
+            <div>
+              <h1 className="text-xl font-bold">{guide.title}</h1>
+              <code className="text-xs text-muted-foreground">{guide.product_code}</code>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="font-semibold text-sm flex items-center gap-1.5">
+                <LayersIcon className="w-4 h-4" /> Choose your version
+              </h2>
+              <p className="text-sm text-muted-foreground">Select the option that matches your product to see the right instructions.</p>
+            </div>
+
+            <div className="space-y-2.5">
+              {/* Standard is always available — it uses the guide's default steps */}
+              <button
+                onClick={() => setSelectedVariantId(null)}
+                className="w-full flex items-center justify-between gap-3 rounded-xl border p-4 text-left hover:border-primary hover:bg-muted/40 transition-colors"
+              >
+                <div>
+                  <p className="font-semibold text-sm">Standard</p>
+                  <p className="text-xs text-muted-foreground">Default installation</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+              </button>
+
+              {variants.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => setSelectedVariantId(v.id)}
+                  className="w-full flex items-center justify-between gap-3 rounded-xl border p-4 text-left hover:border-primary hover:bg-muted/40 transition-colors"
+                >
+                  <p className="font-semibold text-sm">{v.variant_label}</p>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Overview */}
+        {!needsVariantChoice && currentStep === null && !finished && (
+          <div className="space-y-5 sm:space-y-6 animate-fade-in">
+            {variants.length > 0 && (
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
+                <span className="text-xs text-muted-foreground">
+                  Version: <span className="font-medium text-foreground">{selectedVariantLabel}</span>
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => { setSelectedVariantId(undefined); setCurrentStep(null); }}
+                >
+                  Change
+                </Button>
+              </div>
+            )}
             <div className="w-full rounded-xl bg-muted flex items-center justify-center overflow-hidden">
               {guide.product_image_url ? (
                 <img src={guide.product_image_url} alt={guide.title} className="w-full h-auto object-contain bg-white" />
