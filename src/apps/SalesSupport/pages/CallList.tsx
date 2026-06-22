@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import { Loader2, Phone, RefreshCw, ChevronRight, Star, Globe, User, RotateCcw } from "lucide-react";
+import { TelephoneIcon } from "@portal/components/icons";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useCallList } from "../hooks/useSalesQueries";
 import { type Channel } from "../lib/constants";
@@ -112,7 +113,7 @@ export default function CallList() {
         </div>
       ) : calls.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
-          <Phone className="w-10 h-10 text-muted-foreground/40" />
+          <TelephoneIcon className="w-10 h-10 text-muted-foreground/40" />
           <p className="text-muted-foreground">No calls scheduled for this date.</p>
           <button onClick={generateList} disabled={generating}
             className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors">

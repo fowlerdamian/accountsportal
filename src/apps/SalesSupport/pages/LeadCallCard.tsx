@@ -5,6 +5,7 @@ import {
   ArrowLeft, Phone, Globe, Star, User, Link,
   ExternalLink, Loader2, CheckCircle, TrendingDown, TrendingUp, Minus, Save, MessageSquare, PhoneCall, Sparkles, RefreshCw, ChevronDown, ChevronRight,
 } from "lucide-react";
+import { TelephoneIcon } from "@portal/components/icons";
 import { cn } from "../../../apps/Guide/lib/utils";
 import {
   useLead,
@@ -421,7 +422,7 @@ export default function LeadCallCard() {
         {phone && (
           <a href={`tel:${phone}`}
             className="mt-4 inline-flex items-center gap-2 text-2xl font-mono font-semibold text-primary hover:text-primary/80 transition-colors">
-            <PhoneCall className="w-5 h-5" />
+            <TelephoneIcon className="w-5 h-5" />
             {phone}
           </a>
         )}

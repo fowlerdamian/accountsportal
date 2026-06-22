@@ -5,6 +5,7 @@ import {
   ArrowLeft, Phone, Globe, Star, User, Link,
   ExternalLink, Loader2, CheckCircle, TrendingDown, TrendingUp, Minus, Save, MessageSquare, PhoneCall,
 } from "lucide-react";
+import { TelephoneIcon } from "@portal/components/icons";
 import CallHistory from "../components/CallHistory";
 import CompanyIntel from "../components/CompanyIntel";
 import { cn } from "../../../apps/Guide/lib/utils";
@@ -207,7 +208,7 @@ export default function CallCard() {
         {companyPhone && (
           <a href={`tel:${companyPhone}`}
             className="mt-4 inline-flex items-center gap-2 text-2xl font-mono font-semibold text-primary hover:text-primary/80 transition-colors">
-            <PhoneCall className="w-5 h-5" />
+            <TelephoneIcon className="w-5 h-5" />
             {companyPhone}
           </a>
         )}

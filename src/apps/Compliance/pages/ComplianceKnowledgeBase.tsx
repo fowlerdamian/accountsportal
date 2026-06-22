@@ -4,6 +4,7 @@ import { useISO } from '../contexts/ISOContext';
 import { supabase } from '@portal/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Globe, FileText, Trash2, Plus, Loader2, BookOpen, Upload, X } from 'lucide-react';
+import { BookIcon } from '@portal/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -152,7 +153,7 @@ export default function ComplianceKnowledgeBase() {
             </Button>
             <div>
               <h1 className="text-base font-bold text-foreground flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-primary" /> Knowledge Base
+                <BookIcon className="h-4 w-4 text-primary" /> Knowledge Base
               </h1>
               <p className="text-xs text-muted-foreground">Context sources for AI document suggestions</p>
             </div>
@@ -225,7 +226,7 @@ export default function ComplianceKnowledgeBase() {
         {/* Empty state */}
         {!loading && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <BookOpen className="h-12 w-12 text-muted-foreground/40 mb-4" />
+            <BookIcon className="h-12 w-12 text-muted-foreground/40 mb-4" />
             <h3 className="text-base font-semibold text-foreground mb-1">No sources yet</h3>
             <p className="text-sm text-muted-foreground max-w-xs">
               Add websites or upload documents. The AI will use them to suggest tailored answers when completing your ISO documents.

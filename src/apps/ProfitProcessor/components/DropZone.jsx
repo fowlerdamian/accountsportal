@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { Upload } from 'lucide-react'
+import { UploadIcon } from '@portal/components/icons'
 
 const ACCEPTED = ['.xlsx', '.xls']
 
@@ -76,7 +76,7 @@ export default function DropZone({ onFile }) {
       />
 
       {/* Upload icon */}
-      <Upload
+      <UploadIcon
         size={40}
         strokeWidth={1.25}
         style={{ color: dragging ? 'var(--accent)' : 'var(--text-disabled)', transition: 'color 150ms' }}

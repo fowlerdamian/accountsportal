@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Loader2, ChevronRight, Plus, Upload, Paperclip, Clock,
+  Loader2, ChevronRight, Plus, Paperclip, Clock,
   GripVertical, Camera, Trash2, ExternalLink, Box, X,
 } from "lucide-react";
+import { UploadIcon, ClockIcon } from "@portal/components/icons";
 import CadViewer, { canPreview3D } from "@hub/components/CadViewer";
 import { PriorityScorecardModal } from "@hub/components/PriorityScorecardModal";
 import { Button } from "@guide/components/ui/button";
@@ -667,7 +668,7 @@ function ProjectViewContent() {
           title="Hours Logged"
           value={Number(budget?.total_hours ?? 0).toFixed(1)}
           subtitle={`${hoursThisWeek.toFixed(1)} hrs this week`}
-          icon={<Clock className="w-5 h-5" />}
+          icon={<ClockIcon className="w-5 h-5" />}
         />
         <StatsCard
           title="Tasks"
@@ -1064,7 +1065,7 @@ function ProjectViewContent() {
               fileDragOver ? "border-primary bg-primary/5" : "border-border/40 hover:border-border",
             )}
           >
-            <Upload className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
+            <UploadIcon className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Drop files here or click to upload</p>
           </div>
           <input

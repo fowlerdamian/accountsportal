@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Circle, Loader2, Clock, AlertTriangle } from 'lucide-react';
+import { CheckedIcon } from '@portal/components/icons';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -147,7 +148,7 @@ export default function ActionItemsPage() {
       {/* Empty */}
       {!isLoading && filtered.length === 0 && (
         <div className="text-center py-16 text-muted-foreground">
-          <CheckCircle2 className="h-8 w-8 mx-auto mb-3 opacity-40" />
+          <CheckedIcon className="h-8 w-8 mx-auto mb-3 opacity-40" />
           <p className="text-sm">{filter === 'done' ? 'No completed items' : 'All caught up — no outstanding items'}</p>
         </div>
       )}

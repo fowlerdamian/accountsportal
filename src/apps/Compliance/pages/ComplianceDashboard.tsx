@@ -6,6 +6,7 @@ import {
   FileText, CheckCircle2, Clock, Circle, Shield, ArrowRight,
   AlertTriangle, X, FolderOpen, FolderArchive, BookOpen, Settings,
 } from 'lucide-react';
+import { ShieldCheck } from '@portal/components/icons';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -47,7 +48,7 @@ export default function ComplianceDashboard() {
             <img src={companyProfile.logoUrl} alt="Logo" className="h-10 w-10 rounded-lg object-contain bg-secondary p-1" />
           ) : (
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <Shield className="h-5 w-5 text-primary-foreground" />
+              <ShieldCheck className="h-5 w-5 text-primary-foreground" />
             </div>
           )}
           <div className="flex-1 min-w-0">

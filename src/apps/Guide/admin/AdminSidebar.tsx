@@ -6,7 +6,7 @@ import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@guide/components/ui/sidebar";
-import { LayoutDashboard, BookOpen, BarChart3, MessageCircle, Star, Settings, LogOut } from "lucide-react";
+import { LayoutDashboardIcon, BookIcon, ChartBarIcon, MessageCircleIcon, StarIcon, GearIcon, LogoutIcon } from "@portal/components/icons";
 import { Badge } from "@guide/components/ui/badge";
 
 export function AdminSidebar() {
@@ -25,15 +25,15 @@ export function AdminSidebar() {
   };
 
   const mainNav = [
-    { title: "Dashboard", url: "/guide", icon: LayoutDashboard, badge: 0 },
-    { title: "All Guides", url: "/guide/guides", icon: BookOpen, badge: 0 },
-    { title: "Reports", url: "/guide/reports", icon: BarChart3, badge: 0 },
-    { title: "Support", url: "/guide/support", icon: MessageCircle, badge: openSupport },
-    { title: "Feedback", url: "/guide/feedback", icon: Star, badge: openFlags },
+    { title: "Dashboard", url: "/guide", icon: LayoutDashboardIcon, badge: 0 },
+    { title: "All Guides", url: "/guide/guides", icon: BookIcon, badge: 0 },
+    { title: "Reports", url: "/guide/reports", icon: ChartBarIcon, badge: 0 },
+    { title: "Support", url: "/guide/support", icon: MessageCircleIcon, badge: openSupport },
+    { title: "Feedback", url: "/guide/feedback", icon: StarIcon, badge: openFlags },
   ];
 
   const manageNav = [
-    { title: "Settings", url: "/guide/settings", icon: Settings },
+    { title: "Settings", url: "/guide/settings", icon: GearIcon },
   ];
 
   return (
@@ -113,7 +113,7 @@ export function AdminSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <button onClick={handleSignOut} className="hover:bg-sidebar-accent text-sidebar-foreground/60 w-full">
-                <LogOut className="mr-2 h-4 w-4 shrink-0" />
+                <LogoutIcon className="mr-2 h-4 w-4 shrink-0" />
                 {!collapsed && <span>Sign Out</span>}
               </button>
             </SidebarMenuButton>

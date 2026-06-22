@@ -3,7 +3,8 @@ import { Button } from "@guide/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@guide/components/ui/dialog";
 import { Checkbox } from "@guide/components/ui/checkbox";
 import { Alert, AlertDescription } from "@guide/components/ui/alert";
-import { FileText, Loader2, Upload, AlertTriangle, ImageIcon, Tag } from "lucide-react";
+import { Loader2, AlertTriangle, ImageIcon, Tag } from "lucide-react";
+import { FileDescriptionIcon, UploadIcon } from "@portal/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@guide/integrations/supabase/client";
 import * as pdfjsLib from "pdfjs-dist";
@@ -278,7 +279,7 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" /> Import from PDF
+            <FileDescriptionIcon className="w-5 h-5" /> Import from PDF
           </DialogTitle>
         </DialogHeader>
 
@@ -307,7 +308,7 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
               }}
               className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
             >
-              <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+              <UploadIcon className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
               <p className="text-sm font-medium">Drop a PDF here or click to browse</p>
               <p className="text-xs text-muted-foreground mt-1">Max 20 MB, up to 50 pages processed</p>
             </div>

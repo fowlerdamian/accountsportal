@@ -1,4 +1,5 @@
-import { LayoutDashboard, PlusCircle, Settings, LogOut, BarChart3, ClipboardList, Package } from 'lucide-react';
+import { PlusCircle, ClipboardList, Package } from 'lucide-react';
+import { LayoutDashboardIcon, ChartBarIcon, GearIcon, LogoutIcon } from '@portal/components/icons';
 import { NavLink, Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,11 +11,11 @@ import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { useTileSettings } from '@portal/hooks/useTileSettings';
 
 const navItems = [
-  { label: 'Overview', icon: LayoutDashboard, path: '/support' },
+  { label: 'Overview', icon: LayoutDashboardIcon, path: '/support' },
   { label: 'Action Items', icon: ClipboardList, path: '/support/actions' },
   { label: 'New Case', icon: PlusCircle, path: '/support/cases/new' },
   { label: 'Warehouse', icon: Package, path: '/support/warehouse' },
-  { label: 'Analytics', icon: BarChart3, path: '/support/analytics' },
+  { label: 'Analytics', icon: ChartBarIcon, path: '/support/analytics' },
 ];
 
 interface AppSidebarProps {
@@ -121,7 +122,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
               onClick={() => isMobile && onOpenChange?.(false)}
               className={navLinkClass}
             >
-              <Settings className="h-3.5 w-3.5 shrink-0" />
+              <GearIcon className="h-3.5 w-3.5 shrink-0" />
               <span>Team Settings</span>
             </NavLink>
           </>
@@ -159,7 +160,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
             e.currentTarget.style.borderColor = '#222222';
           }}
         >
-          <LogOut size={14} strokeWidth={1.5} />
+          <LogoutIcon size={14} strokeWidth={1.5} />
           <span>Sign out</span>
         </button>
       </div>

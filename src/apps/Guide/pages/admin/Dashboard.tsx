@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { BookOpen, MessageCircle, FileText, AlertTriangle, Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
+import { BookIcon, MessageCircleIcon, FileDescriptionIcon, TriangleAlertIcon } from "@portal/components/icons";
 import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
 import { Input } from "@guide/components/ui/input";
@@ -52,11 +53,11 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatsCard title="Total Guides" value={totalGuides} icon={<BookOpen className="w-5 h-5" />} />
-        <StatsCard title="Published" value={publishedCount} icon={<FileText className="w-5 h-5" />} subtitle="Across all brands" />
-        <StatsCard title="Drafts" value={draftCount} icon={<FileText className="w-5 h-5" />} />
-        <StatsCard title="Open Support" value={openSupport} icon={<MessageCircle className="w-5 h-5" />} />
-        <StatsCard title="Feedback Flags" value={openFeedback} icon={<AlertTriangle className="w-5 h-5" />} />
+        <StatsCard title="Total Guides" value={totalGuides} icon={<BookIcon className="w-5 h-5" />} />
+        <StatsCard title="Published" value={publishedCount} icon={<FileDescriptionIcon className="w-5 h-5" />} subtitle="Across all brands" />
+        <StatsCard title="Drafts" value={draftCount} icon={<FileDescriptionIcon className="w-5 h-5" />} />
+        <StatsCard title="Open Support" value={openSupport} icon={<MessageCircleIcon className="w-5 h-5" />} />
+        <StatsCard title="Feedback Flags" value={openFeedback} icon={<TriangleAlertIcon className="w-5 h-5" />} />
       </div>
 
       <div className="bg-card rounded-lg border">

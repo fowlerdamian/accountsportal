@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Shield, Mail, Loader2, CheckCircle2 } from 'lucide-react';
+import { Mail, Loader2 } from 'lucide-react';
+import { ShieldCheck, CheckedIcon } from '@portal/components/icons';
 import { Button } from '@/components/ui/button';
 import { useAuditAuth } from '../contexts/AuditAuthContext';
 import { toast } from 'sonner';
@@ -29,7 +30,7 @@ export default function ComplianceLogin() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
           <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary mb-4">
-            <Shield className="h-7 w-7 text-primary-foreground" />
+            <ShieldCheck className="h-7 w-7 text-primary-foreground" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">ISO 9001 Compliance</h1>
           <p className="text-sm text-muted-foreground mt-1 text-center">
@@ -39,7 +40,7 @@ export default function ComplianceLogin() {
 
         {sent ? (
           <div className="rounded-xl border border-success/40 bg-success/5 p-6 text-center">
-            <CheckCircle2 className="mx-auto h-8 w-8 text-success mb-3" />
+            <CheckedIcon className="mx-auto h-8 w-8 text-success mb-3" />
             <h2 className="font-semibold text-foreground mb-1">Check your email</h2>
             <p className="text-sm text-muted-foreground">
               We sent a magic link to <span className="font-medium text-foreground">{email}</span>.

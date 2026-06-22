@@ -4,7 +4,8 @@ import { useGuideBySlug, useGuideStepsBySetId, useBrands, useGuideVehicles } fro
 import { supabase } from "@guide/integrations/supabase/client";
 import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
-import { BookOpen, Clock, Wrench, ChevronLeft, ChevronRight, Check, MessageCircle, Star, ArrowLeft, Loader2, Flag, X, Send, Car, Zap } from "lucide-react";
+import { Clock, Wrench, ChevronLeft, ChevronRight, Check, Star, ArrowLeft, Loader2, Flag, X, Send, Car, Zap } from "lucide-react";
+import { BookIcon, MessageCircleIcon } from "@portal/components/icons";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@guide/components/ui/sheet";
 import { Textarea } from "@guide/components/ui/textarea";
 import { Input } from "@guide/components/ui/input";
@@ -72,7 +73,7 @@ export default function GuideViewer() {
       <div className="min-h-screen flex items-center justify-center bg-muted/30">
         <div className="text-center space-y-4 px-6">
           <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto">
-            <BookOpen className="w-8 h-8 text-primary-foreground" />
+            <BookIcon className="w-8 h-8 text-primary-foreground" />
           </div>
           <h1 className="text-xl font-bold">This guide isn't available right now.</h1>
           <p className="text-muted-foreground text-sm">The guide may have been unpublished or the link is incorrect.</p>
@@ -231,7 +232,7 @@ export default function GuideViewer() {
               {guide.product_image_url ? (
                 <img src={guide.product_image_url} alt={guide.title} className="w-full h-auto object-contain bg-white" />
               ) : (
-                <BookOpen className="w-12 h-12 text-muted-foreground/30" />
+                <BookIcon className="w-12 h-12 text-muted-foreground/30" />
               )}
             </div>
 
@@ -489,7 +490,7 @@ export default function GuideViewer() {
         <Sheet open={supportOpen} onOpenChange={setSupportOpen}>
           <SheetTrigger asChild>
             <button className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-40" style={{ backgroundColor: brandColour }}>
-              <MessageCircle className="w-6 h-6 text-white" />
+              <MessageCircleIcon className="w-6 h-6 text-white" />
             </button>
           </SheetTrigger>
           <SheetContent side="bottom" className="sm:max-w-lg sm:mx-auto rounded-t-2xl">

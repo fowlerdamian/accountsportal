@@ -30,6 +30,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import { cn } from "@guide/lib/utils";
 import { FilterPill } from "@portal/components/FilterPill";
+import { TrashIcon } from "@portal/components/icons";
 
 // ── Stage colour map ──────────────────────────────────────────
 
@@ -462,7 +463,7 @@ function ProjectsListBody() {
             <p className="text-xs text-muted-foreground">Projects are permanently deleted after 15 days.</p>
             {deletedProjects.length === 0 ? (
               <div className="rounded-lg border border-dashed p-10 text-center">
-                <Trash2 className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
+                <TrashIcon className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
                 <p className="text-muted-foreground text-sm">Recycle bin is empty.</p>
               </div>
             ) : (

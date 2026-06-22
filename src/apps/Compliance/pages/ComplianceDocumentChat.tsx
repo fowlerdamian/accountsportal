@@ -6,10 +6,11 @@ import { useAuth } from '@guide/contexts/AuthContext';
 import { DOCUMENT_QUESTIONS, ChatMessage } from '../lib/iso-documents';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, Send, Download, FileText, Mic, Upload,
+  ArrowLeft, Send, Download, Mic, Upload,
   CheckCircle2, Loader2, Sparkles, Check, Pencil, RotateCcw, RefreshCw,
   ShieldCheck, Clock,
 } from 'lucide-react';
+import { FileDescriptionIcon } from '@portal/components/icons';
 import SupportingDocUploadTile from '../components/SupportingDocUploadTile';
 import { SUPPORTING_DOC_REQUIREMENTS } from '../lib/supporting-docs';
 import { Button } from '@/components/ui/button';
@@ -673,7 +674,7 @@ export default function ComplianceDocumentChat() {
               <Button onClick={handleCreateDocument} disabled={isGenerating} className="w-full gap-2 py-6 text-lg font-bold glow-gold" size="lg">
                 {isGenerating
                   ? <><Loader2 className="h-5 w-5 animate-spin" /> Generating Document...</>
-                  : <><FileText className="h-5 w-5" /> CREATE DOCUMENT</>}
+                  : <><FileDescriptionIcon className="h-5 w-5" /> CREATE DOCUMENT</>}
               </Button>
             </motion.div>
           </div>

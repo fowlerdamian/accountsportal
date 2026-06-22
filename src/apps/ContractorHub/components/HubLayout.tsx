@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { NavLink, Link, useMatch } from "react-router-dom";
-import { FolderOpen, Users, LogOut, Menu, Plus, Settings, Sparkles } from "lucide-react";
+import { FolderOpen, Menu, Plus, Sparkles } from "lucide-react";
+import { UsersIcon, GearIcon, LogoutIcon } from "@portal/components/icons";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "@guide/contexts/AuthContext";
 import { useIsMobile } from "@guide/hooks/use-mobile";
@@ -41,8 +42,8 @@ export function useHub() {
 
 const navItems = [
   { label: "Projects",    icon: FolderOpen,       path: "/projects/list",        end: false },
-  { label: "Contractors", icon: Users,            path: "/projects/contractors", end: false },
-  { label: "Settings",    icon: Settings,         path: "/projects/settings",    end: false },
+  { label: "Contractors", icon: UsersIcon,        path: "/projects/contractors", end: false },
+  { label: "Settings",    icon: GearIcon,         path: "/projects/settings",    end: false },
 ];
 
 function SidebarContent({
@@ -112,7 +113,7 @@ function SidebarContent({
           onMouseEnter={(e) => { e.currentTarget.style.color = "#f3ca0f"; e.currentTarget.style.borderColor = "rgba(243,202,15,0.4)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "#222222"; }}
         >
-          <LogOut size={14} strokeWidth={1.5} />
+          <LogoutIcon size={14} strokeWidth={1.5} />
           <span>Sign out</span>
         </button>
       </div>

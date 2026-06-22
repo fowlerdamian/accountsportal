@@ -1,7 +1,8 @@
 import { StatsCard } from "@guide/components/admin/StatsCard";
 import { Button } from "@guide/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
-import { BarChart3, TrendingUp, Users, Target, AlertTriangle, Download, Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
+import { ChartBarIcon, ChartLineIcon, UsersIcon, TargetIcon, TriangleAlertIcon } from "@portal/components/icons";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
 import { useState, useMemo } from "react";
 import { useInstructionSets, useBrands, useFeedback } from "@guide/hooks/use-supabase-query";
@@ -132,11 +133,11 @@ export default function Reports() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatsCard title="Total Views" value={stats.totalViews} subtitle="Selected period" icon={<BarChart3 className="w-5 h-5" />} />
-        <StatsCard title="Unique Sessions" value={stats.sessions} icon={<Users className="w-5 h-5" />} />
-        <StatsCard title="Avg Completion" value={`${stats.completionRate}%`} icon={<Target className="w-5 h-5" />} />
-        <StatsCard title="Most Viewed" value={stats.mostViewed?.title?.substring(0, 15) || '—'} subtitle={stats.mostViewed ? `${stats.mostViewed.totalViews} views` : ''} icon={<TrendingUp className="w-5 h-5" />} />
-        <StatsCard title="Guides" value={guides.length} icon={<AlertTriangle className="w-5 h-5" />} />
+        <StatsCard title="Total Views" value={stats.totalViews} subtitle="Selected period" icon={<ChartBarIcon className="w-5 h-5" />} />
+        <StatsCard title="Unique Sessions" value={stats.sessions} icon={<UsersIcon className="w-5 h-5" />} />
+        <StatsCard title="Avg Completion" value={`${stats.completionRate}%`} icon={<TargetIcon className="w-5 h-5" />} />
+        <StatsCard title="Most Viewed" value={stats.mostViewed?.title?.substring(0, 15) || '—'} subtitle={stats.mostViewed ? `${stats.mostViewed.totalViews} views` : ''} icon={<ChartLineIcon className="w-5 h-5" />} />
+        <StatsCard title="Guides" value={guides.length} icon={<TriangleAlertIcon className="w-5 h-5" />} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">

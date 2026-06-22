@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Sparkles, X, Send, Loader2, Trash2, ChevronDown } from 'lucide-react'
+import { SparklesIcon } from '@portal/components/icons'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import ReactMarkdown from 'react-markdown'
@@ -227,7 +228,7 @@ export default function GlobalChat() {
         >
           {messages.length === 0 && (
             <div style={{ textAlign: 'center', paddingTop: '32px' }}>
-              <Sparkles style={{ width: '28px', height: '28px', color: '#333', margin: '0 auto 12px' }} />
+              <SparklesIcon style={{ width: '28px', height: '28px', color: '#333', margin: '0 auto 12px' }} />
               <p style={{ fontSize: '13px', color: '#555', marginBottom: '20px' }}>
                 Ask anything about {contextLabel.toLowerCase()}
               </p>

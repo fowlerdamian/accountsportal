@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, X, Send, Trash2, Loader2 } from "lucide-react";
+import { X, Send, Trash2, Loader2 } from "lucide-react";
+import { SparklesIcon } from "@portal/components/icons";
 import { cn } from "@guide/lib/utils";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useAuth } from "@guide/contexts/AuthContext";
@@ -264,7 +265,7 @@ export function AiAssistantPanel({ open, onClose, searchInputRef }: AiAssistantP
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary" />
+            <SparklesIcon className="w-4 h-4 text-primary" />
             <span className="font-semibold text-sm">AI Assistant</span>
           </div>
           <div className="flex items-center gap-1">
@@ -291,7 +292,7 @@ export function AiAssistantPanel({ open, onClose, searchInputRef }: AiAssistantP
         >
           {allMessages.length === 0 && !sending && (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
-              <Sparkles className="w-8 h-8 text-muted-foreground/40" />
+              <SparklesIcon className="w-8 h-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
                 Ask anything about projects,<br />tasks, or contractors.
               </p>
@@ -380,7 +381,7 @@ export function AiToggleButton({ open, onToggle }: AiToggleButtonProps) {
           : "bg-background border text-foreground hover:bg-muted",
       )}
     >
-      <Sparkles className="w-4 h-4 shrink-0" />
+      <SparklesIcon className="w-4 h-4 shrink-0" />
       <span className="hidden sm:inline">Ask AI</span>
       <kbd className="hidden sm:inline-flex h-4 items-center rounded border px-1 text-[9px] font-mono opacity-60">
         /

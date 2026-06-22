@@ -10,7 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import { useISO } from '../contexts/ISOContext';
 import { ISO_DOCUMENTS } from '../lib/iso-documents';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Upload, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle, FileArchive } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, CheckCircle2, XCircle, Loader2, FileArchive } from 'lucide-react';
+import { TriangleAlertIcon, UploadIcon } from '@portal/components/icons';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -225,7 +226,7 @@ export default function ComplianceRecoverPdfs() {
             </Button>
             <div>
               <h1 className="text-base font-bold text-foreground flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning" />
+                <TriangleAlertIcon className="h-4 w-4 text-warning" />
                 PDF Recovery <span className="text-[10px] uppercase tracking-widest rounded bg-warning/20 text-warning px-1.5 py-0.5">temporary</span>
               </h1>
               <p className="text-xs text-muted-foreground">Drop ISO PDFs (or the Export-All ZIP) to rebuild completed documents from disk.</p>
@@ -261,7 +262,7 @@ export default function ComplianceRecoverPdfs() {
             onClick={() => fileInputRef.current?.click()}
             className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border py-16 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
           >
-            <Upload className="h-10 w-10 text-muted-foreground/60 mb-3" />
+            <UploadIcon className="h-10 w-10 text-muted-foreground/60 mb-3" />
             <p className="text-sm font-semibold text-foreground">Drop ISO PDFs or a ZIP here</p>
             <p className="text-xs text-muted-foreground">…or click to browse</p>
           </div>

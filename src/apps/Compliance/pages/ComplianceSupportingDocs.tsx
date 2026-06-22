@@ -5,7 +5,8 @@ import { useISO } from '../contexts/ISOContext';
 import { auditSupabase } from '../client';
 import { SUPPORTING_DOC_REQUIREMENTS } from '../lib/supporting-docs';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Upload, CheckCircle2, FileText, Trash2, Loader2, Shield, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Upload, CheckCircle2, FileText, Trash2, Loader2, FolderOpen } from 'lucide-react';
+import { ShieldCheck } from '@portal/components/icons';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
@@ -151,7 +152,7 @@ export default function ComplianceSupportingDocs() {
               <img src={companyProfile.logoUrl} alt="Logo" className="h-10 w-10 rounded-lg object-contain bg-secondary p-1" />
             ) : (
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                <Shield className="h-5 w-5 text-primary-foreground" />
+                <ShieldCheck className="h-5 w-5 text-primary-foreground" />
               </div>
             )}
             <div>

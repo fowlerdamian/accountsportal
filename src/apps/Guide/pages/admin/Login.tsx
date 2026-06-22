@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Mail, Loader2, CheckCircle } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
+import { BookIcon, CheckedIcon } from "@portal/components/icons";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
@@ -39,13 +40,13 @@ export default function Login() {
         <div className="w-full max-w-md mx-4">
           <div className="text-center mb-8">
             <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
-              <BookOpen className="w-8 h-8 text-primary-foreground" />
+              <BookIcon className="w-8 h-8 text-primary-foreground" />
             </div>
             <h1 className="text-2xl font-bold text-accent-foreground">Guide</h1>
           </div>
 
           <div className="bg-card rounded-xl p-8 shadow-lg text-center space-y-4">
-            <CheckCircle className="w-12 h-12 text-primary mx-auto" />
+            <CheckedIcon className="w-12 h-12 text-primary mx-auto" />
             <h2 className="text-lg font-semibold">Check your email</h2>
             <p className="text-sm text-muted-foreground">
               We sent a magic link to <strong>{email}</strong>. Click the link in the email to sign in.
@@ -64,7 +65,7 @@ export default function Login() {
       <div className="w-full max-w-md mx-4">
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
-            <BookOpen className="w-8 h-8 text-primary-foreground" />
+            <BookIcon className="w-8 h-8 text-primary-foreground" />
           </div>
           <h1 className="text-2xl font-bold text-accent-foreground">Guide</h1>
           <p className="text-accent-foreground/60 mt-1">Product Installation Platform</p>

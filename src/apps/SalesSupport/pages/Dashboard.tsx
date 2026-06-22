@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Loader2, TrendingUp, Phone, Users, RotateCcw, AlertCircle, CheckCircle, Clock, Sparkles } from "lucide-react";
+import { SparklesIcon } from "@portal/components/icons";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { useDashboardMetrics } from "../hooks/useSalesQueries";
 import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNEL_DESCRIPTION, CHANNELS, type Channel } from "../lib/constants";
@@ -181,7 +182,7 @@ export default function Dashboard() {
       {/* Free-text research suggestion */}
       <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" />
+          <SparklesIcon className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold">Research suggestion</h2>
           <span className="text-xs text-muted-foreground">
             Type a market, niche, or search query — we'll find matching companies and add them as leads.

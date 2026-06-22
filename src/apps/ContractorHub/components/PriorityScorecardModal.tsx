@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@guide/components/ui/dialog";
 import { Button } from "@guide/components/ui/button";
-import { ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckedIcon } from "@portal/components/icons";
 
 interface Question {
   id:          string;
@@ -200,7 +201,7 @@ export function PriorityScorecardModal({ open, onClose, onComplete }: PrioritySc
           /* Results screen */
           <div className="space-y-5 mt-2">
             <div className="flex flex-col items-center gap-1.5 py-2">
-              <CheckCircle2 className={`w-8 h-8 ${score >= 8 ? "text-green-500" : score >= 5 ? "text-amber-500" : "text-red-500"}`} />
+              <CheckedIcon className={`w-8 h-8 ${score >= 8 ? "text-green-500" : score >= 5 ? "text-amber-500" : "text-red-500"}`} />
               <p className="text-4xl font-bold tabular-nums">{score.toFixed(1)}<span className="text-lg text-muted-foreground font-normal"> / 10</span></p>
               <p className="text-sm text-muted-foreground text-center">
                 {score >= 8 ? "High priority — strong business case"

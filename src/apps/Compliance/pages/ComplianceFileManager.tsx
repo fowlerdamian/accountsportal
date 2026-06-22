@@ -2,9 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { useISO } from '../contexts/ISOContext';
 import { motion } from 'framer-motion';
 import {
-  FileText, Shield, Download, Loader2, Eye, Printer,
+  FileText, Download, Loader2, Eye, Printer,
   ArrowLeft, PackageOpen, Paperclip, Trash2,
 } from 'lucide-react';
+import { ShieldCheck } from '@portal/components/icons';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
@@ -189,7 +190,7 @@ export default function ComplianceFileManager() {
               <img src={companyProfile.logoUrl} alt="Logo" className="h-10 w-10 rounded-lg object-contain bg-secondary p-1" />
             ) : (
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                <Shield className="h-5 w-5 text-primary-foreground" />
+                <ShieldCheck className="h-5 w-5 text-primary-foreground" />
               </div>
             )}
             <div>

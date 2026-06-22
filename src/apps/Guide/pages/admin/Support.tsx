@@ -4,7 +4,8 @@ import { StatsCard } from "@guide/components/admin/StatsCard";
 import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
-import { MessageCircle, AlertTriangle, CheckCircle, Clock, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { MessageCircleIcon, TriangleAlertIcon, CheckedIcon, ClockIcon } from "@portal/components/icons";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@guide/components/ui/sheet";
 import { Textarea } from "@guide/components/ui/textarea";
@@ -68,10 +69,10 @@ export default function Support() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title="Open Questions" value={openCount} icon={<MessageCircle className="w-5 h-5" />} />
-        <StatsCard title="Escalated" value={escalatedCount} icon={<AlertTriangle className="w-5 h-5" />} />
-        <StatsCard title="Resolved Today" value={resolvedToday} icon={<CheckCircle className="w-5 h-5" />} />
-        <StatsCard title="Total" value={questions.length} icon={<Clock className="w-5 h-5" />} />
+        <StatsCard title="Open Questions" value={openCount} icon={<MessageCircleIcon className="w-5 h-5" />} />
+        <StatsCard title="Escalated" value={escalatedCount} icon={<TriangleAlertIcon className="w-5 h-5" />} />
+        <StatsCard title="Resolved Today" value={resolvedToday} icon={<CheckedIcon className="w-5 h-5" />} />
+        <StatsCard title="Total" value={questions.length} icon={<ClockIcon className="w-5 h-5" />} />
       </div>
 
       <div className="flex gap-3">

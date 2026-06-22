@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useISO } from '../contexts/ISOContext';
 import { AuditResult } from '../lib/iso-documents';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Shield, CheckCircle2, XCircle, AlertTriangle, Loader2, Wrench } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Loader2, Wrench } from 'lucide-react';
+import { ShieldCheck, CheckedIcon, TriangleAlertIcon } from '@portal/components/icons';
 import { Button } from '@/components/ui/button';
 import { auditSupabase } from '../client';
 import { renderMarkdownToImage } from '../lib/render-preview';
@@ -194,7 +195,7 @@ export default function ComplianceSelfAudit() {
           </Button>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <Shield className="h-5 w-5 text-primary-foreground" />
+              <ShieldCheck className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground">Self-Audit Tool</h1>
@@ -207,19 +208,19 @@ export default function ComplianceSelfAudit() {
       <main className="mx-auto max-w-4xl px-6 py-8">
         {completedDocs.length === 0 ? (
           <div className="rounded-xl border border-border card-gradient p-12 text-center">
-            <Shield className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <ShieldCheck className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <h2 className="text-lg font-semibold text-foreground mb-2">Document Not Ready</h2>
             <p className="text-muted-foreground mb-6">This document must be completed before it can be audited.</p>
             <Button onClick={() => navigate('/compliance')}>Back to Dashboard</Button>
           </div>
         ) : !auditResults && !isAuditing ? (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border card-gradient p-8 text-center">
-            <Shield className="mx-auto h-16 w-16 text-primary mb-6" />
+            <ShieldCheck className="mx-auto h-16 w-16 text-primary mb-6" />
             <h2 className="text-2xl font-bold text-foreground mb-3">Ready to Audit</h2>
             <p className="text-muted-foreground mb-2">Audit <span className="font-semibold text-foreground">{targetDoc?.title}</span> against ISO 9001:2015 Clause {targetDoc?.clause}.</p>
             <p className="text-sm text-muted-foreground mb-8">AI will thoroughly evaluate this document and report any findings.</p>
             <Button onClick={runAudit} className="gap-2 px-8 py-6 text-lg font-bold glow-gold" size="lg">
-              <Shield className="h-5 w-5" /> START AUDIT
+              <ShieldCheck className="h-5 w-5" /> START AUDIT
             </Button>
           </motion.div>
         ) : isAuditing ? (
@@ -248,14 +249,14 @@ export default function ComplianceSelfAudit() {
               <h2 className="text-lg font-bold text-foreground mb-4">Audit Summary — {totalFindings} finding{totalFindings !== 1 ? 's' : ''}</h2>
               {totalFindings === 0 ? (
                 <div className="rounded-lg border border-success/30 bg-success/5 p-6 text-center">
-                  <CheckCircle2 className="mx-auto h-8 w-8 text-success mb-2" />
+                  <CheckedIcon className="mx-auto h-8 w-8 text-success mb-2" />
                   <p className="font-semibold text-foreground">No findings — all documents passed audit</p>
                   <p className="text-xs text-muted-foreground mt-1">Your QMS documentation meets ISO 9001:2015 requirements.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-center">
-                    <AlertTriangle className="mx-auto h-6 w-6 text-warning mb-2" />
+                    <TriangleAlertIcon className="mx-auto h-6 w-6 text-warning mb-2" />
                     <p className="text-2xl font-bold text-foreground">{obsCount}</p>
                     <p className="text-xs text-muted-foreground">Observations</p>
                   </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext } from "react";
 import { NavLink, Link, useSearchParams } from "react-router-dom";
-import { BarChart3, LayoutGrid, LogOut, Menu, Plus } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
+import { ChartBarIcon, LayoutDashboardIcon, LogoutIcon } from "@portal/components/icons";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { useIsMobile } from "../../../hooks/useIsMobile.js";
@@ -33,8 +34,8 @@ export function useTasksUi() {
 // items. Keeping a single entry preserves the sidebar look-and-feel of the
 // other apps (HubLayout has Projects/Contractors/Settings as its three).
 const navItems = [
-  { label: "Tasks",     icon: LayoutGrid, path: "/tasks",           end: true },
-  { label: "Reporting", icon: BarChart3,  path: "/tasks/reporting", end: true },
+  { label: "Tasks",     icon: LayoutDashboardIcon, path: "/tasks",           end: true },
+  { label: "Reporting", icon: ChartBarIcon,        path: "/tasks/reporting", end: true },
 ];
 
 function SidebarContent({
@@ -109,7 +110,7 @@ function SidebarContent({
           onMouseEnter={(e) => { e.currentTarget.style.color = "#f3ca0f"; e.currentTarget.style.borderColor = "rgba(243,202,15,0.4)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "#222222"; }}
         >
-          <LogOut size={14} strokeWidth={1.5} />
+          <LogoutIcon size={14} strokeWidth={1.5} />
           <span>Sign out</span>
         </button>
       </div>

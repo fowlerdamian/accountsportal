@@ -1,15 +1,19 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import {
-  BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings,
-  Package, Users, DollarSign, TrendingUp, ClipboardCheck, ShieldCheck,
+  Truck, Headphones, Wrench,
+  Package, ClipboardCheck, ShieldCheck,
 } from 'lucide-react'
+import {
+  ChartBarIcon, ShoppingCartIcon, BookIcon, GearIcon,
+  UsersIcon, CurrencyDollarIcon, ChartLineIcon,
+} from '@portal/components/icons'
 
 // ─── Icon resolver ───────────────────────────────────────────────────────────
 
 const ICON_MAP = {
-  BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings,
-  Package, Users, DollarSign, TrendingUp, ClipboardCheck, ShieldCheck,
+  BarChart3: ChartBarIcon, Truck, ShoppingCart: ShoppingCartIcon, Headphones, Wrench, BookOpen: BookIcon, Settings: GearIcon,
+  Package, Users: UsersIcon, DollarSign: CurrencyDollarIcon, TrendingUp: ChartLineIcon, ClipboardCheck, ShieldCheck,
 }
 
 function AppIcon({ name, size = 22, className = '' }) {

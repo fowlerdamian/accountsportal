@@ -4,6 +4,7 @@ import { useISO } from '../contexts/ISOContext';
 import { CompanyOverrides } from '../lib/company-profile';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Save, Upload, Building2, MapPin, User, Factory, Globe, Lock, PenLine, RotateCcw, Check, Trash2, Image as ImageIcon, X } from 'lucide-react';
+import { UploadIcon } from '@portal/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -191,7 +192,7 @@ export default function ComplianceCompanyDetails() {
               </div>
             ) : (
               <button type="button" onClick={() => logoInputRef.current?.click()} className="flex h-24 w-24 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary transition-colors">
-                <Upload className="h-6 w-6 mb-1" />
+                <UploadIcon className="h-6 w-6 mb-1" />
                 <span className="text-xs">Upload</span>
               </button>
             )}

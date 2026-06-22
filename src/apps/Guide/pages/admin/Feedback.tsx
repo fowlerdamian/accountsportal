@@ -4,7 +4,8 @@ import { StatsCard } from "@guide/components/admin/StatsCard";
 import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
-import { Star, MessageSquare, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
+import { Star, Loader2 } from "lucide-react";
+import { StarIcon, MessageCircleIcon, TriangleAlertIcon, CheckedIcon } from "@portal/components/icons";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -43,10 +44,10 @@ export default function FeedbackPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title="Avg Rating" value={avgRating > 0 ? avgRating.toFixed(1) : '—'} icon={<Star className="w-5 h-5" />} />
-        <StatsCard title="Total Feedback" value={feedbackItems.length} icon={<MessageSquare className="w-5 h-5" />} />
-        <StatsCard title="Open Flags" value={flagCount} icon={<AlertTriangle className="w-5 h-5" />} />
-        <StatsCard title="Resolved" value={feedbackItems.filter((f: any) => f.resolved).length} icon={<CheckCircle className="w-5 h-5" />} />
+        <StatsCard title="Avg Rating" value={avgRating > 0 ? avgRating.toFixed(1) : '—'} icon={<StarIcon className="w-5 h-5" />} />
+        <StatsCard title="Total Feedback" value={feedbackItems.length} icon={<MessageCircleIcon className="w-5 h-5" />} />
+        <StatsCard title="Open Flags" value={flagCount} icon={<TriangleAlertIcon className="w-5 h-5" />} />
+        <StatsCard title="Resolved" value={feedbackItems.filter((f: any) => f.resolved).length} icon={<CheckedIcon className="w-5 h-5" />} />
       </div>
 
       <div className="flex gap-3">

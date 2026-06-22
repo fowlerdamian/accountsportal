@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, Component } from 'react'
-import { Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Link2, ExternalLink, Trash2, Menu, X as XIcon } from 'lucide-react'
+import { Send, Loader2, AlertTriangle, CheckCircle2, XCircle, ExternalLink, Trash2, Menu, X as XIcon } from 'lucide-react'
+import { TriangleAlertIcon, LinkIcon } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -393,7 +394,7 @@ class XeroChatErrorBoundary extends Component {
           background: '#000', color: '#f87171', fontFamily: '"JetBrains Mono", monospace',
           fontSize: '13px', padding: '40px', textAlign: 'center', flexDirection: 'column', gap: '12px',
         }}>
-          <AlertTriangle size={24} />
+          <TriangleAlertIcon size={24} />
           <div>Something went wrong with the Xero Assistant.</div>
           <button
             onClick={() => this.setState({ error: null })}
@@ -426,7 +427,7 @@ function NotConnectedScreen({ onConnect, onCheckConnection, connecting, error })
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           margin: '0 auto 24px',
         }}>
-          <Link2 size={24} color="#555" />
+          <LinkIcon size={24} color="#555" />
         </div>
 
         <h2 style={{

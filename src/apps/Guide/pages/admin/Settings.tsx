@@ -220,7 +220,7 @@ import { useBrands } from "@guide/hooks/use-supabase-query";
 import { Switch } from "@guide/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
-import { MessageCircle } from "lucide-react";
+import { MessageCircleIcon } from "@portal/components/icons";
 
 function GeneralSettings() {
   const { data: brands = [], isLoading } = useBrands();
@@ -256,7 +256,7 @@ function GeneralSettings() {
         <div className="flex items-center justify-between">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <MessageCircle className="w-5 h-5 text-primary" />
+              <MessageCircleIcon className="w-5 h-5 text-primary" />
             </div>
             <div>
               <Label className="text-sm font-semibold">Customer Chat / Support</Label>

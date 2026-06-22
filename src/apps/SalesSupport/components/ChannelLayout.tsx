@@ -2,16 +2,17 @@ import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { CHANNEL_LABEL, CHANNEL_COLOR, CHANNELS, type Channel } from "../lib/constants";
 import {
-  Users, Kanban, BarChart3, ArrowLeft, Phone,
+  Kanban, ArrowLeft,
 } from "lucide-react";
+import { UsersIcon, TelephoneIcon, ChartBarIcon } from "@portal/components/icons";
 
 interface Props { channel: string }
 
 const NAV_ITEMS = [
-  { label: "Leads",    path: "leads",    icon: Users },
-  { label: "Calls",    path: "calls",    icon: Phone },
+  { label: "Leads",    path: "leads",    icon: UsersIcon },
+  { label: "Calls",    path: "calls",    icon: TelephoneIcon },
   { label: "Pipeline", path: "pipeline", icon: Kanban },
-  { label: "Reports",  path: "reports",  icon: BarChart3 },
+  { label: "Reports",  path: "reports",  icon: ChartBarIcon },
 ];
 
 export default function ChannelLayout({ channel }: Props) {

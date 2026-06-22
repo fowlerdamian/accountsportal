@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, RefreshCw, CheckCircle2, AlertCircle, Loader2, Link2 } from "lucide-react";
+import { ExternalLink, RefreshCw, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { LinkIcon } from "@portal/components/icons";
 import { HubLayout } from "@hub/components/HubLayout";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useContractors, useUpdateContractor } from "@hub/hooks/use-hub-queries";
@@ -88,7 +89,7 @@ function UpworkConnect() {
           href={authUrl!}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
         >
-          <Link2 className="w-4 h-4" />
+          <LinkIcon className="w-4 h-4" />
           Connect Upwork
         </a>
       </div>

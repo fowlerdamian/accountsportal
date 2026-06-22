@@ -1,11 +1,11 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { BarChart3, MessageSquare, Bell } from 'lucide-react'
+import { ChartBarIcon, MessageCircleIcon, FilledBellIcon } from '@portal/components/icons'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 const NAV = [
-  { label: 'Invoice Profit Analysis', shortLabel: 'P&L',   route: '/accounts',                icon: BarChart3,     end: true  },
-  { label: 'Xero Chatbot',            shortLabel: 'Xero',  route: '/accounts/xero',           icon: MessageSquare, end: false },
-  { label: 'Chat Functions',          shortLabel: 'Chat',  route: '/accounts/chat-functions', icon: Bell,          end: false },
+  { label: 'Invoice Profit Analysis', shortLabel: 'P&L',   route: '/accounts',                icon: ChartBarIcon,     end: true  },
+  { label: 'Xero Chatbot',            shortLabel: 'Xero',  route: '/accounts/xero',           icon: MessageCircleIcon, end: false },
+  { label: 'Chat Functions',          shortLabel: 'Chat',  route: '/accounts/chat-functions', icon: FilledBellIcon,    end: false },
 ]
 
 export default function AccountsLayout() {
