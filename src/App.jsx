@@ -35,6 +35,7 @@ import HubSettings from './apps/ContractorHub/pages/HubSettings'
 
 // Tasks (staff_tasks app)
 import TasksApp from './apps/Tasks/TasksApp'
+import TaskWidget from './apps/Tasks/pages/TaskWidget'
 import { TaskDock } from './components/TaskDock'
 import { GlobalShortcuts } from './components/GlobalShortcuts'
 import { GlobalMentions } from './components/GlobalMentions'
@@ -173,6 +174,17 @@ export default function App() {
                       <Route path="settings" element={<HubSettings />} />
                     </Routes>
                   </GuideAuthProvider>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Tasks — pinned desktop-widget view (chrome-free). Must come
+                before /tasks/* so it isn't swallowed by the Tasks layout. */}
+            <Route
+              path="/tasks/widget"
+              element={
+                <ProtectedRoute>
+                  <TaskWidget />
                 </ProtectedRoute>
               }
             />
