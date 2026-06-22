@@ -6,7 +6,7 @@ import { StatusPill, nextStaffTaskStatus } from "@hub/components/StatusPill";
 import { QuadrantPill } from "./QuadrantPill";
 import { UserAvatar } from "./UserAvatar";
 import { quadrantOf, type Quadrant } from "../lib/eisenhower";
-import { dueRingClass, formatDueChip, QUADRANT_DOT_CLASS } from "../lib/color";
+import { dueRingClass, formatDueChip, dueChipClass, QUADRANT_BG_CLASS, QUADRANT_ACCENT_CLASS } from "../lib/color";
 import { useUpdateStaffTask, type StaffTask } from "../hooks/use-task-queries";
 
 // Eisenhower cycle. Each quadrant maps to a representative (urgency, importance)
@@ -80,16 +80,16 @@ export function TaskTile({ task, assigneeName, creatorName, onClick, variant = "
         title={task.title}
         className={cn(
           "group flex items-center gap-1.5 h-9 px-2.5 rounded-md shrink-0",
-          "border border-border/60 bg-[var(--bg-elevated)]",
-          "hover:border-border transition-colors text-left",
+          // Pill tinted by Eisenhower quadrant (priority); ring flags due/overdue.
+          QUADRANT_BG_CLASS[quad],
+          "hover:opacity-90 transition-opacity text-left",
           ringCls,
           className,
         )}
       >
-        <span className={cn("w-2 h-2 rounded-full shrink-0", QUADRANT_DOT_CLASS[quad])} />
-        <span className="text-xs text-foreground/90 truncate min-w-0">{label}</span>
+        <span className="text-xs truncate min-w-0">{label}</span>
         {task.due_date && (
-          <span className="font-mono tabular-nums text-[10px] text-muted-foreground shrink-0">
+          <span className={cn("font-mono tabular-nums text-[10px] shrink-0", dueChipClass(task.due_date))}>
             {formatDueChip(task.due_date)}
           </span>
         )}
@@ -109,6 +109,8 @@ export function TaskTile({ task, assigneeName, creatorName, onClick, variant = "
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
       className={cn(
         "group w-full text-left rounded-lg border bg-[var(--bg-elevated)] cursor-pointer",
+        // Left edge colour-codes the Eisenhower quadrant (priority).
+        QUADRANT_ACCENT_CLASS[quad],
         "p-3 space-y-2 hover:border-border transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
         ringCls,
@@ -149,7 +151,7 @@ export function TaskTile({ task, assigneeName, creatorName, onClick, variant = "
           {unscored && <AlertTriangle className="w-3 h-3 text-amber-400" />}
           {task.blocked_by_task_id && task.status === "blocked" && <Link2 className="w-3 h-3 text-amber-400" />}
           {task.due_date && (
-            <span className="font-mono tabular-nums text-[10px] text-muted-foreground">
+            <span className={cn("font-mono tabular-nums text-[10px]", dueChipClass(task.due_date))}>
               {formatDueChip(task.due_date)}
             </span>
           )}

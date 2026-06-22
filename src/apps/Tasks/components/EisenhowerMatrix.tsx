@@ -1,6 +1,6 @@
 import { cn } from "@guide/lib/utils";
 import { quadrantOf, QUADRANT_LABEL, type Quadrant } from "../lib/eisenhower";
-import { QUADRANT_BG_CLASS, QUADRANT_DOT_CLASS, dueRingClass, formatDueChip } from "../lib/color";
+import { QUADRANT_BG_CLASS, QUADRANT_DOT_CLASS, dueRingClass, formatDueChip, dueChipClass } from "../lib/color";
 import type { StaffTask, StaffProfile } from "../hooks/use-task-queries";
 
 // Eisenhower 2×2 grid. Each task is positioned by (urgency, importance) on
@@ -154,7 +154,7 @@ export function EisenhowerMatrix({ tasks, profiles, myId, onOpenTask }: Eisenhow
                         {nameFor(t.assigned_to)}
                       </span>
                       {t.due_date && (
-                        <span className="font-mono tabular-nums text-[10px] text-muted-foreground shrink-0">
+                        <span className={cn("font-mono tabular-nums text-[10px] shrink-0", dueChipClass(t.due_date))}>
                           {formatDueChip(t.due_date)}
                         </span>
                       )}
