@@ -58,3 +58,7 @@ export { default as BugIcon } from './BugIcon';
 export { default as GaugeIcon } from './GaugeIcon';
 export { default as WifiIcon } from './WifiIcon';
 export { default as QuestionMark } from './QuestionMark';
+
+export { default as UnorderedListIcon } from './UnorderedListIcon';
+
+export { default as StackIcon } from './StackIcon';
