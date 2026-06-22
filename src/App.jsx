@@ -131,17 +131,30 @@ function DocumentTitle() {
   return null
 }
 
+// Global chrome mounted above the router. The pinned desktop widget
+// (/tasks/widget) is intentionally chrome-free — no floating "Ask AI" button
+// and no bottom task dock — so those are suppressed on that route.
+function PortalChrome() {
+  const { pathname } = useLocation()
+  const isWidget = pathname === '/tasks/widget'
+  return (
+    <>
+      {!isWidget && <GlobalChat />}
+      {!isWidget && <TaskDock />}
+      <GlobalShortcuts />
+      <GlobalMentions />
+      <DelegatePromptDialog />
+    </>
+  )
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
           <DocumentTitle />
-          <GlobalChat />
-          <TaskDock />
-          <GlobalShortcuts />
-          <GlobalMentions />
-          <DelegatePromptDialog />
+          <PortalChrome />
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
