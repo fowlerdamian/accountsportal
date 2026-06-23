@@ -9,7 +9,7 @@
 import { useAuth } from "@portal/context/AuthContext";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@guide/lib/utils";
-import { formatDueChip, QUADRANT_DOT_CLASS, QUADRANT_ACCENT_CLASS } from "../lib/color";
+import { formatDueChip, dueIntensity, QUADRANT_DOT_CLASS, QUADRANT_ACCENT_CLASS } from "../lib/color";
 import { quadrantOf } from "../lib/eisenhower";
 import {
   useStaffTasks,
@@ -69,6 +69,7 @@ export default function TaskWidget() {
           <ul className="divide-y divide-border/40">
             {tasks.map((task) => {
               const quad = quadrantOf(task.urgency, task.importance);
+              const di = task.due_date ? dueIntensity(task.due_date) : "none";
               return (
                 <li
                   key={task.id}
@@ -81,7 +82,14 @@ export default function TaskWidget() {
                   <span className="flex-1 truncate text-sm" title={task.title}>
                     {task.title}
                   </span>
-                  <span className="shrink-0 font-mono tabular-nums text-[11px] text-muted-foreground">
+                  <span
+                    className={cn(
+                      "shrink-0 font-mono tabular-nums text-[11px]",
+                      di === "overdue" ? "text-red-500 font-semibold animate-pulse"
+                      : di === "today" ? "text-red-500 font-semibold"
+                      : "text-muted-foreground",
+                    )}
+                  >
                     {task.due_date ? formatDueChip(task.due_date) : "—"}
                   </span>
                 </li>
