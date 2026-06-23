@@ -26,6 +26,15 @@ export const QUADRANT_DOT_CLASS: Record<Quadrant, string> = {
   drop:     "bg-muted-foreground/60",
 };
 
+// Left-edge accent — colour-codes the Eisenhower quadrant (priority).
+// Used by the pinned desktop widget's compact task rows.
+export const QUADRANT_ACCENT_CLASS: Record<Quadrant, string> = {
+  do:       "border-l-4 border-l-red-500",
+  schedule: "border-l-4 border-l-blue-500",
+  delegate: "border-l-4 border-l-amber-500",
+  drop:     "border-l-4 border-l-muted-foreground/40",
+};
+
 export type DueIntensity = "none" | "later" | "week" | "today" | "overdue";
 
 function daysFromToday(dueDate: string): number {

@@ -8,7 +8,9 @@
 
 import { useAuth } from "@portal/context/AuthContext";
 import { RefreshCw } from "lucide-react";
-import { formatDueChip } from "../lib/color";
+import { cn } from "@guide/lib/utils";
+import { formatDueChip, QUADRANT_DOT_CLASS, QUADRANT_ACCENT_CLASS } from "../lib/color";
+import { quadrantOf } from "../lib/eisenhower";
 import {
   useStaffTasks,
   useStaffTasksRealtime,
@@ -65,19 +67,26 @@ export default function TaskWidget() {
           </p>
         ) : (
           <ul className="divide-y divide-border/40">
-            {tasks.map((task) => (
-              <li
-                key={task.id}
-                className="flex items-center gap-3 px-3 py-2 hover:bg-white/5"
-              >
-                <span className="flex-1 truncate text-sm" title={task.title}>
-                  {task.title}
-                </span>
-                <span className="shrink-0 font-mono tabular-nums text-[11px] text-muted-foreground">
-                  {task.due_date ? formatDueChip(task.due_date) : "—"}
-                </span>
-              </li>
-            ))}
+            {tasks.map((task) => {
+              const quad = quadrantOf(task.urgency, task.importance);
+              return (
+                <li
+                  key={task.id}
+                  className={cn(
+                    "flex items-center gap-2.5 px-3 py-2 hover:bg-white/5",
+                    QUADRANT_ACCENT_CLASS[quad],
+                  )}
+                >
+                  <span className={cn("w-2 h-2 rounded-full shrink-0", QUADRANT_DOT_CLASS[quad])} />
+                  <span className="flex-1 truncate text-sm" title={task.title}>
+                    {task.title}
+                  </span>
+                  <span className="shrink-0 font-mono tabular-nums text-[11px] text-muted-foreground">
+                    {task.due_date ? formatDueChip(task.due_date) : "—"}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
