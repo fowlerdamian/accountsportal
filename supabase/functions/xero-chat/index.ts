@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildSystemPrompt } from "./systemPrompt.ts";
+import { resolveModel } from "../_shared/model.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -586,7 +587,7 @@ async function runAgentLoop(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: await resolveModel(apiKey),
         max_tokens: 4096,
         system: systemPrompt,
         tools,

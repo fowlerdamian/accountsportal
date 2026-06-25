@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveModel } from "../_shared/model.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -415,7 +416,7 @@ Return ONLY valid JSON, no markdown:
       },
       signal: AbortSignal.timeout(25000),
       body: JSON.stringify({
-        model:      "claude-sonnet-4-6",
+        model:      await resolveModel(anthropicKey),
         max_tokens: 600,
         messages:   [{ role: "user", content: prompt }],
       }),

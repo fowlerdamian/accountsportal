@@ -1,3 +1,5 @@
+import { resolveModel } from "../_shared/model.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -103,7 +105,7 @@ Deno.serve(async (req) => {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: await resolveModel(apiKey),
         max_tokens: 8192,
         system: SYSTEM_PROMPT,
         messages,
