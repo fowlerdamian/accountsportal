@@ -7,7 +7,8 @@
     "api/notify-task-assignee.js":   { "maxDuration": 10 },
     "api/task-reminders.js":         { "maxDuration": 30 },
     "api/task-score-report.js":      { "maxDuration": 30 },
-    "api/finance-snapshot.js":       { "maxDuration": 60 }
+    "api/finance-snapshot.js":       { "maxDuration": 60 },
+    "api/finance-mtd-digest.js":     { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/sales-sync-cin7",      "schedule": "0 12 * * 1-5" },
@@ -15,7 +16,8 @@
     { "path": "/api/sales-sync-list",      "schedule": "0 14 * * 1-5" },
     { "path": "/api/task-reminders",       "schedule": "0 22 * * *" },
     { "path": "/api/task-score-report",    "schedule": "0 7 * * 1-5" },
-    { "path": "/api/finance-snapshot",     "schedule": "0 15 * * *" }
+    { "path": "/api/finance-snapshot",     "schedule": "0 15 * * *" },
+    { "path": "/api/finance-mtd-digest",   "schedule": "0 8 * * *" }
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
