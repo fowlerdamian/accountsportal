@@ -228,8 +228,10 @@ export default function App() {
               <Route path="dashboard/settings" element={<TileSettings />} />
               <Route path="settings" element={<Settings />} />
               <Route path="accounts" element={<AccountsLayout />}>
-                <Route index element={<ProfitProcessor />} />
-                <Route path="finance" element={<FinanceDashboard />} />
+                <Route index element={<FinanceDashboard />} />
+                <Route path="profit" element={<ProfitProcessor />} />
+                {/* Old direct link to the dashboard now lives at the index. */}
+                <Route path="finance" element={<Navigate to="/accounts" replace />} />
                 <Route path="xero" element={<XeroChat />} />
                 <Route path="chat-functions" element={<ChatFunctions />} />
               </Route>
