@@ -1,11 +1,12 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { ChartBarIcon, MessageCircleIcon, FilledBellIcon } from '@portal/components/icons'
+import { ChartBarIcon, MessageCircleIcon, FilledBellIcon, LayoutDashboardIcon } from '@portal/components/icons'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 const NAV = [
-  { label: 'Invoice Profit Analysis', shortLabel: 'P&L',   route: '/accounts',                icon: ChartBarIcon,     end: true  },
-  { label: 'Xero Chatbot',            shortLabel: 'Xero',  route: '/accounts/xero',           icon: MessageCircleIcon, end: false },
-  { label: 'Chat Functions',          shortLabel: 'Chat',  route: '/accounts/chat-functions', icon: FilledBellIcon,    end: false },
+  { label: 'Invoice Profit Analysis', shortLabel: 'P&L',     route: '/accounts',                icon: ChartBarIcon,        end: true  },
+  { label: 'Finance Dashboard',       shortLabel: 'Finance', route: '/accounts/finance',        icon: LayoutDashboardIcon, end: false },
+  { label: 'Xero Chatbot',            shortLabel: 'Xero',    route: '/accounts/xero',           icon: MessageCircleIcon,   end: false },
+  { label: 'Chat Functions',          shortLabel: 'Chat',    route: '/accounts/chat-functions', icon: FilledBellIcon,      end: false },
 ]
 
 export default function AccountsLayout() {

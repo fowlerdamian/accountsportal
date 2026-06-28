@@ -25,6 +25,7 @@ import ComplianceApp from './apps/Compliance/index'
 import XeroChat from './apps/Xero/index'
 import AccountsLayout from './apps/Accounts/AccountsLayout'
 import ChatFunctions from './apps/Accounts/ChatFunctions.jsx'
+import FinanceDashboard from './apps/Accounts/finance/FinanceDashboard.jsx'
 
 // Contractor Hub
 import ContractorsList from './apps/ContractorHub/pages/ContractorsList'
@@ -228,6 +229,7 @@ export default function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="accounts" element={<AccountsLayout />}>
                 <Route index element={<ProfitProcessor />} />
+                <Route path="finance" element={<FinanceDashboard />} />
                 <Route path="xero" element={<XeroChat />} />
                 <Route path="chat-functions" element={<ChatFunctions />} />
               </Route>
