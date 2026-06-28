@@ -6,14 +6,16 @@
     "api/sales-sync-list.js":        { "maxDuration": 10 },
     "api/notify-task-assignee.js":   { "maxDuration": 10 },
     "api/task-reminders.js":         { "maxDuration": 30 },
-    "api/task-score-report.js":      { "maxDuration": 30 }
+    "api/task-score-report.js":      { "maxDuration": 30 },
+    "api/finance-snapshot.js":       { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/sales-sync-cin7",      "schedule": "0 12 * * 1-5" },
     { "path": "/api/sales-sync-research",  "schedule": "0 13 * * 1-5" },
     { "path": "/api/sales-sync-list",      "schedule": "0 14 * * 1-5" },
     { "path": "/api/task-reminders",       "schedule": "0 22 * * *" },
-    { "path": "/api/task-score-report",    "schedule": "0 7 * * 1-5" }
+    { "path": "/api/task-score-report",    "schedule": "0 7 * * 1-5" },
+    { "path": "/api/finance-snapshot",     "schedule": "0 15 * * *" }
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
