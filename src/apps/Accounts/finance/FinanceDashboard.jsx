@@ -243,6 +243,10 @@ export default function FinanceDashboard() {
     ]
   }, [curr])
 
+  // Calendar Year has no like-for-like prior period in range → hide comparisons.
+  const showCmp = grain !== 'cy'
+  const opexGrid = showCmp ? ROW_GRID : ROW_GRID_NO_CMP
+
   // ── States ──────────────────────────────────────────────────────────────────
   if (isLoading) return <Centered>Loading finance snapshots…</Centered>
   if (error) return <Centered tone={C.red}>Failed to load: {error.message}</Centered>
@@ -278,14 +282,15 @@ export default function FinanceDashboard() {
 
         {/* Tiles */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <Tile icon={CurrencyDollarIcon} label="Revenue" value={money(curr.revenue)} delta={deltaPct(curr.revenue, prev?.revenue)} sub="vs prev" />
+          <Tile icon={CurrencyDollarIcon} label="Revenue" value={money(curr.revenue)}
+            delta={showCmp ? deltaPct(curr.revenue, prev?.revenue) : null} sub={showCmp ? 'vs prev' : ''} />
           <Tile icon={ChartLineIcon} label="Gross Profit" value={money(curr.grossProfit)} valueColor={curr.grossProfit >= 0 ? C.green : C.red}
-            delta={deltaPct(curr.grossProfit, prev?.grossProfit)} sub={pct(curr.grossProfitPct)} />
+            delta={showCmp ? deltaPct(curr.grossProfit, prev?.grossProfit) : null} sub={pct(curr.grossProfitPct)} />
           <Tile icon={WalletIcon} label="EBITDA" value={money(curr.ebitda)} valueColor={curr.ebitda >= 0 ? C.green : C.red}
-            delta={deltaPct(curr.ebitda, prev?.ebitda)} sub="vs prev" accent />
+            delta={showCmp ? deltaPct(curr.ebitda, prev?.ebitda) : null} sub={showCmp ? 'vs prev' : ''} accent />
           <Tile icon={GaugeIcon} label="% to Breakeven" value={pct(curr.pctToBreakeven, 0)}
             valueColor={curr.pctToBreakeven >= 1 ? C.green : C.red}
-            delta={deltaPct(curr.pctToBreakeven, prev?.pctToBreakeven)}
+            delta={showCmp ? deltaPct(curr.pctToBreakeven, prev?.pctToBreakeven) : null}
             sub={curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : ''} />
           <Tile icon={TargetIcon} label="Cases" value={fmt0.format(chartData.reduce((s, d) => s + d.casesTotal, 0))}
             sub={`${chartData.reduce((s, d) => s + d.casesOpen, 0)} open`} />
@@ -344,20 +349,20 @@ export default function FinanceDashboard() {
 
         {/* OpEx breakdown — full-width table, bottom */}
         <Panel title="OpEx Breakdown" icon={LayersIcon}
-          right={<Mono>{expenseRows.length} lines · Δ compared like-for-like{ytdLen > 0 && ytdLen < 12 && grain !== 'month' ? ` (first ${ytdLen} mo)` : ''}; avg = mean of other {GRAINS.find((g) => g.key === grain)?.label.toLowerCase()} periods</Mono>}>
+          right={<Mono>{expenseRows.length} lines{showCmp ? ` · Δ compared like-for-like${ytdLen > 0 && ytdLen < 12 && grain !== 'month' ? ` (first ${ytdLen} mo)` : ''}; avg = mean of other ${GRAINS.find((g) => g.key === grain)?.label.toLowerCase()} periods` : ''}</Mono>}>
           {expenseRows.length === 0 ? (
             <span style={{ color: C.muted, fontSize: 12 }}>No OpEx lines in this period.</span>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ ...ROW_GRID, color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', paddingBottom: 9, borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ ...opexGrid, color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', paddingBottom: 9, borderBottom: `1px solid ${C.border}` }}>
                 <span>Account</span>
                 <span style={{ textAlign: 'right' }}>Amount</span>
                 <span>% of OpEx</span>
-                <span style={{ textAlign: 'right' }}>Δ vs prev period</span>
-                <span style={{ textAlign: 'right' }}>Δ vs average</span>
+                {showCmp && <span style={{ textAlign: 'right' }}>Δ vs prev period</span>}
+                {showCmp && <span style={{ textAlign: 'right' }}>Δ vs average</span>}
               </div>
               {expenseRows.map((r) => (
-                <div key={r.name} style={{ ...ROW_GRID, fontSize: 12.5, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, alignItems: 'center' }}>
+                <div key={r.name} style={{ ...opexGrid, fontSize: 12.5, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, alignItems: 'center' }}>
                   <span style={{ color: C.text }}>{r.name}</span>
                   <span style={{ textAlign: 'right', color: C.text, fontFamily: MONO }}>{money(r.amount)}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -366,8 +371,8 @@ export default function FinanceDashboard() {
                     </span>
                     <span style={{ color: C.muted, fontFamily: MONO, width: 38, textAlign: 'right' }}>{pct(r.share, 0)}</span>
                   </span>
-                  <DeltaCell v={r.changeFromPrev} />
-                  <DeltaCell v={r.changeFromAvg} />
+                  {showCmp && <DeltaCell v={r.changeFromPrev} />}
+                  {showCmp && <DeltaCell v={r.changeFromAvg} />}
                 </div>
               ))}
             </div>
@@ -383,6 +388,8 @@ export default function FinanceDashboard() {
 
 const MONO = '"JetBrains Mono", monospace'
 const ROW_GRID = { display: 'grid', gridTemplateColumns: '1.9fr 1fr 1.7fr 1fr 1fr', gap: 14, alignItems: 'center' }
+// Without the two Δ comparison columns (e.g. Calendar Year view).
+const ROW_GRID_NO_CMP = { display: 'grid', gridTemplateColumns: '2.2fr 1fr 2.4fr', gap: 14, alignItems: 'center' }
 
 function signedPct(v) {
   if (v == null) return '—'
