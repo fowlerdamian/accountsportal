@@ -11,6 +11,7 @@ import {
 import { supabase } from '@portal/lib/supabase'
 import {
   GRAINS, buildOptions, periodKeys, prevPeriodKeys, chartKeys, aggregate, toKey,
+  anchorOfMonth, prevAnchor,
 } from './periods.js'
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -159,21 +160,41 @@ export default function FinanceDashboard() {
     })
   }, [grain, effAnchor, snapByKey, casesByKey])
 
-  // Expense lines (OpEx feeding EBITDA) for the selected period, ranked.
+  // OpEx lines (feeding EBITDA) for the selected period, ranked, each with its
+  // change vs the previous comparable period and vs the average across ALL
+  // comparable periods of this grain (absent periods count as $0 → run-rate).
   const expenseRows = useMemo(() => {
     if (!effAnchor) return []
-    const keys = new Set(periodKeys(grain, effAnchor))
-    const byCode = new Map()
+    const allAnchors = options.map((o) => o.value)
+    const byCode = new Map() // code → { name, perAnchor: Map(anchor → amount) }
     for (const l of data?.lines ?? []) {
       if (l.bucket !== 'opex') continue
-      if (!keys.has(toKey(l.period_month))) continue
-      const prevAmt = byCode.get(l.account_code)?.amount ?? 0
-      byCode.set(l.account_code, { name: l.account_name, amount: prevAmt + Number(l.amount) })
+      const a = anchorOfMonth(grain, toKey(l.period_month))
+      let rec = byCode.get(l.account_code)
+      if (!rec) { rec = { name: l.account_name, perAnchor: new Map() }; byCode.set(l.account_code, rec) }
+      rec.name = l.account_name
+      rec.perAnchor.set(a, (rec.perAnchor.get(a) ?? 0) + Number(l.amount))
     }
-    const arr = [...byCode.values()].filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount)
-    const total = arr.reduce((s, r) => s + r.amount, 0)
-    return arr.map((r) => ({ ...r, share: total ? r.amount / total : 0 }))
-  }, [grain, effAnchor, data, snapByKey])
+    const prevA = prevAnchor(grain, effAnchor)
+    const n = allAnchors.length || 1
+    const rows = []
+    for (const [, rec] of byCode) {
+      const amount = rec.perAnchor.get(effAnchor) ?? 0
+      if (amount <= 0) continue
+      const prevAmount = rec.perAnchor.get(prevA) ?? 0
+      let total = 0
+      for (const a of allAnchors) total += rec.perAnchor.get(a) ?? 0
+      const avg = total / n
+      rows.push({
+        name: rec.name, amount, prevAmount, avg,
+        changeFromPrev: prevAmount ? (amount - prevAmount) / prevAmount : null,
+        changeFromAvg: avg ? (amount - avg) / avg : null,
+      })
+    }
+    rows.sort((a, b) => b.amount - a.amount)
+    const grand = rows.reduce((s, r) => s + r.amount, 0)
+    return rows.map((r) => ({ ...r, share: grand ? r.amount / grand : 0 }))
+  }, [grain, effAnchor, data, options])
 
   const periodLabel = options.find((o) => o.value === effAnchor)?.label ?? '—'
 
@@ -239,42 +260,23 @@ export default function FinanceDashboard() {
             sub={`${chartData.reduce((s, d) => s + d.casesOpen, 0)} open`} />
         </div>
 
-        {/* Waterfall + Expense panel */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.15fr) minmax(0,0.85fr)', gap: 16 }}>
-          <Panel title="EBITDA Waterfall" icon={ChartBarIcon} right={<Mono>{periodLabel}</Mono>}>
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={waterfall} margin={{ top: 16, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid stroke={C.borderSoft} vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} interval={0} />
-                <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
-                <Tooltip content={<ChartTooltip formatter={(v) => money(v)} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar dataKey="base" stackId="w" fill="transparent" />
-                <Bar dataKey="value" stackId="w" radius={[2, 2, 0, 0]} name="Amount">
-                  {waterfall.map((s, i) => (
-                    <Cell key={i} fill={s.kind === 'pos' ? C.revenue : s.kind === 'neg' ? C.cost : s.kind === 'negsub' ? C.red : C.green} />
-                  ))}
-                </Bar>
-              </ComposedChart>
-            </ResponsiveContainer>
-          </Panel>
-
-          <Panel title="OpEx Breakdown" icon={LayersIcon} right={<Mono>{expenseRows.length} lines</Mono>}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, maxHeight: 260, overflow: 'auto', paddingRight: 4 }}>
-              {expenseRows.length === 0 && <span style={{ color: C.muted, fontSize: 12 }}>No OpEx lines in this period.</span>}
-              {expenseRows.map((r) => (
-                <div key={r.name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span style={{ color: C.text }}>{r.name}</span>
-                    <span style={{ color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>{money(r.amount)} · {pct(r.share, 0)}</span>
-                  </div>
-                  <div style={{ height: 4, background: '#161616', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.max(2, r.share * 100)}%`, height: '100%', background: C.accent, opacity: 0.8 }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        </div>
+        {/* EBITDA waterfall — full width */}
+        <Panel title="EBITDA Waterfall" icon={ChartBarIcon} right={<Mono>{periodLabel}</Mono>}>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={waterfall} margin={{ top: 16, right: 8, left: 8, bottom: 0 }}>
+              <CartesianGrid stroke={C.borderSoft} vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} interval={0} />
+              <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
+              <Tooltip content={<ChartTooltip formatter={(v) => money(v)} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+              <Bar dataKey="base" stackId="w" fill="transparent" />
+              <Bar dataKey="value" stackId="w" radius={[2, 2, 0, 0]} name="Amount">
+                {waterfall.map((s, i) => (
+                  <Cell key={i} fill={s.kind === 'pos' ? C.revenue : s.kind === 'neg' ? C.cost : s.kind === 'negsub' ? C.red : C.green} />
+                ))}
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+        </Panel>
 
         {/* Breakeven chart */}
         <Panel title="Revenue vs Breakeven" icon={TargetIcon}
@@ -309,9 +311,57 @@ export default function FinanceDashboard() {
           </ResponsiveContainer>
         </Panel>
 
+        {/* OpEx breakdown — full-width table, bottom */}
+        <Panel title="OpEx Breakdown" icon={LayersIcon}
+          right={<Mono>{expenseRows.length} lines · Δ vs avg = mean across all {GRAINS.find((g) => g.key === grain)?.label.toLowerCase()} periods</Mono>}>
+          {expenseRows.length === 0 ? (
+            <span style={{ color: C.muted, fontSize: 12 }}>No OpEx lines in this period.</span>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ ...ROW_GRID, color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', paddingBottom: 9, borderBottom: `1px solid ${C.border}` }}>
+                <span>Account</span>
+                <span style={{ textAlign: 'right' }}>Amount</span>
+                <span>% of OpEx</span>
+                <span style={{ textAlign: 'right' }}>Δ vs prev period</span>
+                <span style={{ textAlign: 'right' }}>Δ vs average</span>
+              </div>
+              {expenseRows.map((r) => (
+                <div key={r.name} style={{ ...ROW_GRID, fontSize: 12.5, padding: '9px 0', borderBottom: '1px solid #111', alignItems: 'center' }}>
+                  <span style={{ color: C.text }}>{r.name}</span>
+                  <span style={{ textAlign: 'right', color: C.text, fontFamily: MONO }}>{money(r.amount)}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flex: 1, height: 4, background: '#161616', borderRadius: 2, overflow: 'hidden' }}>
+                      <span style={{ display: 'block', width: `${Math.max(2, r.share * 100)}%`, height: '100%', background: C.accent, opacity: 0.8 }} />
+                    </span>
+                    <span style={{ color: C.muted, fontFamily: MONO, width: 38, textAlign: 'right' }}>{pct(r.share, 0)}</span>
+                  </span>
+                  <DeltaCell v={r.changeFromPrev} />
+                  <DeltaCell v={r.changeFromAvg} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+
       </div>
     </div>
   )
+}
+
+// ─── OpEx table helpers ─────────────────────────────────────────────────────────
+
+const MONO = '"JetBrains Mono", monospace'
+const ROW_GRID = { display: 'grid', gridTemplateColumns: '1.9fr 1fr 1.7fr 1fr 1fr', gap: 14, alignItems: 'center' }
+
+function signedPct(v) {
+  if (v == null) return '—'
+  return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`
+}
+
+// For an expense, a rise is unfavourable → red; a fall → green.
+function DeltaCell({ v }) {
+  const color = v == null ? C.faint : v > 0 ? C.red : v < 0 ? C.green : C.muted
+  return <span style={{ textAlign: 'right', fontFamily: MONO, color }}>{signedPct(v)}</span>
 }
 
 // ─── Filter bar ──────────────────────────────────────────────────────────────────

@@ -85,6 +85,20 @@ export function prevPeriodKeys(grain, anchor) {
   return fyMonths(Number(anchor) - 1)
 }
 
+// The selector/anchor value that a given month-key belongs to, for a grain.
+// month → the key itself; cy → 'YYYY'; fy → the ending year as a string.
+export function anchorOfMonth(grain, key) {
+  if (grain === 'month') return key
+  if (grain === 'cy') return String(ymParts(key).y)
+  return String(fyOf(key))
+}
+
+// Previous comparable anchor value (for period-over-period comparisons).
+export function prevAnchor(grain, anchor) {
+  if (grain === 'month') return prevMonthKey(anchor)
+  return String(Number(anchor) - 1)
+}
+
 // Months to plot in the trend charts for the selected period.
 export function chartKeys(grain, anchor) {
   if (grain === 'month') return trailing(anchor, 12)
