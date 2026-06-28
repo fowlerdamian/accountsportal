@@ -3,8 +3,8 @@ import { ChartBarIcon, MessageCircleIcon, FilledBellIcon, LayoutDashboardIcon } 
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 const NAV = [
-  { label: 'Invoice Profit Analysis', shortLabel: 'P&L',     route: '/accounts',                icon: ChartBarIcon,        end: true  },
-  { label: 'Finance Dashboard',       shortLabel: 'Finance', route: '/accounts/finance',        icon: LayoutDashboardIcon, end: false },
+  { label: 'Finance Dashboard',       shortLabel: 'Finance', route: '/accounts',                icon: LayoutDashboardIcon, end: true  },
+  { label: 'Invoice Profit Analysis', shortLabel: 'P&L',     route: '/accounts/profit',         icon: ChartBarIcon,        end: false },
   { label: 'Xero Chatbot',            shortLabel: 'Xero',    route: '/accounts/xero',           icon: MessageCircleIcon,   end: false },
   { label: 'Chat Functions',          shortLabel: 'Chat',    route: '/accounts/chat-functions', icon: FilledBellIcon,      end: false },
 ]
