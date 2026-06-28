@@ -30,7 +30,7 @@ const C = {
   faint:        '#666666',                 // --text-tertiary
   accent:       '#f3ca0f',                 // --accent
   accentSubtle: 'rgba(243,202,15,0.1)',    // --accent-subtle
-  green:        '#60a57e',                 // --status-success
+  green:        '#2E7D32',                 // Support Hub green (used across its analytics/progress UI)
   red:          '#ff1744',                 // --status-error
   warning:      '#f6a529',                 // --status-warning
   revenue:      '#f3ca0f',                 // --accent
