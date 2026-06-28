@@ -296,42 +296,43 @@ export default function FinanceDashboard() {
             sub={`${chartData.reduce((s, d) => s + d.casesOpen, 0)} open`} />
         </div>
 
-        {/* EBITDA waterfall — full width */}
-        <Panel title="EBITDA Waterfall" icon={ChartBarIcon} right={<Mono>{periodLabel}</Mono>}>
-          <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={waterfall} margin={{ top: 16, right: 8, left: 8, bottom: 0 }}>
-              <CartesianGrid stroke={C.borderSoft} vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} interval={0} />
-              <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
-              <Tooltip content={<ChartTooltip formatter={(v) => money(v)} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Bar dataKey="base" stackId="w" fill="transparent" />
-              <Bar dataKey="value" stackId="w" radius={[2, 2, 0, 0]} name="Amount">
-                {waterfall.map((s, i) => (
-                  <Cell key={i} fill={s.kind === 'pos' ? C.revenue : s.kind === 'neg' ? C.cost : s.kind === 'negsub' ? C.red : C.green} />
-                ))}
-              </Bar>
-            </ComposedChart>
-          </ResponsiveContainer>
-        </Panel>
+        {/* EBITDA waterfall + Breakeven — side by side */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
+          <Panel title="EBITDA Waterfall" icon={ChartBarIcon} right={<Mono>{periodLabel}</Mono>}>
+            <ResponsiveContainer width="100%" height={250}>
+              <ComposedChart data={waterfall} margin={{ top: 16, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid stroke={C.borderSoft} vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} interval={0} />
+                <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
+                <Tooltip content={<ChartTooltip formatter={(v) => money(v)} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Bar dataKey="base" stackId="w" fill="transparent" />
+                <Bar dataKey="value" stackId="w" radius={[2, 2, 0, 0]} name="Amount">
+                  {waterfall.map((s, i) => (
+                    <Cell key={i} fill={s.kind === 'pos' ? C.revenue : s.kind === 'neg' ? C.cost : s.kind === 'negsub' ? C.red : C.green} />
+                  ))}
+                </Bar>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </Panel>
 
-        {/* Breakeven chart */}
-        <Panel title="Revenue vs Breakeven" icon={TargetIcon}
-          right={<Mono>{curr.marginOfSafety != null ? `Margin of safety ${money(curr.marginOfSafety)} · ${pct(curr.pctToBreakeven, 0)} of BE` : ''}</Mono>}>
-          <ResponsiveContainer width="100%" height={250}>
-            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 8, bottom: 0 }}>
-              <CartesianGrid stroke={C.borderSoft} vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
-              <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
-              <Tooltip content={<ChartTooltip formatter={(v) => money(v)} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Bar dataKey="revenue" name="Revenue" radius={[2, 2, 0, 0]}>
-                {chartData.map((d, i) => (
-                  <Cell key={i} fill={d.breakeven != null && d.revenue >= d.breakeven ? C.green : C.red} fillOpacity={0.55} />
-                ))}
-              </Bar>
-              <Line dataKey="breakeven" name="Breakeven" stroke={C.accent} strokeWidth={2} dot={false} connectNulls />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </Panel>
+          <Panel title="Revenue vs Breakeven" icon={TargetIcon}
+            right={<Mono>{curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)} · ${pct(curr.pctToBreakeven, 0)} of BE` : ''}</Mono>}>
+            <ResponsiveContainer width="100%" height={250}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 8, bottom: 0 }}>
+                <CartesianGrid stroke={C.borderSoft} vertical={false} />
+                <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
+                <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
+                <Tooltip content={<ChartTooltip formatter={(v) => money(v)} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Bar dataKey="revenue" name="Revenue" radius={[2, 2, 0, 0]}>
+                  {chartData.map((d, i) => (
+                    <Cell key={i} fill={d.breakeven != null && d.revenue >= d.breakeven ? C.green : C.red} fillOpacity={0.55} />
+                  ))}
+                </Bar>
+                <Line dataKey="breakeven" name="Breakeven" stroke={C.accent} strokeWidth={2} dot={false} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </Panel>
+        </div>
 
         {/* Cases trend */}
         <Panel title="Customer-Service Cases" icon={ChartLineIcon} right={<Mono>from SUPPORT module</Mono>}>
