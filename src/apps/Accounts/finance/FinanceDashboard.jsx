@@ -15,11 +15,26 @@ import {
 } from './periods.js'
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
+// Every value maps to a portal design token (src/index.css). Concrete hex is used
+// (not var(--x)) so the colours also resolve inside recharts SVG attributes.
 
 const C = {
-  bg: '#0a0a0a', panel: '#0a0a0a', border: '#222', borderSoft: '#1a1a1a',
-  accent: '#f3ca0f', text: '#fff', muted: '#a0a0a0', faint: '#555',
-  green: '#60a57e', red: '#ff1744', revenue: '#f3ca0f', cost: '#5a5a5a',
+  bg:           '#000000',                 // --bg-primary
+  panel:        '#0a0a0a',                 // --bg-elevated (card)
+  surface:      '#111111',                 // --bg-surface
+  track:        '#1a1a1a',                 // --bg-hover (bar tracks)
+  border:       '#222222',                 // --border-default
+  borderSoft:   '#1a1a1a',                 // --border-subtle
+  text:         '#ffffff',                 // --text-primary
+  muted:        '#a0a0a0',                 // --text-secondary
+  faint:        '#666666',                 // --text-tertiary
+  accent:       '#f3ca0f',                 // --accent
+  accentSubtle: 'rgba(243,202,15,0.1)',    // --accent-subtle
+  green:        '#60a57e',                 // --status-success
+  red:          '#ff1744',                 // --status-error
+  warning:      '#f6a529',                 // --status-warning
+  revenue:      '#f3ca0f',                 // --accent
+  cost:         '#666666',                 // neutral grey (--text-tertiary)
 }
 
 // ─── Formatters ────────────────────────────────────────────────────────────────
@@ -106,7 +121,7 @@ function Panel({ title, icon: Icon, children, right }) {
 function ChartTooltip({ active, payload, label, formatter }) {
   if (!active || !payload?.length) return null
   return (
-    <div style={{ background: '#111', border: `1px solid ${C.border}`, borderRadius: 5, padding: '8px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 5, padding: '8px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>
       <div style={{ color: C.muted, marginBottom: 4 }}>{label}</div>
       {payload.map((p) => (
         <div key={p.dataKey} style={{ color: p.color || C.text }}>{p.name}: {formatter ? formatter(p.value) : p.value}</div>
@@ -222,7 +237,7 @@ export default function FinanceDashboard() {
   if (!availableKeys.length) return <Centered>No finance snapshots yet. Run the snapshot pipeline to populate.</Centered>
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', background: '#000', padding: 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div style={{ height: '100%', overflow: 'auto', background: C.bg, padding: 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Header + filter bar */}
@@ -241,9 +256,9 @@ export default function FinanceDashboard() {
 
         {/* Unmapped banner */}
         {curr && curr.unmappedCount > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(243,202,15,0.06)', border: '1px solid rgba(243,202,15,0.3)', borderRadius: 8, padding: '11px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.accentSubtle, border: '1px solid rgba(243,202,15,0.3)', borderRadius: 8, padding: '11px 14px' }}>
             <TriangleAlertIcon size={16} strokeWidth={1.6} style={{ color: C.accent, flexShrink: 0 }} />
-            <span style={{ fontSize: 12.5, color: '#e7d68a' }}>
+            <span style={{ fontSize: 12.5, color: C.muted }}>
               <strong style={{ color: C.accent }}>{curr.unmappedCount}</strong> P&L account line{curr.unmappedCount === 1 ? '' : 's'} ({money(curr.unmappedAmount)}) in this period are not in the account map — excluded from EBITDA. Add them in the account_map table.
             </span>
           </div>
@@ -330,11 +345,11 @@ export default function FinanceDashboard() {
                 <span style={{ textAlign: 'right' }}>Δ vs average</span>
               </div>
               {expenseRows.map((r) => (
-                <div key={r.name} style={{ ...ROW_GRID, fontSize: 12.5, padding: '9px 0', borderBottom: '1px solid #111', alignItems: 'center' }}>
+                <div key={r.name} style={{ ...ROW_GRID, fontSize: 12.5, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, alignItems: 'center' }}>
                   <span style={{ color: C.text }}>{r.name}</span>
                   <span style={{ textAlign: 'right', color: C.text, fontFamily: MONO }}>{money(r.amount)}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ flex: 1, height: 4, background: '#161616', borderRadius: 2, overflow: 'hidden' }}>
+                    <span style={{ flex: 1, height: 4, background: C.track, borderRadius: 2, overflow: 'hidden' }}>
                       <span style={{ display: 'block', width: `${Math.max(2, r.share * 100)}%`, height: '100%', background: C.accent, opacity: 0.8 }} />
                     </span>
                     <span style={{ color: C.muted, fontFamily: MONO, width: 38, textAlign: 'right' }}>{pct(r.share, 0)}</span>
@@ -373,14 +388,14 @@ function DeltaCell({ v }) {
 function FilterBar({ grain, setGrain, options, anchor, setAnchor }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ display: 'flex', background: '#0c0c0c', border: `1px solid ${C.border}`, borderRadius: 7, padding: 2 }}>
+      <div style={{ display: 'flex', background: C.panel, border: `1px solid ${C.border}`, borderRadius: 7, padding: 2 }}>
         {GRAINS.map((g) => (
           <button key={g.key} onClick={() => setGrain(g.key)}
             style={{
               border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: 5, fontSize: 11.5,
               fontFamily: '"JetBrains Mono", monospace',
               background: grain === g.key ? C.accent : 'transparent',
-              color: grain === g.key ? '#000' : C.muted, fontWeight: grain === g.key ? 600 : 400,
+              color: grain === g.key ? C.bg : C.muted, fontWeight: grain === g.key ? 600 : 400,
               transition: 'background 120ms, color 120ms',
             }}>
             {g.label}
@@ -389,7 +404,7 @@ function FilterBar({ grain, setGrain, options, anchor, setAnchor }) {
       </div>
       <select value={anchor ?? ''} onChange={(e) => setAnchor(e.target.value)}
         style={{
-          background: '#0c0c0c', color: C.text, border: `1px solid ${C.border}`, borderRadius: 7,
+          background: C.panel, color: C.text, border: `1px solid ${C.border}`, borderRadius: 7,
           padding: '7px 10px', fontSize: 12, fontFamily: '"JetBrains Mono", monospace', cursor: 'pointer',
         }}>
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -400,5 +415,5 @@ function FilterBar({ grain, setGrain, options, anchor, setAnchor }) {
 
 function Mono({ children }) { return <span style={{ fontSize: 11, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>{children}</span> }
 function Centered({ children, tone = C.muted }) {
-  return <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tone, fontSize: 13, background: '#000' }}>{children}</div>
+  return <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tone, fontSize: 13, background: C.bg }}>{children}</div>
 }
