@@ -176,15 +176,19 @@ export default function FinanceDashboard() {
       rec.perAnchor.set(a, (rec.perAnchor.get(a) ?? 0) + Number(l.amount))
     }
     const prevA = prevAnchor(grain, effAnchor)
-    const n = allAnchors.length || 1
     const rows = []
     for (const [, rec] of byCode) {
       const amount = rec.perAnchor.get(effAnchor) ?? 0
       if (amount <= 0) continue
       const prevAmount = rec.perAnchor.get(prevA) ?? 0
-      let total = 0
-      for (const a of allAnchors) total += rec.perAnchor.get(a) ?? 0
-      const avg = total / n
+      // Average across the OTHER comparable periods (current period excluded).
+      let total = 0, count = 0
+      for (const a of allAnchors) {
+        if (a === effAnchor) continue
+        total += rec.perAnchor.get(a) ?? 0
+        count += 1
+      }
+      const avg = count ? total / count : null
       rows.push({
         name: rec.name, amount, prevAmount, avg,
         changeFromPrev: prevAmount ? (amount - prevAmount) / prevAmount : null,
@@ -313,7 +317,7 @@ export default function FinanceDashboard() {
 
         {/* OpEx breakdown — full-width table, bottom */}
         <Panel title="OpEx Breakdown" icon={LayersIcon}
-          right={<Mono>{expenseRows.length} lines · Δ vs avg = mean across all {GRAINS.find((g) => g.key === grain)?.label.toLowerCase()} periods</Mono>}>
+          right={<Mono>{expenseRows.length} lines · Δ vs avg = mean across other {GRAINS.find((g) => g.key === grain)?.label.toLowerCase()} periods (current excluded)</Mono>}>
           {expenseRows.length === 0 ? (
             <span style={{ color: C.muted, fontSize: 12 }}>No OpEx lines in this period.</span>
           ) : (
