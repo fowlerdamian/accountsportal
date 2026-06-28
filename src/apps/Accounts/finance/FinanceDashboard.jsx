@@ -10,8 +10,8 @@ import {
 } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
 import {
-  GRAINS, buildOptions, periodKeys, prevPeriodKeys, chartKeys, aggregate, toKey,
-  anchorOfMonth, prevAnchor,
+  GRAINS, buildOptions, periodKeys, chartKeys, aggregate, toKey,
+  prevAnchor, ytdWindow, periodElapsed,
 } from './periods.js'
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -156,7 +156,20 @@ export default function FinanceDashboard() {
   const effAnchor = anchor ?? options[options.length - 1]?.value ?? null
 
   const curr = useMemo(() => effAnchor ? aggregate(periodKeys(grain, effAnchor), snapByKey) : null, [grain, effAnchor, snapByKey])
-  const prev = useMemo(() => effAnchor ? aggregate(prevPeriodKeys(grain, effAnchor), snapByKey) : null, [grain, effAnchor, snapByKey])
+
+  // Number of leading months the current period has data for (its YTD length).
+  // A partial CY/FY is compared against the same window of the prior period.
+  const ytdLen = useMemo(
+    () => effAnchor ? periodElapsed(grain, effAnchor, (k) => snapByKey.has(k)) : 0,
+    [grain, effAnchor, snapByKey],
+  )
+
+  // Previous comparable period, restricted to the same YTD window (year-to-date
+  // vs year-to-date). For a complete period this is the whole prior period.
+  const prev = useMemo(
+    () => effAnchor ? aggregate(ytdWindow(grain, prevAnchor(grain, effAnchor), ytdLen), snapByKey) : null,
+    [grain, effAnchor, snapByKey, ytdLen],
+  )
 
   const chartData = useMemo(() => {
     if (!effAnchor) return []
@@ -175,34 +188,33 @@ export default function FinanceDashboard() {
     })
   }, [grain, effAnchor, snapByKey, casesByKey])
 
-  // OpEx lines (feeding EBITDA) for the selected period, ranked, each with its
-  // change vs the previous comparable period and vs the average across ALL
-  // comparable periods of this grain (absent periods count as $0 → run-rate).
+  // OpEx lines (feeding EBITDA) for the selected period, ranked. Each carries its
+  // change vs the previous period and vs the average of the OTHER comparable
+  // periods — all compared like-for-like on the current period's YTD window, so a
+  // partial year isn't measured against full prior years.
   const expenseRows = useMemo(() => {
     if (!effAnchor) return []
-    const allAnchors = options.map((o) => o.value)
-    const byCode = new Map() // code → { name, perAnchor: Map(anchor → amount) }
+    const otherAnchors = options.map((o) => o.value).filter((a) => a !== effAnchor)
+    const byCode = new Map() // code → { name, perMonth: Map(monthKey → amount) }
     for (const l of data?.lines ?? []) {
       if (l.bucket !== 'opex') continue
-      const a = anchorOfMonth(grain, toKey(l.period_month))
+      const mk = toKey(l.period_month)
       let rec = byCode.get(l.account_code)
-      if (!rec) { rec = { name: l.account_name, perAnchor: new Map() }; byCode.set(l.account_code, rec) }
+      if (!rec) { rec = { name: l.account_name, perMonth: new Map() }; byCode.set(l.account_code, rec) }
       rec.name = l.account_name
-      rec.perAnchor.set(a, (rec.perAnchor.get(a) ?? 0) + Number(l.amount))
+      rec.perMonth.set(mk, (rec.perMonth.get(mk) ?? 0) + Number(l.amount))
     }
-    const prevA = prevAnchor(grain, effAnchor)
+    const sumWindow = (rec, keys) => keys.reduce((s, k) => s + (rec.perMonth.get(k) ?? 0), 0)
+    const currWin = ytdWindow(grain, effAnchor, ytdLen)
+    const prevWin = ytdWindow(grain, prevAnchor(grain, effAnchor), ytdLen)
     const rows = []
     for (const [, rec] of byCode) {
-      const amount = rec.perAnchor.get(effAnchor) ?? 0
+      const amount = sumWindow(rec, currWin)
       if (amount <= 0) continue
-      const prevAmount = rec.perAnchor.get(prevA) ?? 0
-      // Average across the OTHER comparable periods (current period excluded).
+      const prevAmount = sumWindow(rec, prevWin)
+      // Average across other comparable periods, each on the same YTD window.
       let total = 0, count = 0
-      for (const a of allAnchors) {
-        if (a === effAnchor) continue
-        total += rec.perAnchor.get(a) ?? 0
-        count += 1
-      }
+      for (const a of otherAnchors) { total += sumWindow(rec, ytdWindow(grain, a, ytdLen)); count += 1 }
       const avg = count ? total / count : null
       rows.push({
         name: rec.name, amount, prevAmount, avg,
@@ -213,7 +225,7 @@ export default function FinanceDashboard() {
     rows.sort((a, b) => b.amount - a.amount)
     const grand = rows.reduce((s, r) => s + r.amount, 0)
     return rows.map((r) => ({ ...r, share: grand ? r.amount / grand : 0 }))
-  }, [grain, effAnchor, data, options])
+  }, [grain, effAnchor, data, options, ytdLen])
 
   const periodLabel = options.find((o) => o.value === effAnchor)?.label ?? '—'
 
@@ -332,7 +344,7 @@ export default function FinanceDashboard() {
 
         {/* OpEx breakdown — full-width table, bottom */}
         <Panel title="OpEx Breakdown" icon={LayersIcon}
-          right={<Mono>{expenseRows.length} lines · Δ vs avg = mean across other {GRAINS.find((g) => g.key === grain)?.label.toLowerCase()} periods (current excluded)</Mono>}>
+          right={<Mono>{expenseRows.length} lines · Δ compared like-for-like{ytdLen > 0 && ytdLen < 12 && grain !== 'month' ? ` (first ${ytdLen} mo)` : ''}; avg = mean of other {GRAINS.find((g) => g.key === grain)?.label.toLowerCase()} periods</Mono>}>
           {expenseRows.length === 0 ? (
             <span style={{ color: C.muted, fontSize: 12 }}>No OpEx lines in this period.</span>
           ) : (

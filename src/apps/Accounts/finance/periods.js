@@ -99,6 +99,23 @@ export function prevAnchor(grain, anchor) {
   return String(Number(anchor) - 1)
 }
 
+// The first `len` month-keys of a period — its "year/period-to-date" window.
+// Used so a partial current period is compared like-for-like against the same
+// leading months of other periods (e.g. Jan–Jun 2026 vs Jan–Jun 2025), not the
+// full prior period. len = 12 (a complete period) returns all months → no-op.
+export function ytdWindow(grain, anchor, len) {
+  return periodKeys(grain, anchor).slice(0, len)
+}
+
+// How many months of the selected period have data, by chronological position
+// (index of the last month with a snapshot + 1). Defines the YTD window length.
+export function periodElapsed(grain, anchor, hasData) {
+  const keys = periodKeys(grain, anchor)
+  let last = -1
+  keys.forEach((k, i) => { if (hasData(k)) last = i })
+  return last + 1
+}
+
 // Months to plot in the trend charts for the selected period.
 export function chartKeys(grain, anchor) {
   if (grain === 'month') return trailing(anchor, 12)
