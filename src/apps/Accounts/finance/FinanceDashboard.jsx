@@ -244,6 +244,9 @@ export default function FinanceDashboard() {
     const sumWindow = (rec, keys) => keys.reduce((s, k) => s + (rec.perMonth.get(k) ?? 0), 0)
     const currWin = ytdWindow(grain, effAnchor, ytdLen)
     const prevWin = ytdWindow(grain, prevAnchor(grain, effAnchor), ytdLen)
+    // Revenue over the SAME window the OpEx amounts are summed on, so each line's
+    // share is a true % of revenue for the period.
+    const revenue = currWin.reduce((s, k) => s + (Number(snapByKey.get(k)?.revenue) || 0), 0)
     const rows = []
     for (const [, rec] of byCode) {
       const amount = sumWindow(rec, currWin)
@@ -260,9 +263,8 @@ export default function FinanceDashboard() {
       })
     }
     rows.sort((a, b) => b.amount - a.amount)
-    const grand = rows.reduce((s, r) => s + r.amount, 0)
-    return rows.map((r) => ({ ...r, share: grand ? r.amount / grand : 0 }))
-  }, [grain, effAnchor, data, options, ytdLen])
+    return rows.map((r) => ({ ...r, revShare: revenue ? r.amount / revenue : null }))
+  }, [grain, effAnchor, data, options, ytdLen, snapByKey])
 
   const periodLabel = options.find((o) => o.value === effAnchor)?.label ?? '—'
 
@@ -482,7 +484,7 @@ export default function FinanceDashboard() {
               <div style={{ ...opexGrid, color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', paddingBottom: 9, borderBottom: `1px solid ${C.border}` }}>
                 <SortHeader label="Account" colKey="name" sort={sort} onSort={toggleSort} />
                 <SortHeader label="Amount" colKey="amount" align="right" sort={sort} onSort={toggleSort} />
-                <SortHeader label="% of OpEx" colKey="share" sort={sort} onSort={toggleSort} />
+                <SortHeader label="% of Revenue" colKey="revShare" sort={sort} onSort={toggleSort} />
                 {showCmp && <SortHeader label="Δ vs prev period" colKey="changeFromPrev" align="right" sort={sort} onSort={toggleSort} />}
                 {showCmp && <SortHeader label="Δ vs average" colKey="changeFromAvg" align="right" sort={sort} onSort={toggleSort} />}
               </div>
@@ -492,9 +494,9 @@ export default function FinanceDashboard() {
                   <span style={{ textAlign: 'right', color: C.text, fontFamily: MONO }}>{money(r.amount)}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ flex: 1, height: 4, background: C.track, borderRadius: 2, overflow: 'hidden' }}>
-                      <span style={{ display: 'block', width: `${Math.max(2, r.share * 100)}%`, height: '100%', background: C.accent, opacity: 0.8 }} />
+                      <span style={{ display: 'block', width: `${Math.max(2, (r.revShare ?? 0) * 100)}%`, height: '100%', background: C.accent, opacity: 0.8 }} />
                     </span>
-                    <span style={{ color: C.muted, fontFamily: MONO, width: 38, textAlign: 'right' }}>{pct(r.share, 0)}</span>
+                    <span style={{ color: C.muted, fontFamily: MONO, width: 38, textAlign: 'right' }}>{pct(r.revShare, 0)}</span>
                   </span>
                   {showCmp && <DeltaCell v={r.changeFromPrev} />}
                   {showCmp && <DeltaCell v={r.changeFromAvg} />}
