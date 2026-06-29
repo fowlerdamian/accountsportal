@@ -600,7 +600,7 @@ function SnapshotCard({ cardRef, periodLabel, curr, currCases, prev, showCmp, as
     // Off-screen host; html2canvas can still measure/paint it.
     <div aria-hidden style={{ position: 'fixed', left: -99999, top: 0, pointerEvents: 'none' }}>
       <div ref={cardRef} style={{
-        width: 760, padding: 36, boxSizing: 'border-box',
+        width: 480, padding: 32, boxSizing: 'border-box',
         background: 'linear-gradient(150deg, #18181b 0%, #0c0c0e 100%)',
         border: `1px solid ${C.border}`, borderRadius: 18,
         fontFamily: 'Inter, system-ui, sans-serif', color: C.text,
@@ -618,16 +618,19 @@ function SnapshotCard({ cardRef, periodLabel, curr, currCases, prev, showCmp, as
             <div style={{ fontSize: 11, color: C.faint, fontFamily: MONO, marginTop: 4 }}>as at {asOf}</div>
           </div>
         </div>
-        {/* metrics */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+        {/* metrics — vertically stacked tiles */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {metrics.map((m) => (
             <div key={m.label} style={{
-              background: C.panel, border: `1px solid ${C.border}`, borderTop: `2px solid ${m.accent}`,
-              borderRadius: 10, padding: '16px 18px',
+              background: C.panel, border: `1px solid ${C.border}`, borderLeft: `3px solid ${m.accent}`,
+              borderRadius: 10, padding: '14px 18px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
             }}>
               <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 500 }}>{m.label}</div>
-              <div style={{ fontFamily: MONO, fontSize: '1.5rem', fontWeight: 500, marginTop: 10, lineHeight: 1 }}>{m.value}</div>
-              <div style={{ fontSize: 11, color: C.muted, fontFamily: MONO, marginTop: 8, minHeight: 13 }}>{m.sub ?? ''}</div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: MONO, fontSize: '1.4rem', fontWeight: 500, lineHeight: 1 }}>{m.value}</div>
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: MONO, marginTop: 6, minHeight: 13 }}>{m.sub ?? ''}</div>
+              </div>
             </div>
           ))}
         </div>
