@@ -70,6 +70,14 @@ export const APPS = [
     external:    false,
   },
   {
+    name:        'Marketing',
+    description: 'Live marketing dashboard across Google Analytics, HubSpot, Shopify, and Brevo',
+    route:       '/marketing',
+    icon:        'Target',
+    status:      'live',
+    external:    false,
+  },
+  {
     name:        'Compliance',
     description: 'ISO 9001:2015 QMS documentation, self-audit, and evidence management',
     route:       '/compliance',

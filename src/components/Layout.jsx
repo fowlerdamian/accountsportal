@@ -12,6 +12,7 @@ const ROUTE_LABELS = {
   '/logistics/disputes':      'Logistics / Disputes',
   '/purchase-orders':         'Purchasing',
   '/sales-support':           'Sales Support',
+  '/marketing':               'Marketing',
   '/compliance':              'Compliance',
   '/settings':                'Settings',
 }

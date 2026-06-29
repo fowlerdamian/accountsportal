@@ -4,6 +4,7 @@ import {
   ChartBarIcon, ShoppingCartIcon, BookIcon, GearIcon,
   UsersIcon, CurrencyDollarIcon, ChartLineIcon,
   TruckElectricIcon, MessageCircleIcon, LayersIcon, StackIcon, UnorderedListIcon, ShieldCheck,
+  TargetIcon,
 } from '@portal/components/icons'
 
 // ─── Icon resolver ───────────────────────────────────────────────────────────
@@ -11,6 +12,7 @@ import {
 const ICON_MAP = {
   BarChart3: ChartBarIcon, Truck: TruckElectricIcon, ShoppingCart: ShoppingCartIcon, Headphones: MessageCircleIcon, Wrench: LayersIcon, BookOpen: BookIcon, Settings: GearIcon,
   Package: StackIcon, Users: UsersIcon, DollarSign: CurrencyDollarIcon, TrendingUp: ChartLineIcon, ClipboardCheck: UnorderedListIcon, ShieldCheck,
+  Target: TargetIcon,
 }
 
 function AppIcon({ name, size = 22, className = '' }) {
