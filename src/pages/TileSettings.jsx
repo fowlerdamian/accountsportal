@@ -53,7 +53,7 @@ function SupportModeSelector({ userId, settings, toggle, saving }) {
       style={{
         padding: '2px 6px', fontSize: '9px', border: 'none', cursor: saving ? 'not-allowed' : 'pointer',
         fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase',
-        background: mode === value ? '#f3ca0f' : '#1a1a1a',
+        background: mode === value ? 'var(--brand-accent)' : '#1a1a1a',
         color: mode === value ? '#000' : '#555',
         borderRadius: value === 'full' ? '4px 0 0 4px' : value === 'off' ? '0 4px 4px 0' : '0',
         opacity: saving ? 0.5 : 1,
@@ -79,7 +79,7 @@ function Toggle({ checked, onChange, disabled }) {
       disabled={disabled}
       style={{
         width: '36px', height: '20px', borderRadius: '10px', border: 'none',
-        background: checked ? '#f3ca0f' : '#222222',
+        background: checked ? 'var(--brand-accent)' : '#222222',
         cursor: disabled ? 'not-allowed' : 'pointer',
         position: 'relative', transition: 'background 150ms', flexShrink: 0,
         opacity: disabled ? 0.5 : 1,

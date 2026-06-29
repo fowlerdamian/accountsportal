@@ -116,7 +116,7 @@ export default function AddressAutocomplete({
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left',
                 padding: '9px 12px', border: 'none', cursor: 'pointer', fontSize: '13px',
-                color: i === highlight ? '#f3ca0f' : '#ccc',
+                color: i === highlight ? 'var(--brand-accent)' : '#ccc',
                 background: i === highlight ? 'rgba(243,202,15,0.06)' : 'transparent',
                 borderBottom: i < predictions.length - 1 ? '1px solid #181818' : 'none',
               }}

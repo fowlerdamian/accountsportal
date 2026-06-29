@@ -125,7 +125,7 @@ export function TaskDock() {
             aria-label="New task"
             className="ml-auto flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider px-3 py-1.5 rounded shrink-0"
             style={{
-              color: "#f3ca0f",
+              color: "var(--brand-accent)",
               background: "rgba(243,202,15,0.06)",
               border: "1px solid rgba(243,202,15,0.4)",
             }}
@@ -225,7 +225,7 @@ export function TaskDock() {
           title="New task [N]"
           className="flex items-center gap-1.5 px-2.5 h-9 rounded-md text-xs font-medium uppercase tracking-wider shrink-0 transition-colors"
           style={{
-            color: "#f3ca0f",
+            color: "var(--brand-accent)",
             background: "rgba(243,202,15,0.06)",
             border: "1px solid rgba(243,202,15,0.4)",
           }}

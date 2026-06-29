@@ -67,6 +67,19 @@
     --accent-subtle: rgba(243, 202, 15, 0.1);
     --accent-text: #111827;     /* Near Black, on gold */
 
+    /* ── SINGLE SOURCE OF TRUTH for brand accent colours ───────────────────
+       Edit these to recolour the whole portal. Unambiguous names (the shadcn
+       --accent token is overloaded to a grey, so use --brand-* in app code).
+       Inline styles / CSS: var(--brand-accent), var(--brand-aqua), …
+       Charts (recharts) / JS: import { palette } from '@portal/lib/palette'. */
+    --brand-accent: #f3ca0f;   /* primary accent = Gold */
+    --brand-gold:   #f3ca0f;
+    --brand-orange: #ff5a1f;
+    --brand-pink:   #ff3366;
+    --brand-blue:   #3b82f6;
+    --brand-aqua:   #14d9c4;
+    --brand-purple: #7c3aed;
+
     /* Status */
     --status-success: #14d9c4;  /* Aqua */
     --status-warning: #ff5a1f;  /* Orange */
@@ -176,7 +189,7 @@
     box-shadow: 0 0 20px rgba(243, 202, 15, 0.25), 0 0 40px rgba(243, 202, 15, 0.1);
   }
   .text-gradient-gold {
-    background: linear-gradient(135deg, #f3ca0f 0%, #d4b00d 100%);
+    background: linear-gradient(135deg, var(--brand-accent) 0%, var(--accent-hover) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

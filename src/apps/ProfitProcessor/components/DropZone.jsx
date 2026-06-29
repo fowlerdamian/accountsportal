@@ -54,7 +54,7 @@ export default function DropZone({ onFile }) {
       onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
       aria-label="Drop Excel file here or click to browse"
       style={{
-        border: `2px dashed ${dragging ? '#f3ca0f' : '#333'}`,
+        border: `2px dashed ${dragging ? 'var(--brand-accent)' : '#333'}`,
         background: dragging ? 'rgba(243,202,15,0.04)' : '#0a0a0a',
         boxShadow: dragging ? '0 0 48px rgba(243,202,15,0.08)' : 'none',
       }}
@@ -64,7 +64,7 @@ export default function DropZone({ onFile }) {
         flex flex-col items-center justify-center
         px-10 py-20 gap-6
         hover:border-[#555] hover:bg-[#141414]
-        focus-visible:ring-2 focus-visible:ring-[#f3ca0f]/40
+        focus-visible:ring-2 focus-visible:ring-[var(--brand-accent)]/40
       "
     >
       <input
@@ -86,7 +86,7 @@ export default function DropZone({ onFile }) {
       <div className="text-center flex flex-col gap-1.5">
         <p
           className="text-base font-medium transition-colors"
-          style={{ color: dragging ? '#f3ca0f' : '#CCC' }}
+          style={{ color: dragging ? 'var(--brand-accent)' : '#CCC' }}
         >
           {dragging ? 'Release to load report' : 'Drop Cin7 Profit Summary Report'}
         </p>
@@ -94,7 +94,7 @@ export default function DropZone({ onFile }) {
           or{' '}
           <span
             className="underline underline-offset-2 transition-colors"
-            style={{ color: '#f3ca0f' }}
+            style={{ color: 'var(--brand-accent)' }}
           >
             click to browse
           </span>

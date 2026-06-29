@@ -56,7 +56,7 @@ function Toggle({ checked, onChange, disabled }) {
       disabled={disabled}
       style={{
         width: '32px', height: '18px', borderRadius: '9px', border: 'none',
-        background: checked ? '#f3ca0f' : '#222222',
+        background: checked ? 'var(--brand-accent)' : '#222222',
         cursor: disabled ? 'not-allowed' : 'pointer',
         position: 'relative', transition: 'background 150ms', flexShrink: 0,
         opacity: disabled ? 0.5 : 1,
@@ -75,7 +75,7 @@ function Toggle({ checked, onChange, disabled }) {
 const ROLE_OPTIONS = ['admin', 'editor', 'user']
 
 const ROLE_LABELS = {
-  admin:  { label: 'Admin',  color: '#f3ca0f' },
+  admin:  { label: 'Admin',  color: 'var(--brand-accent)' },
   editor: { label: 'Editor', color: '#60A5FA' },
   user:   { label: 'User',   color: '#666' },
 }
@@ -185,7 +185,7 @@ function AccountSection({ user }) {
                 disabled={saving}
                 style={{
                   fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
-                  textTransform: 'uppercase', color: saving ? '#444' : '#f3ca0f',
+                  textTransform: 'uppercase', color: saving ? '#444' : 'var(--brand-accent)',
                   background: 'none', border: '1px solid',
                   borderColor: saving ? '#222222' : 'rgba(243,202,15,0.4)',
                   borderRadius: '4px', padding: '6px 14px',
@@ -232,7 +232,7 @@ function InviteUserForm({ onInvited }) {
       onClick={() => setOpen(true)}
       style={{
         fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
-        color: '#f3ca0f', background: 'none',
+        color: 'var(--brand-accent)', background: 'none',
         border: '1px solid rgba(243,202,15,0.3)', borderRadius: '4px',
         padding: '6px 14px', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace',
       }}
@@ -292,7 +292,7 @@ function InviteUserForm({ onInvited }) {
             style={{
               fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
               fontFamily: '"JetBrains Mono", monospace',
-              color: (sending || !email.trim()) ? '#444' : '#f3ca0f',
+              color: (sending || !email.trim()) ? '#444' : 'var(--brand-accent)',
               background: 'none', border: '1px solid',
               borderColor: (sending || !email.trim()) ? '#222' : 'rgba(243,202,15,0.4)',
               borderRadius: '4px', padding: '6px 16px',

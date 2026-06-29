@@ -40,7 +40,7 @@ export function AdminSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4">
         <Link to="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "8px" }}>
-          <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "#f3ca0f", flexShrink: 0 }} />
+          <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "var(--brand-accent)", flexShrink: 0 }} />
           {!collapsed && (
             <span style={{ fontSize: "12px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ffffff" }}>
               Dashboard

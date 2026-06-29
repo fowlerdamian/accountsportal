@@ -41,7 +41,7 @@ export default function Layout() {
             to="/dashboard"
             style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', flexShrink: 0 }}
           >
-            <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#f3ca0f' }} />
+            <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: 'var(--brand-accent)' }} />
             <span style={{
               fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em',
               textTransform: 'uppercase', color: '#ffffff',
@@ -80,7 +80,7 @@ export default function Layout() {
               color: '#666', background: 'none', border: '1px solid #222222', borderRadius: '4px',
               padding: '4px 10px', cursor: 'pointer', transition: 'color 120ms, border-color 120ms',
             }}
-            onMouseEnter={e => { e.currentTarget.style.color = '#f3ca0f'; e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)' }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)'; e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)' }}
             onMouseLeave={e => { e.currentTarget.style.color = '#666'; e.currentTarget.style.borderColor = '#222222' }}
           >
             Sign out

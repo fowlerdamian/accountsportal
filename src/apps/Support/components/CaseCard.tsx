@@ -47,7 +47,7 @@ export function CaseCard({ caseData, index }: CaseCardProps) {
               marginLeft: 'auto',
               fontSize: '11px',
               fontFamily: '"JetBrains Mono", monospace',
-              color: '#f3ca0f',
+              color: 'var(--brand-accent)',
             }}
           >
             #{caseData.case_number}

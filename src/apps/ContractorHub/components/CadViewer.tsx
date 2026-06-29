@@ -305,7 +305,7 @@ export default function CadViewer({ fileUrl, filename, displayName, driveFileId,
 
           {status === "loading" && !isUnsupported && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "12px" }}>
-              <div style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #f3ca0f", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }} />
+              <div style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid var(--brand-accent)", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }} />
               <span style={{ fontSize: "12px", color: "#666", fontFamily: '"JetBrains Mono", monospace' }}>Loading model…</span>
             </div>
           )}
@@ -331,7 +331,7 @@ export default function CadViewer({ fileUrl, filename, displayName, driveFileId,
               <a
                 href={fileUrl}
                 download={filename}
-                style={{ marginTop: "8px", fontSize: "12px", fontWeight: 500, padding: "7px 16px", borderRadius: "6px", color: "#f3ca0f", border: "1px solid rgba(243,202,15,0.35)", background: "transparent", textDecoration: "none", transition: "background 120ms" }}
+                style={{ marginTop: "8px", fontSize: "12px", fontWeight: 500, padding: "7px 16px", borderRadius: "6px", color: "var(--brand-accent)", border: "1px solid rgba(243,202,15,0.35)", background: "transparent", textDecoration: "none", transition: "background 120ms" }}
               >
                 Download file
               </a>

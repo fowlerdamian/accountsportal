@@ -9,6 +9,7 @@ import {
   TriangleAlertIcon, LayersIcon, ChartBarIcon,
 } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
+import { palette } from '@portal/lib/palette'
 import {
   GRAINS, buildOptions, periodKeys, chartKeys, aggregate, toKey,
   prevAnchor, ytdWindow, periodElapsed,
@@ -28,20 +29,20 @@ const C = {
   text:         '#f8fafc',                 // --text-primary (Off White)
   muted:        '#9ca3af',                 // --text-secondary (gray-400)
   faint:        '#6b7280',                 // --text-tertiary (gray-500)
-  accent:       '#f3ca0f',                 // --accent (Gold)
-  accentSubtle: 'rgba(243,202,15,0.1)',    // --accent-subtle
-  green:        '#14d9c4',                 // positive/good — Aqua (--status-success)
-  red:          '#ff3366',                 // negative/bad — Pink (--status-error)
-  warning:      '#ff5a1f',                 // --status-warning (Orange)
-  revenue:      '#f3ca0f',                 // --accent (Gold)
   cost:         '#6b7280',                 // neutral grey (--text-tertiary)
-  // Brand accent hues (= --cat-*) for graphs & tiles
-  gold:         '#f3ca0f',
-  orange:       '#ff5a1f',
-  pink:         '#ff3366',
-  blue:         '#3b82f6',
-  aqua:         '#14d9c4',
-  purple:       '#7c3aed',
+  accentSubtle: 'rgba(243,202,15,0.1)',    // --accent-subtle
+  // Brand accent hues — single source (src/index.css --brand-* via palette.js)
+  accent:       palette.accent,
+  revenue:      palette.accent,
+  gold:         palette.gold,
+  orange:       palette.orange,
+  pink:         palette.pink,
+  blue:         palette.blue,
+  aqua:         palette.aqua,
+  purple:       palette.purple,
+  green:        palette.aqua,              // positive/good
+  red:          palette.pink,              // negative/bad
+  warning:      palette.orange,
 }
 
 // ─── Formatters ────────────────────────────────────────────────────────────────

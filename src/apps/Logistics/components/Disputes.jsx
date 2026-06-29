@@ -5,7 +5,7 @@ import LogisticsNav from './LogisticsNav.jsx'
 import { aud, invoiceOvercharge } from '../utils/helpers.js'
 
 const STATUS_STYLE = {
-  flagged:  { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  flagged:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
   disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
 }
 
@@ -29,7 +29,7 @@ export default function Disputes() {
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }} />
+        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />
       </div>
     )
   }
@@ -48,8 +48,8 @@ export default function Disputes() {
 
       {invoices.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', background: 'rgba(243,202,15,0.06)', border: '1px solid rgba(243,202,15,0.25)' }}>
-          <span style={{ color: '#f3ca0f', fontSize: '14px', flexShrink: 0, marginTop: '1px' }}>!</span>
-          <p style={{ margin: 0, fontSize: '13px', color: '#f3ca0f' }}>
+          <span style={{ color: 'var(--brand-accent)', fontSize: '14px', flexShrink: 0, marginTop: '1px' }}>!</span>
+          <p style={{ margin: 0, fontSize: '13px', color: 'var(--brand-accent)' }}>
             <span style={{ fontWeight: 600 }}>{invoices.length} invoice{invoices.length !== 1 ? 's' : ''} in dispute</span>
             {totalOver > 0 && <> · <span style={{ fontWeight: 600 }}>{aud(totalOver)}</span> total overcharge</>}
           </p>

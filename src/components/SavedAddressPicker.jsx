@@ -83,7 +83,7 @@ export default function SavedAddressPicker({ onSelect, buttonLabel = 'Saved addr
         type="button"
         onClick={() => setOpen(true)}
         style={buttonStyle ?? DEFAULT_BTN_STYLE}
-        onMouseEnter={e => { e.currentTarget.style.color = '#f3ca0f'; e.currentTarget.style.borderColor = 'rgba(243,202,15,0.35)' }}
+        onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)'; e.currentTarget.style.borderColor = 'rgba(243,202,15,0.35)' }}
         onMouseLeave={e => { e.currentTarget.style.color = (buttonStyle?.color ?? '#a0a0a0'); e.currentTarget.style.borderColor = '#222' }}
       >
         🔖 {buttonLabel}

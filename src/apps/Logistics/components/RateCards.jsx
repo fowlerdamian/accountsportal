@@ -110,8 +110,8 @@ function SubTab({ label, active, onClick }) {
       onClick={onClick}
       style={{
         padding: '8px 16px', fontSize: '12px', fontWeight: 500, cursor: 'pointer',
-        background: 'transparent', border: 'none', borderBottom: `2px solid ${active ? '#f3ca0f' : 'transparent'}`,
-        color: active ? '#f3ca0f' : '#666', transition: 'color 120ms',
+        background: 'transparent', border: 'none', borderBottom: `2px solid ${active ? 'var(--brand-accent)' : 'transparent'}`,
+        color: active ? 'var(--brand-accent)' : '#666', transition: 'color 120ms',
       }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.color = '#AAA' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.color = '#666' }}
@@ -310,7 +310,7 @@ export default function RateCards() {
 
   const btnPrimary = {
     fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
-    cursor: 'pointer', color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)',
+    cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)',
     background: 'transparent', transition: 'background 120ms',
   }
 
@@ -322,7 +322,7 @@ export default function RateCards() {
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }} />
+        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />
       </div>
     )
   }
@@ -438,7 +438,7 @@ export default function RateCards() {
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{r.service}</td>
                             <td style={{ padding: '11px 14px', fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace' }}>{r.lane}</td>
-                            <td style={{ padding: '11px 14px', fontSize: '13px', color: '#f3ca0f', fontWeight: 500, textAlign: 'right' }}>{r.rate}</td>
+                            <td style={{ padding: '11px 14px', fontSize: '13px', color: 'var(--brand-accent)', fontWeight: 500, textAlign: 'right' }}>{r.rate}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -554,7 +554,7 @@ export default function RateCards() {
                   <button
                     onClick={downloadTemplate}
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textAlign: 'left', transition: 'color 120ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#f3ca0f' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)' }}
                     onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
                   >
                     ↓ Download template
@@ -580,7 +580,7 @@ export default function RateCards() {
 
                 <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
                   <p style={{ margin: '0 0 4px', color: '#4ade80' }}>{uploadResult.added} rate{uploadResult.added !== 1 ? 's' : ''} added</p>
-                  {uploadResult.superseded > 0 && <p style={{ margin: '0 0 4px', color: '#f3ca0f' }}>{uploadResult.superseded} existing rate{uploadResult.superseded !== 1 ? 's' : ''} superseded</p>}
+                  {uploadResult.superseded > 0 && <p style={{ margin: '0 0 4px', color: 'var(--brand-accent)' }}>{uploadResult.superseded} existing rate{uploadResult.superseded !== 1 ? 's' : ''} superseded</p>}
                   {uploadResult.failed > 0 && <p style={{ margin: '0 0 4px', color: '#ff1744' }}>{uploadResult.failed} row{uploadResult.failed !== 1 ? 's' : ''} failed to save — old rates left active</p>}
                   {uploadResult.skipped.length > 0 && <p style={{ margin: '0 0 4px', color: '#ff1744' }}>{uploadResult.skipped.length} row{uploadResult.skipped.length !== 1 ? 's' : ''} skipped</p>}
                 </div>

@@ -18,7 +18,7 @@ const STATUS_STYLE = {
   Draft:      { color: '#a0a0a0', background: '#0a0a0a',               border: '1px solid #222222' },
   Authorised: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)',  border: '1px solid rgba(96,165,250,0.3)' },
   Ordered:    { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)' },
-  Receiving:  { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)',  border: '1px solid rgba(243,202,15,0.3)' },
+  Receiving:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)',  border: '1px solid rgba(243,202,15,0.3)' },
   Completed:  { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
   Cancelled:  { color: '#888',    background: '#0a0a0a',               border: '1px solid #222' },
 }
@@ -49,7 +49,7 @@ function EtaLabel({ eta }) {
   const diff = etaDiffDays(eta)
   const label = fmtDate(eta)
   if (diff < 0)  return <span style={{ color: '#ff1744', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span></span>
-  if (diff <= 7) return <span style={{ color: '#f3ca0f', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span></span>
+  if (diff <= 7) return <span style={{ color: 'var(--brand-accent)', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span></span>
   return <span style={{ color: '#AAA' }}>{label}</span>
 }
 
@@ -251,7 +251,7 @@ function PoCard({ po, onEtaSaved, onNoteSaved }) {
         <a
           href={`https://inventory.dearsystems.com/Purchase#${po.cin7_id}`}
           target="_blank" rel="noopener noreferrer"
-          style={{ color: '#f3ca0f', textDecoration: 'none', fontSize: '14px', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}
+          style={{ color: 'var(--brand-accent)', textDecoration: 'none', fontSize: '14px', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}
         >
           {po.po_number}
         </a>
@@ -425,7 +425,7 @@ export default function PurchaseOrders() {
   if (loading) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid #f3ca0f', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
+        <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid var(--brand-accent)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
       </div>
     )
   }
@@ -438,7 +438,7 @@ export default function PurchaseOrders() {
         </p>
         <button
           onClick={() => { setFetchError(null); setLoading(true); fetchOrders(activeFilters.flatMap(f => FILTER_MATCH[f] ?? [f])) }}
-          style={{ padding: '6px 14px', fontSize: '12px', color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent', borderRadius: '6px', cursor: 'pointer' }}
+          style={{ padding: '6px 14px', fontSize: '12px', color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent', borderRadius: '6px', cursor: 'pointer' }}
         >
           Retry
         </button>
@@ -473,7 +473,7 @@ export default function PurchaseOrders() {
             disabled={syncing}
             style={{
               padding: '8px 16px', fontSize: '12px', fontWeight: 500, letterSpacing: '0.04em',
-              textTransform: 'uppercase', color: syncing ? '#555' : '#f3ca0f',
+              textTransform: 'uppercase', color: syncing ? '#555' : 'var(--brand-accent)',
               border: `1px solid ${syncing ? '#333' : 'rgba(243,202,15,0.35)'}`,
               background: 'transparent', borderRadius: '6px',
               cursor: syncing ? 'not-allowed' : 'pointer', transition: 'background 150ms',
@@ -500,7 +500,7 @@ export default function PurchaseOrders() {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '24px' }}>
         <KpiCard label="Showing"       value={visible.length} />
         <KpiCard label="Overdue"       value={overdue.length} valueStyle={overdue.length > 0 ? { color: '#ff1744' } : {}} />
-        <KpiCard label="ETA This Week" value={dueSoon.length} valueStyle={dueSoon.length > 0 ? { color: '#f3ca0f' } : {}} />
+        <KpiCard label="ETA This Week" value={dueSoon.length} valueStyle={dueSoon.length > 0 ? { color: 'var(--brand-accent)' } : {}} />
         <KpiCard label="Order Sent"    value={visible.filter(o => o.has_attachment).length} />
       </div>
 
@@ -576,7 +576,7 @@ export default function PurchaseOrders() {
                     >
                       <td style={{ padding: '11px 14px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace', fontWeight: 500 }}>
                         <a href={`https://inventory.dearsystems.com/Purchase#${po.cin7_id}`} target="_blank" rel="noopener noreferrer"
-                          style={{ color: '#f3ca0f', textDecoration: 'none' }}
+                          style={{ color: 'var(--brand-accent)', textDecoration: 'none' }}
                           onMouseEnter={e => { e.currentTarget.style.textDecoration = 'underline' }}
                           onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none' }}>
                           {po.po_number}

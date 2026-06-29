@@ -153,7 +153,7 @@ export default function GlobalChat() {
             position: 'fixed', bottom: 'calc(16px + var(--task-dock-h, 0px))', right: '24px', zIndex: 50,
             display: 'flex', alignItems: 'center', gap: '8px',
             padding: '10px 16px', borderRadius: '24px',
-            background: '#f3ca0f', color: '#000000',
+            background: 'var(--brand-accent)', color: '#000000',
             border: 'none', cursor: 'pointer',
             fontSize: '13px', fontWeight: 600,
             boxShadow: '0 4px 24px rgba(243,202,15,0.35)',
@@ -187,7 +187,7 @@ export default function GlobalChat() {
           borderBottom: '1px solid #1a1a1a',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles style={{ width: '14px', height: '14px', color: '#f3ca0f' }} />
+            <Sparkles style={{ width: '14px', height: '14px', color: 'var(--brand-accent)' }} />
             <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#ffffff' }}>
               AI Assistant
             </span>
@@ -276,7 +276,7 @@ export default function GlobalChat() {
                   background: 'rgba(243,202,15,0.15)', flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '2px',
                 }}>
-                  <Sparkles style={{ width: '11px', height: '11px', color: '#f3ca0f' }} />
+                  <Sparkles style={{ width: '11px', height: '11px', color: 'var(--brand-accent)' }} />
                 </div>
               )}
               <div
@@ -309,7 +309,7 @@ export default function GlobalChat() {
                 background: 'rgba(243,202,15,0.15)', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <Sparkles style={{ width: '11px', height: '11px', color: '#f3ca0f' }} />
+                <Sparkles style={{ width: '11px', height: '11px', color: 'var(--brand-accent)' }} />
               </div>
               <div style={{
                 padding: '8px 12px', borderRadius: '12px 12px 12px 2px',
@@ -353,7 +353,7 @@ export default function GlobalChat() {
                 position: 'absolute', bottom: '8px', right: '8px',
                 padding: '5px', borderRadius: '5px',
                 background: 'none', border: 'none', cursor: 'pointer',
-                color: input.trim() && !loading ? '#f3ca0f' : '#333',
+                color: input.trim() && !loading ? 'var(--brand-accent)' : '#333',
                 transition: 'color 120ms',
               }}
             >

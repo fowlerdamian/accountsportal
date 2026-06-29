@@ -56,8 +56,8 @@ export default function LogisticsNav() {
             end={tab.end}
             className="flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors border-b-2 outline-none"
             style={{
-              color: isActive ? '#f3ca0f' : '#666',
-              borderBottomColor: isActive ? '#f3ca0f' : 'transparent',
+              color: isActive ? 'var(--brand-accent)' : '#666',
+              borderBottomColor: isActive ? 'var(--brand-accent)' : 'transparent',
               background: isActive ? 'rgba(243,202,15,0.04)' : 'transparent',
               textDecoration: 'none',
             }}
@@ -69,7 +69,7 @@ export default function LogisticsNav() {
                   width: '7px',
                   height: '7px',
                   borderRadius: '50%',
-                  background: isDanger ? '#ff1744' : '#f3ca0f',
+                  background: isDanger ? '#ff1744' : 'var(--brand-accent)',
                   flexShrink: 0,
                 }}
               />

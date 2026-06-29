@@ -7,7 +7,7 @@ import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../
 
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
-  flagged:  { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  flagged:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
   disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
   approved: { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
   resolved: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },
@@ -15,7 +15,7 @@ const STATUS_STYLE = {
 
 const EMAIL_STATUS_STYLE = {
   sent:  { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
-  draft: { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  draft: { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
 }
 
 function ActionBtn({ label, color, borderColor, disabled, onClick }) {
@@ -245,7 +245,7 @@ export default function InvoiceDetail() {
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }} />
+        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />
       </div>
     )
   }
@@ -296,10 +296,10 @@ export default function InvoiceDetail() {
       {/* No claims email warning */}
       {noClaimsWarning && (
         <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
-          background: 'rgba(243,202,15,0.08)', border: '1px solid rgba(243,202,15,0.3)', color: '#f3ca0f',
+          background: 'rgba(243,202,15,0.08)', border: '1px solid rgba(243,202,15,0.3)', color: 'var(--brand-accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <span>No claims email set for this carrier — add one in Carrier settings.</span>
-          <button onClick={() => setNoClaimsWarning(false)} style={{ background: 'none', border: 'none', color: '#f3ca0f', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}>×</button>
+          <button onClick={() => setNoClaimsWarning(false)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}>×</button>
         </div>
       )}
 
@@ -310,7 +310,7 @@ export default function InvoiceDetail() {
             <p style={{ fontSize: '22px', fontWeight: 700, color: '#ffffff', margin: 0 }}>{invoice.invoice_ref}</p>
             <p style={{ fontSize: '13px', color: '#888', margin: '4px 0 0' }}>
               {invoice.carriers?.name}
-              {invoice.carriers?.email && <> · <a href={`mailto:${invoice.carriers.email}`} style={{ color: '#f3ca0f', textDecoration: 'none' }}>{invoice.carriers.email}</a></>}
+              {invoice.carriers?.email && <> · <a href={`mailto:${invoice.carriers.email}`} style={{ color: 'var(--brand-accent)', textDecoration: 'none' }}>{invoice.carriers.email}</a></>}
             </p>
             <p style={{ fontSize: '12px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
               Invoice: {fmtDate(invoice.invoice_date)}
@@ -327,7 +327,7 @@ export default function InvoiceDetail() {
             { label: 'Total Charged', value: aud(total),                   style: {} },
             { label: 'Overcharge',    value: over > 0 ? aud(over) : '—',   style: over > 0 ? { color: '#ff1744' } : {} },
             { label: 'Lines Flagged', value: flagN,                         style: flagN > 0   ? { color: '#ff1744' } : {} },
-            { label: 'No Rate Card',  value: noRateN,                       style: noRateN > 0 ? { color: '#f3ca0f' } : {} },
+            { label: 'No Rate Card',  value: noRateN,                       style: noRateN > 0 ? { color: 'var(--brand-accent)' } : {} },
           ].map(({ label, value, style }) => (
             <div key={label}>
               <p style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{label}</p>
@@ -358,7 +358,7 @@ export default function InvoiceDetail() {
                   <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {isOver  && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff1744', flexShrink: 0 }} />}
-                      {noRate && !isOver && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f3ca0f', flexShrink: 0 }} />}
+                      {noRate && !isOver && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--brand-accent)', flexShrink: 0 }} />}
                       {line.description}
                     </span>
                   </td>
@@ -366,7 +366,7 @@ export default function InvoiceDetail() {
                   <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff', textAlign: 'right' }}>{aud(line.charged_total)}</td>
                   <td style={{ padding: '11px 14px', textAlign: 'right' }}>
                     {noRate
-                      ? <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#f3ca0f', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)', borderRadius: '4px', padding: '2px 7px' }}>No rate card</span>
+                      ? <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)', borderRadius: '4px', padding: '2px 7px' }}>No rate card</span>
                       : <span style={{ fontSize: '13px', color: '#AAA' }}>{aud(line.contracted_total)}</span>}
                   </td>
                   <td style={{ padding: '11px 14px', fontSize: '13px', textAlign: 'right' }}>
@@ -397,7 +397,7 @@ export default function InvoiceDetail() {
       <p style={sectionLabel}>Update status</p>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px', alignItems: 'center' }}>
         <ActionBtn label="Approve"         color="#4ade80" borderColor="#4ade80" disabled={updatingStatus || generatingLetter || invoice.status === 'approved'} onClick={() => updateStatus('approved')} />
-        <ActionBtn label="Flag for Review" color="#f3ca0f" borderColor="#f3ca0f" disabled={updatingStatus || generatingLetter || invoice.status === 'flagged'}  onClick={() => updateStatus('flagged')} />
+        <ActionBtn label="Flag for Review" color="var(--brand-accent)" borderColor="var(--brand-accent)" disabled={updatingStatus || generatingLetter || invoice.status === 'flagged'}  onClick={() => updateStatus('flagged')} />
         <ActionBtn
           label={generatingLetter ? 'Generating…' : updatingStatus ? 'Raising…' : 'Raise Dispute'}
           color="#ff1744" borderColor="#ff1744"
@@ -405,7 +405,7 @@ export default function InvoiceDetail() {
           onClick={raiseDispute}
         />
         <ActionBtn label="Mark Resolved"   color="#60a5fa" borderColor="#60a5fa" disabled={updatingStatus || generatingLetter || invoice.status === 'resolved'} onClick={() => updateStatus('resolved')} />
-        {(updatingStatus || generatingLetter) && <div className="w-4 h-4 rounded-full border animate-spin" style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }} />}
+        {(updatingStatus || generatingLetter) && <div className="w-4 h-4 rounded-full border animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />}
       </div>
 
       {/* Send dispute email — persistent button */}
@@ -448,7 +448,7 @@ export default function InvoiceDetail() {
           style={{
             marginTop: '8px', fontSize: '12px', fontWeight: 500, padding: '6px 14px',
             borderRadius: '6px', cursor: savingNotes ? 'not-allowed' : 'pointer',
-            color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent',
+            color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent',
             opacity: savingNotes ? 0.5 : 1, transition: 'background 120ms',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
@@ -474,7 +474,7 @@ export default function InvoiceDetail() {
               style={{
                 fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
                 cursor: generatingLetter ? 'not-allowed' : 'pointer',
-                color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent',
+                color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent',
                 opacity: generatingLetter ? 0.6 : 1, transition: 'background 120ms',
               }}
               onMouseEnter={e => { if (!generatingLetter) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
@@ -489,7 +489,7 @@ export default function InvoiceDetail() {
                 <button
                   onClick={copyLetter}
                   style={{ marginTop: '12px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', background: 'none', border: 'none', cursor: 'pointer', padding: 0, transition: 'color 120ms' }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#f3ca0f' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)' }}
                   onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
                 >
                   copy letter
@@ -538,7 +538,7 @@ export default function InvoiceDetail() {
                           {em.status === 'draft' && (
                             <button
                               onClick={e => { e.stopPropagation(); setPanelLetter(em.letter_text ?? ''); setShowPanel(true) }}
-                              style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#f3ca0f', background: 'none', border: 'none', cursor: 'pointer', padding: 0, transition: 'opacity 120ms' }}
+                              style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, transition: 'opacity 120ms' }}
                               onMouseEnter={e => { e.currentTarget.style.opacity = '0.7' }}
                               onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
                             >

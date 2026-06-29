@@ -78,7 +78,7 @@ export default function ResetPassword() {
       >
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2.5">
-            <div className="w-1.5 h-6 rounded-sm" style={{ background: '#f3ca0f' }} />
+            <div className="w-1.5 h-6 rounded-sm" style={{ background: 'var(--brand-accent)' }} />
             <span className="text-base font-semibold tracking-widest uppercase" style={{ color: '#ffffff' }}>
               Staff Portal
             </span>
@@ -174,7 +174,7 @@ export default function ResetPassword() {
               disabled={status === 'saving'}
               className="w-full py-2.5 rounded text-sm font-semibold tracking-wide uppercase mt-1"
               style={{
-                background: status === 'saving' ? '#333' : '#f3ca0f',
+                background: status === 'saving' ? '#333' : 'var(--brand-accent)',
                 color: status === 'saving' ? '#888' : '#000000',
                 border: 'none',
                 cursor: status === 'saving' ? 'default' : 'pointer',

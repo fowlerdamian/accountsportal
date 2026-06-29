@@ -68,7 +68,7 @@ function OrderNumCell({ orderNum, orderLinks, linksLoading }) {
         target="_blank"
         rel="noopener noreferrer"
         className="font-mono text-sm whitespace-nowrap hover:underline underline-offset-2"
-        style={{ color: '#f3ca0f' }}
+        style={{ color: 'var(--brand-accent)' }}
       >
         {orderNum}
       </a>
@@ -78,13 +78,13 @@ function OrderNumCell({ orderNum, orderLinks, linksLoading }) {
   return (
     <span
       className="font-mono text-sm whitespace-nowrap inline-flex items-center gap-1.5"
-      style={{ color: '#f3ca0f' }}
+      style={{ color: 'var(--brand-accent)' }}
     >
       {orderNum}
       {linksLoading && (
         <span
           className="inline-block w-1 h-1 rounded-full animate-pulse flex-shrink-0"
-          style={{ background: '#f3ca0f', opacity: 0.4 }}
+          style={{ background: 'var(--brand-accent)', opacity: 0.4 }}
         />
       )}
     </span>
@@ -256,7 +256,7 @@ export default function DataTable({ orders, orderLinks = {}, linksLoading = fals
                   className={`px-4 py-3 text-[10px] font-medium uppercase tracking-[0.1em] whitespace-nowrap ${
                     col.align === 'right' ? 'text-right' : 'text-left'
                   } ${col.key ? 'cursor-pointer select-none' : ''}`}
-                  style={{ color: isActive ? '#f3ca0f' : '#555', transition: 'color 0.15s' }}
+                  style={{ color: isActive ? 'var(--brand-accent)' : '#555', transition: 'color 0.15s' }}
                 >
                   {col.label}
                   {col.key && <SortIcon dir={isActive ? sortDir : null} />}
