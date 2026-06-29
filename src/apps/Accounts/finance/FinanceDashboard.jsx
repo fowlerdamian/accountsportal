@@ -101,7 +101,7 @@ function Tile({ icon: Icon, label, value, sub, delta, valueColor = C.text, hue =
         {Icon && <Icon size={14} strokeWidth={1.5} style={{ color: hue }} />}
         <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 500 }}>{label}</span>
       </div>
-      <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '1.55rem', lineHeight: 1, fontWeight: 500, color: valueColor }}>{value}</span>
+      <span className="tile-value" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '1.55rem', lineHeight: 1, fontWeight: 500, color: valueColor }}>{value}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 14 }}>
         {delta != null && (
           <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: dColor }}>{dArrow} {pct(Math.abs(delta))}</span>
@@ -267,6 +267,7 @@ export default function FinanceDashboard() {
   }, [grain, effAnchor, data, options, ytdLen, snapByKey])
 
   const periodLabel = options.find((o) => o.value === effAnchor)?.label ?? '—'
+  const asOf = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 
   // ── Waterfall steps: Revenue → −COGS → GP → −OpEx → EBITDA ──────────────────
   const waterfall = useMemo(() => {
@@ -334,14 +335,14 @@ export default function FinanceDashboard() {
   // best available first — opens the native share sheet (mobile), copies the PNG
   // to the clipboard, or downloads it. So a snapshot of "what I'm looking at" is
   // one click away to drop into Slack / email.
-  const shotRef = useRef(null)
+  const cardRef = useRef(null)
   const [shareState, setShareState] = useState('idle') // idle|working|copied|saved|error
   async function handleShare() {
-    if (!shotRef.current || shareState === 'working') return
+    if (!cardRef.current || shareState === 'working') return
     setShareState('working')
     try {
-      const canvas = await html2canvas(shotRef.current, {
-        backgroundColor: C.bg, scale: 2, useCORS: true, logging: false,
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: null, scale: 3, useCORS: true, logging: false,
       })
       const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'))
       const fname = `finance-${String(periodLabel).replace(/\s+/g, '-').toLowerCase()}.png`
@@ -372,18 +373,18 @@ export default function FinanceDashboard() {
   if (!availableKeys.length) return <Centered>No finance snapshots yet. Run the snapshot pipeline to populate.</Centered>
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', background: C.bg, padding: 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <div ref={shotRef} style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="finance-root" style={{ height: '100%', overflow: 'auto', background: C.bg, padding: 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
+      <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Header + filter bar */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div className="finance-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Finance Dashboard</h1>
             <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
               {periodLabel} · GST-exclusive · source: Xero{curr?.months ? ` · ${curr.months} mo` : ''}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="finance-controls" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <FilterBar
               grain={grain} setGrain={(g) => { setGrain(g); setAnchor(null) }}
               options={options} anchor={effAnchor} setAnchor={setAnchor}
@@ -404,7 +405,7 @@ export default function FinanceDashboard() {
         )}
 
         {/* Tiles */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+        <div className="finance-tiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
           <Tile icon={CurrencyDollarIcon} label="Revenue" value={money(curr.revenue)} hue={C.gold} valueColor={C.gold}
             delta={showCmp ? deltaPct(curr.revenue, prev?.revenue) : null} sub={showCmp ? 'vs prev' : ''} />
           <Tile icon={ChartLineIcon} label="Gross Profit" value={money(curr.grossProfit)} hue={C.aqua} valueColor={curr.grossProfit >= 0 ? C.green : C.red}
@@ -508,6 +509,10 @@ export default function FinanceDashboard() {
         </div>
 
       </div>
+
+      {/* Off-screen card captured by the Share button */}
+      <SnapshotCard cardRef={cardRef} periodLabel={periodLabel} curr={curr}
+        currCases={currCases} prev={prev} showCmp={showCmp} asOf={asOf} />
     </div>
   )
 }
@@ -571,6 +576,64 @@ function FilterBar({ grain, setGrain, options, anchor, setAnchor }) {
         }}>
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
+    </div>
+  )
+}
+
+// A clean, branded snapshot image of the current view — rendered off-screen and
+// rasterised, rather than screenshotting the live (cramped) dashboard DOM. Solid
+// fills + no recharts SVG ⇒ html2canvas produces a crisp card.
+function deltaLabel(d) {
+  if (d == null) return null
+  return `${d >= 0 ? '▲' : '▼'} ${pct(Math.abs(d))} vs prev`
+}
+function SnapshotCard({ cardRef, periodLabel, curr, currCases, prev, showCmp, asOf }) {
+  if (!curr) return null
+  const metrics = [
+    { label: 'Revenue', value: money(curr.revenue), accent: C.gold, sub: showCmp ? deltaLabel(deltaPct(curr.revenue, prev?.revenue)) : 'GST-excl.' },
+    { label: 'Gross Profit', value: money(curr.grossProfit), accent: C.aqua, sub: `${pct(curr.grossProfitPct)} margin` },
+    { label: 'EBITDA', value: money(curr.ebitda), accent: C.purple, sub: `${pct(curr.ebitdaPct)} margin` },
+    { label: '% to Breakeven', value: pct(curr.pctToBreakeven, 0), accent: C.orange, sub: curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : null },
+    { label: 'Cases', value: fmt0.format(currCases.total), accent: C.blue, sub: `${currCases.open} open` },
+  ]
+  return (
+    // Off-screen host; html2canvas can still measure/paint it.
+    <div aria-hidden style={{ position: 'fixed', left: -99999, top: 0, pointerEvents: 'none' }}>
+      <div ref={cardRef} style={{
+        width: 760, padding: 36, boxSizing: 'border-box',
+        background: 'linear-gradient(150deg, #18181b 0%, #0c0c0e 100%)',
+        border: `1px solid ${C.border}`, borderRadius: 18,
+        fontFamily: 'Inter, system-ui, sans-serif', color: C.text,
+      }}>
+        {/* accent bar */}
+        <div style={{ height: 4, width: 64, borderRadius: 2, background: `linear-gradient(90deg, ${C.gold}, ${C.orange})`, marginBottom: 20 }} />
+        {/* header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.01em' }}>Finance Snapshot</div>
+            <div style={{ fontSize: 13, color: C.muted, fontFamily: MONO, marginTop: 4 }}>{periodLabel} · GST-exclusive · source: Xero</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.gold, letterSpacing: '0.04em' }}>AUTOMOTIVE GROUP</div>
+            <div style={{ fontSize: 11, color: C.faint, fontFamily: MONO, marginTop: 4 }}>as at {asOf}</div>
+          </div>
+        </div>
+        {/* metrics */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          {metrics.map((m) => (
+            <div key={m.label} style={{
+              background: C.panel, border: `1px solid ${C.border}`, borderTop: `2px solid ${m.accent}`,
+              borderRadius: 10, padding: '16px 18px',
+            }}>
+              <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 500 }}>{m.label}</div>
+              <div style={{ fontFamily: MONO, fontSize: '1.5rem', fontWeight: 500, marginTop: 10, lineHeight: 1 }}>{m.value}</div>
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: MONO, marginTop: 8, minHeight: 13 }}>{m.sub ?? ''}</div>
+            </div>
+          ))}
+        </div>
+        {/* footer */}
+        <div style={{ marginTop: 22, fontSize: 11, color: C.faint, fontFamily: MONO }}>app.automotivegroup.com.au · Finance Dashboard</div>
+      </div>
     </div>
   )
 }

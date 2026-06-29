@@ -26,6 +26,35 @@
   .finance-desktop-only {
     display: none !important;
   }
+
+  /* ── Finance Dashboard mobile UX ──────────────────────────────────────── */
+  .finance-root {
+    padding: 12px !important;
+  }
+  /* Stack the title above the controls; let controls use the full width. */
+  .finance-header {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .finance-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  /* The grain switch + period select fill the row; sync/share sit beneath. */
+  .finance-controls > :first-child {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+  /* Two compact tiles per row instead of five tall stacked blocks. */
+  .finance-tiles {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .tile-value {
+    font-size: 1.2rem !important;
+  }
 }
 
 .accounts-nav-link:hover {
