@@ -13,8 +13,8 @@
 //   <Bar fill={palette.accent} />
 
 const FALLBACK = {
-  accent: '#0f53bc', gold: '#0f53bc', orange: '#974d46', pink: '#831914',
-  blue: '#0f53bc', aqua: '#2d6854', purple: '#974d46',
+  accent: '#e09f3e', gold: '#e09f3e', orange: '#e09f3e', pink: '#9e2a2b',
+  blue: '#335c67', aqua: '#335c67', purple: '#540b0e',
 }
 
 function read(name, fallback) {
