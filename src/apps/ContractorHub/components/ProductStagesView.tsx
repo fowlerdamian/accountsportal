@@ -96,7 +96,7 @@ function StageStepper({
                     }
                     className={cn(
                       "w-12 h-12 rounded-full flex items-center justify-center border-2 text-sm font-bold transition-all duration-200",
-                      isActive    && "border-primary bg-primary/15 text-primary scale-115 shadow-[0_0_24px_rgba(243,202,15,0.4)]",
+                      isActive    && "border-primary bg-primary/15 text-primary scale-115 shadow-[0_0_24px_rgba(var(--brand-accent-rgb),0.4)]",
                       isCompleted && "border-green-500 bg-green-500/15 text-green-400 cursor-pointer hover:bg-amber-500/15 hover:border-amber-500 hover:text-amber-400",
                       isFuture    && "border-border/30 bg-background text-muted-foreground/30",
                       isFuture && !activating && "hover:border-border/60 hover:text-muted-foreground/60 cursor-pointer",

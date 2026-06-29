@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import html2canvas from 'html2canvas'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
   CartesianGrid, Cell, ReferenceLine,
@@ -30,7 +31,7 @@ const C = {
   muted:        '#a0a0a0',                 // --text-secondary
   faint:        '#666666',                 // --text-tertiary
   cost:         '#666666',                 // neutral grey
-  accentSubtle: 'rgba(15,83,188,0.12)',    // --accent-subtle (blue)
+  accentSubtle: 'rgba(224,159,62,0.12)',   // --accent-subtle (orange)
   // Brand accent hues — single source (src/index.css --brand-* via palette.js)
   accent:       palette.accent,
   revenue:      palette.accent,
@@ -291,6 +292,43 @@ export default function FinanceDashboard() {
     return rows
   }, [expenseRows, sort])
 
+  // ── Share current view as an image ────────────────────────────────────────────
+  // Rasterises the dashboard exactly as it's currently filtered/sorted, then —
+  // best available first — opens the native share sheet (mobile), copies the PNG
+  // to the clipboard, or downloads it. So a snapshot of "what I'm looking at" is
+  // one click away to drop into Slack / email.
+  const shotRef = useRef(null)
+  const [shareState, setShareState] = useState('idle') // idle|working|copied|saved|error
+  async function handleShare() {
+    if (!shotRef.current || shareState === 'working') return
+    setShareState('working')
+    try {
+      const canvas = await html2canvas(shotRef.current, {
+        backgroundColor: C.bg, scale: 2, useCORS: true, logging: false,
+      })
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'))
+      const fname = `finance-${String(periodLabel).replace(/\s+/g, '-').toLowerCase()}.png`
+      const file = new File([blob], fname, { type: 'image/png' })
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Finance snapshot', text: `Finance Dashboard — ${periodLabel}` })
+        setShareState('idle')
+      } else if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })])
+        setShareState('copied')
+      } else {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = fname; a.click()
+        URL.revokeObjectURL(url)
+        setShareState('saved')
+      }
+    } catch (e) {
+      console.error('[finance share]', e)
+      setShareState('error')
+    }
+    setTimeout(() => setShareState((s) => (s === 'working' ? s : 'idle')), 2500)
+  }
+
   // ── States ──────────────────────────────────────────────────────────────────
   if (isLoading) return <Centered>Loading finance snapshots…</Centered>
   if (error) return <Centered tone={C.red}>Failed to load: {error.message}</Centered>
@@ -298,7 +336,7 @@ export default function FinanceDashboard() {
 
   return (
     <div style={{ height: '100%', overflow: 'auto', background: C.bg, padding: 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div ref={shotRef} style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Header + filter bar */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -308,10 +346,13 @@ export default function FinanceDashboard() {
               {periodLabel} · GST-exclusive · source: Xero{curr?.months ? ` · ${curr.months} mo` : ''}
             </span>
           </div>
-          <FilterBar
-            grain={grain} setGrain={(g) => { setGrain(g); setAnchor(null) }}
-            options={options} anchor={effAnchor} setAnchor={setAnchor}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <FilterBar
+              grain={grain} setGrain={(g) => { setGrain(g); setAnchor(null) }}
+              options={options} anchor={effAnchor} setAnchor={setAnchor}
+            />
+            <ShareButton state={shareState} onClick={handleShare} />
+          </div>
         </div>
 
         {/* Unmapped banner */}
@@ -489,6 +530,30 @@ function FilterBar({ grain, setGrain, options, anchor, setAnchor }) {
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
+  )
+}
+
+// Share the current view as a PNG (native share → clipboard → download).
+const SHARE_LABEL = { idle: 'Share', working: 'Capturing…', copied: 'Copied ✓', saved: 'Saved ✓', error: 'Failed' }
+function ShareButton({ state, onClick }) {
+  const active = state === 'copied' || state === 'saved'
+  return (
+    <button onClick={onClick} disabled={state === 'working'}
+      title="Share a snapshot of the current view"
+      data-html2canvas-ignore="true"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6, cursor: state === 'working' ? 'default' : 'pointer',
+        background: active ? C.accent : C.panel, color: active ? C.bg : C.text,
+        border: `1px solid ${active ? C.accent : C.border}`, borderRadius: 7,
+        padding: '7px 12px', fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace',
+        transition: 'background 120ms, color 120ms',
+      }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+        <path d="M12 16V3" /><path d="m8 7 4-4 4 4" />
+      </svg>
+      {SHARE_LABEL[state] ?? 'Share'}
+    </button>
   )
 }
 

@@ -74,6 +74,7 @@
        Inline styles / CSS: var(--brand-accent), var(--brand-aqua), …
        Charts (recharts) / JS: import { palette } from '@portal/lib/palette'. */
     --brand-accent: #e09f3e;   /* primary accent = Orange */
+    --brand-accent-rgb: 224, 159, 62;  /* ^ same, RGB triple for rgba() alpha tints */
     --brand-gold:   #e09f3e;   /* Orange (warm gold) */
     --brand-orange: #e09f3e;   /* Orange */
     --brand-pink:   #9e2a2b;   /* Red */

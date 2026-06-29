@@ -310,9 +310,9 @@ export function HubTimerButton() {
         style={{
           display: "flex", alignItems: "center", gap: "6px",
           fontSize: "11px", fontFamily: '"JetBrains Mono", monospace',
-          color:      isRunning ? "var(--brand-accent)" : "#555",
+          color:      isRunning ? "var(--brand-accent)" : "var(--text-tertiary)",
           background: "none",
-          border:     `1px solid ${isRunning ? "rgba(243,202,15,0.4)" : "#222222"}`,
+          border:     `1px solid ${isRunning ? "rgba(var(--brand-accent-rgb),0.4)" : "#222222"}`,
           borderRadius: "4px", padding: "4px 10px", cursor: "pointer",
           transition: "color 120ms, border-color 120ms",
         }}

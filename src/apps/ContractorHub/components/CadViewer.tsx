@@ -313,7 +313,7 @@ export default function CadViewer({ fileUrl, filename, displayName, driveFileId,
           {status === "error" && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "8px" }}>
               <span style={{ fontSize: "13px", color: "#ff1744", fontFamily: '"JetBrains Mono", monospace' }}>Failed to load model</span>
-              <span style={{ fontSize: "11px", color: "#555", fontFamily: '"JetBrains Mono", monospace' }}>{errorMsg}</span>
+              <span style={{ fontSize: "11px", color: "var(--text-tertiary)", fontFamily: '"JetBrains Mono", monospace' }}>{errorMsg}</span>
             </div>
           )}
 
@@ -331,7 +331,7 @@ export default function CadViewer({ fileUrl, filename, displayName, driveFileId,
               <a
                 href={fileUrl}
                 download={filename}
-                style={{ marginTop: "8px", fontSize: "12px", fontWeight: 500, padding: "7px 16px", borderRadius: "6px", color: "var(--brand-accent)", border: "1px solid rgba(243,202,15,0.35)", background: "transparent", textDecoration: "none", transition: "background 120ms" }}
+                style={{ marginTop: "8px", fontSize: "12px", fontWeight: 500, padding: "7px 16px", borderRadius: "6px", color: "var(--brand-accent)", border: "1px solid rgba(var(--brand-accent-rgb),0.35)", background: "transparent", textDecoration: "none", transition: "background 120ms" }}
               >
                 Download file
               </a>
