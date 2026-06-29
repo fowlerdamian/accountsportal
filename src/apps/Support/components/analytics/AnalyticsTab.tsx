@@ -9,12 +9,13 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Legend,
 } from 'recharts';
 import { format, subDays, startOfDay, startOfWeek, startOfMonth, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns';
+import { palette } from '@portal/lib/palette';
 
 const TYPE_COLOURS: Record<CaseType, string> = {
-  warranty_claim: '#C0392B',
-  order_error: '#D4860A',
-  freight_issue: '#1A6FA8',
-  complaint: '#1A6FA8',
+  warranty_claim: palette.pink,
+  order_error: palette.orange,
+  freight_issue: palette.blue,
+  complaint: palette.blue,
   general: '#5A5A5A',
 };
 
@@ -31,11 +32,11 @@ const EXTENDED_LABELS: Record<ExtendedCategory, string> = {
 };
 
 const EXTENDED_COLOURS: Record<ExtendedCategory, string> = {
-  warranty_claim: '#C0392B',
-  order_entry_error: '#D4860A',
-  warehouse_error: '#6B3FA0',
-  freight_issue: '#1A6FA8',
-  complaint: '#2E7D32',
+  warranty_claim: palette.pink,
+  order_entry_error: palette.orange,
+  warehouse_error: palette.purple,
+  freight_issue: palette.blue,
+  complaint: palette.aqua,
   general: '#5A5A5A',
 };
 
@@ -256,11 +257,11 @@ export default function AnalyticsTab() {
                 labelStyle={{ color: '#9A9A9A' }}
               />
               <Legend formatter={(value) => <span style={{ color: '#9A9A9A', fontSize: '11px' }}>{value}</span>} />
-              <Line type="monotone" dataKey="Warranty" stroke="#C0392B" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#1E1E1E' }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="Order Entry Error" stroke="#D4860A" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#1E1E1E' }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="Warehouse Error" stroke="#6B3FA0" strokeWidth={2} dot={{ r: 4, strokeWidth: 0, fill: '#6B3FA0' }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="Freight Issue" stroke="#1A6FA8" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#1E1E1E' }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="Complaint" stroke="#2E7D32" strokeWidth={2} dot={{ r: 4, strokeWidth: 0, fill: '#2E7D32' }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="Warranty" stroke={palette.pink} strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#1E1E1E' }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="Order Entry Error" stroke={palette.orange} strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#1E1E1E' }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="Warehouse Error" stroke={palette.purple} strokeWidth={2} dot={{ r: 4, strokeWidth: 0, fill: palette.purple }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="Freight Issue" stroke={palette.blue} strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#1E1E1E' }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="Complaint" stroke={palette.aqua} strokeWidth={2} dot={{ r: 4, strokeWidth: 0, fill: palette.aqua }} activeDot={{ r: 6 }} />
               <Line type="monotone" dataKey="General" stroke="#5A5A5A" strokeWidth={2} dot={{ r: 2, strokeWidth: 2, fill: '#5A5A5A' }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>

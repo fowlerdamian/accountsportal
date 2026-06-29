@@ -125,7 +125,7 @@ export function ActionConfirmationCard({
       className={cn(
         "w-full text-left rounded-lg border px-3 py-2.5 text-sm transition-colors",
         isError
-          ? "border-red-800/50 bg-red-900/20 text-red-300"
+          ? "border-[rgba(var(--brand-pink-rgb),0.5)] bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)]"
           : "border-border/60 bg-muted/40 hover:bg-muted/60",
         linkTo && "cursor-pointer",
         !linkTo && "cursor-default",
@@ -134,10 +134,10 @@ export function ActionConfirmationCard({
     >
       <div className="flex items-center gap-2 mb-1">
         {isError
-          ? <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-          : <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />
+          ? <AlertCircle className="w-3.5 h-3.5 text-[var(--brand-pink)] shrink-0" />
+          : <CheckCircle2 className="w-3.5 h-3.5 text-[var(--brand-aqua)] shrink-0" />
         }
-        <span className={cn("font-medium text-xs", isError ? "text-red-300" : "text-foreground")}>
+        <span className={cn("font-medium text-xs", isError ? "text-[var(--brand-pink)]" : "text-foreground")}>
           {title}
         </span>
       </div>

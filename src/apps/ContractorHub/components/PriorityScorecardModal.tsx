@@ -157,9 +157,9 @@ export function PriorityScorecardModal({ open, onClose, onComplete }: PrioritySc
                     className={[
                       "flex-1 h-10 rounded-md text-sm font-semibold border transition-all",
                       currentRating === n
-                        ? n >= 8 ? "bg-green-500 text-white border-green-500 scale-110"
-                          : n >= 5 ? "bg-amber-500 text-white border-amber-500 scale-110"
-                          : "bg-red-500 text-white border-red-500 scale-110"
+                        ? n >= 8 ? "bg-[var(--brand-aqua)] text-white border-[var(--brand-aqua)] scale-110"
+                          : n >= 5 ? "bg-[var(--brand-orange)] text-white border-[var(--brand-orange)] scale-110"
+                          : "bg-[var(--brand-pink)] text-white border-[var(--brand-pink)] scale-110"
                         : "border-border text-muted-foreground hover:bg-muted",
                     ].join(" ")}
                   >
@@ -201,7 +201,7 @@ export function PriorityScorecardModal({ open, onClose, onComplete }: PrioritySc
           /* Results screen */
           <div className="space-y-5 mt-2">
             <div className="flex flex-col items-center gap-1.5 py-2">
-              <CheckedIcon className={`w-8 h-8 ${score >= 8 ? "text-green-500" : score >= 5 ? "text-amber-500" : "text-red-500"}`} />
+              <CheckedIcon className={`w-8 h-8 ${score >= 8 ? "text-[var(--brand-aqua)]" : score >= 5 ? "text-[var(--brand-orange)]" : "text-[var(--brand-pink)]"}`} />
               <p className="text-4xl font-bold tabular-nums">{score.toFixed(1)}<span className="text-lg text-muted-foreground font-normal"> / 10</span></p>
               <p className="text-sm text-muted-foreground text-center">
                 {score >= 8 ? "High priority — strong business case"
@@ -220,7 +220,7 @@ export function PriorityScorecardModal({ open, onClose, onComplete }: PrioritySc
                     <span className="w-40 text-muted-foreground shrink-0 truncate">{q.label}</span>
                     <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all ${r >= 8 ? "bg-green-500" : r >= 5 ? "bg-amber-500" : "bg-red-500"}`}
+                        className={`h-full rounded-full transition-all ${r >= 8 ? "bg-[var(--brand-aqua)]" : r >= 5 ? "bg-[var(--brand-orange)]" : "bg-[var(--brand-pink)]"}`}
                         style={{ width: `${r * 10}%` }}
                       />
                     </div>

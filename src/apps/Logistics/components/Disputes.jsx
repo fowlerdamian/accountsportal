@@ -6,7 +6,7 @@ import { aud, invoiceOvercharge } from '../utils/helpers.js'
 
 const STATUS_STYLE = {
   flagged:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
-  disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
+  disputed: { color: 'var(--brand-pink)', background: 'rgba(var(--brand-pink-rgb),0.1)',  border: '1px solid rgba(var(--brand-pink-rgb),0.3)'  },
 }
 
 export default function Disputes() {
@@ -87,7 +87,7 @@ export default function Disputes() {
                   </td>
                   <td style={{ padding: '11px 14px', fontSize: '13px', textAlign: 'right' }}>
                     {over > 0
-                      ? <span style={{ color: '#ff1744', fontWeight: 500 }}>{aud(over)}</span>
+                      ? <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{aud(over)}</span>
                       : <span style={{ color: '#444' }}>—</span>}
                   </td>
                   <td style={{ padding: '11px 14px', fontSize: '12px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

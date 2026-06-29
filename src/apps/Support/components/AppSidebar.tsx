@@ -78,7 +78,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
             {item.path === '/support/actions' && actionCount > 0 && (
               <span
                 className="ml-auto h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-medium rounded-sm"
-                style={{ background: 'rgba(239,68,68,0.2)', color: '#ff1744' }}
+                style={{ background: 'rgba(var(--brand-pink-rgb),0.2)', color: 'var(--brand-pink)' }}
               >
                 {actionCount}
               </span>
@@ -86,7 +86,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
             {item.path === '/support/warehouse' && warehouseCount > 0 && (
               <span
                 className="ml-auto h-4 min-w-[16px] px-1 flex items-center justify-center text-[10px] font-medium rounded-sm"
-                style={{ background: 'rgba(59,158,255,0.2)', color: '#3B9EFF' }}
+                style={{ background: 'rgba(var(--brand-aqua-rgb),0.2)', color: 'var(--brand-blue)' }}
               >
                 {warehouseCount}
               </span>

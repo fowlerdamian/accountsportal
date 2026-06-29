@@ -96,9 +96,9 @@ export default function ResetPassword() {
           <div className="flex flex-col gap-4">
             <div
               className="rounded px-4 py-4"
-              style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}
+              style={{ background: 'rgba(var(--brand-pink-rgb),0.06)', border: '1px solid rgba(var(--brand-pink-rgb),0.2)' }}
             >
-              <p className="text-sm font-medium" style={{ color: '#ff6b6b' }}>Link invalid or expired</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--brand-pink)' }}>Link invalid or expired</p>
               <p className="text-xs font-mono mt-2" style={{ color: '#a0a0a0' }}>
                 Ask an admin to send a new reset link from Settings.
               </p>
@@ -116,9 +116,9 @@ export default function ResetPassword() {
         {status === 'done' && (
           <div
             className="rounded px-4 py-4"
-            style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}
+            style={{ background: 'rgba(var(--brand-aqua-rgb),0.06)', border: '1px solid rgba(var(--brand-aqua-rgb),0.2)' }}
           >
-            <p className="text-sm font-medium" style={{ color: '#86EFAC' }}>Password updated</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--brand-aqua)' }}>Password updated</p>
             <p className="text-xs font-mono mt-2" style={{ color: '#a0a0a0' }}>Redirecting to the portal…</p>
           </div>
         )}
@@ -166,7 +166,7 @@ export default function ResetPassword() {
             </label>
 
             {error && (
-              <p className="text-xs font-mono" style={{ color: '#ff6b6b' }}>{error}</p>
+              <p className="text-xs font-mono" style={{ color: 'var(--brand-pink)' }}>{error}</p>
             )}
 
             <button

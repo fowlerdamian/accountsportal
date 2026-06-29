@@ -52,8 +52,8 @@ export function DependencyPicker({ value, onChange, parentDue, excludeUser }: De
   }, [parentDue]);
 
   return (
-    <div className="space-y-3 rounded-md border border-dashed bg-amber-950/10 p-3">
-      <p className="text-[11px] uppercase tracking-wide text-amber-400/80 font-medium">
+    <div className="space-y-3 rounded-md border border-dashed bg-[rgba(var(--brand-accent-rgb),0.1)] p-3">
+      <p className="text-[11px] uppercase tracking-wide text-[rgba(var(--brand-accent-rgb),0.8)] font-medium">
         Waiting on someone — auto-creates their task & blocks this one
       </p>
 

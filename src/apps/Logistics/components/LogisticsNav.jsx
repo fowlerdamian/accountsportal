@@ -69,7 +69,7 @@ export default function LogisticsNav() {
                   width: '7px',
                   height: '7px',
                   borderRadius: '50%',
-                  background: isDanger ? '#ff1744' : 'var(--brand-accent)',
+                  background: isDanger ? 'var(--brand-pink)' : 'var(--brand-accent)',
                   flexShrink: 0,
                 }}
               />

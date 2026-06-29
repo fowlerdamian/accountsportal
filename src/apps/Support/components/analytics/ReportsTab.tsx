@@ -6,6 +6,7 @@ import { CASE_TYPE_LABELS } from '@/lib/types';
 import type { Case, CaseType } from '@/lib/types';
 import { calculateBusinessDaysOpen } from '@/lib/businessDays';
 import { Download } from 'lucide-react';
+import { palette } from '@portal/lib/palette';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Label,
@@ -19,10 +20,10 @@ import {
 type Preset = 'this_week' | 'this_month' | 'last_month' | 'last_3_months';
 
 const TYPE_COLOURS: Record<CaseType, string> = {
-  warranty_claim: '#C0392B',
-  order_error: '#D4860A',
-  freight_issue: '#1A6FA8',
-  complaint: '#6B3FA0',
+  warranty_claim: palette.pink,
+  order_error: palette.orange,
+  freight_issue: palette.blue,
+  complaint: palette.purple,
   general: '#5A5A5A',
 };
 
@@ -38,11 +39,11 @@ const EXTENDED_LABELS: Record<ExtendedCategory, string> = {
 };
 
 const EXTENDED_COLOURS: Record<ExtendedCategory, string> = {
-  warranty_claim: '#C0392B',
-  order_entry_error: '#D4860A',
-  warehouse_error: '#6B3FA0',
-  freight_issue: '#1A6FA8',
-  complaint: '#6B3FA0',
+  warranty_claim: palette.pink,
+  order_entry_error: palette.orange,
+  warehouse_error: palette.purple,
+  freight_issue: palette.blue,
+  complaint: palette.purple,
   general: '#5A5A5A',
 };
 
@@ -57,9 +58,9 @@ function getExtendedCategory(c: { type: string; error_origin?: string | null }):
 
 const STATUS_COLOURS: Record<string, string> = {
   open: '#5A5A5A',
-  actioned: '#1A6FA8',
-  in_hand: '#6B3FA0',
-  closed: '#2E7D32',
+  actioned: palette.blue,
+  in_hand: palette.purple,
+  closed: palette.aqua,
 };
 
 function getDateRange(preset: Preset): { start: Date; end: Date } {
@@ -129,7 +130,7 @@ export default function ReportsTab() {
     return {
       name: EXTENDED_LABELS[cat],
       days: rounded,
-      color: rounded <= 1 ? '#2E7D32' : rounded <= 2 ? '#D4860A' : '#C0392B',
+      color: rounded <= 1 ? palette.aqua : rounded <= 2 ? palette.orange : palette.pink,
     };
   }).filter(Boolean) as { name: string; days: number; color: string }[];
 
@@ -335,7 +336,7 @@ export default function ReportsTab() {
                 />
                 <YAxis tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} allowDecimals={false} />
                 <Tooltip {...tooltipStyle} />
-                <Line type="monotone" dataKey="count" stroke="#1A6FA8" strokeWidth={2} dot={days.length <= 14} />
+                <Line type="monotone" dataKey="count" stroke={palette.blue} strokeWidth={2} dot={days.length <= 14} />
               </LineChart>
             </ResponsiveContainer>
           </div>

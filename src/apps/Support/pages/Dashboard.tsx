@@ -207,9 +207,9 @@ export default function Dashboard() {
       {/* Stats — portal KPI card pattern */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 mb-6">
         <StatPill label="New" count={openCount} colorClass="text-[#ffffff]" active={statusFilter === 'open'} onClick={() => toggleStatusFilter('open')} />
-        <StatPill label="Actioned" count={actionedCount} colorClass="text-[#3B9EFF]" active={statusFilter === 'actioned'} onClick={() => toggleStatusFilter('actioned')} />
+        <StatPill label="Actioned" count={actionedCount} colorClass="text-[var(--brand-blue)]" active={statusFilter === 'actioned'} onClick={() => toggleStatusFilter('actioned')} />
         <StatPill label="In hand" count={inHandCount} colorClass="text-[var(--brand-accent)]" active={statusFilter === 'in_hand'} onClick={() => toggleStatusFilter('in_hand')} />
-        <StatPill label="Closed" count={closedCount} colorClass="text-[#60a57e]" active={statusFilter === 'closed'} onClick={() => toggleStatusFilter('closed')} />
+        <StatPill label="Closed" count={closedCount} colorClass="text-[var(--brand-aqua)]" active={statusFilter === 'closed'} onClick={() => toggleStatusFilter('closed')} />
       </div>
 
       {/* Filter tabs — amber active underline */}

@@ -8,13 +8,13 @@ import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
   flagged:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
-  disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
-  approved: { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
-  resolved: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },
+  disputed: { color: 'var(--brand-pink)', background: 'rgba(var(--brand-pink-rgb),0.1)',  border: '1px solid rgba(var(--brand-pink-rgb),0.3)'  },
+  approved: { color: 'var(--brand-aqua)', background: 'rgba(var(--brand-aqua-rgb),0.1)', border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
+  resolved: { color: 'var(--brand-blue)', background: 'rgba(var(--brand-aqua-rgb),0.1)', border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
 }
 
 const EMAIL_STATUS_STYLE = {
-  sent:  { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
+  sent:  { color: 'var(--brand-aqua)', background: 'rgba(var(--brand-aqua-rgb),0.1)',  border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
   draft: { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
 }
 
@@ -286,9 +286,9 @@ export default function InvoiceDetail() {
       {/* Toast */}
       {msg && (
         <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
-          background: msg.type === 'ok' ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)',
-          border: `1px solid ${msg.type === 'ok' ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`,
-          color: msg.type === 'ok' ? '#4ade80' : '#ff1744' }}>
+          background: msg.type === 'ok' ? 'rgba(var(--brand-aqua-rgb),0.1)' : 'rgba(var(--brand-pink-rgb),0.1)',
+          border: `1px solid ${msg.type === 'ok' ? 'rgba(var(--brand-aqua-rgb),0.3)' : 'rgba(var(--brand-pink-rgb),0.3)'}`,
+          color: msg.type === 'ok' ? 'var(--brand-aqua)' : 'var(--brand-pink)' }}>
           {msg.text}
         </div>
       )}
@@ -325,8 +325,8 @@ export default function InvoiceDetail() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px', paddingTop: '16px', borderTop: '1px solid #1a1a1a' }}>
           {[
             { label: 'Total Charged', value: aud(total),                   style: {} },
-            { label: 'Overcharge',    value: over > 0 ? aud(over) : '—',   style: over > 0 ? { color: '#ff1744' } : {} },
-            { label: 'Lines Flagged', value: flagN,                         style: flagN > 0   ? { color: '#ff1744' } : {} },
+            { label: 'Overcharge',    value: over > 0 ? aud(over) : '—',   style: over > 0 ? { color: 'var(--brand-pink)' } : {} },
+            { label: 'Lines Flagged', value: flagN,                         style: flagN > 0   ? { color: 'var(--brand-pink)' } : {} },
             { label: 'No Rate Card',  value: noRateN,                       style: noRateN > 0 ? { color: 'var(--brand-accent)' } : {} },
           ].map(({ label, value, style }) => (
             <div key={label}>
@@ -354,10 +354,10 @@ export default function InvoiceDetail() {
               const isOver   = variance != null && variance > 0
               const noRate   = line.contracted_total == null
               return (
-                <tr key={line.id} style={{ borderBottom: '1px solid #181818', background: isOver ? 'rgba(239,68,68,0.04)' : 'transparent' }}>
+                <tr key={line.id} style={{ borderBottom: '1px solid #181818', background: isOver ? 'rgba(var(--brand-pink-rgb),0.04)' : 'transparent' }}>
                   <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {isOver  && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ff1744', flexShrink: 0 }} />}
+                      {isOver  && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--brand-pink)', flexShrink: 0 }} />}
                       {noRate && !isOver && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--brand-accent)', flexShrink: 0 }} />}
                       {line.description}
                     </span>
@@ -373,9 +373,9 @@ export default function InvoiceDetail() {
                     {variance == null
                       ? <span style={{ color: '#444' }}>—</span>
                       : variance > 0
-                        ? <span style={{ color: '#ff1744', fontWeight: 500 }}>+{aud(variance)}</span>
+                        ? <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>+{aud(variance)}</span>
                         : variance < 0
-                          ? <span style={{ color: '#4ade80' }}>{aud(variance)}</span>
+                          ? <span style={{ color: 'var(--brand-aqua)' }}>{aud(variance)}</span>
                           : <span style={{ color: '#444' }}>—</span>}
                   </td>
                 </tr>
@@ -386,7 +386,7 @@ export default function InvoiceDetail() {
               <td style={{ padding: '11px 14px', fontSize: '13px', fontWeight: 600, color: '#ffffff', textAlign: 'right' }}>{aud(total)}</td>
               <td />
               <td style={{ padding: '11px 14px', textAlign: 'right' }}>
-                {over > 0 ? <span style={{ color: '#ff1744', fontWeight: 600, fontSize: '13px' }}>+{aud(over)}</span> : <span style={{ color: '#444' }}>—</span>}
+                {over > 0 ? <span style={{ color: 'var(--brand-pink)', fontWeight: 600, fontSize: '13px' }}>+{aud(over)}</span> : <span style={{ color: '#444' }}>—</span>}
               </td>
             </tr>
           </tbody>
@@ -396,15 +396,15 @@ export default function InvoiceDetail() {
       {/* Status actions */}
       <p style={sectionLabel}>Update status</p>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px', alignItems: 'center' }}>
-        <ActionBtn label="Approve"         color="#4ade80" borderColor="#4ade80" disabled={updatingStatus || generatingLetter || invoice.status === 'approved'} onClick={() => updateStatus('approved')} />
+        <ActionBtn label="Approve"         color="var(--brand-aqua)" borderColor="var(--brand-aqua)" disabled={updatingStatus || generatingLetter || invoice.status === 'approved'} onClick={() => updateStatus('approved')} />
         <ActionBtn label="Flag for Review" color="var(--brand-accent)" borderColor="var(--brand-accent)" disabled={updatingStatus || generatingLetter || invoice.status === 'flagged'}  onClick={() => updateStatus('flagged')} />
         <ActionBtn
           label={generatingLetter ? 'Generating…' : updatingStatus ? 'Raising…' : 'Raise Dispute'}
-          color="#ff1744" borderColor="#ff1744"
+          color="var(--brand-pink)" borderColor="var(--brand-pink)"
           disabled={updatingStatus || generatingLetter || invoice.status === 'disputed'}
           onClick={raiseDispute}
         />
-        <ActionBtn label="Mark Resolved"   color="#60a5fa" borderColor="#60a5fa" disabled={updatingStatus || generatingLetter || invoice.status === 'resolved'} onClick={() => updateStatus('resolved')} />
+        <ActionBtn label="Mark Resolved"   color="var(--brand-blue)" borderColor="var(--brand-blue)" disabled={updatingStatus || generatingLetter || invoice.status === 'resolved'} onClick={() => updateStatus('resolved')} />
         {(updatingStatus || generatingLetter) && <div className="w-4 h-4 rounded-full border animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />}
       </div>
 
@@ -417,10 +417,10 @@ export default function InvoiceDetail() {
             style={{
               fontSize: '12px', fontWeight: 500, padding: '7px 16px', borderRadius: '6px',
               cursor: generatingLetter ? 'not-allowed' : 'pointer',
-              color: '#ff1744', border: '1px solid rgba(239,68,68,0.35)', background: 'transparent',
+              color: 'var(--brand-pink)', border: '1px solid rgba(var(--brand-pink-rgb),0.35)', background: 'transparent',
               opacity: generatingLetter ? 0.6 : 1, transition: 'background 120ms',
             }}
-            onMouseEnter={e => { if (!generatingLetter) e.currentTarget.style.background = 'rgba(239,68,68,0.08)' }}
+            onMouseEnter={e => { if (!generatingLetter) e.currentTarget.style.background = 'rgba(var(--brand-pink-rgb),0.08)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
             {generatingLetter ? 'Generating…' : 'Send dispute email'}
@@ -464,7 +464,7 @@ export default function InvoiceDetail() {
           <p style={sectionLabel}>AI Dispute Letter</p>
           <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
             <p style={{ fontSize: '13px', color: '#888', margin: '0 0 14px' }}>
-              <span style={{ color: '#ff1744', fontWeight: 500 }}>{flagN} overcharged line{flagN !== 1 ? 's' : ''}</span>
+              <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{flagN} overcharged line{flagN !== 1 ? 's' : ''}</span>
               {' · '}
               <span style={{ color: '#ffffff' }}>{aud(over)} to recover</span>
             </p>

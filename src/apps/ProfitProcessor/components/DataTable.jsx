@@ -20,25 +20,25 @@ function fmtPercent(value) {
 // ─── Color logic ─────────────────────────────────────────────────────────────
 
 function profitColor(value) {
-  if (value > 0.005)  return '#60a57e'
-  if (value < -0.005) return '#ff1744'
+  if (value > 0.005)  return 'var(--brand-aqua)'
+  if (value < -0.005) return 'var(--brand-pink)'
   return '#888'
 }
 
 function gpColor(gpPercent, invoiceExGst) {
   if (Math.abs(invoiceExGst) < 0.01) return '#888'
-  if (gpPercent > 90) return '#F59E0B'
-  if (gpPercent < 20) return '#ff1744'
-  return '#60a57e'
+  if (gpPercent > 90) return 'var(--brand-orange)'
+  if (gpPercent < 20) return 'var(--brand-pink)'
+  return 'var(--brand-aqua)'
 }
 
 // ─── Flag badges ─────────────────────────────────────────────────────────────
 
 const FLAG_STYLE = {
-  [FLAG.ZERO_COGS]: { label: '$0 COGS', bg: 'rgba(127,29,29,0.7)',  text: '#FCA5A5', border: '#7F1D1D' },
-  [FLAG.ZERO_INV]:  { label: '$0 INV',  bg: 'rgba(124,45,18,0.7)',  text: '#FDBA74', border: '#7C2D12' },
-  [FLAG.LOW_GP]:    { label: 'LOW GP',  bg: 'rgba(30,27,75,0.8)',   text: '#A5B4FC', border: '#312E81' },
-  [FLAG.HIGH_GP]:   { label: 'HIGH GP', bg: 'rgba(113,63,18,0.7)',  text: '#FDE68A', border: '#713F12' },
+  [FLAG.ZERO_COGS]: { label: '$0 COGS', bg: 'rgba(var(--brand-pink-rgb),0.7)',  text: 'var(--brand-pink)', border: 'var(--brand-pink)' },
+  [FLAG.ZERO_INV]:  { label: '$0 INV',  bg: 'rgba(var(--brand-accent-rgb),0.7)',  text: 'var(--brand-orange)', border: 'var(--brand-orange)' },
+  [FLAG.LOW_GP]:    { label: 'LOW GP',  bg: 'rgba(var(--brand-purple-rgb),0.8)',   text: 'var(--brand-purple)', border: 'var(--brand-purple)' },
+  [FLAG.HIGH_GP]:   { label: 'HIGH GP', bg: 'rgba(var(--brand-accent-rgb),0.7)',  text: 'var(--brand-orange)', border: 'var(--brand-orange)' },
 }
 
 function FlagBadge({ flag }) {
@@ -102,8 +102,8 @@ function ApproveCheckbox({ orderNum, isApproved, onToggleApprove }) {
       <span
         className="relative inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm border flex-shrink-0"
         style={{
-          background:   isApproved ? '#60a57e' : 'transparent',
-          borderColor:  isApproved ? '#60a57e' : '#444',
+          background:   isApproved ? 'var(--brand-aqua)' : 'transparent',
+          borderColor:  isApproved ? 'var(--brand-aqua)' : '#444',
           transition:   'background 0.15s, border-color 0.15s',
         }}
       >
@@ -163,7 +163,7 @@ function Row({ order, isEven, orderLinks, linksLoading, isApproved, onToggleAppr
               onToggleApprove={onToggleApprove}
             />
             {isApproved ? (
-              <span className="text-[10px] font-mono" style={{ color: '#60a57e' }}>approved</span>
+              <span className="text-[10px] font-mono" style={{ color: 'var(--brand-aqua)' }}>approved</span>
             ) : (
               order.flags.map((f) => <FlagBadge key={f} flag={f} />)
             )}

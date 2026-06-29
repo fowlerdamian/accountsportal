@@ -15,6 +15,7 @@ import {
   subMonths, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval,
   startOfDay, startOfWeek as _startOfWeek,
 } from 'date-fns';
+import { palette } from '@portal/lib/palette';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,19 +38,19 @@ const EXTENDED_LABELS: Record<ExtendedCategory, string> = {
 };
 
 const EXTENDED_COLOURS: Record<ExtendedCategory, string> = {
-  warranty_claim:    '#C0392B',
-  order_entry_error: '#D4860A',
-  warehouse_error:   '#6B3FA0',
-  freight_issue:     '#1A6FA8',
-  complaint:         '#2E7D32',
+  warranty_claim:    palette.pink,
+  order_entry_error: palette.orange,
+  warehouse_error:   palette.purple,
+  freight_issue:     palette.blue,
+  complaint:         palette.aqua,
   general:           '#5A5A5A',
 };
 
 const STATUS_COLOURS: Record<string, string> = {
   open:     '#5A5A5A',
-  actioned: '#1A6FA8',
-  in_hand:  '#6B3FA0',
-  closed:   '#2E7D32',
+  actioned: palette.blue,
+  in_hand:  palette.purple,
+  closed:   palette.aqua,
 };
 
 const TOOLTIP_STYLE = {
@@ -186,7 +187,7 @@ export default function AnalyticsPage() {
     return {
       name: EXTENDED_LABELS[cat],
       days: rounded,
-      color: rounded <= 1 ? '#2E7D32' : rounded <= 2 ? '#D4860A' : '#C0392B',
+      color: rounded <= 1 ? palette.aqua : rounded <= 2 ? palette.orange : palette.pink,
     };
   }).filter(Boolean) as { name: string; days: number; color: string }[];
 
@@ -435,11 +436,11 @@ export default function AnalyticsPage() {
                 />
                 <Tooltip {...TOOLTIP_STYLE} />
                 <Legend formatter={(value) => <span style={{ color: '#9A9A9A', fontSize: '11px' }}>{value}</span>} />
-                <Line type="monotone" dataKey="Warranty"          stroke="#C0392B" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Order Entry Error" stroke="#D4860A" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Warehouse Error"   stroke="#6B3FA0" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Freight Issue"     stroke="#1A6FA8" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Complaint"         stroke="#2E7D32" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Warranty"          stroke={palette.pink} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Order Entry Error" stroke={palette.orange} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Warehouse Error"   stroke={palette.purple} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Freight Issue"     stroke={palette.blue} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Complaint"         stroke={palette.aqua} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
                 <Line type="monotone" dataKey="General"           stroke="#5A5A5A" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>

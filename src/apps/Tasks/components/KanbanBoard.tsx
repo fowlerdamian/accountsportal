@@ -22,9 +22,9 @@ interface KanbanBoardProps {
 
 const COLUMNS: { key: StaffTaskStatus; label: string; tint: string }[] = [
   { key: "not_started", label: "Not Started", tint: "border-t-muted-foreground/40" },
-  { key: "in_progress", label: "In Progress", tint: "border-t-blue-500/60" },
-  { key: "blocked",     label: "Blocked",     tint: "border-t-amber-500/60" },
-  { key: "done",        label: "Done",        tint: "border-t-green-500/60" },
+  { key: "in_progress", label: "In Progress", tint: "border-t-[rgba(var(--brand-aqua-rgb),0.6)]" },
+  { key: "blocked",     label: "Blocked",     tint: "border-t-[rgba(var(--brand-accent-rgb),0.6)]" },
+  { key: "done",        label: "Done",        tint: "border-t-[rgba(var(--brand-aqua-rgb),0.6)]" },
 ];
 
 function nameFor(profiles: StaffProfile[], id: string, selfId?: string): string {

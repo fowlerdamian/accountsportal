@@ -363,7 +363,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                   "text-xs px-1.5 py-0.5 rounded",
                   dueRingClass(liveTask.due_date),
                   new Date(liveTask.due_date) < new Date(new Date().setHours(0, 0, 0, 0)) && liveTask.status !== "done"
-                    ? "text-red-400"
+                    ? "text-[var(--brand-pink)]"
                     : "text-muted-foreground",
                 )}>
                   Due {liveTask.due_date} <span className="opacity-70">· {formatDueChip(liveTask.due_date)}</span>
@@ -376,7 +376,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-muted-foreground">Delete?</span>
               <button onClick={handleDelete}
-                className="px-2 py-1 rounded text-xs bg-red-500 text-white hover:bg-red-600 transition-colors">Yes</button>
+                className="px-2 py-1 rounded text-xs bg-[var(--brand-pink)] text-white hover:bg-[var(--brand-pink)] transition-colors">Yes</button>
               <button onClick={() => setConfirmDelete(false)}
                 className="px-2 py-1 rounded text-xs border hover:bg-muted transition-colors">No</button>
             </div>
@@ -385,7 +385,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
               {isCreator && (
                 <button
                   onClick={() => setConfirmDelete(true)}
-                  className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
+                  className="p-1.5 rounded hover:bg-[rgba(var(--brand-pink-rgb),0.1)] text-muted-foreground hover:text-[var(--brand-pink)] transition-colors"
                   title="Delete task"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -403,7 +403,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
         {unscored && canMutate && !editingScore && (
           <button
             onClick={startEditScore}
-            className="mx-5 mt-3 flex items-center gap-2 rounded-md border border-amber-800/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-200 hover:bg-amber-950/50 transition-colors"
+            className="mx-5 mt-3 flex items-center gap-2 rounded-md border border-[rgba(var(--brand-accent-rgb),0.4)] bg-[rgba(var(--brand-accent-rgb),0.3)] px-3 py-2 text-xs text-[var(--brand-orange)] hover:bg-[rgba(var(--brand-accent-rgb),0.5)] transition-colors"
           >
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             Score this task — sets its place on the Eisenhower matrix and in the dock.
@@ -414,10 +414,10 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
             marked Done the DB trigger flips this task back to 'not_started',
             so the chip must clear too (otherwise it looks like unblock failed). */}
         {liveTask.status === "blocked" && liveTask.blocked_by_task_id && blocker && (
-          <div className="mx-5 mt-3 flex items-start gap-2 rounded-md border border-amber-800/40 bg-amber-950/20 px-3 py-2">
-            <Link2 className="w-3.5 h-3.5 text-amber-300 mt-0.5 shrink-0" />
+          <div className="mx-5 mt-3 flex items-start gap-2 rounded-md border border-[rgba(var(--brand-accent-rgb),0.4)] bg-[rgba(var(--brand-accent-rgb),0.2)] px-3 py-2">
+            <Link2 className="w-3.5 h-3.5 text-[var(--brand-orange)] mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0 text-xs">
-              <div className="text-amber-200 font-medium truncate">Blocked by: {blocker.title}</div>
+              <div className="text-[var(--brand-orange)] font-medium truncate">Blocked by: {blocker.title}</div>
               <div className="text-muted-foreground mt-0.5">
                 Auto-unblocks when that task is marked Done.
               </div>
@@ -497,9 +497,9 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                       "px-2 py-1.5 rounded text-[11px] font-medium border transition-colors",
                       active
                         ? s.key === "not_started" ? "bg-muted text-foreground border-border"
-                        : s.key === "in_progress" ? "bg-blue-900/40 text-blue-300 border-blue-800/40"
-                        : s.key === "blocked"     ? "bg-amber-900/40 text-amber-300 border-amber-800/40"
-                        :                            "bg-green-900/40 text-green-300 border-green-800/40"
+                        : s.key === "in_progress" ? "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)] border-[rgba(var(--brand-aqua-rgb),0.4)]"
+                        : s.key === "blocked"     ? "bg-[rgba(var(--brand-accent-rgb),0.4)] text-[var(--brand-orange)] border-[rgba(var(--brand-accent-rgb),0.4)]"
+                        :                            "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-aqua)] border-[rgba(var(--brand-aqua-rgb),0.4)]"
                         : "text-muted-foreground border-transparent hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50",
                     )}
                   >
@@ -620,7 +620,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
               {canMutate && !addDepOpen && (
                 <button
                   onClick={() => setAddDepOpen(true)}
-                  className="text-[11px] text-amber-400 hover:text-amber-300 transition-colors"
+                  className="text-[11px] text-[var(--brand-orange)] hover:text-[var(--brand-orange)] transition-colors"
                 >
                   + Add dependency
                 </button>
@@ -692,7 +692,7 @@ export function TaskDrawer({ taskId, open, onClose }: TaskDrawerProps) {
                         <span className="text-[10px] text-muted-foreground">{c.created_at.slice(0, 10)}</span>
                       </div>
                       {fromOther && (
-                        <div className="flex items-center gap-1 text-[10px] text-amber-400/80 mt-0.5">
+                        <div className="flex items-center gap-1 text-[10px] text-[rgba(var(--brand-accent-rgb),0.8)] mt-0.5">
                           <Link2 className="w-2.5 h-2.5 shrink-0" />
                           <span className="truncate">on: {titleById[c.task_id] ?? "related task"}</span>
                         </div>

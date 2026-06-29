@@ -18,9 +18,9 @@ function formatTime(iso: string | null): string {
 }
 
 const STATUS_CONFIG = {
-  answered:  { icon: Phone,         color: "text-emerald-400", label: "Answered" },
-  missed:    { icon: PhoneMissed,   color: "text-red-400",     label: "Missed" },
-  voicemail: { icon: Voicemail,     color: "text-amber-400",   label: "Voicemail" },
+  answered:  { icon: Phone,         color: "text-[var(--brand-aqua)]", label: "Answered" },
+  missed:    { icon: PhoneMissed,   color: "text-[var(--brand-pink)]",     label: "Missed" },
+  voicemail: { icon: Voicemail,     color: "text-[var(--brand-orange)]",   label: "Voicemail" },
   busy:      { icon: PhoneMissed,   color: "text-zinc-400",    label: "Busy" },
 } as const;
 

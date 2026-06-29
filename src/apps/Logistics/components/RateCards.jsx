@@ -369,9 +369,9 @@ export default function RateCards() {
       {/* Flash message */}
       {msg && (
         <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
-          background: msg.type === 'ok' ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)',
-          border: `1px solid ${msg.type === 'ok' ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`,
-          color: msg.type === 'ok' ? '#4ade80' : '#ff1744' }}>
+          background: msg.type === 'ok' ? 'rgba(var(--brand-aqua-rgb),0.1)' : 'rgba(var(--brand-pink-rgb),0.1)',
+          border: `1px solid ${msg.type === 'ok' ? 'rgba(var(--brand-aqua-rgb),0.3)' : 'rgba(var(--brand-pink-rgb),0.3)'}`,
+          color: msg.type === 'ok' ? 'var(--brand-aqua)' : 'var(--brand-pink)' }}>
           {msg.text}
         </div>
       )}
@@ -543,7 +543,7 @@ export default function RateCards() {
                       style={{ fontSize: '12px', color: '#AAA', fontFamily: '"JetBrains Mono", monospace', width: '100%' }}
                     />
                     {uploadParsed && (
-                      <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: uploadParsed.rows.length > 0 ? '#4ade80' : '#ff1744' }}>
+                      <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: uploadParsed.rows.length > 0 ? 'var(--brand-aqua)' : 'var(--brand-pink)' }}>
                         {uploadParsed.rows.length > 0
                           ? `${uploadParsed.rows.length} row${uploadParsed.rows.length !== 1 ? 's' : ''} ready${uploadParsed.skipped.length > 0 ? `, ${uploadParsed.skipped.length} skipped` : ''}`
                           : `No valid rows found`}
@@ -579,10 +579,10 @@ export default function RateCards() {
                 <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', margin: '0 0 16px' }}>Upload complete</p>
 
                 <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
-                  <p style={{ margin: '0 0 4px', color: '#4ade80' }}>{uploadResult.added} rate{uploadResult.added !== 1 ? 's' : ''} added</p>
+                  <p style={{ margin: '0 0 4px', color: 'var(--brand-aqua)' }}>{uploadResult.added} rate{uploadResult.added !== 1 ? 's' : ''} added</p>
                   {uploadResult.superseded > 0 && <p style={{ margin: '0 0 4px', color: 'var(--brand-accent)' }}>{uploadResult.superseded} existing rate{uploadResult.superseded !== 1 ? 's' : ''} superseded</p>}
-                  {uploadResult.failed > 0 && <p style={{ margin: '0 0 4px', color: '#ff1744' }}>{uploadResult.failed} row{uploadResult.failed !== 1 ? 's' : ''} failed to save — old rates left active</p>}
-                  {uploadResult.skipped.length > 0 && <p style={{ margin: '0 0 4px', color: '#ff1744' }}>{uploadResult.skipped.length} row{uploadResult.skipped.length !== 1 ? 's' : ''} skipped</p>}
+                  {uploadResult.failed > 0 && <p style={{ margin: '0 0 4px', color: 'var(--brand-pink)' }}>{uploadResult.failed} row{uploadResult.failed !== 1 ? 's' : ''} failed to save — old rates left active</p>}
+                  {uploadResult.skipped.length > 0 && <p style={{ margin: '0 0 4px', color: 'var(--brand-pink)' }}>{uploadResult.skipped.length} row{uploadResult.skipped.length !== 1 ? 's' : ''} skipped</p>}
                 </div>
 
                 {uploadResult.skipped.length > 0 && (
@@ -592,7 +592,7 @@ export default function RateCards() {
                       {uploadResult.skipped.map((s, i) => (
                         <div key={i} style={{ padding: '8px 12px', borderBottom: i < uploadResult.skipped.length - 1 ? '1px solid #181818' : 'none', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace' }}>
                           <span style={{ color: '#a0a0a0' }}>Row {s.row} · </span>
-                          <span style={{ color: '#ff1744' }}>{s.reason}</span>
+                          <span style={{ color: 'var(--brand-pink)' }}>{s.reason}</span>
                         </div>
                       ))}
                     </div>

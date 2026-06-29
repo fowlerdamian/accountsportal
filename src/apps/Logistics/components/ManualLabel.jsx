@@ -279,9 +279,9 @@ export default function ManualLabel() {
       {/* Flash message */}
       {msg && (
         <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
-          background: msg.type === 'ok' ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)',
-          border: `1px solid ${msg.type === 'ok' ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`,
-          color: msg.type === 'ok' ? '#4ade80' : '#ff1744' }}>
+          background: msg.type === 'ok' ? 'rgba(var(--brand-aqua-rgb),0.1)' : 'rgba(var(--brand-pink-rgb),0.1)',
+          border: `1px solid ${msg.type === 'ok' ? 'rgba(var(--brand-aqua-rgb),0.3)' : 'rgba(var(--brand-pink-rgb),0.3)'}`,
+          color: msg.type === 'ok' ? 'var(--brand-aqua)' : 'var(--brand-pink)' }}>
           {msg.text}
         </div>
       )}

@@ -50,9 +50,9 @@ function Card({ label, value, sub, valueColor = '#ffffff', accent = false }) {
 export default function SummaryCards({ totals }) {
   const { revenue, totalCogs, totalProfit, avgGp, flaggedCount, flagBreakdown } = totals
 
-  const profitColor = totalProfit > 0 ? '#60a57e' : totalProfit < 0 ? '#ff1744' : '#888'
-  const gpColor     = avgGp >= 20 ? '#60a57e' : '#ff1744'
-  const flagColor   = flaggedCount === 0 ? '#60a57e' : flaggedCount <= 3 ? 'var(--brand-accent)' : '#ff1744'
+  const profitColor = totalProfit > 0 ? 'var(--brand-aqua)' : totalProfit < 0 ? 'var(--brand-pink)' : '#888'
+  const gpColor     = avgGp >= 20 ? 'var(--brand-aqua)' : 'var(--brand-pink)'
+  const flagColor   = flaggedCount === 0 ? 'var(--brand-aqua)' : flaggedCount <= 3 ? 'var(--brand-accent)' : 'var(--brand-pink)'
 
   const flagParts = [
     flagBreakdown.zeroCogs > 0 && `${flagBreakdown.zeroCogs} $0 COGS`,

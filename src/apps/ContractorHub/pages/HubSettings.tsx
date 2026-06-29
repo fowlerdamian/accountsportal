@@ -253,8 +253,8 @@ function SyncLogTable() {
                     <span className={cn(
                       "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium",
                       entry.direction === "inbound"
-                        ? "bg-blue-900/30 text-blue-300"
-                        : "bg-orange-900/30 text-orange-300",
+                        ? "bg-[rgba(var(--brand-aqua-rgb),0.3)] text-[var(--brand-blue)]"
+                        : "bg-[rgba(var(--brand-accent-rgb),0.3)] text-[var(--brand-orange)]",
                     )}>
                       {entry.direction}
                     </span>
@@ -262,11 +262,11 @@ function SyncLogTable() {
                   <td className="px-3 py-2 text-muted-foreground">{entry.entity_type}</td>
                   <td className="px-3 py-2">
                     {entry.status === "success" ? (
-                      <span className="flex items-center gap-1 text-green-400">
+                      <span className="flex items-center gap-1 text-[var(--brand-aqua)]">
                         <CheckCircle2 className="w-3 h-3" /> ok
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-red-400">
+                      <span className="flex items-center gap-1 text-[var(--brand-pink)]">
                         <AlertCircle className="w-3 h-3" /> error
                       </span>
                     )}

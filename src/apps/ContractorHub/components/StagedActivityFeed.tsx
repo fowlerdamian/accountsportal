@@ -7,27 +7,27 @@ import type { ActivityEntry, ActivityType } from "@hub/hooks/use-hub-queries";
 
 const TYPE_CONFIG: Record<ActivityType, { icon: typeof MessageSquare; badgeClass: string; badge: string }> = {
   note:           { icon: MessageSquare,   badge: "note",    badgeClass: "bg-muted text-muted-foreground" },
-  update:         { icon: RefreshCw,       badge: "update",  badgeClass: "bg-blue-900/40 text-blue-300" },
+  update:         { icon: RefreshCw,       badge: "update",  badgeClass: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)]" },
   status_change:  { icon: CornerDownRight, badge: "",        badgeClass: "" },
   file:           { icon: Paperclip,       badge: "file",    badgeClass: "bg-muted text-muted-foreground" },
   time_log:       { icon: Clock,           badge: "time",    badgeClass: "bg-muted text-muted-foreground" },
-  upwork_message: { icon: ExternalLink,    badge: "upwork",  badgeClass: "bg-blue-900/40 text-blue-300" },
+  upwork_message: { icon: ExternalLink,    badge: "upwork",  badgeClass: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)]" },
 };
 
 const STAGE_DOT: Record<string, string> = {
-  Idea:      "bg-violet-400",
-  Sketch:    "bg-blue-400",
-  CAD:       "bg-cyan-400",
-  Prototype: "bg-amber-400",
-  Complete:  "bg-green-400",
+  Idea:      "bg-[var(--brand-purple)]",
+  Sketch:    "bg-[var(--brand-blue)]",
+  CAD:       "bg-[var(--brand-blue)]",
+  Prototype: "bg-[var(--brand-orange)]",
+  Complete:  "bg-[var(--brand-aqua)]",
 };
 
 const STAGE_LABEL: Record<string, string> = {
-  Idea:      "text-violet-400",
-  Sketch:    "text-blue-400",
-  CAD:       "text-cyan-400",
-  Prototype: "text-amber-400",
-  Complete:  "text-green-400",
+  Idea:      "text-[var(--brand-purple)]",
+  Sketch:    "text-[var(--brand-blue)]",
+  CAD:       "text-[var(--brand-blue)]",
+  Prototype: "text-[var(--brand-orange)]",
+  Complete:  "text-[var(--brand-aqua)]",
 };
 
 function EntryRow({ entry }: { entry: ActivityEntry }) {

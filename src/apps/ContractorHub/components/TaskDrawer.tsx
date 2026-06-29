@@ -139,7 +139,7 @@ export function TaskDrawer({ task, open, onClose }: TaskDrawerProps) {
                 <span className={cn(
                   "text-xs",
                   new Date(liveTask.due_date) < new Date() && liveTask.status !== "done"
-                    ? "text-red-400"
+                    ? "text-[var(--brand-pink)]"
                     : "text-muted-foreground"
                 )}>
                   Due {liveTask.due_date}
@@ -152,7 +152,7 @@ export function TaskDrawer({ task, open, onClose }: TaskDrawerProps) {
               <span className="text-xs text-muted-foreground">Delete?</span>
               <button
                 onClick={handleDelete}
-                className="px-2 py-1 rounded text-xs bg-red-500 text-white hover:bg-red-600 transition-colors"
+                className="px-2 py-1 rounded text-xs bg-[var(--brand-pink)] text-white hover:bg-[var(--brand-pink)] transition-colors"
               >
                 Yes
               </button>
@@ -167,7 +167,7 @@ export function TaskDrawer({ task, open, onClose }: TaskDrawerProps) {
             <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
+                className="p-1.5 rounded hover:bg-[rgba(var(--brand-pink-rgb),0.1)] text-muted-foreground hover:text-[var(--brand-pink)] transition-colors"
                 title="Delete task"
               >
                 <Trash2 className="w-4 h-4" />

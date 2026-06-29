@@ -12,26 +12,26 @@ import type { Quadrant } from "./eisenhower";
 // Backgrounds — mirror PriorityPill exactly. See
 // src/apps/ContractorHub/components/PriorityPill.tsx
 export const QUADRANT_BG_CLASS: Record<Quadrant, string> = {
-  do:       "bg-red-900/40 text-red-300 border border-red-800/40",
-  schedule: "bg-blue-900/40 text-blue-300 border border-blue-800/40",
-  delegate: "bg-amber-900/40 text-amber-300 border border-amber-800/40",
+  do:       "bg-[rgba(var(--brand-pink-rgb),0.4)] text-[var(--brand-pink)] border border-[rgba(var(--brand-pink-rgb),0.4)]",
+  schedule: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)] border border-[rgba(var(--brand-aqua-rgb),0.4)]",
+  delegate: "bg-[rgba(var(--brand-accent-rgb),0.4)] text-[var(--brand-orange)] border border-[rgba(var(--brand-accent-rgb),0.4)]",
   drop:     "bg-muted text-muted-foreground border border-border/40",
 };
 
 // Small dot variant (used inside dock pills)
 export const QUADRANT_DOT_CLASS: Record<Quadrant, string> = {
-  do:       "bg-red-400",
-  schedule: "bg-blue-400",
-  delegate: "bg-amber-400",
+  do:       "bg-[var(--brand-pink)]",
+  schedule: "bg-[var(--brand-blue)]",
+  delegate: "bg-[var(--brand-orange)]",
   drop:     "bg-muted-foreground/60",
 };
 
 // Left-edge accent — colour-codes the Eisenhower quadrant (priority).
 // Used by the pinned desktop widget's compact task rows.
 export const QUADRANT_ACCENT_CLASS: Record<Quadrant, string> = {
-  do:       "border-l-4 border-l-red-500",
-  schedule: "border-l-4 border-l-blue-500",
-  delegate: "border-l-4 border-l-amber-500",
+  do:       "border-l-4 border-l-[var(--brand-pink)]",
+  schedule: "border-l-4 border-l-[var(--brand-blue)]",
+  delegate: "border-l-4 border-l-[var(--brand-orange)]",
   drop:     "border-l-4 border-l-muted-foreground/40",
 };
 
@@ -58,9 +58,9 @@ export function dueIntensity(dueDate: string | null): DueIntensity {
 export const DUE_RING_CLASS: Record<DueIntensity, string> = {
   none:    "",
   later:   "",
-  week:    "ring-1 ring-yellow-400/70",
-  today:   "ring-2 ring-orange-400",
-  overdue: "ring-2 ring-red-500",
+  week:    "ring-1 ring-[rgba(var(--brand-accent-rgb),0.7)]",
+  today:   "ring-2 ring-[var(--brand-orange)]",
+  overdue: "ring-2 ring-[var(--brand-pink)]",
 };
 
 export function dueRingClass(dueDate: string | null): string {
@@ -71,9 +71,9 @@ export function dueRingClass(dueDate: string | null): string {
 export const DUE_CHIP_CLASS: Record<DueIntensity, string> = {
   none:    "text-muted-foreground",
   later:   "text-muted-foreground",
-  week:    "text-yellow-500",
-  today:   "text-orange-400 font-semibold",
-  overdue: "text-red-400 font-semibold",
+  week:    "text-[var(--brand-orange)]",
+  today:   "text-[var(--brand-orange)] font-semibold",
+  overdue: "text-[var(--brand-pink)] font-semibold",
 };
 
 export function dueChipClass(dueDate: string | null): string {

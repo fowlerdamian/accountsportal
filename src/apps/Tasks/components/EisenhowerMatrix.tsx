@@ -26,9 +26,9 @@ interface EisenhowerMatrixProps {
 }
 
 const QUADRANT_TINT: Record<Quadrant, string> = {
-  do:       "bg-red-950/30    border-red-900/50",
-  schedule: "bg-blue-950/30   border-blue-900/50",
-  delegate: "bg-amber-950/30  border-amber-900/50",
+  do:       "bg-[rgba(var(--brand-pink-rgb),0.3)] border-[rgba(var(--brand-pink-rgb),0.5)]",
+  schedule: "bg-[rgba(var(--brand-aqua-rgb),0.3)] border-[rgba(var(--brand-aqua-rgb),0.5)]",
+  delegate: "bg-[rgba(var(--brand-accent-rgb),0.3)] border-[rgba(var(--brand-accent-rgb),0.5)]",
   drop:     "bg-muted/30      border-border/40",
 };
 
@@ -74,11 +74,11 @@ export function EisenhowerMatrix({ tasks, profiles, myId, onOpenTask }: Eisenhow
           <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
             {/* TL = Schedule (low urg, high imp) */}
             <div className={cn("border-r border-b", QUADRANT_TINT.schedule, "flex items-start justify-start p-2")}>
-              <span className="text-[10px] uppercase tracking-wider text-blue-300/80 font-medium">Schedule</span>
+              <span className="text-[10px] uppercase tracking-wider text-[rgba(var(--brand-aqua-rgb),0.8)] font-medium">Schedule</span>
             </div>
             {/* TR = Do */}
             <div className={cn("border-b", QUADRANT_TINT.do, "flex items-start justify-end p-2")}>
-              <span className="text-[10px] uppercase tracking-wider text-red-300/80 font-medium">Do</span>
+              <span className="text-[10px] uppercase tracking-wider text-[rgba(var(--brand-pink-rgb),0.8)] font-medium">Do</span>
             </div>
             {/* BL = Drop */}
             <div className={cn("border-r", QUADRANT_TINT.drop, "flex items-end justify-start p-2")}>
@@ -86,7 +86,7 @@ export function EisenhowerMatrix({ tasks, profiles, myId, onOpenTask }: Eisenhow
             </div>
             {/* BR = Delegate */}
             <div className={cn(QUADRANT_TINT.delegate, "flex items-end justify-end p-2")}>
-              <span className="text-[10px] uppercase tracking-wider text-amber-300/80 font-medium">Delegate</span>
+              <span className="text-[10px] uppercase tracking-wider text-[rgba(var(--brand-accent-rgb),0.8)] font-medium">Delegate</span>
             </div>
           </div>
 

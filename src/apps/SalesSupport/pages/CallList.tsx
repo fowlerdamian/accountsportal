@@ -12,17 +12,17 @@ import { DatePicker } from "@portal/components/DatePicker";
 import { useQueryClient } from "@tanstack/react-query";
 
 const CALL_REASON_COLOR = (reason: string) => {
-  if (reason.toLowerCase().includes("win-back")) return "text-red-400 bg-red-500/10 border-red-500/20";
-  if (reason.toLowerCase().includes("new")) return "text-blue-400 bg-blue-500/10 border-blue-500/20";
-  return "text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
+  if (reason.toLowerCase().includes("win-back")) return "text-[var(--brand-pink)] bg-[rgba(var(--brand-pink-rgb),0.1)] border-[rgba(var(--brand-pink-rgb),0.2)]";
+  if (reason.toLowerCase().includes("new")) return "text-[var(--brand-blue)] bg-[rgba(var(--brand-aqua-rgb),0.1)] border-[rgba(var(--brand-aqua-rgb),0.2)]";
+  return "text-[var(--brand-orange)] bg-[rgba(var(--brand-accent-rgb),0.1)] border-[rgba(var(--brand-accent-rgb),0.2)]";
 };
 
 const OUTCOME_COLOR: Record<string, string> = {
-  connected:      "bg-green-500/20 text-green-400",
-  voicemail:      "bg-yellow-500/20 text-yellow-400",
+  connected:      "bg-[rgba(var(--brand-aqua-rgb),0.2)] text-[var(--brand-aqua)]",
+  voicemail:      "bg-[rgba(var(--brand-accent-rgb),0.2)] text-[var(--brand-orange)]",
   no_answer:      "bg-zinc-500/20 text-zinc-400",
-  callback:       "bg-blue-500/20 text-blue-400",
-  not_interested: "bg-red-500/20 text-red-400",
+  callback:       "bg-[rgba(var(--brand-aqua-rgb),0.2)] text-[var(--brand-blue)]",
+  not_interested: "bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)]",
 };
 
 export default function CallList() {
@@ -87,7 +87,7 @@ export default function CallList() {
 
       {/* Generation error */}
       {genError && (
-        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+        <div className="text-xs text-[var(--brand-pink)] bg-[rgba(var(--brand-pink-rgb),0.1)] border border-[rgba(var(--brand-pink-rgb),0.2)] rounded-lg px-3 py-2">
           {genError}
         </div>
       )}
@@ -178,8 +178,8 @@ export default function CallList() {
                               </span>
                             )}
                             {brief.google_rating && (
-                              <span className="flex items-center gap-1 text-yellow-400">
-                                <Star className="w-3.5 h-3.5 fill-yellow-400" />
+                              <span className="flex items-center gap-1 text-[var(--brand-orange)]">
+                                <Star className="w-3.5 h-3.5 fill-[var(--brand-orange)]" />
                                 {brief.google_rating}
                               </span>
                             )}
@@ -190,7 +190,7 @@ export default function CallList() {
                               </span>
                             )}
                             {call.context_brief?.cin7_data?.is_winback && (
-                              <span className="text-red-400 font-medium">Win-back</span>
+                              <span className="text-[var(--brand-pink)] font-medium">Win-back</span>
                             )}
                           </div>
                         </div>

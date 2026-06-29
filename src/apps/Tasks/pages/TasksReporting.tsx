@@ -19,15 +19,15 @@ const GOLD = palette.accent;
 
 const STATUS_COLORS: Record<string, string> = {
   "Not Started": "#888888",
-  "In Progress": "#4fc3f7",
-  "Blocked":     "#ef5350",
-  "Done":        "#66bb6a",
+  "In Progress": palette.blue,
+  "Blocked":     palette.pink,
+  "Done":        palette.aqua,
 };
 
 const QUADRANT_COLORS: Record<Quadrant, string> = {
-  do:       "#ef5350",
+  do:       palette.pink,
   schedule: GOLD,
-  delegate: "#4fc3f7",
+  delegate: palette.blue,
   drop:     "#888888",
 };
 
@@ -43,9 +43,9 @@ function shortDay(iso: string): string {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 8) return "#66bb6a";
+  if (score >= 8) return palette.aqua;
   if (score >= 5) return GOLD;
-  return "#ef5350";
+  return palette.pink;
 }
 
 function KpiCard({ label, value, accent }: { label: string; value: React.ReactNode; accent?: string }) {
@@ -176,8 +176,8 @@ export function TasksReporting() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Today's score" value={`${todayScore}/10`} accent={scoreColor(todayScore)} />
         <KpiCard label="Open tasks" value={open.length} />
-        <KpiCard label="Overdue" value={overdue.length} accent={overdue.length > 0 ? "#ef5350" : "#66bb6a"} />
-        <KpiCard label="Completed this week" value={doneThisWeek.length} accent="#66bb6a" />
+        <KpiCard label="Overdue" value={overdue.length} accent={overdue.length > 0 ? "var(--brand-pink)" : "var(--brand-aqua)"} />
+        <KpiCard label="Completed this week" value={doneThisWeek.length} accent="var(--brand-aqua)" />
       </div>
 
       {/* Score trend */}
@@ -203,8 +203,8 @@ export function TasksReporting() {
               <YAxis allowDecimals={false} {...AXIS} />
               <Tooltip {...TOOLTIP_STYLE} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="created"   name="Created"   fill="#4fc3f7" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="completed" name="Completed" fill="#66bb6a" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="created"   name="Created"   fill={palette.blue} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="completed" name="Completed" fill={palette.aqua} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

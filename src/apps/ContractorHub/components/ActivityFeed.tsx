@@ -6,11 +6,11 @@ import type { ActivityEntry, ActivityType } from "@hub/hooks/use-hub-queries";
 
 const TYPE_CONFIG: Record<ActivityType, { icon: typeof MessageSquare; badgeClass: string; badge: string }> = {
   note:           { icon: MessageSquare, badge: "note",    badgeClass: "bg-muted text-muted-foreground" },
-  update:         { icon: RefreshCw,     badge: "update",  badgeClass: "bg-blue-900/40 text-blue-300" },
+  update:         { icon: RefreshCw,     badge: "update",  badgeClass: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)]" },
   status_change:  { icon: CornerDownRight, badge: "",      badgeClass: "" },
   file:           { icon: Paperclip,     badge: "file",    badgeClass: "bg-muted text-muted-foreground" },
   time_log:       { icon: Clock,         badge: "time",    badgeClass: "bg-muted text-muted-foreground" },
-  upwork_message: { icon: ExternalLink,  badge: "upwork",  badgeClass: "bg-blue-900/40 text-blue-300" },
+  upwork_message: { icon: ExternalLink,  badge: "upwork",  badgeClass: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)]" },
 };
 
 interface ActivityFeedProps {

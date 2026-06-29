@@ -197,7 +197,7 @@ export function NewTaskModal({ open, onClose }: NewTaskModalProps) {
                   return !v;
                 });
               }}
-              className="flex items-center gap-2 text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors"
+              className="flex items-center gap-2 text-xs font-medium text-[var(--brand-orange)] hover:text-[var(--brand-orange)] transition-colors"
             >
               {withDep ? <Link2Off className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
               {withDep ? "Remove dependency" : "Waiting on someone first?"}

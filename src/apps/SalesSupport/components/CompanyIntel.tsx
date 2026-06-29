@@ -38,7 +38,7 @@ export default function CompanyIntel({ lead }: Props) {
       {hasCompanyData && (
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
           {lead.industry && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-500/10 text-violet-400 border border-violet-500/20 rounded-full font-medium">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[rgba(var(--brand-purple-rgb),0.1)] text-[var(--brand-purple)] border border-[rgba(var(--brand-purple-rgb),0.2)] rounded-full font-medium">
               {lead.industry}
             </span>
           )}
@@ -108,7 +108,7 @@ export default function CompanyIntel({ lead }: Props) {
                     {c.name && <span className="text-muted-foreground/60">· {c.name}</span>}
                     {c.position && <span className="text-muted-foreground/50">{c.position}</span>}
                     <span className={`ml-auto text-xs px-1 rounded ${
-                      c.source === "hunter" ? "text-emerald-400/70" : "text-muted-foreground/40"
+                      c.source === "hunter" ? "text-[rgba(var(--brand-aqua-rgb),0.7)]" : "text-muted-foreground/40"
                     }`}>
                       {c.source}
                     </span>

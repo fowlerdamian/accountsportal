@@ -15,9 +15,9 @@ interface ScorePickerProps {
 function pillClass(value: number | null, n: number): string {
   const active = value === n;
   const colour =
-    n < 3 ? "bg-red-500    text-white border-red-500"   :
-    n === 3 ? "bg-amber-500  text-white border-amber-500" :
-              "bg-green-500  text-white border-green-500";
+    n < 3 ? "bg-[var(--brand-pink)] text-white border-[var(--brand-pink)]" :
+    n === 3 ? "bg-[var(--brand-orange)] text-white border-[var(--brand-orange)]" :
+              "bg-[var(--brand-aqua)] text-white border-[var(--brand-aqua)]";
   return cn(
     "w-7 h-7 rounded text-xs font-semibold border transition-colors",
     active ? colour : "border-border text-muted-foreground hover:bg-muted",

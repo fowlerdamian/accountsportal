@@ -221,8 +221,8 @@ export function TasksDashboard() {
             <section key={win} className="space-y-2">
               <h2 className={cn(
                 "text-xs font-semibold uppercase tracking-wider",
-                win === "overdue" ? "text-red-400"
-                  : win === "today" ? "text-orange-400"
+                win === "overdue" ? "text-[var(--brand-pink)]"
+                  : win === "today" ? "text-[var(--brand-orange)]"
                   : "text-muted-foreground",
               )}>
                 {WINDOW_LABEL[win]} <span className="opacity-50">· {list.length}</span>

@@ -131,12 +131,12 @@ export default function ProfitProcessor() {
             <div
               className="w-full max-w-lg rounded-lg px-4 py-3"
               style={{
-                background: 'rgba(127,29,29,0.15)',
-                border: '1px solid rgba(127,29,29,0.5)',
+                background: 'rgba(var(--brand-pink-rgb),0.15)',
+                border: '1px solid rgba(var(--brand-pink-rgb),0.5)',
               }}
             >
-              <p className="text-sm font-mono" style={{ color: '#FCA5A5' }}>
-                <span style={{ color: '#ff1744' }}>Error: </span>
+              <p className="text-sm font-mono" style={{ color: 'var(--brand-pink)' }}>
+                <span style={{ color: 'var(--brand-pink)' }}>Error: </span>
                 {error}
               </p>
             </div>

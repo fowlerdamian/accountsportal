@@ -4,8 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth as usePortalAuth } from '@portal/context/AuthContext';
 
 const AVATAR_COLOURS = [
-  '#C0392B', '#1A6FA8', '#2E7D32', '#D4860A',
-  '#6B3FA0', '#0E7C7B', '#8D3B2B', '#3D5A80',
+  'var(--brand-pink)', 'var(--brand-blue)', 'var(--brand-aqua)', 'var(--brand-orange)',
+  'var(--brand-purple)', 'var(--brand-aqua)', 'var(--brand-pink)', 'var(--brand-blue)',
 ];
 
 interface TeamMember {

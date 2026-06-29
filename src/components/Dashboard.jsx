@@ -24,9 +24,9 @@ function Tab({ label, count, active, warn, onClick }) {
           background: active
             ? 'rgba(var(--brand-accent-rgb),0.15)'
             : warn
-              ? 'rgba(127,29,29,0.5)'
+              ? 'rgba(var(--brand-pink-rgb),0.5)'
               : '#1a1a1a',
-          color: active ? 'var(--brand-accent)' : warn ? '#FCA5A5' : '#555',
+          color: active ? 'var(--brand-accent)' : warn ? 'var(--brand-pink)' : '#555',
         }}
       >
         {count}

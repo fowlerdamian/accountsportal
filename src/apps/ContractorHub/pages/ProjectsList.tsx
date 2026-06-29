@@ -35,11 +35,11 @@ import { TrashIcon } from "@portal/components/icons";
 // ── Stage colour map ──────────────────────────────────────────
 
 const STAGE_COLORS = [
-  { border: "border-l-violet-500", dot: "bg-violet-400", text: "text-violet-400" },
-  { border: "border-l-blue-500",   dot: "bg-blue-400",   text: "text-blue-400" },
-  { border: "border-l-cyan-500",   dot: "bg-cyan-400",   text: "text-cyan-400" },
-  { border: "border-l-amber-500",  dot: "bg-amber-400",  text: "text-amber-400" },
-  { border: "border-l-green-500",  dot: "bg-green-400",  text: "text-green-400" },
+  { border: "border-l-[var(--brand-purple)]", dot: "bg-[var(--brand-purple)]", text: "text-[var(--brand-purple)]" },
+  { border: "border-l-[var(--brand-blue)]",   dot: "bg-[var(--brand-blue)]",   text: "text-[var(--brand-blue)]" },
+  { border: "border-l-[var(--brand-blue)]",   dot: "bg-[var(--brand-blue)]",   text: "text-[var(--brand-blue)]" },
+  { border: "border-l-[var(--brand-orange)]",  dot: "bg-[var(--brand-orange)]",  text: "text-[var(--brand-orange)]" },
+  { border: "border-l-[var(--brand-aqua)]",  dot: "bg-[var(--brand-aqua)]",  text: "text-[var(--brand-aqua)]" },
 ];
 
 function stageColor(stageName: string) {
@@ -50,7 +50,7 @@ function stageColor(stageName: string) {
 // ── Kanban columns (product dev stages + catch-all) ──────────
 
 const KANBAN_STAGE_COLS = [
-  ...NEW_PRODUCT_STAGES.map((s, i) => ({ key: s, label: s, color: ["border-t-violet-500","border-t-blue-500","border-t-cyan-500","border-t-amber-500","border-t-green-500"][i] })),
+  ...NEW_PRODUCT_STAGES.map((s, i) => ({ key: s, label: s, color: ["border-t-[var(--brand-purple)]","border-t-[var(--brand-blue)]","border-t-[var(--brand-blue)]","border-t-[var(--brand-orange)]","border-t-[var(--brand-aqua)]"][i] })),
   { key: "__other__", label: "Other", color: "border-t-zinc-500" },
 ];
 
@@ -122,9 +122,9 @@ function ProjectCard({
           {project.priority_score != null && (
             <span className={cn(
               "text-[10px] font-bold px-1.5 py-0.5 rounded tabular-nums",
-              project.priority_score >= 8 ? "bg-green-500/20 text-green-400"
-                : project.priority_score >= 5 ? "bg-amber-500/20 text-amber-400"
-                : "bg-red-500/20 text-red-400",
+              project.priority_score >= 8 ? "bg-[rgba(var(--brand-aqua-rgb),0.2)] text-[var(--brand-aqua)]"
+                : project.priority_score >= 5 ? "bg-[rgba(var(--brand-accent-rgb),0.2)] text-[var(--brand-orange)]"
+                : "bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)]",
             )}>
               {project.priority_score}/10
             </span>
@@ -133,7 +133,7 @@ function ProjectCard({
             <div className="flex items-center gap-1">
               <span className={cn("text-[11px] font-semibold", color.text)}>{activeStage.name}</span>
               {activeStage.name === "Prototype" && (
-                <span className={cn("w-4 h-4 rounded-full flex items-center justify-center", activeStage.metadata?.ordered ? "bg-green-500" : "bg-red-500/80")}>
+                <span className={cn("w-4 h-4 rounded-full flex items-center justify-center", activeStage.metadata?.ordered ? "bg-[var(--brand-aqua)]" : "bg-[rgba(var(--brand-pink-rgb),0.8)]")}>
                   {activeStage.metadata?.ordered ? <Check className="w-2.5 h-2.5 text-white" /> : <XIcon className="w-2.5 h-2.5 text-white" />}
                 </span>
               )}
@@ -151,7 +151,7 @@ function ProjectCard({
         <div className="flex items-center gap-1.5">
           {NEW_PRODUCT_STAGES.map((s, i) => (
             <div key={s} className={cn("h-1 flex-1 rounded-full transition-colors",
-              i < stageIdx && "bg-green-500/50",
+              i < stageIdx && "bg-[rgba(var(--brand-aqua-rgb),0.5)]",
               i === stageIdx && color.dot,
               i > stageIdx && "bg-muted",
             )} />
@@ -161,7 +161,7 @@ function ProjectCard({
       {!isProduct && budget?.budget_allocated != null && (
         <div className="space-y-1 opacity-60">
           <div className="h-1 rounded-full bg-muted overflow-hidden">
-            <div className={cn("h-full rounded-full", burnPct >= 100 ? "bg-red-500" : burnPct >= 80 ? "bg-amber-500" : "bg-primary/60")} style={{ width: `${burnPct}%` }} />
+            <div className={cn("h-full rounded-full", burnPct >= 100 ? "bg-[var(--brand-pink)]" : burnPct >= 80 ? "bg-[var(--brand-orange)]" : "bg-primary/60")} style={{ width: `${burnPct}%` }} />
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground/60">
             <span>${Number(budget.budget_spent).toFixed(0)} spent</span>
@@ -171,7 +171,7 @@ function ProjectCard({
       )}
       <div className="flex items-center justify-between mt-auto">
         {project.due_date ? (
-          <div className={cn("flex items-center gap-1 text-[11px]", isOverdue ? "text-red-400" : "text-muted-foreground/60")}>
+          <div className={cn("flex items-center gap-1 text-[11px]", isOverdue ? "text-[var(--brand-pink)]" : "text-muted-foreground/60")}>
             {isOverdue && <AlertCircle className="w-3 h-3" />}
             <Calendar className="w-3 h-3" />
             {project.due_date}
@@ -210,9 +210,9 @@ function KanbanCard({
         <span className="text-xs font-medium leading-snug">{project.name}</span>
         {project.priority_score != null && (
           <span className={cn("text-[9px] font-bold px-1 py-0.5 rounded shrink-0 tabular-nums",
-            project.priority_score >= 8 ? "bg-green-500/20 text-green-400"
-              : project.priority_score >= 5 ? "bg-amber-500/20 text-amber-400"
-              : "bg-red-500/20 text-red-400",
+            project.priority_score >= 8 ? "bg-[rgba(var(--brand-aqua-rgb),0.2)] text-[var(--brand-aqua)]"
+              : project.priority_score >= 5 ? "bg-[rgba(var(--brand-accent-rgb),0.2)] text-[var(--brand-orange)]"
+              : "bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)]",
           )}>
             {project.priority_score}
           </span>
@@ -224,7 +224,7 @@ function KanbanCard({
       <div className="flex items-center justify-between">
         {contractors.length > 0 && <ContractorAvatarGroup contractors={contractors} size="sm" />}
         {project.due_date && (
-          <span className={cn("text-[10px] flex items-center gap-0.5", isOverdue ? "text-red-400" : "text-muted-foreground/50")}>
+          <span className={cn("text-[10px] flex items-center gap-0.5", isOverdue ? "text-[var(--brand-pink)]" : "text-muted-foreground/50")}>
             {isOverdue && <AlertCircle className="w-2.5 h-2.5" />}
             <Calendar className="w-2.5 h-2.5" />
             {project.due_date}
@@ -492,7 +492,7 @@ function ProjectsListBody() {
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
                         </div>
                       ) : (
-                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-red-400 hover:bg-red-400/10" onClick={() => setConfirmDeleteId(p.id)}>
+                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-[var(--brand-pink)] hover:bg-[rgba(var(--brand-pink-rgb),0.1)]" onClick={() => setConfirmDeleteId(p.id)}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       )}

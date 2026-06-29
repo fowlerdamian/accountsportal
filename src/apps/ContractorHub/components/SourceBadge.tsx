@@ -12,7 +12,7 @@ export function SourceBadge({ source, className }: SourceBadgeProps) {
       <span
         className={cn(
           "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold",
-          "bg-blue-900/40 text-blue-300 border border-blue-800/40",
+          "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)] border border-[rgba(var(--brand-aqua-rgb),0.4)]",
           className,
         )}
       >

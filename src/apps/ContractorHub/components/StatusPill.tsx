@@ -9,25 +9,25 @@ type AnyStatus = TaskStatus | ProjectStatus | StaffTaskStatus;
 
 const TASK_CONFIG: Record<TaskStatus, { label: string; className: string }> = {
   backlog:     { label: "To Do",        className: "bg-muted text-muted-foreground" },
-  in_progress: { label: "In Progress",  className: "bg-blue-900/40 text-blue-300 border border-blue-800/40" },
-  review:      { label: "Stuck",        className: "bg-red-900/40 text-red-300 border border-red-800/40" },
-  done:        { label: "Complete",     className: "bg-green-900/40 text-green-300 border border-green-800/40" },
+  in_progress: { label: "In Progress",  className: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)] border border-[rgba(var(--brand-aqua-rgb),0.4)]" },
+  review:      { label: "Stuck",        className: "bg-[rgba(var(--brand-pink-rgb),0.4)] text-[var(--brand-pink)] border border-[rgba(var(--brand-pink-rgb),0.4)]" },
+  done:        { label: "Complete",     className: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-aqua)] border border-[rgba(var(--brand-aqua-rgb),0.4)]" },
 };
 
 const PROJECT_CONFIG: Record<ProjectStatus, { label: string; className: string }> = {
   planning:  { label: "Planning",   className: "bg-muted text-muted-foreground" },
-  active:    { label: "Active",     className: "bg-blue-900/40 text-blue-300 border border-blue-800/40" },
-  on_hold:   { label: "On Hold",    className: "bg-amber-900/40 text-amber-300 border border-amber-800/40" },
-  complete:  { label: "Complete",   className: "bg-green-900/40 text-green-300 border border-green-800/40" },
+  active:    { label: "Active",     className: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)] border border-[rgba(var(--brand-aqua-rgb),0.4)]" },
+  on_hold:   { label: "On Hold",    className: "bg-[rgba(var(--brand-accent-rgb),0.4)] text-[var(--brand-orange)] border border-[rgba(var(--brand-accent-rgb),0.4)]" },
+  complete:  { label: "Complete",   className: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-aqua)] border border-[rgba(var(--brand-aqua-rgb),0.4)]" },
   archived:  { label: "Archived",   className: "bg-muted/40 text-muted-foreground/70 border border-border/40" },
 };
 
 // staff_tasks: map "not_started"→muted, "blocked"→amber (reuses on_hold/review hues), "done"→green
 const STAFF_TASK_CONFIG: Record<StaffTaskStatus, { label: string; className: string }> = {
   not_started: { label: "Not Started", className: "bg-muted text-muted-foreground" },
-  in_progress: { label: "In Progress", className: "bg-blue-900/40 text-blue-300 border border-blue-800/40" },
-  blocked:     { label: "Blocked",     className: "bg-amber-900/40 text-amber-300 border border-amber-800/40" },
-  done:        { label: "Done",        className: "bg-green-900/40 text-green-300 border border-green-800/40" },
+  in_progress: { label: "In Progress", className: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-blue)] border border-[rgba(var(--brand-aqua-rgb),0.4)]" },
+  blocked:     { label: "Blocked",     className: "bg-[rgba(var(--brand-accent-rgb),0.4)] text-[var(--brand-orange)] border border-[rgba(var(--brand-accent-rgb),0.4)]" },
+  done:        { label: "Done",        className: "bg-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-aqua)] border border-[rgba(var(--brand-aqua-rgb),0.4)]" },
 };
 
 const TASK_STATUSES        = new Set<string>(Object.keys(TASK_CONFIG));

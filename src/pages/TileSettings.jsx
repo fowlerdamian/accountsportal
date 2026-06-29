@@ -145,7 +145,7 @@ export default function TileSettings() {
       </div>
 
       {error && (
-        <div style={{ marginBottom: '24px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ff1744', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
+        <div style={{ marginBottom: '24px', padding: '12px 16px', background: 'rgba(var(--brand-pink-rgb),0.1)', border: '1px solid rgba(var(--brand-pink-rgb),0.3)', borderRadius: '6px', color: 'var(--brand-pink)', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
           {error.message}
         </div>
       )}

@@ -21,9 +21,9 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 
 function JobStatusBadge({ status }: { status: string }) {
   const map: Record<string, { icon: typeof Clock; textClass: string; iconClass: string; label: string }> = {
-    completed: { icon: CheckCircle, textClass: "text-green-400",        iconClass: "",             label: "Completed" },
-    running:   { icon: Loader2,     textClass: "text-yellow-400",       iconClass: "",             label: "Running"   },
-    failed:    { icon: AlertCircle, textClass: "text-red-400",          iconClass: "",             label: "Failed"    },
+    completed: { icon: CheckCircle, textClass: "text-[var(--brand-aqua)]",        iconClass: "",             label: "Completed" },
+    running:   { icon: Loader2,     textClass: "text-[var(--brand-orange)]",       iconClass: "",             label: "Running"   },
+    failed:    { icon: AlertCircle, textClass: "text-[var(--brand-pink)]",          iconClass: "",             label: "Failed"    },
     pending:   { icon: Clock,       textClass: "text-muted-foreground", iconClass: "",             label: "Pending"   },
   };
   const { icon: Icon, textClass, iconClass, label } = map[status] ?? map.pending;
@@ -238,7 +238,7 @@ export default function Dashboard() {
         </div>
         {suggestionResult && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+            <CheckCircle className="w-3.5 h-3.5 text-[var(--brand-aqua)] flex-shrink-0" />
             {suggestionResult}
           </div>
         )}

@@ -10,7 +10,7 @@ import { cn } from "../../../apps/Guide/lib/utils";
 import { supabase } from "@portal/lib/supabase";
 import { CHANNEL_LABEL, type Channel } from "../lib/constants";
 
-const CHART_COLORS = [palette.accent, "#4fc3f7", "#ef5350", "#66bb6a", "#ab47bc", "#ffa726"];
+const CHART_COLORS = [palette.accent, palette.blue, palette.pink, palette.aqua, palette.purple, palette.orange];
 
 const TOOLTIP_STYLE = {
   contentStyle: { background: "#1a1a1a", border: "1px solid #333", borderRadius: 8, fontSize: 12 },
@@ -186,7 +186,7 @@ export default function Reports() {
               <XAxis dataKey="range" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip {...TOOLTIP_STYLE} />
-              <Bar dataKey="count" fill="#4fc3f7" radius={[3, 3, 0, 0]} maxBarSize={28} name="Leads" />
+              <Bar dataKey="count" fill={palette.blue} radius={[3, 3, 0, 0]} maxBarSize={28} name="Leads" />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -246,8 +246,8 @@ export default function Reports() {
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip {...TOOLTIP_STYLE} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="total" fill="#4fc3f7" radius={[3, 3, 0, 0]} maxBarSize={20} name="Scheduled" opacity={0.4} />
-            <Bar dataKey="made"  fill="#66bb6a" radius={[3, 3, 0, 0]} maxBarSize={20} name="Completed" />
+            <Bar dataKey="total" fill={palette.blue} radius={[3, 3, 0, 0]} maxBarSize={20} name="Scheduled" opacity={0.4} />
+            <Bar dataKey="made"  fill={palette.aqua} radius={[3, 3, 0, 0]} maxBarSize={20} name="Completed" />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -257,7 +257,7 @@ export default function Reports() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <ChartCard title="Win-back Candidates">
             <div className="flex items-center gap-4 py-4">
-              <div className="text-5xl font-bold text-red-400 tabular-nums">{d?.winbackCount ?? 0}</div>
+              <div className="text-5xl font-bold text-[var(--brand-pink)] tabular-nums">{d?.winbackCount ?? 0}</div>
               <div className="text-sm text-muted-foreground">
                 distributors with no order<br />in the last 30 days
               </div>
@@ -282,7 +282,7 @@ export default function Reports() {
         <ChartCard title="Lead Source: Tender News vs General Search">
           <div className="flex items-center gap-8 py-4">
             {[
-              { label: "Tender / Contract News", value: d?.tenderLeads ?? 0, color: "text-blue-400" },
+              { label: "Tender / Contract News", value: d?.tenderLeads ?? 0, color: "text-[var(--brand-blue)]" },
               { label: "General Search",          value: d?.searchLeads ?? 0, color: "text-primary" },
             ].map(({ label, value, color }) => (
               <div key={label}>

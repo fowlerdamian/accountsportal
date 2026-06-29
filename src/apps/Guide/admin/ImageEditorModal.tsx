@@ -482,7 +482,7 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
             ) : (
               <span className="text-xs text-white/70">
                 Clear all?{" "}
-                <button className="text-red-400 underline" onClick={handleClearAll}>Yes</button>{" / "}
+                <button className="text-[var(--brand-pink)] underline" onClick={handleClearAll}>Yes</button>{" / "}
                 <button className="text-white/60 underline" onClick={() => setConfirmClear(false)}>No</button>
               </span>
             )}
@@ -563,7 +563,7 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
           Your original photo is always preserved. Re-opening this editor reloads the original.
         </p>
         <Button
-          className="bg-amber-500 hover:bg-amber-600 text-white"
+          className="bg-[var(--brand-orange)] hover:bg-[var(--brand-orange)] text-white"
           onClick={handleSave}
         >
           Save Image

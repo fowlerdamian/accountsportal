@@ -151,9 +151,9 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
   const trendIcon = () => {
     if (!orderHistory) return null;
     const expected = (orderHistory.order_count_90d / 3);
-    if (orderHistory.order_count_30d < expected * 0.5) return <TrendingDown className="w-4 h-4 text-red-400" />;
-    if (orderHistory.order_count_30d >= expected * 1.2) return <TrendingUp className="w-4 h-4 text-green-400" />;
-    return <Minus className="w-4 h-4 text-yellow-400" />;
+    if (orderHistory.order_count_30d < expected * 0.5) return <TrendingDown className="w-4 h-4 text-[var(--brand-pink)]" />;
+    if (orderHistory.order_count_30d >= expected * 1.2) return <TrendingUp className="w-4 h-4 text-[var(--brand-aqua)]" />;
+    return <Minus className="w-4 h-4 text-[var(--brand-orange)]" />;
   };
 
   return (
@@ -196,7 +196,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
             )}
             {lead.hubspot_company_id ? (
               <a href={`https://app-ap1.hubspot.com/contacts/22572063/company/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-orange-500/10 text-orange-400 text-sm hover:bg-orange-500/20 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[rgba(var(--brand-accent-rgb),0.1)] text-[var(--brand-orange)] text-sm hover:bg-[rgba(var(--brand-accent-rgb),0.2)] transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" /> View in HubSpot
               </a>
             ) : (
@@ -212,27 +212,27 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
                 {addingToCall ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5" />}
                 {addedToCall ? "Added!" : "Add to Call List"}
               </button>
-              {addCallError && <span className="text-xs text-red-400">{addCallError}</span>}
+              {addCallError && <span className="text-xs text-[var(--brand-pink)]">{addCallError}</span>}
             </div>
             <button onClick={() => setShowDisqual(!showDisqual)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/10 text-red-400 text-sm hover:bg-red-500/20 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[rgba(var(--brand-pink-rgb),0.1)] text-[var(--brand-pink)] text-sm hover:bg-[rgba(var(--brand-pink-rgb),0.2)] transition-colors">
               Disqualify
             </button>
           </div>
 
           {/* Disqualify form */}
           {showDisqual && (
-            <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/20 space-y-2">
+            <div className="p-3 rounded-lg bg-[rgba(var(--brand-pink-rgb),0.05)] border border-[rgba(var(--brand-pink-rgb),0.2)] space-y-2">
               <input
                 type="text"
                 placeholder="Reason for disqualification..."
                 value={disqualReason}
                 onChange={(e) => setDisqual(e.target.value)}
-                className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[rgba(var(--brand-pink-rgb),0.5)]"
               />
               <div className="flex gap-2">
                 <button onClick={disqualify} disabled={disqualifying || !disqualReason.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors disabled:opacity-50">
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[var(--brand-pink)] text-white rounded hover:bg-[var(--brand-pink)] transition-colors disabled:opacity-50">
                   {disqualifying && <Loader2 className="w-3 h-3 animate-spin" />}
                   Confirm
                 </button>
@@ -304,26 +304,26 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
             <div className="flex flex-wrap gap-4 items-center">
               {lead.google_rating != null && (
                 <div className="flex items-center gap-1.5 text-sm">
-                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                  <Star className="w-4 h-4 text-[var(--brand-orange)] fill-[var(--brand-orange)]" />
                   <span className="font-semibold">{lead.google_rating}</span>
                   {lead.google_review_count != null && <span className="text-muted-foreground">({lead.google_review_count} reviews)</span>}
                 </div>
               )}
               {lead.social_facebook && (
                 <a href={lead.social_facebook} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                  className="flex items-center gap-1 text-sm text-[var(--brand-blue)] hover:text-[var(--brand-blue)] transition-colors">
                   <Link className="w-4 h-4" /> Facebook
                 </a>
               )}
               {lead.social_instagram && (
                 <a href={lead.social_instagram} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-sm text-pink-400 hover:text-pink-300 transition-colors">
+                  className="flex items-center gap-1 text-sm text-[var(--brand-pink)] hover:text-[var(--brand-pink)] transition-colors">
                   <Link className="w-4 h-4" /> Instagram
                 </a>
               )}
               {lead.social_linkedin && (
                 <a href={lead.social_linkedin} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-sm text-blue-500 hover:text-blue-400 transition-colors">
+                  className="flex items-center gap-1 text-sm text-[var(--brand-blue)] hover:text-[var(--brand-blue)] transition-colors">
                   <Link className="w-4 h-4" /> LinkedIn
                 </a>
               )}
@@ -337,7 +337,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
               {orderHistory ? (
                 <div className="space-y-3">
                   {orderHistory.is_winback_candidate && (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgba(var(--brand-pink-rgb),0.1)] border border-[rgba(var(--brand-pink-rgb),0.2)] text-sm text-[var(--brand-pink)]">
                       <TrendingDown className="w-4 h-4" />
                       Win-back candidate — {orderHistory.days_since_last_order} days since last order
                     </div>
@@ -382,7 +382,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
           {lead.channel === "fleetcraft" && lead.tender_context && (
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Tender Context</h3>
-              <p className="text-sm text-foreground/80 leading-relaxed bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
+              <p className="text-sm text-foreground/80 leading-relaxed bg-[rgba(var(--brand-aqua-rgb),0.05)] border border-[rgba(var(--brand-aqua-rgb),0.2)] rounded-lg p-3">
                 {lead.tender_context}
               </p>
             </section>

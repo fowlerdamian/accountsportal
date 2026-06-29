@@ -7,9 +7,9 @@ import { aud, invoiceTotal, invoiceOvercharge } from '../utils/helpers.js'
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
   flagged:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
-  disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
-  approved: { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
-  resolved: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },
+  disputed: { color: 'var(--brand-pink)', background: 'rgba(var(--brand-pink-rgb),0.1)',  border: '1px solid rgba(var(--brand-pink-rgb),0.3)'  },
+  approved: { color: 'var(--brand-aqua)', background: 'rgba(var(--brand-aqua-rgb),0.1)', border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
+  resolved: { color: 'var(--brand-blue)', background: 'rgba(var(--brand-aqua-rgb),0.1)', border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
 }
 
 function KpiCard({ label, value, valueStyle }) {
@@ -72,8 +72,8 @@ export default function LogisticsDashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px', marginBottom: '32px' }}>
         <KpiCard label="Total Invoiced"    value={aud(totalInv)} />
-        <KpiCard label="Total Overcharged" value={aud(totalOver)} valueStyle={totalOver > 0 ? { color: '#ff1744' } : {}} />
-        <KpiCard label="Open Disputes"     value={openDisp}      valueStyle={openDisp > 0   ? { color: '#ff1744' } : {}} />
+        <KpiCard label="Total Overcharged" value={aud(totalOver)} valueStyle={totalOver > 0 ? { color: 'var(--brand-pink)' } : {}} />
+        <KpiCard label="Open Disputes"     value={openDisp}      valueStyle={openDisp > 0   ? { color: 'var(--brand-pink)' } : {}} />
         <KpiCard label="Need Action"       value={needAction}    valueStyle={needAction > 0  ? { color: 'var(--brand-accent)' } : {}} />
       </div>
 
@@ -118,7 +118,7 @@ export default function LogisticsDashboard() {
                   <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff', textAlign: 'right' }}>{aud(total)}</td>
                   <td style={{ padding: '11px 14px', fontSize: '13px', textAlign: 'right' }}>
                     {over > 0
-                      ? <span style={{ color: '#ff1744', fontWeight: 500 }}>{aud(over)}</span>
+                      ? <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{aud(over)}</span>
                       : <span style={{ color: '#444' }}>—</span>}
                   </td>
                   <td style={{ padding: '11px 14px' }}>

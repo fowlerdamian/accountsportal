@@ -20,9 +20,9 @@ import { localToday } from "@portal/lib/dates";
 
 const BUBBLE: Record<TaskStatus, { label: string; bg: string; text: string; ring: string }> = {
   backlog:     { label: "To Do",       bg: "bg-zinc-800",     text: "text-zinc-300",  ring: "ring-zinc-600" },
-  in_progress: { label: "In Progress", bg: "bg-blue-900/70",  text: "text-blue-200",  ring: "ring-blue-600" },
-  review:      { label: "Stuck",       bg: "bg-red-900/70",   text: "text-red-200",   ring: "ring-red-600" },
-  done:        { label: "Complete",    bg: "bg-green-900/70", text: "text-green-200", ring: "ring-green-600" },
+  in_progress: { label: "In Progress", bg: "bg-[rgba(var(--brand-aqua-rgb),0.7)]",  text: "text-[var(--brand-blue)]",  ring: "ring-[var(--brand-blue)]" },
+  review:      { label: "Stuck",       bg: "bg-[rgba(var(--brand-pink-rgb),0.7)]",   text: "text-[var(--brand-pink)]",   ring: "ring-[var(--brand-pink)]" },
+  done:        { label: "Complete",    bg: "bg-[rgba(var(--brand-aqua-rgb),0.7)]", text: "text-[var(--brand-aqua)]", ring: "ring-[var(--brand-aqua)]" },
 };
 
 const STATUS_CYCLE: TaskStatus[] = ["backlog", "in_progress", "review", "done"];
@@ -97,7 +97,7 @@ function StageStepper({
                     className={cn(
                       "w-12 h-12 rounded-full flex items-center justify-center border-2 text-sm font-bold transition-all duration-200",
                       isActive    && "border-primary bg-primary/15 text-primary scale-115 shadow-[0_0_24px_rgba(var(--brand-accent-rgb),0.4)]",
-                      isCompleted && "border-green-500 bg-green-500/15 text-green-400 cursor-pointer hover:bg-amber-500/15 hover:border-amber-500 hover:text-amber-400",
+                      isCompleted && "border-[var(--brand-aqua)] bg-[rgba(var(--brand-aqua-rgb),0.15)] text-[var(--brand-aqua)] cursor-pointer hover:bg-[rgba(var(--brand-accent-rgb),0.15)] hover:border-[var(--brand-orange)] hover:text-[var(--brand-orange)]",
                       isFuture    && "border-border/30 bg-background text-muted-foreground/30",
                       isFuture && !activating && "hover:border-border/60 hover:text-muted-foreground/60 cursor-pointer",
                       activating  && !isActive && "opacity-40 cursor-not-allowed",
@@ -117,8 +117,8 @@ function StageStepper({
                       className={cn(
                         "absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-background flex items-center justify-center transition-colors",
                         stage.metadata?.ordered
-                          ? "bg-green-500 text-white"
-                          : "bg-red-500/80 text-white",
+                          ? "bg-[var(--brand-aqua)] text-white"
+                          : "bg-[rgba(var(--brand-pink-rgb),0.8)] text-white",
                       )}
                     >
                       {stage.metadata?.ordered
@@ -133,7 +133,7 @@ function StageStepper({
                   <p className={cn(
                     "text-xs font-semibold",
                     isActive    && "text-primary",
-                    isCompleted && "text-green-400",
+                    isCompleted && "text-[var(--brand-aqua)]",
                     isFuture    && "text-muted-foreground/30",
                   )}>
                     {stage.name}
@@ -141,7 +141,7 @@ function StageStepper({
                   {isActive && stage.name === "Prototype" && (
                     <p className={cn(
                       "text-[10px] font-semibold mt-0.5",
-                      stage.metadata?.ordered ? "text-green-400" : "text-red-400",
+                      stage.metadata?.ordered ? "text-[var(--brand-aqua)]" : "text-[var(--brand-pink)]",
                     )}>
                       {stage.metadata?.ordered ? "Ordered" : "Not ordered"}
                     </p>
@@ -153,7 +153,7 @@ function StageStepper({
                     <p className="text-[10px] text-muted-foreground/40 mt-0.5">click again to archive</p>
                   )}
                   {isCompleted && stage.end_date && (
-                    <p className="text-[10px] text-green-400/50 mt-0.5">{stage.end_date}</p>
+                    <p className="text-[10px] text-[rgba(var(--brand-aqua-rgb),0.5)] mt-0.5">{stage.end_date}</p>
                   )}
                   {isCompleted && (
                     <p className="text-[10px] text-muted-foreground/30 mt-0.5">click to roll back</p>
@@ -196,9 +196,9 @@ function TaskRow({
       <div className={cn(
         "w-2 h-2 rounded-full shrink-0",
         task.status === "backlog"     && "bg-zinc-500",
-        task.status === "in_progress" && "bg-blue-400",
-        task.status === "review"      && "bg-red-400",
-        task.status === "done"        && "bg-green-400",
+        task.status === "in_progress" && "bg-[var(--brand-blue)]",
+        task.status === "review"      && "bg-[var(--brand-pink)]",
+        task.status === "done"        && "bg-[var(--brand-aqua)]",
       )} />
 
       <span className={cn(
@@ -435,9 +435,9 @@ export function ProductStagesView({ projectId }: ProductStagesViewProps) {
                     <div className={cn(
                       "w-1.5 h-1.5 rounded-full",
                       s === "backlog"     && "bg-zinc-500",
-                      s === "in_progress" && "bg-blue-400",
-                      s === "review"      && "bg-red-400",
-                      s === "done"        && "bg-green-400",
+                      s === "in_progress" && "bg-[var(--brand-blue)]",
+                      s === "review"      && "bg-[var(--brand-pink)]",
+                      s === "done"        && "bg-[var(--brand-aqua)]",
                     )} />
                     <span className="text-[10px] text-muted-foreground">{BUBBLE[s].label}</span>
                   </div>

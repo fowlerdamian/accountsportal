@@ -145,7 +145,7 @@ export default function Pipeline() {
                   const amount  = parseFloat(deal.properties.amount ?? "0") || 0;
                   const daysIn  = daysSince(deal.properties.hs_lastmodifieddate ?? deal.properties.createdate);
                   const isOpen  = expandedDeal === deal.id;
-                  const stageHeat = daysIn > 30 ? "border-red-500/40" : daysIn > 14 ? "border-yellow-500/40" : "border-border";
+                  const stageHeat = daysIn > 30 ? "border-[rgba(var(--brand-pink-rgb),0.4)]" : daysIn > 14 ? "border-[rgba(var(--brand-accent-rgb),0.4)]" : "border-border";
 
                   return (
                     <div
@@ -160,7 +160,7 @@ export default function Pipeline() {
 
                       <div className="flex items-center justify-between mt-2">
                         {amount > 0 ? (
-                          <span className="text-xs font-semibold text-green-400">
+                          <span className="text-xs font-semibold text-[var(--brand-aqua)]">
                             ${amount.toLocaleString()}
                           </span>
                         ) : (
@@ -168,7 +168,7 @@ export default function Pipeline() {
                         )}
                         <span className={cn(
                           "flex items-center gap-1 text-xs",
-                          daysIn > 30 ? "text-red-400" : daysIn > 14 ? "text-yellow-400" : "text-muted-foreground"
+                          daysIn > 30 ? "text-[var(--brand-pink)]" : daysIn > 14 ? "text-[var(--brand-orange)]" : "text-muted-foreground"
                         )}>
                           <Clock className="w-3 h-3" />
                           {daysIn}d
@@ -186,7 +186,7 @@ export default function Pipeline() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 text-orange-400 hover:text-orange-300 transition-colors"
+                            className="flex items-center gap-1 text-[var(--brand-orange)] hover:text-[var(--brand-orange)] transition-colors"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                             Open in HubSpot

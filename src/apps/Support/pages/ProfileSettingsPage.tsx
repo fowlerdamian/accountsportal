@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 
 const AVATAR_COLOURS = [
-  '#C0392B', '#1A6FA8', '#2E7D32', '#D4860A',
-  '#6B3FA0', '#0E7C7B', '#8D3B2B', '#3D5A80',
-  '#7B1FA2', '#00695C', '#E65100', '#283593',
+  'var(--brand-pink)', 'var(--brand-blue)', 'var(--brand-aqua)', 'var(--brand-orange)',
+  'var(--brand-purple)', 'var(--brand-aqua)', 'var(--brand-pink)', 'var(--brand-blue)',
+  'var(--brand-purple)', 'var(--brand-aqua)', 'var(--brand-orange)', 'var(--brand-purple)',
 ];
 
 export default function ProfileSettingsPage() {

@@ -165,9 +165,9 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
                   className={[
                     "w-7 h-7 rounded text-xs font-semibold border transition-colors",
                     priorityScore === n
-                      ? n >= 8 ? "bg-green-500 text-white border-green-500"
-                        : n >= 5 ? "bg-amber-500 text-white border-amber-500"
-                        : "bg-red-500 text-white border-red-500"
+                      ? n >= 8 ? "bg-[var(--brand-aqua)] text-white border-[var(--brand-aqua)]"
+                        : n >= 5 ? "bg-[var(--brand-orange)] text-white border-[var(--brand-orange)]"
+                        : "bg-[var(--brand-pink)] text-white border-[var(--brand-pink)]"
                       : "border-border text-muted-foreground hover:bg-muted",
                   ].join(" ")}
                 >

@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase.js'
 import { useNavigate } from 'react-router-dom'
 import { APPS } from '../config/apps.js'
 import { useIsAdmin } from '../hooks/useIsAdmin.js'
+import { palette } from '../lib/palette.js'
 
 const ICON_MAP = {
   BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings: SettingsIcon,
@@ -74,9 +75,11 @@ function Toggle({ checked, onChange, disabled }) {
 
 const ROLE_OPTIONS = ['admin', 'editor', 'user']
 
+// Concrete hex from the central palette (live from --brand-* tokens) so the
+// `cfg.color + '66'` alpha-suffix concatenations below stay valid 8-digit hex.
 const ROLE_LABELS = {
-  admin:  { label: 'Admin',  color: 'var(--brand-accent)' },
-  editor: { label: 'Editor', color: '#60A5FA' },
+  admin:  { label: 'Admin',  color: palette.accent },
+  editor: { label: 'Editor', color: palette.blue },
   user:   { label: 'User',   color: '#666' },
 }
 
@@ -157,7 +160,7 @@ function AccountSection({ user }) {
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#ff1744', fontFamily: '"JetBrains Mono", monospace' }}>
+            <div style={{ fontSize: '12px', color: 'var(--brand-pink)', fontFamily: '"JetBrains Mono", monospace' }}>
               {error}
             </div>
           )}
@@ -167,8 +170,8 @@ function AccountSection({ user }) {
               onClick={signOut}
               style={{
                 fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
-                textTransform: 'uppercase', color: '#ff1744',
-                background: 'none', border: '1px solid rgba(239,68,68,0.3)',
+                textTransform: 'uppercase', color: 'var(--brand-pink)',
+                background: 'none', border: '1px solid rgba(var(--brand-pink-rgb),0.3)',
                 borderRadius: '4px', padding: '6px 14px', cursor: 'pointer',
               }}
             >
@@ -176,7 +179,7 @@ function AccountSection({ user }) {
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {saved && (
-                <span style={{ fontSize: '11px', color: '#60a57e', fontFamily: '"JetBrains Mono", monospace' }}>
+                <span style={{ fontSize: '11px', color: 'var(--brand-aqua)', fontFamily: '"JetBrains Mono", monospace' }}>
                   Saved
                 </span>
               )}
@@ -283,7 +286,7 @@ function InviteUserForm({ onInvited }) {
           </div>
         </div>
 
-        {error && <div style={{ fontSize: '12px', color: '#ff1744', fontFamily: '"JetBrains Mono", monospace' }}>{error}</div>}
+        {error && <div style={{ fontSize: '12px', color: 'var(--brand-pink)', fontFamily: '"JetBrains Mono", monospace' }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
@@ -382,7 +385,7 @@ function UserManagement() {
       </div>
 
       {error && (
-        <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#ff1744', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace' }}>
+        <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(var(--brand-pink-rgb),0.1)', border: '1px solid rgba(var(--brand-pink-rgb),0.3)', borderRadius: '6px', color: 'var(--brand-pink)', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace' }}>
           {error}
         </div>
       )}
@@ -510,16 +513,16 @@ function UserManagement() {
                           fontFamily: '"JetBrains Mono", monospace',
                           padding: '6px 14px', borderRadius: '4px',
                           cursor: resetSent[u.id] ? 'default' : 'pointer',
-                          border: `1px solid ${resetSent[u.id] ? '#333' : 'rgba(96,165,250,0.3)'}`,
+                          border: `1px solid ${resetSent[u.id] ? '#333' : 'rgba(var(--brand-aqua-rgb),0.3)'}`,
                           background: 'transparent',
-                          color: resetSent[u.id] ? '#555' : '#60A5FA',
+                          color: resetSent[u.id] ? '#555' : 'var(--brand-blue)',
                           transition: 'all 120ms',
                         }}
                       >
                         {resetSent[u.id] ? '✓ Reset email sent' : 'Send password reset'}
                       </button>
                       {resetError[u.id] && (
-                        <div style={{ marginTop: '8px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#ff1744' }}>
+                        <div style={{ marginTop: '8px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-pink)' }}>
                           {resetError[u.id]}
                         </div>
                       )}

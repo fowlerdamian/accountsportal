@@ -407,7 +407,7 @@ export default function GuideViewer() {
 
             {isDivider ? (
               /* Wiring-break interstitial — full-card "Continue" prompt */
-              <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/5 p-5 sm:p-7 space-y-5 text-center">
+              <div className="rounded-xl border-2 border-[rgba(var(--brand-accent-rgb),0.4)] bg-[rgba(var(--brand-accent-rgb),0.05)] p-5 sm:p-7 space-y-5 text-center">
                 {step.image_url ? (
                   <img
                     src={step.image_url}
@@ -416,8 +416,8 @@ export default function GuideViewer() {
                     onClick={() => setLightbox(step.image_url!)}
                   />
                 ) : (
-                  <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/15 flex items-center justify-center">
-                    <Zap className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                  <div className="w-12 h-12 mx-auto rounded-full bg-[rgba(var(--brand-accent-rgb),0.15)] flex items-center justify-center">
+                    <Zap className="w-6 h-6 text-[var(--brand-orange)] dark:text-[var(--brand-orange)]" />
                   </div>
                 )}
                 <div className="space-y-2">

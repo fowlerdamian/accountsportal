@@ -72,7 +72,7 @@ function ConfirmationCard({ content, onConfirm, onCancel, confirmed, cancelled }
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{previewText}</ReactMarkdown>
         <div style={{
           marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px',
-          fontSize: '12px', color: '#60a57e', fontFamily: '"JetBrains Mono", monospace',
+          fontSize: '12px', color: 'var(--brand-aqua)', fontFamily: '"JetBrains Mono", monospace',
         }}>
           <CheckCircle2 size={13} />
           Executing…
@@ -161,7 +161,7 @@ function MessageBubble({ msg, onConfirm, onCancel }) {
         border: isUser ? '1px solid #222' : 'none',
         borderRadius: '8px',
         padding: isUser ? '10px 14px' : '0',
-        color: msg.isError ? '#f87171' : '#e0e0e0',
+        color: msg.isError ? 'var(--brand-pink)' : '#e0e0e0',
         fontSize: '14px',
         lineHeight: '1.65',
       }}>
@@ -176,7 +176,7 @@ function MessageBubble({ msg, onConfirm, onCancel }) {
             cancelled={msg.cancelled}
           />
         ) : (
-          <div style={{ color: msg.isError ? '#f87171' : '#e0e0e0' }}>
+          <div style={{ color: msg.isError ? 'var(--brand-pink)' : '#e0e0e0' }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
               {msg.content}
             </ReactMarkdown>
@@ -362,7 +362,7 @@ function SessionsSidebar({ sessions, currentId, onSelect, onNew, onDelete, loadi
                     borderRadius: '3px',
                     transition: 'color 120ms',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#f87171' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-pink)' }}
                   onMouseLeave={e => { e.currentTarget.style.color = '#444' }}
                 >
                   <Trash2 size={12} />
@@ -391,7 +391,7 @@ class XeroChatErrorBoundary extends Component {
       return (
         <div style={{
           height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: '#000', color: '#f87171', fontFamily: '"JetBrains Mono", monospace',
+          background: '#000', color: 'var(--brand-pink)', fontFamily: '"JetBrains Mono", monospace',
           fontSize: '13px', padding: '40px', textAlign: 'center', flexDirection: 'column', gap: '12px',
         }}>
           <TriangleAlertIcon size={24} />
@@ -446,8 +446,8 @@ function NotConnectedScreen({ onConnect, onCheckConnection, connecting, error })
         {error && (
           <div style={{
             marginBottom: '20px', padding: '10px 14px',
-            background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)',
-            borderRadius: '6px', fontSize: '12px', color: '#f87171',
+            background: 'rgba(var(--brand-pink-rgb),0.06)', border: '1px solid rgba(var(--brand-pink-rgb),0.2)',
+            borderRadius: '6px', fontSize: '12px', color: 'var(--brand-pink)',
             fontFamily: '"JetBrains Mono", monospace', textAlign: 'left',
           }}>
             {error}
@@ -460,7 +460,7 @@ function NotConnectedScreen({ onConnect, onCheckConnection, connecting, error })
           style={{
             display: 'inline-flex', alignItems: 'center', gap: '8px',
             padding: '10px 20px', fontSize: '13px', fontWeight: 600,
-            background: connecting ? '#0d0d0d' : '#13b5ea',
+            background: connecting ? '#0d0d0d' : 'var(--brand-blue)',
             color: connecting ? '#555' : '#000',
             border: 'none', borderRadius: '7px',
             cursor: connecting ? 'not-allowed' : 'pointer',
@@ -845,8 +845,8 @@ function XeroChatInner() {
           </button>
         )}
         <div style={{
-          width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e',
-          boxShadow: '0 0 5px #22c55e', flexShrink: 0,
+          width: '7px', height: '7px', borderRadius: '50%', background: 'var(--brand-aqua)',
+          boxShadow: '0 0 5px var(--brand-aqua)', flexShrink: 0,
         }} />
         <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em', color: '#fff', whiteSpace: 'nowrap' }}>
           XERO ASSISTANT

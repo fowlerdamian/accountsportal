@@ -72,8 +72,8 @@ function SectionHeading({ children }) {
 function Button({ tone = 'gold', disabled, onClick, children }) {
   const palette = {
     gold: { fg: 'var(--brand-accent)', border: 'rgba(var(--brand-accent-rgb),0.4)' },
-    blue: { fg: '#60A5FA', border: 'rgba(96,165,250,0.4)' },
-    red:  { fg: '#ff1744', border: 'rgba(239,68,68,0.4)' },
+    blue: { fg: 'var(--brand-blue)', border: 'rgba(var(--brand-aqua-rgb),0.4)' },
+    red:  { fg: 'var(--brand-pink)', border: 'rgba(var(--brand-pink-rgb),0.4)' },
   }[tone]
   return (
     <button
@@ -262,7 +262,7 @@ function FunctionRow({ row, onChange, isAdmin }) {
   const lastRun = row.last_run_at
     ? `${row.last_run_status ?? 'ran'} · ${relativeTime(row.last_run_at)}`
     : 'never run'
-  const lastRunColor = row.last_run_status === 'error' ? '#ff1744' : '#666'
+  const lastRunColor = row.last_run_status === 'error' ? 'var(--brand-pink)' : '#666'
   const errorCount = row.consecutive_errors ?? 0
   const supportsDedup = row.slug === 'cin7-realtime-alerts'
 
@@ -281,7 +281,7 @@ function FunctionRow({ row, onChange, isAdmin }) {
             {SCHEDULE_LABEL[row.slug] ?? row.slug}
             <span style={{ color: lastRunColor, marginLeft: '8px' }}>· {lastRun}</span>
             {errorCount > 0 && (
-              <span style={{ color: '#ff1744', marginLeft: '8px' }}>· {errorCount} consecutive error{errorCount > 1 ? 's' : ''}</span>
+              <span style={{ color: 'var(--brand-pink)', marginLeft: '8px' }}>· {errorCount} consecutive error{errorCount > 1 ? 's' : ''}</span>
             )}
           </div>
         </div>
@@ -353,7 +353,7 @@ function FunctionRow({ row, onChange, isAdmin }) {
           )}
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#ff1744', ...monoStyle }}>
+            <div style={{ fontSize: '12px', color: 'var(--brand-pink)', ...monoStyle }}>
               {error}
             </div>
           )}
@@ -378,7 +378,7 @@ function FunctionRow({ row, onChange, isAdmin }) {
             {fields.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {dirty && <span style={{ fontSize: '11px', color: 'var(--brand-accent)', ...monoStyle }}>● Unsaved</span>}
-                {saved && <span style={{ fontSize: '11px', color: '#60a57e', ...monoStyle }}>Saved</span>}
+                {saved && <span style={{ fontSize: '11px', color: 'var(--brand-aqua)', ...monoStyle }}>Saved</span>}
                 <Button
                   tone="gold"
                   disabled={saving || !isAdmin || !dirty}
@@ -470,8 +470,8 @@ export default function ChatFunctions() {
       {error && (
         <div style={{
           marginBottom: '16px', padding: '10px 14px',
-          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-          borderRadius: '6px', color: '#ff1744', fontSize: '12px',
+          background: 'rgba(var(--brand-pink-rgb),0.1)', border: '1px solid rgba(var(--brand-pink-rgb),0.3)',
+          borderRadius: '6px', color: 'var(--brand-pink)', fontSize: '12px',
           ...monoStyle,
         }}>
           {error}

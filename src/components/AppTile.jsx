@@ -22,7 +22,7 @@ function AppIcon({ name, size = 22, className = '' }) {
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  live:          { label: 'Live',        color: 'var(--status-success)', bg: 'rgba(96,165,126,0.1)',  border: 'rgba(96,165,126,0.25)' },
+  live:          { label: 'Live',        color: 'var(--status-success)', bg: 'rgba(var(--brand-aqua-rgb),0.1)',  border: 'rgba(var(--brand-aqua-rgb),0.25)' },
   beta:          { label: 'Beta',        color: 'var(--accent)',         bg: 'var(--accent-subtle)',   border: 'rgba(var(--brand-accent-rgb),0.25)' },
   'coming-soon': { label: 'Coming Soon', color: 'var(--text-tertiary)',  bg: 'rgba(102,102,102,0.1)', border: 'rgba(102,102,102,0.2)' },
 }

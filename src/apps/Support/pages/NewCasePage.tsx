@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react';
+import { palette } from '@portal/lib/palette';
 import { CaseType, ErrorOrigin } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,11 +39,11 @@ interface TileConfig {
 }
 
 const issueTiles: TileConfig[] = [
-  { value: 'warranty_claim', label: 'Warranty Claim', description: 'Product failed or not fit for purpose within warranty period', type: 'warranty_claim', errorOrigin: null, accent: '#C0392B', char: 'W' },
-  { value: 'order_entry', label: 'Order Entry Error', description: 'Wrong item or quantity entered on the order before dispatch', type: 'order_error', errorOrigin: 'order_entry', badge: 'Order error', accent: '#D4860A', char: 'O' },
-  { value: 'warehouse', label: 'Warehouse Error', description: 'Correct item on the order but wrong thing picked or packed', type: 'order_error', errorOrigin: 'warehouse', badge: 'Order error', accent: '#6B3FA0', char: 'W' },
-  { value: 'freight_issue', label: 'Freight Issue', description: 'Damaged, lost, or delayed in transit', type: 'freight_issue', errorOrigin: null, accent: '#1A6FA8', char: 'F' },
-  { value: 'complaint', label: 'Complaint', description: 'Customer dissatisfied with product, service, or experience', type: 'complaint', errorOrigin: null, accent: '#D4860A', char: 'C' },
+  { value: 'warranty_claim', label: 'Warranty Claim', description: 'Product failed or not fit for purpose within warranty period', type: 'warranty_claim', errorOrigin: null, accent: palette.pink, char: 'W' },
+  { value: 'order_entry', label: 'Order Entry Error', description: 'Wrong item or quantity entered on the order before dispatch', type: 'order_error', errorOrigin: 'order_entry', badge: 'Order error', accent: palette.orange, char: 'O' },
+  { value: 'warehouse', label: 'Warehouse Error', description: 'Correct item on the order but wrong thing picked or packed', type: 'order_error', errorOrigin: 'warehouse', badge: 'Order error', accent: palette.purple, char: 'W' },
+  { value: 'freight_issue', label: 'Freight Issue', description: 'Damaged, lost, or delayed in transit', type: 'freight_issue', errorOrigin: null, accent: palette.blue, char: 'F' },
+  { value: 'complaint', label: 'Complaint', description: 'Customer dissatisfied with product, service, or experience', type: 'complaint', errorOrigin: null, accent: palette.orange, char: 'C' },
   { value: 'general', label: 'General', description: 'Other enquiry not covered above', type: 'general', errorOrigin: null, accent: '#5A5A5A', char: 'G' },
 ];
 

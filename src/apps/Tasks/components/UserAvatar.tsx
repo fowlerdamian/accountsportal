@@ -5,14 +5,14 @@ import { cn } from "@guide/lib/utils";
 // here is an auth.users / profile, not a contractor.
 
 const PALETTE = [
-  { bg: "bg-blue-900/70",    text: "text-blue-200"    },
-  { bg: "bg-emerald-900/70", text: "text-emerald-200" },
-  { bg: "bg-amber-900/70",   text: "text-amber-200"   },
-  { bg: "bg-rose-900/70",    text: "text-rose-200"    },
-  { bg: "bg-violet-900/70",  text: "text-violet-200"  },
-  { bg: "bg-cyan-900/70",    text: "text-cyan-200"    },
-  { bg: "bg-orange-900/70",  text: "text-orange-200"  },
-  { bg: "bg-lime-900/70",    text: "text-lime-200"    },
+  { bg: "bg-[rgba(var(--brand-aqua-rgb),0.7)]",   text: "text-[var(--brand-blue)]"   },
+  { bg: "bg-[rgba(var(--brand-aqua-rgb),0.7)]",   text: "text-[var(--brand-aqua)]"   },
+  { bg: "bg-[rgba(var(--brand-accent-rgb),0.7)]", text: "text-[var(--brand-orange)]" },
+  { bg: "bg-[rgba(var(--brand-pink-rgb),0.7)]",   text: "text-[var(--brand-pink)]"   },
+  { bg: "bg-[rgba(var(--brand-purple-rgb),0.7)]", text: "text-[var(--brand-purple)]" },
+  { bg: "bg-[rgba(var(--brand-aqua-rgb),0.7)]",   text: "text-[var(--brand-blue)]"   },
+  { bg: "bg-[rgba(var(--brand-accent-rgb),0.7)]", text: "text-[var(--brand-orange)]" },
+  { bg: "bg-[rgba(var(--brand-aqua-rgb),0.7)]",   text: "text-[var(--brand-aqua)]"   },
 ];
 
 const SIZE_CLASSES = {

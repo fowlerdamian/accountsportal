@@ -267,14 +267,14 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
       <div
         ref={setNodeRef}
         style={style}
-        className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-3 sm:p-4 space-y-3 group"
+        className="border border-[rgba(var(--brand-accent-rgb),0.3)] bg-[rgba(var(--brand-accent-rgb),0.05)] rounded-lg p-3 sm:p-4 space-y-3 group"
       >
         <div className="flex items-start gap-2 sm:gap-3">
           <div className="flex items-center gap-1 sm:gap-2 pt-1">
             <button type="button" className="cursor-grab active:cursor-grabbing touch-none" {...attributes} {...listeners}>
-              <GripVertical className="w-4 h-4 text-amber-500/70" />
+              <GripVertical className="w-4 h-4 text-[rgba(var(--brand-accent-rgb),0.7)]" />
             </button>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-500/15 px-2 py-1 rounded">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-orange)] dark:text-[var(--brand-orange)] bg-[rgba(var(--brand-accent-rgb),0.15)] px-2 py-1 rounded">
               Wiring Instructions
             </span>
           </div>
@@ -283,14 +283,14 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
               value={step.subtitle}
               onChange={e => onUpdate(index, 'subtitle', e.target.value)}
               placeholder={WIRING_BREAK_SUBTITLE}
-              className="font-medium border-amber-500/30 bg-background"
+              className="font-medium border-[rgba(var(--brand-accent-rgb),0.3)] bg-background"
             />
             <Textarea
               value={step.description}
               onChange={e => onUpdate(index, 'description', e.target.value)}
               placeholder={WIRING_BREAK_DESCRIPTION}
               rows={3}
-              className="border-amber-500/30 bg-background"
+              className="border-[rgba(var(--brand-accent-rgb),0.3)] bg-background"
             />
             <DropZone
               label="Wiring kit image"
@@ -1034,7 +1034,7 @@ export default function GuideEditor() {
                 variant="outline"
                 onClick={addWiringBreak}
                 disabled={guideSteps.some(s => s.is_divider)}
-                className="w-full border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                className="w-full border-[rgba(var(--brand-accent-rgb),0.4)] text-[var(--brand-orange)] dark:text-[var(--brand-orange)] hover:bg-[rgba(var(--brand-accent-rgb),0.1)]"
               >
                 <Plus className="w-4 h-4 mr-2" /> Add Wiring Instructions
               </Button>

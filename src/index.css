@@ -110,6 +110,11 @@
        Charts (recharts) / JS: import { palette } from '@portal/lib/palette'. */
     --brand-accent: #e09f3e;   /* primary accent = Orange */
     --brand-accent-rgb: 224, 159, 62;  /* ^ same, RGB triple for rgba() alpha tints */
+    /* RGB triples for the other brand hues (rgba() alpha tints, app-wide).
+       Keep in sync with --brand-pink/aqua/purple below. */
+    --brand-pink-rgb:   158, 42, 43;   /* #9e2a2b Red */
+    --brand-aqua-rgb:   51, 92, 103;   /* #335c67 Teal (also "blue") */
+    --brand-purple-rgb: 84, 11, 14;    /* #540b0e Deep Red */
     --brand-gold:   #e09f3e;   /* Orange (warm gold) */
     --brand-orange: #e09f3e;   /* Orange */
     --brand-pink:   #9e2a2b;   /* Red */

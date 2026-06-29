@@ -391,7 +391,7 @@ export default function CaseDetailPage() {
                   onClick={() => deleteCaseMutation.mutate()}
                   disabled={deleteCaseMutation.isPending}
                   className="px-3 py-1.5 text-sm text-white font-medium flex items-center gap-2 transition-opacity"
-                  style={{ backgroundColor: '#C0392B' }}
+                  style={{ backgroundColor: 'var(--brand-pink)' }}
                 >
                   {deleteCaseMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Yes, delete permanently

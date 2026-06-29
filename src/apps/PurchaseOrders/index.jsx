@@ -16,10 +16,10 @@ const FILTER_MATCH   = {
 
 const STATUS_STYLE = {
   Draft:      { color: '#a0a0a0', background: '#0a0a0a',               border: '1px solid #222222' },
-  Authorised: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)',  border: '1px solid rgba(96,165,250,0.3)' },
-  Ordered:    { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)' },
+  Authorised: { color: 'var(--brand-blue)', background: 'rgba(var(--brand-aqua-rgb),0.1)',  border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
+  Ordered:    { color: 'var(--brand-purple)', background: 'rgba(var(--brand-purple-rgb),0.1)', border: '1px solid rgba(var(--brand-purple-rgb),0.3)' },
   Receiving:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)',  border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
-  Completed:  { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
+  Completed:  { color: 'var(--brand-aqua)', background: 'rgba(var(--brand-aqua-rgb),0.1)',  border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
   Cancelled:  { color: '#888',    background: '#0a0a0a',               border: '1px solid #222' },
 }
 
@@ -48,7 +48,7 @@ function EtaLabel({ eta }) {
   if (!eta) return <span style={{ color: '#333' }}>—</span>
   const diff = etaDiffDays(eta)
   const label = fmtDate(eta)
-  if (diff < 0)  return <span style={{ color: '#ff1744', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span></span>
+  if (diff < 0)  return <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({Math.abs(diff)}d overdue)</span></span>
   if (diff <= 7) return <span style={{ color: 'var(--brand-accent)', fontWeight: 500 }}>{label} <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace' }}>({diff}d)</span></span>
   return <span style={{ color: '#AAA' }}>{label}</span>
 }
@@ -121,7 +121,7 @@ function EtaCell({ poId, eta, onSaved }) {
             background: 'transparent', border: 'none', color: '#555',
             cursor: 'pointer', padding: '0 4px', fontSize: '14px', lineHeight: 1,
           }}
-          onMouseEnter={e => { e.currentTarget.style.color = '#ff6b6b' }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-pink)' }}
           onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
         >×</button>
       )}
@@ -241,8 +241,8 @@ function PoCard({ po, onEtaSaved, onNoteSaved }) {
 
   return (
     <div style={{
-      background: isOverdue ? 'rgba(239,68,68,0.04)' : '#0a0a0a',
-      border: `1px solid ${isOverdue ? 'rgba(239,68,68,0.2)' : '#222222'}`,
+      background: isOverdue ? 'rgba(var(--brand-pink-rgb),0.04)' : '#0a0a0a',
+      border: `1px solid ${isOverdue ? 'rgba(var(--brand-pink-rgb),0.2)' : '#222222'}`,
       borderRadius: '8px', padding: '14px 16px',
       display: 'flex', flexDirection: 'column', gap: '10px',
     }}>
@@ -433,7 +433,7 @@ export default function PurchaseOrders() {
   if (fetchError) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-        <p style={{ color: '#ff1744', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px', margin: 0 }}>
+        <p style={{ color: 'var(--brand-pink)', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px', margin: 0 }}>
           Failed to load orders: {fetchError}
         </p>
         <button
@@ -464,7 +464,7 @@ export default function PurchaseOrders() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {syncMsg && (
-            <span style={{ fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: syncMsg.type === 'ok' ? '#4ade80' : '#ff1744' }}>
+            <span style={{ fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: syncMsg.type === 'ok' ? 'var(--brand-aqua)' : 'var(--brand-pink)' }}>
               {syncMsg.text}
             </span>
           )}
@@ -499,7 +499,7 @@ export default function PurchaseOrders() {
       {/* ── KPI cards ──────────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '24px' }}>
         <KpiCard label="Showing"       value={visible.length} />
-        <KpiCard label="Overdue"       value={overdue.length} valueStyle={overdue.length > 0 ? { color: '#ff1744' } : {}} />
+        <KpiCard label="Overdue"       value={overdue.length} valueStyle={overdue.length > 0 ? { color: 'var(--brand-pink)' } : {}} />
         <KpiCard label="ETA This Week" value={dueSoon.length} valueStyle={dueSoon.length > 0 ? { color: 'var(--brand-accent)' } : {}} />
         <KpiCard label="Order Sent"    value={visible.filter(o => o.has_attachment).length} />
       </div>
@@ -570,9 +570,9 @@ export default function PurchaseOrders() {
                   return (
                     <tr
                       key={po.id}
-                      style={{ borderBottom: '1px solid #181818', background: isOverdue ? 'rgba(239,68,68,0.04)' : 'transparent', transition: 'background 120ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = isOverdue ? 'rgba(239,68,68,0.08)' : '#111' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = isOverdue ? 'rgba(239,68,68,0.04)' : 'transparent' }}
+                      style={{ borderBottom: '1px solid #181818', background: isOverdue ? 'rgba(var(--brand-pink-rgb),0.04)' : 'transparent', transition: 'background 120ms' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = isOverdue ? 'rgba(var(--brand-pink-rgb),0.08)' : '#111' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = isOverdue ? 'rgba(var(--brand-pink-rgb),0.04)' : 'transparent' }}
                     >
                       <td style={{ padding: '11px 14px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace', fontWeight: 500 }}>
                         <a href={`https://inventory.dearsystems.com/Purchase#${po.cin7_id}`} target="_blank" rel="noopener noreferrer"

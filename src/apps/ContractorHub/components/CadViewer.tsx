@@ -312,7 +312,7 @@ export default function CadViewer({ fileUrl, filename, displayName, driveFileId,
 
           {status === "error" && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "8px" }}>
-              <span style={{ fontSize: "13px", color: "#ff1744", fontFamily: '"JetBrains Mono", monospace' }}>Failed to load model</span>
+              <span style={{ fontSize: "13px", color: "var(--brand-pink)", fontFamily: '"JetBrains Mono", monospace' }}>Failed to load model</span>
               <span style={{ fontSize: "11px", color: "var(--text-tertiary)", fontFamily: '"JetBrains Mono", monospace' }}>{errorMsg}</span>
             </div>
           )}

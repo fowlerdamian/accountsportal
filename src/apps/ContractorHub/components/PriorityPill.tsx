@@ -4,8 +4,8 @@ import type { TaskPriority } from "@hub/hooks/use-hub-queries";
 const CONFIG: Record<TaskPriority, { label: string; className: string }> = {
   low:    { label: "Low",    className: "bg-muted text-muted-foreground" },
   medium: { label: "Medium", className: "bg-muted/60 text-foreground/70 border border-border/50" },
-  high:   { label: "High",   className: "bg-amber-900/40 text-amber-300 border border-amber-800/40" },
-  urgent: { label: "Urgent", className: "bg-red-900/40 text-red-300 border border-red-800/40" },
+  high:   { label: "High",   className: "bg-[rgba(var(--brand-accent-rgb),0.4)] text-[var(--brand-orange)] border border-[rgba(var(--brand-accent-rgb),0.4)]" },
+  urgent: { label: "Urgent", className: "bg-[rgba(var(--brand-pink-rgb),0.4)] text-[var(--brand-pink)] border border-[rgba(var(--brand-pink-rgb),0.4)]" },
 };
 
 interface PriorityPillProps {

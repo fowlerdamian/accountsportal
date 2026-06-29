@@ -98,9 +98,9 @@ export default function LoginPage() {
           <div className="flex flex-col gap-4">
             <div
               className="rounded px-4 py-4 flex flex-col gap-2"
-              style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}
+              style={{ background: 'rgba(var(--brand-aqua-rgb),0.06)', border: '1px solid rgba(var(--brand-aqua-rgb),0.2)' }}
             >
-              <p className="text-sm font-medium" style={{ color: '#86EFAC' }}>
+              <p className="text-sm font-medium" style={{ color: 'var(--brand-aqua)' }}>
                 Check your inbox
               </p>
               <p className="text-xs font-mono" style={{ color: '#a0a0a0' }}>
@@ -180,9 +180,9 @@ export default function LoginPage() {
               <p
                 className="text-xs font-mono px-3 py-2 rounded"
                 style={{
-                  color: '#FCA5A5',
-                  background: 'rgba(127,29,29,0.2)',
-                  border: '1px solid rgba(127,29,29,0.4)',
+                  color: 'var(--brand-pink)',
+                  background: 'rgba(var(--brand-pink-rgb),0.2)',
+                  border: '1px solid rgba(var(--brand-pink-rgb),0.4)',
                 }}
               >
                 {error}
@@ -194,7 +194,7 @@ export default function LoginPage() {
               disabled={submitting}
               className="w-full py-2.5 rounded text-sm font-semibold tracking-wide uppercase mt-1"
               style={{
-                background: submitting ? '#8a6220' : 'var(--brand-accent)',
+                background: submitting ? 'var(--brand-orange)' : 'var(--brand-accent)',
                 color: '#0a0a0a',
                 opacity: submitting ? 0.7 : 1,
                 cursor: submitting ? 'not-allowed' : 'pointer',

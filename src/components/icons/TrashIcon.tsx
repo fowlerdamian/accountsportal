@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useCallback } from "react";
 import type { AnimatedIconHandle, AnimatedIconProps } from "./types";
 import { motion, useAnimate } from "framer-motion";
+import { palette } from "@portal/lib/palette";
 
 export interface TrashIconProps extends AnimatedIconProps {
   shakeOnClick?: boolean;
@@ -58,7 +59,7 @@ const TrashIcon = forwardRef<AnimatedIconHandle, TrashIconProps>(
 
       await animate(
         ".trash-icon",
-        { stroke: "#ef4444" },
+        { stroke: palette.pink },
         { duration: 0.2, delay: 0.1, ease: "easeInOut" },
       );
     }, [animate, dangerHover]);

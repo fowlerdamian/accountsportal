@@ -17,25 +17,25 @@ export const CHANNEL_DESCRIPTION: Record<Channel, string> = {
 // Tailwind colour tokens per channel
 export const CHANNEL_COLOR: Record<Channel, { bg: string; text: string; border: string; badge: string; ring: string }> = {
   trailbait:  {
-    bg:     "bg-orange-500/10",
-    text:   "text-orange-400",
-    border: "border-orange-500/30",
-    badge:  "bg-orange-500 text-white",
-    ring:   "ring-orange-500/40",
+    bg:     "bg-[rgba(var(--brand-accent-rgb),0.1)]",
+    text:   "text-[var(--brand-orange)]",
+    border: "border-[rgba(var(--brand-accent-rgb),0.3)]",
+    badge:  "bg-[var(--brand-orange)] text-white",
+    ring:   "ring-[rgba(var(--brand-accent-rgb),0.4)]",
   },
   fleetcraft: {
-    bg:     "bg-blue-500/10",
-    text:   "text-blue-400",
-    border: "border-blue-500/30",
-    badge:  "bg-blue-500 text-white",
-    ring:   "ring-blue-500/40",
+    bg:     "bg-[rgba(var(--brand-aqua-rgb),0.1)]",
+    text:   "text-[var(--brand-blue)]",
+    border: "border-[rgba(var(--brand-aqua-rgb),0.3)]",
+    badge:  "bg-[var(--brand-blue)] text-white",
+    ring:   "ring-[rgba(var(--brand-aqua-rgb),0.4)]",
   },
   aga: {
-    bg:     "bg-emerald-500/10",
-    text:   "text-emerald-400",
-    border: "border-emerald-500/30",
-    badge:  "bg-emerald-500 text-white",
-    ring:   "ring-emerald-500/40",
+    bg:     "bg-[rgba(var(--brand-aqua-rgb),0.1)]",
+    text:   "text-[var(--brand-aqua)]",
+    border: "border-[rgba(var(--brand-aqua-rgb),0.3)]",
+    badge:  "bg-[var(--brand-aqua)] text-white",
+    ring:   "ring-[rgba(var(--brand-aqua-rgb),0.4)]",
   },
 };
 
@@ -51,12 +51,12 @@ export const LEAD_STATUS_LABEL: Record<string, string> = {
 
 export const LEAD_STATUS_COLOR: Record<string, string> = {
   new:           "bg-zinc-700 text-zinc-300",
-  researched:    "bg-blue-900/50 text-blue-300",
-  enriched:      "bg-violet-900/50 text-violet-300",
-  queued:        "bg-yellow-900/50 text-yellow-300",
-  contacted:     "bg-orange-900/50 text-orange-300",
-  converted:     "bg-green-900/50 text-green-300",
-  disqualified:  "bg-red-900/50 text-red-300",
+  researched:    "bg-[rgba(var(--brand-aqua-rgb),0.5)] text-[var(--brand-blue)]",
+  enriched:      "bg-[rgba(var(--brand-purple-rgb),0.5)] text-[var(--brand-purple)]",
+  queued:        "bg-[rgba(var(--brand-accent-rgb),0.5)] text-[var(--brand-orange)]",
+  contacted:     "bg-[rgba(var(--brand-accent-rgb),0.5)] text-[var(--brand-orange)]",
+  converted:     "bg-[rgba(var(--brand-aqua-rgb),0.5)] text-[var(--brand-aqua)]",
+  disqualified:  "bg-[rgba(var(--brand-pink-rgb),0.5)] text-[var(--brand-pink)]",
 };
 
 export const CALL_OUTCOME_LABEL: Record<string, string> = {
@@ -68,15 +68,15 @@ export const CALL_OUTCOME_LABEL: Record<string, string> = {
 };
 
 export const SCORE_COLOR = (score: number): string => {
-  if (score >= 70) return "text-green-400";
-  if (score >= 45) return "text-yellow-400";
-  return "text-red-400";
+  if (score >= 70) return "text-[var(--brand-aqua)]";
+  if (score >= 45) return "text-[var(--brand-orange)]";
+  return "text-[var(--brand-pink)]";
 };
 
 export const SCORE_BG = (score: number): string => {
-  if (score >= 70) return "bg-green-500/20 text-green-400 border-green-500/30";
-  if (score >= 45) return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-  return "bg-red-500/20 text-red-400 border-red-500/30";
+  if (score >= 70) return "bg-[rgba(var(--brand-aqua-rgb),0.2)] text-[var(--brand-aqua)] border-[rgba(var(--brand-aqua-rgb),0.3)]";
+  if (score >= 45) return "bg-[rgba(var(--brand-accent-rgb),0.2)] text-[var(--brand-orange)] border-[rgba(var(--brand-accent-rgb),0.3)]";
+  return "bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)] border-[rgba(var(--brand-pink-rgb),0.3)]";
 };
 
 export const SUPABASE_FN_URL = (name: string): string => {

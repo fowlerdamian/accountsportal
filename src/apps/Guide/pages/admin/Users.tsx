@@ -177,7 +177,7 @@ export default function Users() {
                     </div>
                   ) : (
                     <Button size="sm" variant="ghost"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-[var(--brand-pink)] hover:bg-[rgba(var(--brand-pink-rgb),0.1)] opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => setConfirmDeleteId(user.id)}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>

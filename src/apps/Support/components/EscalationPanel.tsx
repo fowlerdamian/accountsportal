@@ -88,7 +88,7 @@ export function EscalationPanel({ caseId, caseNumber, caseTitle, onClose }: Prop
   });
 
   return (
-    <div className="bg-card border border-border p-4 mb-4" style={{ borderLeftWidth: '4px', borderLeftColor: '#C0392B' }}>
+    <div className="bg-card border border-border p-4 mb-4" style={{ borderLeftWidth: '4px', borderLeftColor: 'var(--brand-pink)' }}>
       <h3 className="text-sm font-heading mb-3">Escalate this case?</h3>
 
       <div className="mb-3">
@@ -133,7 +133,7 @@ export function EscalationPanel({ caseId, caseNumber, caseTitle, onClose }: Prop
             'px-4 py-2 text-sm font-medium text-foreground flex items-center gap-2 transition-opacity',
             (!assigneeId || !note.trim() || escalateMutation.isPending) ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90'
           )}
-          style={{ backgroundColor: '#C0392B' }}
+          style={{ backgroundColor: 'var(--brand-pink)' }}
         >
           {escalateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           Escalate

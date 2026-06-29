@@ -126,9 +126,9 @@ export default function LeadList() {
     <div className="space-y-4 animate-fade-in">
       {/* AGA qualification notice */}
       {channel === "aga" && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgba(var(--brand-aqua-rgb),0.1)] border border-[rgba(var(--brand-aqua-rgb),0.2)] text-xs text-[var(--brand-aqua)]">
           <span className="font-semibold">Own brand required</span>
-          <span className="text-emerald-400/60">· Only leads with a confirmed own brand are shown for AGA Bespoke</span>
+          <span className="text-[rgba(var(--brand-aqua-rgb),0.6)]">· Only leads with a confirmed own brand are shown for AGA Bespoke</span>
         </div>
       )}
 
@@ -184,7 +184,7 @@ export default function LeadList() {
 
       {/* Bulk action error */}
       {bulkError && (
-        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+        <div className="text-xs text-[var(--brand-pink)] bg-[rgba(var(--brand-pink-rgb),0.1)] border border-[rgba(var(--brand-pink-rgb),0.2)] rounded-lg px-3 py-2">
           {bulkError}
         </div>
       )}
@@ -254,7 +254,7 @@ export default function LeadList() {
                     {lead.hubspot_company_id && (
                       <a href={`https://app-ap1.hubspot.com/contacts/22572063/company/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-orange-400">
+                        className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-[var(--brand-orange)]">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}
@@ -268,10 +268,10 @@ export default function LeadList() {
                     <span className="text-xs text-muted-foreground">{[lead.state, lead.postcode].filter(Boolean).join(" ")}</span>
                   )}
                   {lead.google_rating != null && (
-                    <span className="text-xs text-yellow-400">★ {lead.google_rating}</span>
+                    <span className="text-xs text-[var(--brand-orange)]">★ {lead.google_rating}</span>
                   )}
                   {lead.is_existing_customer && (
-                    <span className="text-xs text-green-400 font-medium">Existing</span>
+                    <span className="text-xs text-[var(--brand-aqua)] font-medium">Existing</span>
                   )}
                   <span className="text-xs text-muted-foreground/60">
                     {new Date(lead.updated_at).toLocaleDateString("en-AU")}
@@ -354,7 +354,7 @@ export default function LeadList() {
                   </td>
                   <td className="px-3 py-2.5 text-sm">
                     {lead.google_rating != null ? (
-                      <span className="text-yellow-400">★ {lead.google_rating}</span>
+                      <span className="text-[var(--brand-orange)]">★ {lead.google_rating}</span>
                     ) : "—"}
                     {lead.google_review_count != null && (
                       <span className="text-xs text-muted-foreground ml-1">({lead.google_review_count})</span>
@@ -367,7 +367,7 @@ export default function LeadList() {
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     {lead.is_existing_customer ? (
-                      <span className="text-xs text-green-400 font-medium">Yes</span>
+                      <span className="text-xs text-[var(--brand-aqua)] font-medium">Yes</span>
                     ) : (
                       <span className="text-xs text-muted-foreground">No</span>
                     )}
@@ -381,7 +381,7 @@ export default function LeadList() {
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                     {lead.hubspot_company_id && (
                       <a href={`https://app-ap1.hubspot.com/contacts/22572063/company/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
-                        className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-orange-400 inline-block">
+                        className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-[var(--brand-orange)] inline-block">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}

@@ -20,11 +20,11 @@ const CHANNEL_PITCH: Record<string, string> = {
 };
 
 const OUTCOMES = [
-  { key: "connected",      label: "Connected",      color: "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" },
-  { key: "voicemail",      label: "Voicemail",      color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30" },
+  { key: "connected",      label: "Connected",      color: "bg-[rgba(var(--brand-aqua-rgb),0.2)] text-[var(--brand-aqua)] border-[rgba(var(--brand-aqua-rgb),0.3)] hover:bg-[rgba(var(--brand-aqua-rgb),0.3)]" },
+  { key: "voicemail",      label: "Voicemail",      color: "bg-[rgba(var(--brand-accent-rgb),0.2)] text-[var(--brand-orange)] border-[rgba(var(--brand-accent-rgb),0.3)] hover:bg-[rgba(var(--brand-accent-rgb),0.3)]" },
   { key: "no_answer",      label: "No Answer",      color: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30 hover:bg-zinc-500/30" },
-  { key: "callback",       label: "Callback",       color: "bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30" },
-  { key: "not_interested", label: "Not Interested", color: "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30" },
+  { key: "callback",       label: "Callback",       color: "bg-[rgba(var(--brand-aqua-rgb),0.2)] text-[var(--brand-blue)] border-[rgba(var(--brand-aqua-rgb),0.3)] hover:bg-[rgba(var(--brand-aqua-rgb),0.3)]" },
+  { key: "not_interested", label: "Not Interested", color: "bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)] border-[rgba(var(--brand-pink-rgb),0.3)] hover:bg-[rgba(var(--brand-pink-rgb),0.3)]" },
 ];
 
 export default function CallCard() {
@@ -191,13 +191,13 @@ export default function CallCard() {
             )}
             {lead?.hubspot_company_id && (
               <a href={`https://app-ap1.hubspot.com/contacts/22572063/company/${lead.hubspot_company_id}`} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-[rgba(var(--brand-accent-rgb),0.1)] text-[var(--brand-orange)] hover:bg-[rgba(var(--brand-accent-rgb),0.2)] transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" /> HubSpot
               </a>
             )}
             {channel === "trailbait" && lead?.cin7_customer_id && (
               <a href={`https://go.cin7.com/Customer#guid=${lead.cin7_customer_id}`} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-[rgba(var(--brand-aqua-rgb),0.1)] text-[var(--brand-blue)] hover:bg-[rgba(var(--brand-aqua-rgb),0.2)] transition-colors">
                 <ExternalLink className="w-3.5 h-3.5" /> Cin7
               </a>
             )}
@@ -215,14 +215,14 @@ export default function CallCard() {
       </div>
 
       {/* Context */}
-      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+      <div className="rounded-xl border border-[rgba(var(--brand-accent-rgb),0.2)] bg-[rgba(var(--brand-accent-rgb),0.05)] p-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xs font-semibold uppercase tracking-wider text-amber-400">Context</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-orange)]">Context</div>
           {brief.hook_tier && (
             <span className={cn(
               "text-xs px-2 py-0.5 rounded font-mono font-semibold",
-              brief.hook_tier === 1 ? "bg-red-500/20 text-red-400 border border-red-500/30" :
-              brief.hook_tier === 2 ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+              brief.hook_tier === 1 ? "bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)] border border-[rgba(var(--brand-pink-rgb),0.3)]" :
+              brief.hook_tier === 2 ? "bg-[rgba(var(--brand-accent-rgb),0.2)] text-[var(--brand-orange)] border border-[rgba(var(--brand-accent-rgb),0.3)]" :
                                       "bg-zinc-500/20 text-zinc-400 border border-zinc-500/30"
             )}>
               {brief.hook_tier === 1 ? "T1 · Urgent" : brief.hook_tier === 2 ? "T2 · Pain point" : "T3 · General fit"}
@@ -238,7 +238,7 @@ export default function CallCard() {
               : []),
           ].filter(Boolean).slice(0, 4).map((point: string, i: number) => (
             <li key={i} className="text-sm text-foreground/80 flex gap-2.5 leading-relaxed">
-              <span className="text-amber-400 font-bold flex-shrink-0">·</span>
+              <span className="text-[var(--brand-orange)] font-bold flex-shrink-0">·</span>
               {point}
             </li>
           ))}
@@ -262,7 +262,7 @@ export default function CallCard() {
           )}
 
           {lead?.lusha_mobile && numberRevealed ? (
-            <a href={`tel:${lead.lusha_mobile}`} className="flex items-center gap-1.5 text-sm font-mono font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">
+            <a href={`tel:${lead.lusha_mobile}`} className="flex items-center gap-1.5 text-sm font-mono font-semibold text-[var(--brand-aqua)] hover:text-[var(--brand-aqua)] transition-colors">
               <PhoneCall className="w-3.5 h-3.5" />
               {lead.lusha_mobile}
             </a>
@@ -270,7 +270,7 @@ export default function CallCard() {
             <button
               onClick={revealLusha}
               disabled={lushaLoading}
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-[rgba(var(--brand-aqua-rgb),0.3)] bg-[rgba(var(--brand-aqua-rgb),0.1)] text-[var(--brand-aqua)] hover:bg-[rgba(var(--brand-aqua-rgb),0.2)] transition-colors disabled:opacity-50"
             >
               {lushaLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
               {lushaLoading ? "Revealing…" : "Reveal number"}
@@ -299,20 +299,20 @@ export default function CallCard() {
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Online</div>
           <div className="flex flex-wrap gap-3 text-sm">
             {googleRating && (
-              <span className="flex items-center gap-1 text-yellow-400">
-                <Star className="w-4 h-4 fill-yellow-400" />
+              <span className="flex items-center gap-1 text-[var(--brand-orange)]">
+                <Star className="w-4 h-4 fill-[var(--brand-orange)]" />
                 {googleRating}
                 {googleReviews && <span className="text-muted-foreground text-xs">({googleReviews})</span>}
               </span>
             )}
             {social?.facebook && (
-              <a href={social.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300"><Link className="w-4 h-4" /></a>
+              <a href={social.facebook} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-blue)] hover:text-[var(--brand-blue)]"><Link className="w-4 h-4" /></a>
             )}
             {social?.instagram && (
-              <a href={social.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300"><Link className="w-4 h-4" /></a>
+              <a href={social.instagram} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-pink)] hover:text-[var(--brand-pink)]"><Link className="w-4 h-4" /></a>
             )}
             {social?.linkedin && (
-              <a href={social.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-400"><Link className="w-4 h-4" /></a>
+              <a href={social.linkedin} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-blue)] hover:text-[var(--brand-blue)]"><Link className="w-4 h-4" /></a>
             )}
           </div>
         </div>
@@ -363,7 +363,7 @@ export default function CallCard() {
         <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Order History</div>
           {cin7.is_winback && (
-            <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 text-sm text-[var(--brand-pink)] bg-[rgba(var(--brand-pink-rgb),0.1)] border border-[rgba(var(--brand-pink-rgb),0.2)] rounded-lg px-3 py-2">
               <TrendingDown className="w-4 h-4" />
               Win-back — {cin7.days_since_last_order} days since last order
             </div>
@@ -391,9 +391,9 @@ export default function CallCard() {
             </div>
           )}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {trendDir() === "declining" ? <TrendingDown className="w-4 h-4 text-red-400" /> :
-             trendDir() === "growing"   ? <TrendingUp   className="w-4 h-4 text-green-400" /> :
-                                          <Minus         className="w-4 h-4 text-yellow-400" />}
+            {trendDir() === "declining" ? <TrendingDown className="w-4 h-4 text-[var(--brand-pink)]" /> :
+             trendDir() === "growing"   ? <TrendingUp   className="w-4 h-4 text-[var(--brand-aqua)]" /> :
+                                          <Minus         className="w-4 h-4 text-[var(--brand-orange)]" />}
             <span className="capitalize">{trendDir()} order trend</span>
           </div>
         </div>
@@ -401,8 +401,8 @@ export default function CallCard() {
 
       {/* FleetCraft: tender context */}
       {channel === "fleetcraft" && tenderContext && (
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-2">Tender / Contract Context</div>
+        <div className="rounded-xl border border-[rgba(var(--brand-aqua-rgb),0.2)] bg-[rgba(var(--brand-aqua-rgb),0.05)] p-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-blue)] mb-2">Tender / Contract Context</div>
           <p className="text-sm text-foreground/80">{tenderContext}</p>
         </div>
       )}
@@ -422,7 +422,7 @@ export default function CallCard() {
           disabled={saveNotes.isPending}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-muted hover:bg-muted/70 transition-colors disabled:opacity-50"
         >
-          {notesSaved ? <CheckCircle className="w-3.5 h-3.5 text-green-400" /> : <Save className="w-3.5 h-3.5" />}
+          {notesSaved ? <CheckCircle className="w-3.5 h-3.5 text-[var(--brand-aqua)]" /> : <Save className="w-3.5 h-3.5" />}
           {notesSaved ? "Saved" : "Save Notes"}
         </button>
       </div>
@@ -452,10 +452,10 @@ export default function CallCard() {
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-4 flex items-center gap-3">
-          <CheckCircle className="w-5 h-5 text-green-400" />
+        <div className="rounded-xl border border-[rgba(var(--brand-aqua-rgb),0.2)] bg-[rgba(var(--brand-aqua-rgb),0.05)] p-4 flex items-center gap-3">
+          <CheckCircle className="w-5 h-5 text-[var(--brand-aqua)]" />
           <div>
-            <p className="text-sm font-medium text-green-400">Call completed</p>
+            <p className="text-sm font-medium text-[var(--brand-aqua)]">Call completed</p>
             <p className="text-xs text-muted-foreground capitalize">
               Outcome: {call.call_outcome?.replace(/_/g, " ") ?? "recorded"}
               {call.called_at && ` · ${new Date(call.called_at).toLocaleString("en-AU", { dateStyle: "short", timeStyle: "short" })}`}

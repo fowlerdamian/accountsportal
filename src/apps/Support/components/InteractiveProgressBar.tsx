@@ -7,15 +7,16 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { CaseStatus, STATUS_LABELS } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { palette } from '@portal/lib/palette';
 
 
 const ALL_STAGES: CaseStatus[] = ['open', 'actioned', 'in_hand', 'closed'];
 
 const STAGE_COLORS: Record<CaseStatus, string> = {
   open: '#5A5A5A',
-  actioned: '#1A6FA8',
-  in_hand: '#6B3FA0',
-  closed: '#2E7D32',
+  actioned: palette.blue,
+  in_hand: palette.purple,
+  closed: palette.aqua,
 };
 
 const MOBILE_LABELS: Record<CaseStatus, string> = {

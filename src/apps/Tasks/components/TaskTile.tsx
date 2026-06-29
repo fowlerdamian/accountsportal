@@ -146,8 +146,8 @@ export function TaskTile({ task, assigneeName, creatorName, onClick, variant = "
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {unscored && <AlertTriangle className="w-3 h-3 text-amber-400" />}
-          {task.blocked_by_task_id && task.status === "blocked" && <Link2 className="w-3 h-3 text-amber-400" />}
+          {unscored && <AlertTriangle className="w-3 h-3 text-[var(--brand-orange)]" />}
+          {task.blocked_by_task_id && task.status === "blocked" && <Link2 className="w-3 h-3 text-[var(--brand-orange)]" />}
           {task.due_date && (
             <span className={cn("font-mono tabular-nums text-[10px]", dueChipClass(task.due_date))}>
               {formatDueChip(task.due_date)}

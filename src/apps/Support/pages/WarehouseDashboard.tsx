@@ -163,9 +163,9 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
   });
 
   return (
-    <div className="bg-card border border-border p-5" style={{ borderLeftWidth: '4px', borderLeftColor: '#1A6FA8' }}>
+    <div className="bg-card border border-border p-5" style={{ borderLeftWidth: '4px', borderLeftColor: 'var(--brand-blue)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[11px] font-medium px-2 py-0.5 border" style={{ backgroundColor: '#1A6FA815', color: '#1A6FA8', borderColor: '#1A6FA830' }}>Pick order</span>
+        <span className="text-[11px] font-medium px-2 py-0.5 border" style={{ backgroundColor: 'rgba(var(--brand-aqua-rgb),0.08)', color: 'var(--brand-blue)', borderColor: 'rgba(var(--brand-aqua-rgb),0.19)' }}>Pick order</span>
         <span className="text-xs text-muted-foreground">#{caseNum}</span>
         {item.priority === 'urgent' && <span className="text-[11px] font-medium px-2 py-0.5 bg-status-urgent/15 text-status-urgent border border-status-urgent/30">Urgent</span>}
       </div>
@@ -332,7 +332,7 @@ function GeneralTaskCard({ item, readOnly }: { item: WarehouseActionItem; readOn
   const isUrgent = item.priority === 'urgent';
 
   return (
-    <div className="bg-card border border-border p-5" style={{ borderLeftWidth: '4px', borderLeftColor: isUrgent ? '#C0392B' : '#5A5A5A' }}>
+    <div className="bg-card border border-border p-5" style={{ borderLeftWidth: '4px', borderLeftColor: isUrgent ? 'var(--brand-pink)' : '#5A5A5A' }}>
       <div className="flex items-center gap-2 mb-3">
         <span className={cn(
           'text-[11px] font-medium px-2 py-0.5 border',
@@ -498,11 +498,11 @@ export default function WarehouseDashboard() {
             <span className="text-2xl font-heading text-foreground">{todoCount}</span>
             <span className="text-xs text-muted-foreground uppercase tracking-wide font-heading block mt-0.5">To do</span>
           </div>
-          <div className="bg-card border border-border px-4 py-3" style={{ borderTopWidth: '3px', borderTopColor: '#1A6FA8' }}>
+          <div className="bg-card border border-border px-4 py-3" style={{ borderTopWidth: '3px', borderTopColor: 'var(--brand-blue)' }}>
             <span className="text-2xl font-heading text-foreground">{inProgressCount}</span>
             <span className="text-xs text-muted-foreground uppercase tracking-wide font-heading block mt-0.5">In progress</span>
           </div>
-          <div className="bg-card border border-border px-4 py-3" style={{ borderTopWidth: '3px', borderTopColor: '#2E7D32' }}>
+          <div className="bg-card border border-border px-4 py-3" style={{ borderTopWidth: '3px', borderTopColor: 'var(--brand-aqua)' }}>
             <span className="text-2xl font-heading text-foreground">{doneToday.length}</span>
             <span className="text-xs text-muted-foreground uppercase tracking-wide font-heading block mt-0.5">Done today</span>
           </div>

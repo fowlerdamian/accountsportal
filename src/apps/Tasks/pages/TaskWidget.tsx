@@ -85,8 +85,8 @@ export default function TaskWidget() {
                   <span
                     className={cn(
                       "shrink-0 font-mono tabular-nums text-[11px]",
-                      di === "overdue" ? "text-red-500 font-semibold animate-pulse"
-                      : di === "today" ? "text-red-500 font-semibold"
+                      di === "overdue" ? "text-[var(--brand-pink)] font-semibold animate-pulse"
+                      : di === "today" ? "text-[var(--brand-pink)] font-semibold"
                       : "text-muted-foreground",
                     )}
                   >

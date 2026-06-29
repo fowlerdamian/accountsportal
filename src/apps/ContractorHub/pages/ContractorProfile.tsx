@@ -266,7 +266,7 @@ export default function ContractorProfile() {
                       <td className="p-3 text-sm">{t.title}</td>
                       <td className="p-3 text-sm text-muted-foreground">{t.projects?.name ?? "—"}</td>
                       <td className="p-3"><StatusPill status={t.status} size="sm" /></td>
-                      <td className={cn("p-3 text-right text-xs", isOverdue ? "text-red-400" : "text-muted-foreground")}>
+                      <td className={cn("p-3 text-right text-xs", isOverdue ? "text-[var(--brand-pink)]" : "text-muted-foreground")}>
                         {t.due_date ?? "—"}
                       </td>
                     </tr>

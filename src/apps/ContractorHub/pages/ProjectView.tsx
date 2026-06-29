@@ -40,6 +40,7 @@ import {
 } from "@hub/hooks/use-hub-queries";
 import { notifyBudgetThreshold } from "@hub/lib/notifyHubChat";
 import { localToday } from "@portal/lib/dates";
+import { palette as brandPalette } from "@portal/lib/palette";
 
 // ── FileThumb ────────────────────────────────────────────────
 // Renders a uniform 36x36 tile for any file. If a thumbnail URL is set,
@@ -51,19 +52,19 @@ const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
 function fileThumbPalette(ext: string): { bg: string; fg: string; border: string } {
   const e = ext.toLowerCase();
   if (["step","stp","stl","sldprt","iges","igs"].includes(e))
-    return { bg: "bg-blue-500/10",   fg: "text-blue-400",   border: "border-blue-500/30" };
+    return { bg: "bg-[rgba(var(--brand-aqua-rgb),0.1)]",   fg: "text-[var(--brand-blue)]",   border: "border-[rgba(var(--brand-aqua-rgb),0.3)]" };
   if (["dxf","dwg"].includes(e))
-    return { bg: "bg-cyan-500/10",   fg: "text-cyan-400",   border: "border-cyan-500/30" };
+    return { bg: "bg-[rgba(var(--brand-aqua-rgb),0.1)]",   fg: "text-[var(--brand-blue)]",   border: "border-[rgba(var(--brand-aqua-rgb),0.3)]" };
   if (["slddrw"].includes(e))
-    return { bg: "bg-indigo-500/10", fg: "text-indigo-400", border: "border-indigo-500/30" };
+    return { bg: "bg-[rgba(var(--brand-purple-rgb),0.1)]", fg: "text-[var(--brand-purple)]", border: "border-[rgba(var(--brand-purple-rgb),0.3)]" };
   if (["pdf"].includes(e))
-    return { bg: "bg-red-500/10",    fg: "text-red-400",    border: "border-red-500/30" };
+    return { bg: "bg-[rgba(var(--brand-pink-rgb),0.1)]",    fg: "text-[var(--brand-pink)]",    border: "border-[rgba(var(--brand-pink-rgb),0.3)]" };
   if (["zip","rar","7z","tar","gz"].includes(e))
-    return { bg: "bg-amber-500/10",  fg: "text-amber-400",  border: "border-amber-500/30" };
+    return { bg: "bg-[rgba(var(--brand-accent-rgb),0.1)]",  fg: "text-[var(--brand-orange)]",  border: "border-[rgba(var(--brand-accent-rgb),0.3)]" };
   if (["doc","docx","txt","md","rtf"].includes(e))
     return { bg: "bg-slate-500/10",  fg: "text-slate-400",  border: "border-slate-500/30" };
   if (["xls","xlsx","csv"].includes(e))
-    return { bg: "bg-emerald-500/10",fg: "text-emerald-400",border: "border-emerald-500/30" };
+    return { bg: "bg-[rgba(var(--brand-aqua-rgb),0.1)]",fg: "text-[var(--brand-aqua)]",border: "border-[rgba(var(--brand-aqua-rgb),0.3)]" };
   return { bg: "bg-muted", fg: "text-muted-foreground", border: "border-border/40" };
 }
 
@@ -549,10 +550,10 @@ function ProjectViewContent() {
                 "text-[11px] font-bold px-2 py-1 rounded border transition-colors",
                 project.priority_score != null
                   ? project.priority_score >= 8
-                    ? "border-green-500/40 text-green-400 bg-green-500/10 hover:bg-green-500/20"
+                    ? "border-[rgba(var(--brand-aqua-rgb),0.4)] text-[var(--brand-aqua)] bg-[rgba(var(--brand-aqua-rgb),0.1)] hover:bg-[rgba(var(--brand-aqua-rgb),0.2)]"
                     : project.priority_score >= 5
-                    ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
-                    : "border-red-500/40 text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                    ? "border-[rgba(var(--brand-accent-rgb),0.4)] text-[var(--brand-orange)] bg-[rgba(var(--brand-accent-rgb),0.1)] hover:bg-[rgba(var(--brand-accent-rgb),0.2)]"
+                    : "border-[rgba(var(--brand-pink-rgb),0.4)] text-[var(--brand-pink)] bg-[rgba(var(--brand-pink-rgb),0.1)] hover:bg-[rgba(var(--brand-pink-rgb),0.2)]"
                   : "border-border text-muted-foreground hover:bg-muted",
               )}
             >
@@ -590,12 +591,12 @@ function ProjectViewContent() {
                 }}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 87.3 78" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0a15.92 15.92 0 003.3 6.65z" fill="#0066DA"/>
-                  <path d="M43.65 25L29.9 1.2c-1.35.8-2.5 1.9-3.3 3.3L.95 50.2A15.86 15.86 0 000 56.9h27.5z" fill="#00AC47"/>
-                  <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.6H59.8l5.85 11.05z" fill="#EA4335"/>
-                  <path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z" fill="#00832D"/>
-                  <path d="M59.8 56.9h27.5a16 16 0 00-1.2-6.7L62.05 7.55c-.8-1.4-1.95-2.5-3.3-3.3L45 25z" fill="#2684FC"/>
-                  <path d="M27.5 56.9H0l13.75 23.8c1.35.8 2.9 1.2 4.5 1.2H69.05c1.6 0 3.15-.45 4.5-1.2L59.8 56.9z" fill="#FFBA00"/>
+                  <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0a15.92 15.92 0 003.3 6.65z" fill={brandPalette.blue}/>
+                  <path d="M43.65 25L29.9 1.2c-1.35.8-2.5 1.9-3.3 3.3L.95 50.2A15.86 15.86 0 000 56.9h27.5z" fill={brandPalette.aqua}/>
+                  <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.6H59.8l5.85 11.05z" fill={brandPalette.pink}/>
+                  <path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z" fill={brandPalette.aqua}/>
+                  <path d="M59.8 56.9h27.5a16 16 0 00-1.2-6.7L62.05 7.55c-.8-1.4-1.95-2.5-3.3-3.3L45 25z" fill={brandPalette.blue}/>
+                  <path d="M27.5 56.9H0l13.75 23.8c1.35.8 2.9 1.2 4.5 1.2H69.05c1.6 0 3.15-.45 4.5-1.2L59.8 56.9z" fill={brandPalette.orange}/>
                 </svg>
                 Drive
               </button>
@@ -606,7 +607,7 @@ function ProjectViewContent() {
               Log Time
             </Button>
 
-            <Button size="sm" variant="ghost" onClick={handleDelete} className="text-muted-foreground hover:text-red-400 hover:bg-red-400/10">
+            <Button size="sm" variant="ghost" onClick={handleDelete} className="text-muted-foreground hover:text-[var(--brand-pink)] hover:bg-[rgba(var(--brand-pink-rgb),0.1)]">
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
           </div>
@@ -615,7 +616,7 @@ function ProjectViewContent() {
         <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
           {project.start_date && <span>Start: {project.start_date}</span>}
           {project.due_date && (
-            <span className={cn(project.due_date < today && project.status !== "complete" && "text-red-400")}>
+            <span className={cn(project.due_date < today && project.status !== "complete" && "text-[var(--brand-pink)]")}>
               Due: {project.due_date}
             </span>
           )}
@@ -662,7 +663,7 @@ function ProjectViewContent() {
               : "No budget set"
           }
           subtitle={budget?.budget_allocated != null ? `of $${Number(budget.budget_allocated).toLocaleString()}` : undefined}
-          className={cn(budget?.budget_remaining != null && budget.budget_remaining < 0 && "[&_p.text-2xl]:text-red-400")}
+          className={cn(budget?.budget_remaining != null && budget.budget_remaining < 0 && "[&_p.text-2xl]:text-[var(--brand-pink)]")}
         />
         <StatsCard
           title="Hours Logged"
@@ -772,13 +773,13 @@ function ProjectViewContent() {
                         </div>
                       )}
                     </td>
-                    <td className={cn("p-3 text-right text-xs hidden sm:table-cell", isOverdue ? "text-red-400" : "text-muted-foreground")}>
+                    <td className={cn("p-3 text-right text-xs hidden sm:table-cell", isOverdue ? "text-[var(--brand-pink)]" : "text-muted-foreground")}>
                       <div className="flex items-center justify-end gap-2">
                         <span>{task.due_date ?? "—"}</span>
                         {confirmDeleteTaskId === task.id ? (
                           <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                             <button
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)] hover:bg-[rgba(var(--brand-pink-rgb),0.3)]"
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 try {
@@ -796,7 +797,7 @@ function ProjectViewContent() {
                         ) : (
                           <button
                             title="Delete task"
-                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-[var(--brand-pink)] transition-opacity"
                             onClick={e => { e.stopPropagation(); setConfirmDeleteTaskId(task.id); }}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -831,13 +832,13 @@ function ProjectViewContent() {
                             </div>
                           )}
                         </td>
-                        <td className={cn("p-3 text-right text-xs hidden sm:table-cell", subOverdue ? "text-red-400" : "text-muted-foreground")}>
+                        <td className={cn("p-3 text-right text-xs hidden sm:table-cell", subOverdue ? "text-[var(--brand-pink)]" : "text-muted-foreground")}>
                           <div className="flex items-center justify-end gap-2">
                             <span>{sub.due_date ?? "—"}</span>
                             {confirmDeleteTaskId === sub.id ? (
                               <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                                 <button
-                                  className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-[rgba(var(--brand-pink-rgb),0.2)] text-[var(--brand-pink)] hover:bg-[rgba(var(--brand-pink-rgb),0.3)]"
                                   onClick={async (e) => {
                                     e.stopPropagation();
                                     try {
@@ -855,7 +856,7 @@ function ProjectViewContent() {
                             ) : (
                               <button
                                 title="Delete task"
-                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-400 transition-opacity"
+                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-[var(--brand-pink)] transition-opacity"
                                 onClick={e => { e.stopPropagation(); setConfirmDeleteTaskId(sub.id); }}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
