@@ -141,6 +141,7 @@ export function aggregate(keys, snapByKey) {
   const grossProfit = sum.revenue - sum.cogs
   const grossProfitPct = sum.revenue !== 0 ? grossProfit / sum.revenue : null
   const ebitda = grossProfit - sum.opex_ebitda
+  const ebitdaPct = sum.revenue !== 0 ? ebitda / sum.revenue : null
   const contribution = sum.revenue - sum.variable_costs
   const cmPct = sum.revenue !== 0 ? contribution / sum.revenue : null
   const breakeven = cmPct ? sum.fixed_costs / cmPct : null
@@ -148,7 +149,7 @@ export function aggregate(keys, snapByKey) {
   const marginOfSafety = breakeven != null ? sum.revenue - breakeven : null
   return {
     revenue: sum.revenue, cogs: sum.cogs, grossProfit, grossProfitPct,
-    opex: sum.opex_ebitda, ebitda, variableCosts: sum.variable_costs,
+    opex: sum.opex_ebitda, ebitda, ebitdaPct, variableCosts: sum.variable_costs,
     fixedCosts: sum.fixed_costs, contribution, cmPct, breakeven,
     pctToBreakeven, marginOfSafety,
     unmappedCount: sum.unmapped_count, unmappedAmount: sum.unmapped_amount,

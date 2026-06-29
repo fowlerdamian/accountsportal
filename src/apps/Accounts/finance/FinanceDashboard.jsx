@@ -295,7 +295,7 @@ export default function FinanceDashboard() {
           <Tile icon={ChartLineIcon} label="Gross Profit" value={money(curr.grossProfit)} hue={C.aqua} valueColor={curr.grossProfit >= 0 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.grossProfit, prev?.grossProfit) : null} sub={pct(curr.grossProfitPct)} />
           <Tile icon={WalletIcon} label="EBITDA" value={money(curr.ebitda)} hue={C.purple} valueColor={curr.ebitda >= 0 ? C.green : C.red}
-            delta={showCmp ? deltaPct(curr.ebitda, prev?.ebitda) : null} sub={showCmp ? 'vs prev' : ''} />
+            delta={showCmp ? deltaPct(curr.ebitda, prev?.ebitda) : null} sub={pct(curr.ebitdaPct)} />
           <Tile icon={GaugeIcon} label="% to Breakeven" value={pct(curr.pctToBreakeven, 0)} hue={C.orange}
             valueColor={curr.pctToBreakeven >= 1 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.pctToBreakeven, prev?.pctToBreakeven) : null}
