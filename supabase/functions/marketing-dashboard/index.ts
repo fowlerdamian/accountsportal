@@ -317,14 +317,35 @@ serve(async (req) => {
     });
   }
 
-  const propertyId = String(body.propertyId ?? Deno.env.get("GA_PROPERTY_ID") ?? "");
+  // Resolve the list of GA4 properties to report on. Prefer GA_PROPERTIES
+  // (JSON: [{"label":"AGA","id":"496706418"},...]); fall back to the single
+  // GA_PROPERTY_ID; allow a per-request override via body.properties.
+  const gaProps: { label: string; id: string }[] = (() => {
+    if (Array.isArray(body.properties) && body.properties.length) return body.properties;
+    const raw = Deno.env.get("GA_PROPERTIES");
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      } catch { /* fall through */ }
+    }
+    const single = Deno.env.get("GA_PROPERTY_ID");
+    return single ? [{ label: "Website", id: single }] : [];
+  })();
 
-  const [analytics, hubspot, shopify, brevo] = await Promise.all([
-    fetchAnalytics(propertyId),
+  const [sites, hubspot, shopify, brevo] = await Promise.all([
+    Promise.all(gaProps.map((p) =>
+      fetchAnalytics(String(p.id)).then((r) => ({ label: p.label, ...r })))),
     fetchHubspot(),
     fetchShopify(),
     fetchBrevo(),
   ]);
+
+  const analytics = {
+    configured: gaProps.length > 0 && sites.some((s) => s.configured),
+    ok: sites.some((s) => s.ok),
+    sites,
+  };
 
   return json({
     ok: true,

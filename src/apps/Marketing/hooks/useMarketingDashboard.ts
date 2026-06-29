@@ -10,7 +10,8 @@ export interface SourceBase {
   error?: string;
 }
 
-export interface AnalyticsData extends SourceBase {
+export interface AnalyticsSite extends SourceBase {
+  label: string;
   propertyId?: string;
   activeUsers?: number;
   newUsers?: number;
@@ -20,6 +21,10 @@ export interface AnalyticsData extends SourceBase {
   engagementRate?: number;
   timeseries?: { date: string; sessions: number; users: number }[];
   channels?: { channel: string; sessions: number }[];
+}
+
+export interface AnalyticsData extends SourceBase {
+  sites: AnalyticsSite[];
 }
 
 export interface HubspotData extends SourceBase {
