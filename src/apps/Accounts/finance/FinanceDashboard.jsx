@@ -179,6 +179,21 @@ export default function FinanceDashboard() {
 
   const curr = useMemo(() => effAnchor ? aggregate(periodKeys(grain, effAnchor), snapByKey) : null, [grain, effAnchor, snapByKey])
 
+  // Cases for the SELECTED period only (was previously summing the whole trend
+  // window, so the tile ignored the month/period filter).
+  const currCases = useMemo(() => {
+    const acc = { total: 0, open: 0, resolved: 0 }
+    if (!effAnchor) return acc
+    for (const k of periodKeys(grain, effAnchor)) {
+      const c = casesByKey.get(k)
+      if (!c) continue
+      acc.total += c.cases_total || 0
+      acc.open += c.cases_open || 0
+      acc.resolved += c.cases_resolved || 0
+    }
+    return acc
+  }, [grain, effAnchor, casesByKey])
+
   // Number of leading months the current period has data for (its YTD length).
   // A partial CY/FY is compared against the same window of the prior period.
   const ytdLen = useMemo(
@@ -398,12 +413,12 @@ export default function FinanceDashboard() {
             valueColor={curr.pctToBreakeven >= 1 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.pctToBreakeven, prev?.pctToBreakeven) : null}
             sub={curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : ''} />
-          <Tile icon={TargetIcon} label="Cases" value={fmt0.format(chartData.reduce((s, d) => s + d.casesTotal, 0))} hue={C.blue} valueColor={C.blue}
-            sub={`${chartData.reduce((s, d) => s + d.casesOpen, 0)} open`} />
+          <Tile icon={TargetIcon} label="Cases" value={fmt0.format(currCases.total)} hue={C.blue} valueColor={C.blue}
+            sub={`${currCases.open} open`} />
         </div>
 
-        {/* EBITDA waterfall + Breakeven — side by side */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
+        {/* EBITDA waterfall + Breakeven — side by side (desktop only) */}
+        <div className="finance-desktop-only" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
           <Panel title="EBITDA Waterfall" icon={ChartBarIcon} right={<Mono>{periodLabel}</Mono>}>
             <ResponsiveContainer width="100%" height={250}>
               <ComposedChart data={waterfall} margin={{ top: 16, right: 8, left: 8, bottom: 0 }}>
@@ -440,7 +455,8 @@ export default function FinanceDashboard() {
           </Panel>
         </div>
 
-        {/* Cases trend */}
+        {/* Cases trend (desktop only) */}
+        <div className="finance-desktop-only">
         <Panel title="Customer-Service Cases" icon={ChartLineIcon} right={<Mono>from SUPPORT module</Mono>}>
           <ResponsiveContainer width="100%" height={200}>
             <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 8, bottom: 0 }}>
@@ -453,8 +469,10 @@ export default function FinanceDashboard() {
             </ComposedChart>
           </ResponsiveContainer>
         </Panel>
+        </div>
 
-        {/* OpEx breakdown — full-width table, bottom */}
+        {/* OpEx breakdown — full-width table, bottom (desktop only) */}
+        <div className="finance-desktop-only">
         <Panel title="OpEx Breakdown" icon={LayersIcon}
           right={<Mono>{expenseRows.length} lines{showCmp ? ` · Δ compared like-for-like${ytdLen > 0 && ytdLen < 12 && grain !== 'month' ? ` (first ${ytdLen} mo)` : ''}; avg = mean of other ${GRAINS.find((g) => g.key === grain)?.label.toLowerCase()} periods` : ''}</Mono>}>
           {expenseRows.length === 0 ? (
@@ -485,6 +503,7 @@ export default function FinanceDashboard() {
             </div>
           )}
         </Panel>
+        </div>
 
       </div>
     </div>

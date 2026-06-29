@@ -20,6 +20,12 @@
   .xero-quick-actions {
     flex-wrap: wrap !important;
   }
+
+  /* Finance Dashboard on mobile: show only the 5 metric tiles, hide the
+     charts and OpEx table (override inline display via !important). */
+  .finance-desktop-only {
+    display: none !important;
+  }
 }
 
 .accounts-nav-link:hover {
