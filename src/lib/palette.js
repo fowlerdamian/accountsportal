@@ -16,6 +16,10 @@ const FALLBACK = {
   accent: '#e09f3e', gold: '#e09f3e', orange: '#e09f3e', pink: '#9e2a2b',
   blue: '#335c67', aqua: '#335c67', purple: '#540b0e',
 }
+// Distinct categorical hues (mirrors --cat-1..8 in index.css). Use for
+// multi-series / per-category charts where each entry must be visually distinct
+// (e.g. brand/channel comparisons) — NOT the single-hue brand accents.
+const FALLBACK_CAT = ['#e09f3e', '#335c67', '#9e2a2b', '#540b0e', '#fff3b0', '#eab768', '#5a8794', '#c14f50']
 
 function read(name, fallback) {
   if (typeof window === 'undefined' || !window.getComputedStyle) return fallback
@@ -35,4 +39,7 @@ export const palette = {
   get purple() { return read('--brand-purple', FALLBACK.purple) },
   // Ordered hue list for multi-series charts (mirrors --cat-* intent).
   get series() { return [this.gold, this.blue, this.pink, this.aqua, this.purple, this.orange] },
+  // 8 DISTINCT categorical hues from --cat-1..8 — for per-category series
+  // (brand/channel comparisons) that must stay distinguishable.
+  get cat() { return FALLBACK_CAT.map((fb, i) => read(`--cat-${i + 1}`, fb)) },
 }

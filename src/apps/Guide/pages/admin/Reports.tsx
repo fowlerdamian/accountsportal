@@ -6,6 +6,7 @@ import { ChartBarIcon, ChartLineIcon, UsersIcon, TargetIcon, TriangleAlertIcon }
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
 import { useState, useMemo } from "react";
 import { useInstructionSets, useBrands, useFeedback } from "@guide/hooks/use-supabase-query";
+import { palette } from "@portal/lib/palette";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
 
@@ -170,8 +171,8 @@ export default function Reports() {
                 <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
                 <Tooltip />
                 <Legend />
-                {brands.map(b => (
-                  <Bar key={b.key} dataKey={b.key} fill={b.primary_colour} radius={[4, 4, 0, 0]} />
+                {brands.map((b, i) => (
+                  <Bar key={b.key} dataKey={b.key} fill={palette.cat[i % palette.cat.length]} radius={[4, 4, 0, 0]} />
                 ))}
               </BarChart>
             </ResponsiveContainer>

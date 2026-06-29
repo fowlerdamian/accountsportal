@@ -31,11 +31,11 @@ export const CHANNEL_COLOR: Record<Channel, { bg: string; text: string; border: 
     ring:   "ring-[rgba(var(--brand-aqua-rgb),0.4)]",
   },
   aga: {
-    bg:     "bg-[rgba(var(--brand-aqua-rgb),0.1)]",
-    text:   "text-[var(--brand-aqua)]",
-    border: "border-[rgba(var(--brand-aqua-rgb),0.3)]",
-    badge:  "bg-[var(--brand-aqua)] text-white",
-    ring:   "ring-[rgba(var(--brand-aqua-rgb),0.4)]",
+    bg:     "bg-[rgba(var(--brand-pink-rgb),0.1)]",
+    text:   "text-[var(--brand-pink)]",
+    border: "border-[rgba(var(--brand-pink-rgb),0.3)]",
+    badge:  "bg-[var(--brand-pink)] text-white",
+    ring:   "ring-[rgba(var(--brand-pink-rgb),0.4)]",
   },
 };
 
