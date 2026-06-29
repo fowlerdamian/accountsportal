@@ -138,6 +138,19 @@ function ChartTooltip({ active, payload, label, formatter }) {
   )
 }
 
+// Waterfall hover: show each step's signed figure and its share of revenue.
+function WaterfallTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0]?.payload
+  if (!d) return null
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 5, padding: '8px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>
+      <div style={{ color: C.muted, marginBottom: 4 }}>{d.name}</div>
+      <div style={{ color: d.color || C.text }}>{money(d.disp)} · {pct(d.pctOfRev)} of rev</div>
+    </div>
+  )
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────────
 
 export default function FinanceDashboard() {
@@ -241,19 +254,42 @@ export default function FinanceDashboard() {
   const waterfall = useMemo(() => {
     if (!curr) return []
     const { revenue, cogs, grossProfit, opex, ebitda } = curr
-    // each bar drawn as [base (transparent), value]; one brand hue per step
+    // each bar drawn as [base (transparent), value]; one brand hue per step.
+    // pctOfRev = signed step figure ÷ revenue, surfaced in the hover tooltip.
+    const ofRev = (v) => (revenue ? v / revenue : null)
     return [
-      { name: 'Revenue', base: 0, value: revenue, disp: revenue, color: C.gold },
-      { name: '− COGS', base: grossProfit, value: cogs, disp: -cogs, color: C.orange },
-      { name: 'Gross Profit', base: 0, value: grossProfit, disp: grossProfit, color: C.aqua },
-      { name: '− OpEx', base: ebitda, value: opex, disp: -opex, color: C.pink },
-      { name: 'EBITDA', base: 0, value: ebitda, disp: ebitda, color: ebitda >= 0 ? C.purple : C.red },
+      { name: 'Revenue', base: 0, value: revenue, disp: revenue, pctOfRev: ofRev(revenue), color: C.gold },
+      { name: '− COGS', base: grossProfit, value: cogs, disp: -cogs, pctOfRev: ofRev(-cogs), color: C.orange },
+      { name: 'Gross Profit', base: 0, value: grossProfit, disp: grossProfit, pctOfRev: ofRev(grossProfit), color: C.aqua },
+      { name: '− OpEx', base: ebitda, value: opex, disp: -opex, pctOfRev: ofRev(-opex), color: C.pink },
+      { name: 'EBITDA', base: 0, value: ebitda, disp: ebitda, pctOfRev: ofRev(ebitda), color: ebitda >= 0 ? C.purple : C.red },
     ]
   }, [curr])
 
   // Calendar Year has no like-for-like prior period in range → hide comparisons.
   const showCmp = grain !== 'cy'
   const opexGrid = showCmp ? ROW_GRID : ROW_GRID_NO_CMP
+
+  // OpEx table sorting — click any column header to toggle. Numeric columns
+  // start descending; the Account name starts ascending. Nulls always sort last.
+  const [sort, setSort] = useState({ key: 'amount', dir: 'desc' })
+  const toggleSort = (key) =>
+    setSort((s) => (s.key === key
+      ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: key === 'name' ? 'asc' : 'desc' }))
+  const sortedRows = useMemo(() => {
+    const rows = [...expenseRows]
+    const mul = sort.dir === 'asc' ? 1 : -1
+    rows.sort((a, b) => {
+      if (sort.key === 'name') return mul * a.name.localeCompare(b.name)
+      const av = a[sort.key], bv = b[sort.key]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1   // nulls last, regardless of direction
+      if (bv == null) return -1
+      return mul * (av - bv)
+    })
+    return rows
+  }, [expenseRows, sort])
 
   // ── States ──────────────────────────────────────────────────────────────────
   if (isLoading) return <Centered>Loading finance snapshots…</Centered>
@@ -312,7 +348,7 @@ export default function FinanceDashboard() {
                 <CartesianGrid stroke={C.borderSoft} vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} interval={0} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
-                <Tooltip content={<ChartTooltip formatter={(v) => money(v)} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Tooltip content={<WaterfallTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                 <Bar dataKey="base" stackId="w" fill="transparent" />
                 <Bar dataKey="value" stackId="w" radius={[2, 2, 0, 0]} name="Amount">
                   {waterfall.map((s, i) => (
@@ -364,13 +400,13 @@ export default function FinanceDashboard() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ ...opexGrid, color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', paddingBottom: 9, borderBottom: `1px solid ${C.border}` }}>
-                <span>Account</span>
-                <span style={{ textAlign: 'right' }}>Amount</span>
-                <span>% of OpEx</span>
-                {showCmp && <span style={{ textAlign: 'right' }}>Δ vs prev period</span>}
-                {showCmp && <span style={{ textAlign: 'right' }}>Δ vs average</span>}
+                <SortHeader label="Account" colKey="name" sort={sort} onSort={toggleSort} />
+                <SortHeader label="Amount" colKey="amount" align="right" sort={sort} onSort={toggleSort} />
+                <SortHeader label="% of OpEx" colKey="share" sort={sort} onSort={toggleSort} />
+                {showCmp && <SortHeader label="Δ vs prev period" colKey="changeFromPrev" align="right" sort={sort} onSort={toggleSort} />}
+                {showCmp && <SortHeader label="Δ vs average" colKey="changeFromAvg" align="right" sort={sort} onSort={toggleSort} />}
               </div>
-              {expenseRows.map((r) => (
+              {sortedRows.map((r) => (
                 <div key={r.name} style={{ ...opexGrid, fontSize: 12.5, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, alignItems: 'center' }}>
                   <span style={{ color: C.text }}>{r.name}</span>
                   <span style={{ textAlign: 'right', color: C.text, fontFamily: MONO }}>{money(r.amount)}</span>
@@ -403,6 +439,21 @@ const ROW_GRID_NO_CMP = { display: 'grid', gridTemplateColumns: '2.2fr 1fr 2.4fr
 function signedPct(v) {
   if (v == null) return '—'
   return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`
+}
+
+// Clickable column header for the OpEx table; shows the active sort arrow.
+function SortHeader({ label, colKey, align = 'left', sort, onSort }) {
+  const active = sort.key === colKey
+  return (
+    <span
+      onClick={() => onSort(colKey)}
+      style={{
+        textAlign: align, cursor: 'pointer', userSelect: 'none',
+        color: active ? C.text : 'inherit',
+      }}>
+      {label}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </span>
+  )
 }
 
 // For an expense, a rise is unfavourable → red; a fall → green.
