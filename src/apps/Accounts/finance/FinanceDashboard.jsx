@@ -19,22 +19,22 @@ import {
 // (not var(--x)) so the colours also resolve inside recharts SVG attributes.
 
 const C = {
-  bg:           '#000000',                 // --bg-primary
-  panel:        '#0a0a0a',                 // --bg-elevated (card)
-  surface:      '#111111',                 // --bg-surface
-  track:        '#1a1a1a',                 // --bg-hover (bar tracks)
-  border:       '#222222',                 // --border-default
-  borderSoft:   '#1a1a1a',                 // --border-subtle
-  text:         '#ffffff',                 // --text-primary
-  muted:        '#a0a0a0',                 // --text-secondary
-  faint:        '#666666',                 // --text-tertiary
-  accent:       '#f3ca0f',                 // --accent
+  bg:           '#030712',                 // --bg-primary (gray-950)
+  panel:        '#111827',                 // --bg-elevated (Near Black, card)
+  surface:      '#1f2937',                 // --bg-surface (gray-800)
+  track:        '#1f2937',                 // bar tracks (gray-800)
+  border:       '#374151',                 // --border-default (gray-700)
+  borderSoft:   '#1f2937',                 // --border-subtle (gray-800)
+  text:         '#f8fafc',                 // --text-primary (Off White)
+  muted:        '#9ca3af',                 // --text-secondary (gray-400)
+  faint:        '#6b7280',                 // --text-tertiary (gray-500)
+  accent:       '#f3ca0f',                 // --accent (Gold)
   accentSubtle: 'rgba(243,202,15,0.1)',    // --accent-subtle
-  green:        '#2E7D32',                 // Support Hub green (used across its analytics/progress UI)
-  red:          '#ff1744',                 // --status-error
-  warning:      '#f6a529',                 // --status-warning
-  revenue:      '#f3ca0f',                 // --accent
-  cost:         '#666666',                 // neutral grey (--text-tertiary)
+  green:        '#2E7D32',                 // Support Hub green (kept by request; new token success = Aqua #14d9c4)
+  red:          '#ff1744',                 // negative (new token error = Pink #ff3366)
+  warning:      '#ff5a1f',                 // --status-warning (Orange)
+  revenue:      '#f3ca0f',                 // --accent (Gold)
+  cost:         '#6b7280',                 // neutral grey (--text-tertiary)
 }
 
 // ─── Formatters ────────────────────────────────────────────────────────────────

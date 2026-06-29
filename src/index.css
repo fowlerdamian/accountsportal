@@ -37,46 +37,51 @@
 
 @layer base {
   :root {
+    /* ── AGA brand palette (dark base) ──────────────────────────────────────
+       Gold #F3CA0F · Orange #FF5A1F · Pink #FF3366 · Blue #3B82F6 ·
+       Aqua #14D9C4 · Purple #7C3AED · Near-Black #111827 · Off-White #F8FAFC.
+       Surfaces use the Tailwind gray/slate ramp anchored on Near-Black. */
+
     /* Backgrounds */
-    --bg-primary: #000000;
-    --bg-elevated: #0a0a0a;
-    --bg-surface: #111111;
-    --bg-hover: #1a1a1a;
-    --bg-active: #222222;
+    --bg-primary: #030712;   /* gray-950 — page */
+    --bg-elevated: #111827;  /* Near Black (brand) — cards/tiles */
+    --bg-surface: #1f2937;   /* gray-800 — raised surfaces/inputs */
+    --bg-hover: #273345;
+    --bg-active: #374151;    /* gray-700 */
 
     /* Borders */
-    --border-default: #222222;
-    --border-subtle: #1a1a1a;
-    --border-strong: #333333;
+    --border-default: #374151;  /* gray-700 */
+    --border-subtle: #1f2937;   /* gray-800 */
+    --border-strong: #4b5563;   /* gray-600 */
 
     /* Text */
-    --text-primary: #ffffff;
-    --text-secondary: #a0a0a0;
-    --text-tertiary: #666666;
-    --text-disabled: #444444;
+    --text-primary: #f8fafc;    /* Off White (brand) */
+    --text-secondary: #9ca3af;  /* gray-400 */
+    --text-tertiary: #6b7280;   /* gray-500 */
+    --text-disabled: #4b5563;   /* gray-600 */
 
-    /* Accent (TrailBait Yellow) */
+    /* Accent (AGA Gold) */
     --accent: #f3ca0f;
     --accent-hover: #d4b00d;
     --accent-muted: #413813;
     --accent-subtle: rgba(243, 202, 15, 0.1);
-    --accent-text: #141414;
+    --accent-text: #111827;     /* Near Black, on gold */
 
     /* Status */
-    --status-success: #60a57e;
-    --status-warning: #f6a529;
-    --status-error: #ff1744;
-    --status-info: #f3ca0f;
+    --status-success: #14d9c4;  /* Aqua */
+    --status-warning: #ff5a1f;  /* Orange */
+    --status-error: #ff3366;    /* Pink */
+    --status-info: #3b82f6;     /* Blue */
 
-    /* Categorical */
-    --cat-1: #f3ca0f;
-    --cat-2: #4fc3f7;
-    --cat-3: #ef5350;
-    --cat-4: #66bb6a;
-    --cat-5: #ab47bc;
-    --cat-6: #ff7043;
-    --cat-7: #26c6da;
-    --cat-8: #ec407a;
+    /* Categorical (brand hues + tints) */
+    --cat-1: #f3ca0f;  /* Gold */
+    --cat-2: #3b82f6;  /* Blue */
+    --cat-3: #ff3366;  /* Pink */
+    --cat-4: #14d9c4;  /* Aqua */
+    --cat-5: #7c3aed;  /* Purple */
+    --cat-6: #ff5a1f;  /* Orange */
+    --cat-7: #60a5fa;  /* Blue 400 */
+    --cat-8: #f472b6;  /* Pink 400 */
 
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.5);
@@ -93,54 +98,54 @@
     --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
 
-    /* shadcn/ui compatibility tokens (mapped to design system) */
-    --background: 0 0% 0%;
-    --foreground: 0 0% 100%;
-    --card: 0 0% 4%;
-    --card-foreground: 0 0% 100%;
-    --popover: 0 0% 4%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 48 92% 50%;
-    --primary-foreground: 0 0% 8%;
-    --secondary: 0 0% 13%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 7%;
-    --muted-foreground: 0 0% 63%;
-    --accent: 0 0% 13%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 348 100% 55%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 13%;
-    --input: 0 0% 13%;
+    /* shadcn/ui compatibility tokens (mapped to brand palette) */
+    --background: 224 71% 4%;        /* #030712 */
+    --foreground: 210 40% 98%;       /* #f8fafc */
+    --card: 221 39% 11%;             /* #111827 */
+    --card-foreground: 210 40% 98%;
+    --popover: 221 39% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 48 92% 50%;           /* Gold */
+    --primary-foreground: 221 39% 11%;
+    --secondary: 215 28% 17%;        /* gray-800 */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 218 11% 65%; /* gray-400 */
+    --accent: 215 28% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 345 100% 60%;     /* Pink */
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 19% 27%;           /* gray-700 */
+    --input: 217 19% 27%;
     --ring: 48 92% 50%;
     --radius: 8px;
 
     /* Status (HSL for Tailwind) */
-    --status-urgent: 348 100% 55%;
-    --status-warning: 36 92% 56%;
-    --status-progress: 199 91% 64%;
-    --status-resolved: 150 27% 51%;
-    --status-neutral: 0 0% 40%;
+    --status-urgent: 345 100% 60%;   /* Pink */
+    --status-warning: 16 100% 56%;   /* Orange */
+    --status-progress: 217 91% 60%;  /* Blue */
+    --status-resolved: 174 83% 46%;  /* Aqua */
+    --status-neutral: 218 11% 50%;
 
     /* Success / Warning for Compliance module */
-    --success: 150 27% 51%;
-    --success-foreground: 0 0% 100%;
-    --warning: 36 92% 56%;
-    --warning-foreground: 0 0% 8%;
+    --success: 174 83% 46%;          /* Aqua */
+    --success-foreground: 221 39% 11%;
+    --warning: 16 100% 56%;          /* Orange */
+    --warning-foreground: 221 39% 11%;
 
     /* Surface layers */
-    --surface: 0 0% 4%;
-    --surface-elevated: 0 0% 7%;
-    --border-hover: 0 0% 20%;
+    --surface: 221 39% 11%;          /* #111827 */
+    --surface-elevated: 215 28% 17%; /* gray-800 */
+    --border-hover: 217 19% 35%;
 
     /* Sidebar */
-    --sidebar-background: 0 0% 0%;
-    --sidebar-foreground: 0 0% 63%;
+    --sidebar-background: 224 71% 4%;
+    --sidebar-foreground: 218 11% 65%;
     --sidebar-primary: 48 92% 50%;
-    --sidebar-primary-foreground: 0 0% 8%;
-    --sidebar-accent: 0 0% 13%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 0 0% 13%;
+    --sidebar-primary-foreground: 221 39% 11%;
+    --sidebar-accent: 215 28% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 19% 27%;
     --sidebar-ring: 48 92% 50%;
   }
 }
