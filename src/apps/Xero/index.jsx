@@ -102,7 +102,7 @@ function ConfirmationCard({ content, onConfirm, onCancel, confirmed, cancelled }
       <div style={{
         marginTop: '14px',
         border: '1px solid rgba(243,202,15,0.3)',
-        borderLeft: '3px solid #f3ca0f',
+        borderLeft: '3px solid var(--brand-accent)',
         borderRadius: '6px',
         padding: '12px 14px',
         background: 'rgba(243,202,15,0.04)',
@@ -110,7 +110,7 @@ function ConfirmationCard({ content, onConfirm, onCancel, confirmed, cancelled }
         <div style={{
           display: 'flex', alignItems: 'center', gap: '6px',
           marginBottom: '10px', fontSize: '12px',
-          color: '#f3ca0f', fontFamily: '"JetBrains Mono", monospace',
+          color: 'var(--brand-accent)', fontFamily: '"JetBrains Mono", monospace',
         }}>
           <AlertTriangle size={13} />
           Write operation — requires confirmation
@@ -120,7 +120,7 @@ function ConfirmationCard({ content, onConfirm, onCancel, confirmed, cancelled }
             onClick={onConfirm}
             style={{
               padding: '7px 14px', fontSize: '12px', fontWeight: 600,
-              background: '#f3ca0f', color: '#000', border: 'none',
+              background: 'var(--brand-accent)', color: '#000', border: 'none',
               borderRadius: '5px', cursor: 'pointer',
               fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.04em',
             }}
@@ -991,7 +991,7 @@ function XeroChatInner() {
                   disabled={!input.trim() || loading}
                   style={{
                     width: '40px', height: '40px', borderRadius: '6px', flexShrink: 0,
-                    background: input.trim() && !loading ? '#f3ca0f' : '#0d0d0d',
+                    background: input.trim() && !loading ? 'var(--brand-accent)' : '#0d0d0d',
                     border: '1px solid #222',
                     color: input.trim() && !loading ? '#000' : '#333',
                     cursor: input.trim() && !loading ? 'pointer' : 'default',

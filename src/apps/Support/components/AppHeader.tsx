@@ -33,7 +33,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
               <Menu size={18} strokeWidth={1.5} />
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#f3ca0f' }} />
+              <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: 'var(--brand-accent)' }} />
               <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff' }}>
                 Support Hub
               </span>
@@ -41,7 +41,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
           </>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: '#f3ca0f' }} />
+            <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: 'var(--brand-accent)' }} />
             <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff' }}>
               Support Hub
             </span>
@@ -111,7 +111,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
               fontFamily: 'inherit',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#f3ca0f';
+              e.currentTarget.style.color = 'var(--brand-accent)';
               e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)';
             }}
             onMouseLeave={(e) => {

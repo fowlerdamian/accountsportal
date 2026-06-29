@@ -232,7 +232,7 @@ export default function ManualLabel() {
   }
   const btnPrimary = {
     fontSize: '12px', fontWeight: 500, padding: '8px 18px', borderRadius: '6px',
-    cursor: 'pointer', color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)',
+    cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)',
     background: 'transparent', transition: 'background 120ms',
   }
   const btnGhost = {
@@ -252,7 +252,7 @@ export default function ManualLabel() {
             style={{
               padding: '8px 18px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', border: 'none',
               background: active ? 'rgba(243,202,15,0.1)' : 'transparent',
-              color: active ? '#f3ca0f' : '#666', transition: 'color 120ms, background 120ms',
+              color: active ? 'var(--brand-accent)' : '#666', transition: 'color 120ms, background 120ms',
             }}
           >
             {opt.label}
@@ -315,7 +315,7 @@ export default function ManualLabel() {
                     <div style={{ color: '#fff', fontWeight: 500 }}>{trailbaitFrom.name}</div>
                     {addressLines(trailbaitFrom).map((l, i) => <div key={i}>{l}</div>)}
                     {(!trailbaitFrom.suburb || !trailbaitFrom.state || !trailbaitFrom.postcode) && (
-                      <div style={{ color: '#f3ca0f', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', marginTop: '6px' }}>
+                      <div style={{ color: 'var(--brand-accent)', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', marginTop: '6px' }}>
                         ⚠ Incomplete — click Edit to add suburb / state / postcode
                       </div>
                     )}
@@ -398,7 +398,7 @@ export default function ManualLabel() {
             {/* Save address */}
             <div style={{ marginTop: '16px', borderTop: '1px solid #1e1e1e', paddingTop: '14px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#AAA' }}>
-                <input type="checkbox" checked={saveAddr} onChange={e => setSaveAddr(e.target.checked)} style={{ accentColor: '#f3ca0f', width: '15px', height: '15px' }} />
+                <input type="checkbox" checked={saveAddr} onChange={e => setSaveAddr(e.target.checked)} style={{ accentColor: 'var(--brand-accent)', width: '15px', height: '15px' }} />
                 Save this address for next time
               </label>
               {saveAddr && (

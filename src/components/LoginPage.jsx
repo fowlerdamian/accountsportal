@@ -80,7 +80,7 @@ export default function LoginPage() {
         {/* Logo / wordmark */}
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2.5">
-            <div className="w-1.5 h-6 rounded-sm" style={{ background: '#f3ca0f' }} />
+            <div className="w-1.5 h-6 rounded-sm" style={{ background: 'var(--brand-accent)' }} />
             <span
               className="text-base font-semibold tracking-widest uppercase"
               style={{ color: '#ffffff' }}
@@ -143,7 +143,7 @@ export default function LoginPage() {
                   border: '1px solid #222222',
                   color: '#ffffff',
                 }}
-                onFocus={(e) => { e.target.style.borderColor = '#f3ca0f' }}
+                onFocus={(e) => { e.target.style.borderColor = 'var(--brand-accent)' }}
                 onBlur={(e)  => { e.target.style.borderColor = '#222222' }}
               />
             </div>
@@ -170,7 +170,7 @@ export default function LoginPage() {
                     border: '1px solid #222222',
                     color: '#ffffff',
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = '#f3ca0f' }}
+                  onFocus={(e) => { e.target.style.borderColor = 'var(--brand-accent)' }}
                   onBlur={(e)  => { e.target.style.borderColor = '#222222' }}
                 />
               </div>
@@ -194,7 +194,7 @@ export default function LoginPage() {
               disabled={submitting}
               className="w-full py-2.5 rounded text-sm font-semibold tracking-wide uppercase mt-1"
               style={{
-                background: submitting ? '#8a6220' : '#f3ca0f',
+                background: submitting ? '#8a6220' : 'var(--brand-accent)',
                 color: '#0a0a0a',
                 opacity: submitting ? 0.7 : 1,
                 cursor: submitting ? 'not-allowed' : 'pointer',

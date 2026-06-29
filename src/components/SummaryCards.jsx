@@ -52,7 +52,7 @@ export default function SummaryCards({ totals }) {
 
   const profitColor = totalProfit > 0 ? '#60a57e' : totalProfit < 0 ? '#ff1744' : '#888'
   const gpColor     = avgGp >= 20 ? '#60a57e' : '#ff1744'
-  const flagColor   = flaggedCount === 0 ? '#60a57e' : flaggedCount <= 3 ? '#f3ca0f' : '#ff1744'
+  const flagColor   = flaggedCount === 0 ? '#60a57e' : flaggedCount <= 3 ? 'var(--brand-accent)' : '#ff1744'
 
   const flagParts = [
     flagBreakdown.zeroCogs > 0 && `${flagBreakdown.zeroCogs} $0 COGS`,

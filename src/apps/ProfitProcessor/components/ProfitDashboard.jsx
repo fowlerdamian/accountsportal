@@ -10,8 +10,8 @@ function Tab({ label, count, active, warn, onClick }) {
       onClick={onClick}
       className="flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors border-b-2 outline-none"
       style={{
-        color: active ? '#f3ca0f' : '#666',
-        borderBottomColor: active ? '#f3ca0f' : 'transparent',
+        color: active ? 'var(--brand-accent)' : '#666',
+        borderBottomColor: active ? 'var(--brand-accent)' : 'transparent',
         background: active ? 'rgba(243,202,15,0.04)' : 'transparent',
       }}
       onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = '#AAA' }}
@@ -26,7 +26,7 @@ function Tab({ label, count, active, warn, onClick }) {
             : warn
               ? 'rgba(127,29,29,0.5)'
               : '#1a1a1a',
-          color: active ? '#f3ca0f' : warn ? '#FCA5A5' : '#555',
+          color: active ? 'var(--brand-accent)' : warn ? '#FCA5A5' : '#555',
         }}
       >
         {count}
@@ -86,7 +86,7 @@ export default function ProfitDashboard({ result, onReset, orderLinks = {}, link
             onClick={onReset}
             className="px-4 py-1.5 text-xs font-medium rounded uppercase tracking-wide transition-colors"
             style={{
-              color: '#f3ca0f',
+              color: 'var(--brand-accent)',
               border: '1px solid rgba(243,202,15,0.35)',
               background: 'transparent',
             }}

@@ -117,7 +117,7 @@ export default function ProfitProcessor() {
         <div className="flex flex-col items-center gap-4">
           <div
             className="w-8 h-8 rounded-full border-2 animate-spin"
-            style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }}
+            style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }}
           />
           <p className="text-sm font-mono" style={{ color: '#666' }}>
             Processing {fileName}…

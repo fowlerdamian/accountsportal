@@ -40,7 +40,7 @@ function Toggle({ checked, onChange, disabled }) {
       disabled={disabled}
       style={{
         width: '36px', height: '20px', borderRadius: '10px', border: 'none',
-        background: checked ? '#f3ca0f' : '#222222',
+        background: checked ? 'var(--brand-accent)' : '#222222',
         cursor: disabled ? 'not-allowed' : 'pointer',
         position: 'relative', transition: 'background 150ms', flexShrink: 0,
         opacity: disabled ? 0.5 : 1,
@@ -71,7 +71,7 @@ function SectionHeading({ children }) {
 
 function Button({ tone = 'gold', disabled, onClick, children }) {
   const palette = {
-    gold: { fg: '#f3ca0f', border: 'rgba(243,202,15,0.4)' },
+    gold: { fg: 'var(--brand-accent)', border: 'rgba(243,202,15,0.4)' },
     blue: { fg: '#60A5FA', border: 'rgba(96,165,250,0.4)' },
     red:  { fg: '#ff1744', border: 'rgba(239,68,68,0.4)' },
   }[tone]
@@ -377,7 +377,7 @@ function FunctionRow({ row, onChange, isAdmin }) {
 
             {fields.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {dirty && <span style={{ fontSize: '11px', color: '#f3ca0f', ...monoStyle }}>● Unsaved</span>}
+                {dirty && <span style={{ fontSize: '11px', color: 'var(--brand-accent)', ...monoStyle }}>● Unsaved</span>}
                 {saved && <span style={{ fontSize: '11px', color: '#60a57e', ...monoStyle }}>Saved</span>}
                 <Button
                   tone="gold"

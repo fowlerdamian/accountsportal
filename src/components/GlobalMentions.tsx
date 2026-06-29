@@ -229,7 +229,7 @@ export function GlobalMentions() {
               boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
               fontSize: '12px', color: '#e0e0e0',
             }}>
-              <span style={{ color: '#f3ca0f', fontWeight: 600 }}>✓ Task for {c.assignee}:</span> {c.title}
+              <span style={{ color: 'var(--brand-accent)', fontWeight: 600 }}>✓ Task for {c.assignee}:</span> {c.title}
             </div>
           ))}
         </div>

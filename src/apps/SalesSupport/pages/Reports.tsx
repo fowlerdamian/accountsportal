@@ -1,5 +1,6 @@
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { palette } from "@portal/lib/palette";
 import { Loader2 } from "lucide-react";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
@@ -9,7 +10,7 @@ import { cn } from "../../../apps/Guide/lib/utils";
 import { supabase } from "@portal/lib/supabase";
 import { CHANNEL_LABEL, type Channel } from "../lib/constants";
 
-const CHART_COLORS = ["#f3ca0f", "#4fc3f7", "#ef5350", "#66bb6a", "#ab47bc", "#ffa726"];
+const CHART_COLORS = [palette.accent, "#4fc3f7", "#ef5350", "#66bb6a", "#ab47bc", "#ffa726"];
 
 const TOOLTIP_STYLE = {
   contentStyle: { background: "#1a1a1a", border: "1px solid #333", borderRadius: 8, fontSize: 12 },
@@ -173,7 +174,7 @@ export default function Reports() {
               <XAxis dataKey="week" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip {...TOOLTIP_STYLE} />
-              <Bar dataKey="count" fill="#f3ca0f" radius={[3, 3, 0, 0]} maxBarSize={32} name="Leads" />
+              <Bar dataKey="count" fill={palette.accent} radius={[3, 3, 0, 0]} maxBarSize={32} name="Leads" />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -270,7 +271,7 @@ export default function Reports() {
                 <XAxis dataKey="range" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip {...TOOLTIP_STYLE} />
-                <Bar dataKey="count" fill="#f3ca0f" radius={[3, 3, 0, 0]} maxBarSize={28} name="Distributors" />
+                <Bar dataKey="count" fill={palette.accent} radius={[3, 3, 0, 0]} maxBarSize={28} name="Distributors" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>

@@ -6,7 +6,7 @@ import { aud, invoiceTotal, invoiceOvercharge } from '../utils/helpers.js'
 
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
-  flagged:  { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  flagged:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
   disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
   approved: { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
   resolved: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },
@@ -44,7 +44,7 @@ export default function LogisticsDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }} />
+        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />
       </div>
     )
   }
@@ -74,7 +74,7 @@ export default function LogisticsDashboard() {
         <KpiCard label="Total Invoiced"    value={aud(totalInv)} />
         <KpiCard label="Total Overcharged" value={aud(totalOver)} valueStyle={totalOver > 0 ? { color: '#ff1744' } : {}} />
         <KpiCard label="Open Disputes"     value={openDisp}      valueStyle={openDisp > 0   ? { color: '#ff1744' } : {}} />
-        <KpiCard label="Need Action"       value={needAction}    valueStyle={needAction > 0  ? { color: '#f3ca0f' } : {}} />
+        <KpiCard label="Need Action"       value={needAction}    valueStyle={needAction > 0  ? { color: 'var(--brand-accent)' } : {}} />
       </div>
 
       <p style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>

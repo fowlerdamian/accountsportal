@@ -310,7 +310,7 @@ export function HubTimerButton() {
         style={{
           display: "flex", alignItems: "center", gap: "6px",
           fontSize: "11px", fontFamily: '"JetBrains Mono", monospace',
-          color:      isRunning ? "#f3ca0f" : "#555",
+          color:      isRunning ? "var(--brand-accent)" : "#555",
           background: "none",
           border:     `1px solid ${isRunning ? "rgba(243,202,15,0.4)" : "#222222"}`,
           borderRadius: "4px", padding: "4px 10px", cursor: "pointer",
@@ -319,7 +319,7 @@ export function HubTimerButton() {
       >
         {isRunning ? (
           <>
-            <Square size={10} style={{ fill: "#f3ca0f", color: "#f3ca0f" }} />
+            <Square size={10} style={{ fill: "var(--brand-accent)", color: "var(--brand-accent)" }} />
             <span>{formatElapsed(elapsed)}</span>
           </>
         ) : (

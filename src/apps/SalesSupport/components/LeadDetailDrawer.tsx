@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { palette } from "@portal/lib/palette";
 import { X, ExternalLink, Star, Globe, Phone, MapPin, User, Link, TrendingDown, TrendingUp, Minus, Loader2, PhoneCall, MessageSquare } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { LeadScoreBadge } from "./LeadScoreBadge";
@@ -399,7 +400,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
                     <Tooltip
                       contentStyle={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 6, fontSize: 12 }}
                     />
-                    <Bar dataKey="value" fill="#f3ca0f" radius={[0, 3, 3, 0]} maxBarSize={14} />
+                    <Bar dataKey="value" fill={palette.accent} radius={[0, 3, 3, 0]} maxBarSize={14} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

@@ -199,7 +199,7 @@ export function CommentBody({ body }: { body: string }) {
     <p className="text-sm text-foreground/90 whitespace-pre-wrap">
       {parts.map((part, i) =>
         part.startsWith("@") ? (
-          <span key={i} className="text-[#f3ca0f] font-medium">{part}</span>
+          <span key={i} className="text-[var(--brand-accent)] font-medium">{part}</span>
         ) : (
           <span key={i}>{part}</span>
         ),

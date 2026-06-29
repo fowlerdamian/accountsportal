@@ -208,7 +208,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 mb-6">
         <StatPill label="New" count={openCount} colorClass="text-[#ffffff]" active={statusFilter === 'open'} onClick={() => toggleStatusFilter('open')} />
         <StatPill label="Actioned" count={actionedCount} colorClass="text-[#3B9EFF]" active={statusFilter === 'actioned'} onClick={() => toggleStatusFilter('actioned')} />
-        <StatPill label="In hand" count={inHandCount} colorClass="text-[#f3ca0f]" active={statusFilter === 'in_hand'} onClick={() => toggleStatusFilter('in_hand')} />
+        <StatPill label="In hand" count={inHandCount} colorClass="text-[var(--brand-accent)]" active={statusFilter === 'in_hand'} onClick={() => toggleStatusFilter('in_hand')} />
         <StatPill label="Closed" count={closedCount} colorClass="text-[#60a57e]" active={statusFilter === 'closed'} onClick={() => toggleStatusFilter('closed')} />
       </div>
 
@@ -224,9 +224,9 @@ export default function Dashboard() {
               fontWeight: 500,
               background: 'none',
               border: 'none',
-              borderBottom: activeTab === tab.key && !statusFilter ? '2px solid #f3ca0f' : '2px solid transparent',
+              borderBottom: activeTab === tab.key && !statusFilter ? '2px solid var(--brand-accent)' : '2px solid transparent',
               marginBottom: '-1px',
-              color: activeTab === tab.key && !statusFilter ? '#f3ca0f' : '#555',
+              color: activeTab === tab.key && !statusFilter ? 'var(--brand-accent)' : '#555',
               cursor: 'pointer',
               transition: 'color 120ms, border-color 120ms',
               fontFamily: 'inherit',
@@ -284,7 +284,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
           <button
             onClick={() => { setTypeFilter('all'); setSortBy('newest'); setActiveTab('active'); setStatusFilter(null); }}
-            style={{ fontSize: '11px', color: '#f3ca0f', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
+            style={{ fontSize: '11px', color: 'var(--brand-accent)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
           >
             Reset filters
           </button>
@@ -303,7 +303,7 @@ export default function Dashboard() {
               background: typeFilter === f.key ? 'rgba(243,202,15,0.12)' : 'transparent',
               border: typeFilter === f.key ? '1px solid rgba(243,202,15,0.4)' : '1px solid #222222',
               borderRadius: '3px',
-              color: typeFilter === f.key ? '#f3ca0f' : '#555',
+              color: typeFilter === f.key ? 'var(--brand-accent)' : '#555',
               cursor: 'pointer',
               transition: 'all 120ms',
               fontFamily: 'inherit',
@@ -324,7 +324,7 @@ export default function Dashboard() {
               background: sortBy === s.key ? 'rgba(243,202,15,0.12)' : 'transparent',
               border: sortBy === s.key ? '1px solid rgba(243,202,15,0.4)' : '1px solid #222222',
               borderRadius: '3px',
-              color: sortBy === s.key ? '#f3ca0f' : '#555',
+              color: sortBy === s.key ? 'var(--brand-accent)' : '#555',
               cursor: 'pointer',
               transition: 'all 120ms',
               fontFamily: 'inherit',

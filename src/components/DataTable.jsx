@@ -57,7 +57,7 @@ function FlagBadge({ flag }) {
 function Row({ order, isEven }) {
   return (
     <tr style={{ background: isEven ? '#0d0d0d' : '#0a0a0a' }}>
-      <td className="px-4 py-2.5 text-sm font-mono whitespace-nowrap" style={{ color: '#f3ca0f' }}>
+      <td className="px-4 py-2.5 text-sm font-mono whitespace-nowrap" style={{ color: 'var(--brand-accent)' }}>
         {order.orderNum}
       </td>
       <td className="px-4 py-2.5 text-sm max-w-[180px]" style={{ color: '#CCC' }}>

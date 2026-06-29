@@ -62,7 +62,7 @@ function SidebarContent({
       "flex items-center gap-3 px-3 py-2.5 text-xs font-medium transition-colors duration-150 border-l-2",
       "font-sans tracking-wide uppercase",
       isActive
-        ? "text-[#f3ca0f] border-[#f3ca0f] bg-[rgba(243,202,15,0.06)]"
+        ? "text-[var(--brand-accent)] border-[var(--brand-accent)] bg-[rgba(243,202,15,0.06)]"
         : "text-[#555] border-transparent hover:text-[#ffffff] hover:border-[#333]"
     );
 
@@ -77,7 +77,7 @@ function SidebarContent({
           textDecoration: "none",
         }}
       >
-        <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "#f3ca0f", flexShrink: 0 }} />
+        <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "var(--brand-accent)", flexShrink: 0 }} />
         <span style={{ fontSize: "12px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ffffff" }}>
           Dashboard
         </span>
@@ -110,7 +110,7 @@ function SidebarContent({
             background: "none", border: "1px solid #222222", borderRadius: "4px",
             cursor: "pointer", transition: "color 120ms, border-color 120ms", fontFamily: "inherit",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "#f3ca0f"; e.currentTarget.style.borderColor = "rgba(243,202,15,0.4)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--brand-accent)"; e.currentTarget.style.borderColor = "rgba(243,202,15,0.4)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "#222222"; }}
         >
           <LogoutIcon size={14} strokeWidth={1.5} />
@@ -229,7 +229,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
                     <Menu size={18} strokeWidth={1.5} />
                   </button>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "#f3ca0f" }} />
+                    <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "var(--brand-accent)" }} />
                     <span style={{ fontSize: "12px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ffffff" }}>
                       Dashboard
                     </span>
@@ -237,7 +237,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
                 </>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "#f3ca0f" }} />
+                  <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "var(--brand-accent)" }} />
                   <span style={{ fontSize: "12px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ffffff" }}>
                     Dashboard
                   </span>
@@ -255,7 +255,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
                 style={{
                   display: "flex", alignItems: "center", gap: "6px",
                   fontSize: "11px", fontFamily: '"JetBrains Mono", monospace',
-                  color: aiOpen ? "#f3ca0f" : "#555", background: "none",
+                  color: aiOpen ? "var(--brand-accent)" : "#555", background: "none",
                   border: `1px solid ${aiOpen ? "rgba(243,202,15,0.4)" : "#222222"}`,
                   borderRadius: "4px", padding: "4px 10px", cursor: "pointer",
                   transition: "color 120ms, border-color 120ms",
@@ -272,7 +272,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
                 style={{
                   display: "flex", alignItems: "center", gap: "6px",
                   fontSize: "11px", fontFamily: '"JetBrains Mono", monospace',
-                  color: paletteOpen ? "#f3ca0f" : "#555", background: "none",
+                  color: paletteOpen ? "var(--brand-accent)" : "#555", background: "none",
                   border: `1px solid ${paletteOpen ? "rgba(243,202,15,0.4)" : "#222222"}`,
                   borderRadius: "4px", padding: "4px 10px", cursor: "pointer",
                   transition: "color 120ms, border-color 120ms",

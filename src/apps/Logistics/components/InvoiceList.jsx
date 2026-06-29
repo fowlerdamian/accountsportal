@@ -52,7 +52,7 @@ async function extractPdfText(buffer) {
 
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
-  flagged:  { color: '#f3ca0f', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  flagged:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
   disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
   approved: { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
   resolved: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },
@@ -84,7 +84,7 @@ const inputStyle = {
 }
 const btnPrimary = {
   fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
-  cursor: 'pointer', color: '#f3ca0f', border: '1px solid rgba(243,202,15,0.35)',
+  cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)',
   background: 'transparent', transition: 'background 120ms',
 }
 const btnGhost = {
@@ -248,7 +248,7 @@ export default function InvoiceList() {
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: '#f3ca0f', borderTopColor: 'transparent' }} />
+        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />
       </div>
     )
   }
@@ -412,7 +412,7 @@ export default function InvoiceList() {
                         {uploadPreview.lines.map((l, i) => (
                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderBottom: i < uploadPreview.lines.length - 1 ? '1px solid #181818' : 'none', fontSize: '12px' }}>
                             <span style={{ color: '#AAA' }}>{l.description}{l.detail ? <span style={{ color: '#555', fontFamily: '"JetBrains Mono", monospace' }}> · {l.detail}</span> : null}</span>
-                            <span style={{ color: '#f3ca0f', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'nowrap', marginLeft: '12px' }}>${l.charged_total.toFixed(2)}</span>
+                            <span style={{ color: 'var(--brand-accent)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'nowrap', marginLeft: '12px' }}>${l.charged_total.toFixed(2)}</span>
                           </div>
                         ))}
                       </div>

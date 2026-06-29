@@ -13,8 +13,9 @@ import {
 } from "../hooks/use-task-queries";
 import { quadrantOf, QUADRANT_LABEL, type Quadrant } from "../lib/eisenhower";
 import { scoreFor, statsForDay, localDay, lastNDays } from "../lib/score";
+import { palette } from "@portal/lib/palette";
 
-const GOLD = "#f3ca0f";
+const GOLD = palette.accent;
 
 const STATUS_COLORS: Record<string, string> = {
   "Not Started": "#888888",
