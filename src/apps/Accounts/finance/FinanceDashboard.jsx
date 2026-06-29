@@ -412,7 +412,7 @@ export default function FinanceDashboard() {
             delta={showCmp ? deltaPct(curr.grossProfit, prev?.grossProfit) : null} sub={pct(curr.grossProfitPct)} />
           <Tile icon={WalletIcon} label="EBITDA" value={money(curr.ebitda)} hue={C.purple} valueColor={curr.ebitda >= 0 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.ebitda, prev?.ebitda) : null} sub={pct(curr.ebitdaPct)} />
-          <Tile icon={GaugeIcon} label="% to Breakeven" value={pct(curr.pctToBreakeven, 0)} hue={C.orange}
+          <Tile icon={GaugeIcon} label="% to Breakeven" value={pct(curr.pctToBreakeven, 1)} hue={C.orange}
             valueColor={curr.pctToBreakeven >= 1 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.pctToBreakeven, prev?.pctToBreakeven) : null}
             sub={curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : ''} />
@@ -440,7 +440,7 @@ export default function FinanceDashboard() {
           </Panel>
 
           <Panel title="Revenue vs Breakeven" icon={TargetIcon}
-            right={<Mono>{curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)} · ${pct(curr.pctToBreakeven, 0)} of BE` : ''}</Mono>}>
+            right={<Mono>{curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)} · ${pct(curr.pctToBreakeven, 1)} of BE` : ''}</Mono>}>
             <ResponsiveContainer width="100%" height={250}>
               <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 8, bottom: 0 }}>
                 <CartesianGrid stroke={C.borderSoft} vertical={false} />
@@ -497,7 +497,7 @@ export default function FinanceDashboard() {
                     <span style={{ flex: 1, height: 4, background: C.track, borderRadius: 2, overflow: 'hidden' }}>
                       <span style={{ display: 'block', width: `${Math.max(2, (r.revShare ?? 0) * 100)}%`, height: '100%', background: C.accent, opacity: 0.8 }} />
                     </span>
-                    <span style={{ color: C.muted, fontFamily: MONO, width: 38, textAlign: 'right' }}>{pct(r.revShare, 0)}</span>
+                    <span style={{ color: C.muted, fontFamily: MONO, width: 48, textAlign: 'right' }}>{pct(r.revShare, 1)}</span>
                   </span>
                   {showCmp && <DeltaCell v={r.changeFromPrev} />}
                   {showCmp && <DeltaCell v={r.changeFromAvg} />}
@@ -593,7 +593,7 @@ function SnapshotCard({ cardRef, periodLabel, curr, currCases, prev, showCmp, as
     { label: 'Revenue', value: money(curr.revenue), accent: C.gold, sub: showCmp ? deltaLabel(deltaPct(curr.revenue, prev?.revenue)) : 'GST-excl.' },
     { label: 'Gross Profit', value: money(curr.grossProfit), accent: C.aqua, sub: `${pct(curr.grossProfitPct)} margin` },
     { label: 'EBITDA', value: money(curr.ebitda), accent: C.purple, sub: `${pct(curr.ebitdaPct)} margin` },
-    { label: '% to Breakeven', value: pct(curr.pctToBreakeven, 0), accent: C.orange, sub: curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : null },
+    { label: '% to Breakeven', value: pct(curr.pctToBreakeven, 1), accent: C.orange, sub: curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : null },
     { label: 'Cases', value: fmt0.format(currCases.total), accent: C.blue, sub: `${currCases.open} open` },
   ]
   return (
