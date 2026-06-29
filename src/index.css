@@ -38,21 +38,21 @@
 @layer base {
   :root {
     /* ── AGA brand palette (dark base) ──────────────────────────────────────
-       Gold #F3CA0F · Orange #FF5A1F · Pink #FF3366 · Blue #3B82F6 ·
-       Aqua #14D9C4 · Purple #7C3AED · Near-Black #111827 · Off-White #F8FAFC.
-       Surfaces use the Tailwind gray/slate ramp anchored on Near-Black. */
+       Base #070C0B (page) · #0E2236 (cards/navy). Accents: Blue #0F53BC
+       (primary) · Teal #2D6854 (success) · Maroon #831914 (error) ·
+       Terracotta #974D46 (warning). Off-White #F8FAFC text. */
 
     /* Backgrounds */
-    --bg-primary: #030712;   /* gray-950 — page */
-    --bg-elevated: #111827;  /* Near Black (brand) — cards/tiles */
-    --bg-surface: #1f2937;   /* gray-800 — raised surfaces/inputs */
-    --bg-hover: #273345;
-    --bg-active: #374151;    /* gray-700 */
+    --bg-primary: #070c0b;   /* near-black — page */
+    --bg-elevated: #0e2236;  /* dark navy — cards/tiles */
+    --bg-surface: #16314d;   /* raised surfaces/inputs */
+    --bg-hover: #1c3c5c;
+    --bg-active: #234766;
 
     /* Borders */
-    --border-default: #374151;  /* gray-700 */
-    --border-subtle: #1f2937;   /* gray-800 */
-    --border-strong: #4b5563;   /* gray-600 */
+    --border-default: #234766;
+    --border-subtle: #16314d;
+    --border-strong: #2e567c;
 
     /* Text */
     --text-primary: #f8fafc;    /* Off White (brand) */
@@ -60,47 +60,47 @@
     --text-tertiary: #6b7280;   /* gray-500 */
     --text-disabled: #4b5563;   /* gray-600 */
 
-    /* Accent (AGA Gold) */
-    --accent: #f3ca0f;
-    --accent-hover: #d4b00d;
-    --accent-muted: #413813;
-    --accent-subtle: rgba(243, 202, 15, 0.1);
-    --accent-text: #111827;     /* Near Black, on gold */
+    /* Accent (Blue) */
+    --accent: #0f53bc;
+    --accent-hover: #0d47a0;
+    --accent-muted: #122a44;
+    --accent-subtle: rgba(15, 83, 188, 0.12);
+    --accent-text: #f8fafc;     /* Off White, on blue */
 
     /* ── SINGLE SOURCE OF TRUTH for brand accent colours ───────────────────
        Edit these to recolour the whole portal. Unambiguous names (the shadcn
        --accent token is overloaded to a grey, so use --brand-* in app code).
        Inline styles / CSS: var(--brand-accent), var(--brand-aqua), …
        Charts (recharts) / JS: import { palette } from '@portal/lib/palette'. */
-    --brand-accent: #f3ca0f;   /* primary accent = Gold */
-    --brand-gold:   #f3ca0f;
-    --brand-orange: #ff5a1f;
-    --brand-pink:   #ff3366;
-    --brand-blue:   #3b82f6;
-    --brand-aqua:   #14d9c4;
-    --brand-purple: #7c3aed;
+    --brand-accent: #0f53bc;   /* primary accent = Blue */
+    --brand-gold:   #0f53bc;   /* (no gold in palette → primary) */
+    --brand-orange: #974d46;   /* Terracotta */
+    --brand-pink:   #831914;   /* Maroon */
+    --brand-blue:   #0f53bc;
+    --brand-aqua:   #2d6854;   /* Teal */
+    --brand-purple: #974d46;   /* Terracotta */
 
     /* Status */
-    --status-success: #14d9c4;  /* Aqua */
-    --status-warning: #ff5a1f;  /* Orange */
-    --status-error: #ff3366;    /* Pink */
-    --status-info: #3b82f6;     /* Blue */
+    --status-success: #2d6854;  /* Teal */
+    --status-warning: #974d46;  /* Terracotta */
+    --status-error: #831914;    /* Maroon */
+    --status-info: #0f53bc;     /* Blue */
 
     /* Categorical (brand hues + tints) */
-    --cat-1: #f3ca0f;  /* Gold */
-    --cat-2: #3b82f6;  /* Blue */
-    --cat-3: #ff3366;  /* Pink */
-    --cat-4: #14d9c4;  /* Aqua */
-    --cat-5: #7c3aed;  /* Purple */
-    --cat-6: #ff5a1f;  /* Orange */
-    --cat-7: #60a5fa;  /* Blue 400 */
-    --cat-8: #f472b6;  /* Pink 400 */
+    --cat-1: #0f53bc;  /* Blue */
+    --cat-2: #2d6854;  /* Teal */
+    --cat-3: #831914;  /* Maroon */
+    --cat-4: #974d46;  /* Terracotta */
+    --cat-5: #0e2236;  /* Navy */
+    --cat-6: #3b82f6;  /* Blue 400 */
+    --cat-7: #4d8a74;  /* Teal 400 */
+    --cat-8: #b5675f;  /* Terracotta 400 */
 
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.5);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
     --shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
-    --shadow-glow: 0 0 20px rgba(243,202,15,0.15);
+    --shadow-glow: 0 0 20px rgba(15,83,188,0.18);
 
     /* Radii */
     --radius-sm: 4px;
@@ -112,54 +112,54 @@
     --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
 
     /* shadcn/ui compatibility tokens (mapped to brand palette) */
-    --background: 224 71% 4%;        /* #030712 */
+    --background: 168 26% 4%;        /* #070c0b */
     --foreground: 210 40% 98%;       /* #f8fafc */
-    --card: 221 39% 11%;             /* #111827 */
+    --card: 210 59% 13%;             /* #0e2236 */
     --card-foreground: 210 40% 98%;
-    --popover: 221 39% 11%;
+    --popover: 210 59% 13%;
     --popover-foreground: 210 40% 98%;
-    --primary: 48 92% 50%;           /* Gold */
-    --primary-foreground: 221 39% 11%;
-    --secondary: 215 28% 17%;        /* gray-800 */
+    --primary: 216 85% 40%;          /* Blue #0f53bc */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 45% 19%;        /* navy surface */
     --secondary-foreground: 210 40% 98%;
-    --muted: 215 28% 17%;
-    --muted-foreground: 218 11% 65%; /* gray-400 */
-    --accent: 215 28% 17%;
+    --muted: 210 45% 19%;
+    --muted-foreground: 215 16% 65%;
+    --accent: 210 45% 19%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 345 100% 60%;     /* Pink */
+    --destructive: 3 73% 30%;        /* Maroon #831914 */
     --destructive-foreground: 210 40% 98%;
-    --border: 217 19% 27%;           /* gray-700 */
-    --input: 217 19% 27%;
-    --ring: 48 92% 50%;
+    --border: 210 33% 27%;           /* navy border */
+    --input: 210 33% 27%;
+    --ring: 216 85% 40%;
     --radius: 8px;
 
     /* Status (HSL for Tailwind) */
-    --status-urgent: 345 100% 60%;   /* Pink */
-    --status-warning: 16 100% 56%;   /* Orange */
-    --status-progress: 217 91% 60%;  /* Blue */
-    --status-resolved: 174 83% 46%;  /* Aqua */
-    --status-neutral: 218 11% 50%;
+    --status-urgent: 3 73% 38%;      /* Maroon */
+    --status-warning: 5 37% 43%;     /* Terracotta */
+    --status-progress: 216 85% 40%;  /* Blue */
+    --status-resolved: 160 40% 29%;  /* Teal */
+    --status-neutral: 210 14% 45%;
 
     /* Success / Warning for Compliance module */
-    --success: 174 83% 46%;          /* Aqua */
-    --success-foreground: 221 39% 11%;
-    --warning: 16 100% 56%;          /* Orange */
-    --warning-foreground: 221 39% 11%;
+    --success: 160 40% 29%;          /* Teal */
+    --success-foreground: 210 40% 98%;
+    --warning: 5 37% 43%;            /* Terracotta */
+    --warning-foreground: 210 40% 98%;
 
     /* Surface layers */
-    --surface: 221 39% 11%;          /* #111827 */
-    --surface-elevated: 215 28% 17%; /* gray-800 */
-    --border-hover: 217 19% 35%;
+    --surface: 210 59% 13%;          /* #0e2236 */
+    --surface-elevated: 210 45% 19%;
+    --border-hover: 210 33% 34%;
 
     /* Sidebar */
-    --sidebar-background: 224 71% 4%;
-    --sidebar-foreground: 218 11% 65%;
-    --sidebar-primary: 48 92% 50%;
-    --sidebar-primary-foreground: 221 39% 11%;
-    --sidebar-accent: 215 28% 17%;
+    --sidebar-background: 168 26% 4%;
+    --sidebar-foreground: 215 16% 65%;
+    --sidebar-primary: 216 85% 40%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 210 45% 19%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 19% 27%;
-    --sidebar-ring: 48 92% 50%;
+    --sidebar-border: 210 33% 27%;
+    --sidebar-ring: 216 85% 40%;
   }
 }
 

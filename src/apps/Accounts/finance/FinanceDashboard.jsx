@@ -30,7 +30,7 @@ const C = {
   muted:        '#9ca3af',                 // --text-secondary (gray-400)
   faint:        '#6b7280',                 // --text-tertiary (gray-500)
   cost:         '#6b7280',                 // neutral grey (--text-tertiary)
-  accentSubtle: 'rgba(243,202,15,0.1)',    // --accent-subtle
+  accentSubtle: 'rgba(15,83,188,0.12)',    // --accent-subtle (blue)
   // Brand accent hues — single source (src/index.css --brand-* via palette.js)
   accent:       palette.accent,
   revenue:      palette.accent,
