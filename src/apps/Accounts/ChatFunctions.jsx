@@ -71,7 +71,7 @@ function SectionHeading({ children }) {
 
 function Button({ tone = 'gold', disabled, onClick, children }) {
   const palette = {
-    gold: { fg: 'var(--brand-accent)', border: 'rgba(243,202,15,0.4)' },
+    gold: { fg: 'var(--brand-accent)', border: 'rgba(var(--brand-accent-rgb),0.4)' },
     blue: { fg: '#60A5FA', border: 'rgba(96,165,250,0.4)' },
     red:  { fg: '#ff1744', border: 'rgba(239,68,68,0.4)' },
   }[tone]

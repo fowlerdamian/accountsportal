@@ -32,7 +32,7 @@ export function CaseCard({ caseData, index }: CaseCardProps) {
         userSelect: 'none',
       }}
       whileHover={{
-        borderColor: 'rgba(243,202,15,0.35)',
+        borderColor: 'rgba(var(--brand-accent-rgb),0.35)',
         y: -1,
         boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
       }}

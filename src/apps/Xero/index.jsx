@@ -101,11 +101,11 @@ function ConfirmationCard({ content, onConfirm, onCancel, confirmed, cancelled }
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{previewText}</ReactMarkdown>
       <div style={{
         marginTop: '14px',
-        border: '1px solid rgba(243,202,15,0.3)',
+        border: '1px solid rgba(var(--brand-accent-rgb),0.3)',
         borderLeft: '3px solid var(--brand-accent)',
         borderRadius: '6px',
         padding: '12px 14px',
-        background: 'rgba(243,202,15,0.04)',
+        background: 'rgba(var(--brand-accent-rgb),0.04)',
       }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: '6px',
@@ -326,8 +326,8 @@ function SessionsSidebar({ sessions, currentId, onSelect, onNew, onDelete, loadi
                 style={{
                   width: '100%', textAlign: 'left',
                   padding: '8px 28px 8px 10px',
-                  background: isActive ? 'rgba(243,202,15,0.06)' : isHovered ? 'rgba(255,255,255,0.02)' : 'transparent',
-                  border: `1px solid ${isActive ? 'rgba(243,202,15,0.2)' : 'transparent'}`,
+                  background: isActive ? 'rgba(var(--brand-accent-rgb),0.06)' : isHovered ? 'rgba(255,255,255,0.02)' : 'transparent',
+                  border: `1px solid ${isActive ? 'rgba(var(--brand-accent-rgb),0.2)' : 'transparent'}`,
                   borderRadius: '5px', cursor: 'pointer',
                   transition: 'background 120ms',
                 }}
@@ -932,7 +932,7 @@ function XeroChatInner() {
                         padding: '10px 14px', color: '#555', fontSize: '13px',
                         cursor: 'pointer', transition: 'border-color 150ms, color 150ms',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(243,202,15,0.3)'; e.currentTarget.style.color = '#ccc' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(var(--brand-accent-rgb),0.3)'; e.currentTarget.style.color = '#ccc' }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#555' }}
                     >
                       {s}

@@ -310,7 +310,7 @@ export default function RateCards() {
 
   const btnPrimary = {
     fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
-    cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)',
+    cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)',
     background: 'transparent', transition: 'background 120ms',
   }
 
@@ -341,7 +341,7 @@ export default function RateCards() {
             <button
               onClick={openUploadModal}
               style={btnPrimary}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
             >
               Upload rate card
@@ -349,7 +349,7 @@ export default function RateCards() {
             <button
               onClick={() => setShowForm(v => !v)}
               style={btnPrimary}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
             >
               + Add rate
@@ -497,7 +497,7 @@ export default function RateCards() {
                         onClick={() => saveCarrier(carrier.id)}
                         disabled={!dirty || isSaving}
                         style={{ ...btnPrimary, opacity: (!dirty || isSaving) ? 0.4 : 1, cursor: (!dirty || isSaving) ? 'default' : 'pointer' }}
-                        onMouseEnter={e => { if (dirty && !isSaving) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+                        onMouseEnter={e => { if (dirty && !isSaving) e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                       >
                         {isSaving ? 'Saving…' : 'Save'}
@@ -566,7 +566,7 @@ export default function RateCards() {
                     onClick={handleUpload}
                     disabled={uploading || !uploadCarrierId || !uploadParsed || uploadParsed.rows.length === 0}
                     style={{ ...btnPrimary, opacity: (uploading || !uploadCarrierId || !uploadParsed || uploadParsed.rows.length === 0) ? 0.5 : 1, cursor: (uploading || !uploadCarrierId || !uploadParsed || uploadParsed.rows.length === 0) ? 'not-allowed' : 'pointer' }}
-                    onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+                    onMouseEnter={e => { if (!uploading) e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                   >
                     {uploading ? 'Uploading…' : 'Upload'}
@@ -602,7 +602,7 @@ export default function RateCards() {
                 <button
                   onClick={closeUploadModal}
                   style={btnPrimary}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                 >
                   Done

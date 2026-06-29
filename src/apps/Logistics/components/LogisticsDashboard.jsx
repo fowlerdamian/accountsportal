@@ -6,7 +6,7 @@ import { aud, invoiceTotal, invoiceOvercharge } from '../utils/helpers.js'
 
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
-  flagged:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  flagged:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
   disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
   approved: { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
   resolved: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },

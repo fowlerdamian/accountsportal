@@ -31,7 +31,7 @@ export default function AccountsLayout() {
                 fontSize: '11px', fontFamily: '"JetBrains Mono", monospace',
                 color: isActive ? '#fff' : '#555',
                 borderBottom: isActive ? '2px solid var(--brand-accent)' : '2px solid transparent',
-                background: isActive ? 'rgba(243,202,15,0.04)' : 'transparent',
+                background: isActive ? 'rgba(var(--brand-accent-rgb),0.04)' : 'transparent',
                 transition: 'color 120ms, border-color 120ms',
               })}
             >

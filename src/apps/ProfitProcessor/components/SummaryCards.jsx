@@ -21,7 +21,7 @@ function Card({ label, value, sub, valueColor = '#ffffff', accent = false }) {
       className="rounded-lg p-5 flex flex-col gap-1.5"
       style={{
         background: '#0a0a0a',
-        border: `1px solid ${accent ? 'rgba(243,202,15,0.25)' : '#222222'}`,
+        border: `1px solid ${accent ? 'rgba(var(--brand-accent-rgb),0.25)' : '#222222'}`,
       }}
     >
       <span

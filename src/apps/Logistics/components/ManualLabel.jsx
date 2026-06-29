@@ -232,7 +232,7 @@ export default function ManualLabel() {
   }
   const btnPrimary = {
     fontSize: '12px', fontWeight: 500, padding: '8px 18px', borderRadius: '6px',
-    cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)',
+    cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)',
     background: 'transparent', transition: 'background 120ms',
   }
   const btnGhost = {
@@ -251,7 +251,7 @@ export default function ManualLabel() {
             onClick={() => onChange(opt.key)}
             style={{
               padding: '8px 18px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', border: 'none',
-              background: active ? 'rgba(243,202,15,0.1)' : 'transparent',
+              background: active ? 'rgba(var(--brand-accent-rgb),0.1)' : 'transparent',
               color: active ? 'var(--brand-accent)' : '#666', transition: 'color 120ms, background 120ms',
             }}
           >
@@ -416,7 +416,7 @@ export default function ManualLabel() {
             onClick={handleGenerate}
             disabled={!validTo || saving}
             style={{ ...btnPrimary, width: '100%', padding: '12px', fontSize: '13px', opacity: (!validTo || saving) ? 0.5 : 1, cursor: (!validTo || saving) ? 'not-allowed' : 'pointer' }}
-            onMouseEnter={e => { if (validTo && !saving) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+            onMouseEnter={e => { if (validTo && !saving) e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
             {saving ? 'Saving…' : `Generate ${size === '4x6' ? '4×6"' : 'A4'} ${brand} label PDF`}

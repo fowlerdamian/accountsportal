@@ -52,7 +52,7 @@ async function extractPdfText(buffer) {
 
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
-  flagged:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  flagged:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
   disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
   approved: { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
   resolved: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },
@@ -84,7 +84,7 @@ const inputStyle = {
 }
 const btnPrimary = {
   fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
-  cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)',
+  cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)',
   background: 'transparent', transition: 'background 120ms',
 }
 const btnGhost = {
@@ -264,7 +264,7 @@ export default function InvoiceList() {
         <button
           onClick={openUploadModal}
           style={btnPrimary}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
         >
           Upload invoice
@@ -352,7 +352,7 @@ export default function InvoiceList() {
                 <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
                   <p style={{ margin: '0 0 4px', color: '#4ade80' }}>{uploadResult.ref} — {uploadResult.lines} line{uploadResult.lines !== 1 ? 's' : ''} added</p>
                 </div>
-                <button onClick={closeUploadModal} style={btnPrimary} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>Done</button>
+                <button onClick={closeUploadModal} style={btnPrimary} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>Done</button>
               </>
             ) : (
               <>
@@ -431,7 +431,7 @@ export default function InvoiceList() {
                     onClick={handleImport}
                     disabled={uploading || uploadParsing || !uploadPreview}
                     style={{ ...btnPrimary, opacity: (uploading || uploadParsing || !uploadPreview) ? 0.5 : 1, cursor: (uploading || uploadParsing || !uploadPreview) ? 'not-allowed' : 'pointer' }}
-                    onMouseEnter={e => { if (!uploading && !uploadParsing && uploadPreview) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+                    onMouseEnter={e => { if (!uploading && !uploadParsing && uploadPreview) e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                   >
                     {uploading ? 'Importing…' : 'Import'}

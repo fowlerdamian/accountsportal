@@ -58,7 +58,7 @@ export default function LogisticsNav() {
             style={{
               color: isActive ? 'var(--brand-accent)' : '#666',
               borderBottomColor: isActive ? 'var(--brand-accent)' : 'transparent',
-              background: isActive ? 'rgba(243,202,15,0.04)' : 'transparent',
+              background: isActive ? 'rgba(var(--brand-accent-rgb),0.04)' : 'transparent',
               textDecoration: 'none',
             }}
           >

@@ -43,7 +43,7 @@ function StatPill({ label, count, colorClass, active, onClick }: { label: string
       onClick={onClick}
       style={{
         background: '#0a0a0a',
-        border: active ? '1px solid rgba(243,202,15,0.5)' : '1px solid #1e1e1e',
+        border: active ? '1px solid rgba(var(--brand-accent-rgb),0.5)' : '1px solid #1e1e1e',
         borderRadius: '8px',
         padding: '16px 20px',
         display: 'flex',
@@ -52,7 +52,7 @@ function StatPill({ label, count, colorClass, active, onClick }: { label: string
         textAlign: 'left',
         cursor: 'pointer',
         transition: 'border-color 150ms',
-        boxShadow: active ? '0 0 0 1px rgba(243,202,15,0.25)' : 'none',
+        boxShadow: active ? '0 0 0 1px rgba(var(--brand-accent-rgb),0.25)' : 'none',
       }}
     >
       <span className={cn('font-mono text-2xl font-medium leading-none', colorClass)}>{count}</span>
@@ -258,7 +258,7 @@ export default function Dashboard() {
             boxSizing: 'border-box',
             fontFamily: 'inherit',
           }}
-          onFocus={e => { e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)'; }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'rgba(var(--brand-accent-rgb),0.4)'; }}
           onBlur={e => { e.currentTarget.style.borderColor = '#222222'; }}
         />
         <span
@@ -300,8 +300,8 @@ export default function Dashboard() {
             style={{
               padding: '3px 10px',
               fontSize: '11px',
-              background: typeFilter === f.key ? 'rgba(243,202,15,0.12)' : 'transparent',
-              border: typeFilter === f.key ? '1px solid rgba(243,202,15,0.4)' : '1px solid #222222',
+              background: typeFilter === f.key ? 'rgba(var(--brand-accent-rgb),0.12)' : 'transparent',
+              border: typeFilter === f.key ? '1px solid rgba(var(--brand-accent-rgb),0.4)' : '1px solid #222222',
               borderRadius: '3px',
               color: typeFilter === f.key ? 'var(--brand-accent)' : '#555',
               cursor: 'pointer',
@@ -321,8 +321,8 @@ export default function Dashboard() {
             style={{
               padding: '3px 10px',
               fontSize: '11px',
-              background: sortBy === s.key ? 'rgba(243,202,15,0.12)' : 'transparent',
-              border: sortBy === s.key ? '1px solid rgba(243,202,15,0.4)' : '1px solid #222222',
+              background: sortBy === s.key ? 'rgba(var(--brand-accent-rgb),0.12)' : 'transparent',
+              border: sortBy === s.key ? '1px solid rgba(var(--brand-accent-rgb),0.4)' : '1px solid #222222',
               borderRadius: '3px',
               color: sortBy === s.key ? 'var(--brand-accent)' : '#555',
               cursor: 'pointer',

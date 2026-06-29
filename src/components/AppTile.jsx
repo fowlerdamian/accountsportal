@@ -23,7 +23,7 @@ function AppIcon({ name, size = 22, className = '' }) {
 
 const STATUS_CONFIG = {
   live:          { label: 'Live',        color: 'var(--status-success)', bg: 'rgba(96,165,126,0.1)',  border: 'rgba(96,165,126,0.25)' },
-  beta:          { label: 'Beta',        color: 'var(--accent)',         bg: 'var(--accent-subtle)',   border: 'rgba(243,202,15,0.25)' },
+  beta:          { label: 'Beta',        color: 'var(--accent)',         bg: 'var(--accent-subtle)',   border: 'rgba(var(--brand-accent-rgb),0.25)' },
   'coming-soon': { label: 'Coming Soon', color: 'var(--text-tertiary)',  bg: 'rgba(102,102,102,0.1)', border: 'rgba(102,102,102,0.2)' },
 }
 
@@ -48,7 +48,7 @@ function TileCard({ app, hovered }) {
   return (
     <div style={{
       background: 'var(--bg-elevated)',
-      border: `1px solid ${hovered && !isComingSoon ? 'rgba(243,202,15,0.35)' : 'var(--border-default)'}`,
+      border: `1px solid ${hovered && !isComingSoon ? 'rgba(var(--brand-accent-rgb),0.35)' : 'var(--border-default)'}`,
       borderRadius: 'var(--radius-md)',
       padding: '24px',
       height: '100%', boxSizing: 'border-box',

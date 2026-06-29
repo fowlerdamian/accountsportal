@@ -38,7 +38,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
       'flex items-center gap-3 px-3 py-2.5 text-xs font-medium transition-colors duration-150 border-l-2',
       'font-sans tracking-wide uppercase',
       isActive
-        ? 'text-[var(--brand-accent)] border-[var(--brand-accent)] bg-[rgba(243,202,15,0.06)]'
+        ? 'text-[var(--brand-accent)] border-[var(--brand-accent)] bg-[rgba(var(--brand-accent-rgb),0.06)]'
         : 'text-[#555] border-transparent hover:text-[#ffffff] hover:border-[#333]'
     );
 
@@ -153,7 +153,7 @@ export function AppSidebar({ open, onOpenChange }: AppSidebarProps) {
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = 'var(--brand-accent)';
-            e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)';
+            e.currentTarget.style.borderColor = 'rgba(var(--brand-accent-rgb),0.4)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.color = '#666';

@@ -48,7 +48,7 @@ export default function PortalDashboard() {
               padding: '6px 12px', cursor: 'pointer', textDecoration: 'none',
               transition: 'color 120ms, border-color 120ms', display: 'inline-flex', alignItems: 'center', gap: '6px',
             }}
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)'; e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)' }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)'; e.currentTarget.style.borderColor = 'rgba(var(--brand-accent-rgb),0.4)' }}
             onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.borderColor = '#222222' }}
           >
             Manage Access

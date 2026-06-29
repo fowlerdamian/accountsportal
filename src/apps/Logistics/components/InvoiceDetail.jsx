@@ -7,7 +7,7 @@ import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../
 
 const STATUS_STYLE = {
   pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
-  flagged:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  flagged:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
   disputed: { color: '#ff1744', background: 'rgba(239,68,68,0.1)',  border: '1px solid rgba(239,68,68,0.3)'  },
   approved: { color: '#4ade80', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' },
   resolved: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)' },
@@ -15,7 +15,7 @@ const STATUS_STYLE = {
 
 const EMAIL_STATUS_STYLE = {
   sent:  { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
-  draft: { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)' },
+  draft: { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
 }
 
 function ActionBtn({ label, color, borderColor, disabled, onClick }) {
@@ -296,7 +296,7 @@ export default function InvoiceDetail() {
       {/* No claims email warning */}
       {noClaimsWarning && (
         <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
-          background: 'rgba(243,202,15,0.08)', border: '1px solid rgba(243,202,15,0.3)', color: 'var(--brand-accent)',
+          background: 'rgba(var(--brand-accent-rgb),0.08)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', color: 'var(--brand-accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <span>No claims email set for this carrier — add one in Carrier settings.</span>
           <button onClick={() => setNoClaimsWarning(false)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}>×</button>
@@ -366,7 +366,7 @@ export default function InvoiceDetail() {
                   <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff', textAlign: 'right' }}>{aud(line.charged_total)}</td>
                   <td style={{ padding: '11px 14px', textAlign: 'right' }}>
                     {noRate
-                      ? <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)', border: '1px solid rgba(243,202,15,0.3)', borderRadius: '4px', padding: '2px 7px' }}>No rate card</span>
+                      ? <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', borderRadius: '4px', padding: '2px 7px' }}>No rate card</span>
                       : <span style={{ fontSize: '13px', color: '#AAA' }}>{aud(line.contracted_total)}</span>}
                   </td>
                   <td style={{ padding: '11px 14px', fontSize: '13px', textAlign: 'right' }}>
@@ -448,10 +448,10 @@ export default function InvoiceDetail() {
           style={{
             marginTop: '8px', fontSize: '12px', fontWeight: 500, padding: '6px 14px',
             borderRadius: '6px', cursor: savingNotes ? 'not-allowed' : 'pointer',
-            color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent',
+            color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)', background: 'transparent',
             opacity: savingNotes ? 0.5 : 1, transition: 'background 120ms',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
         >
           {savingNotes ? 'Saving…' : 'Save notes'}
@@ -474,10 +474,10 @@ export default function InvoiceDetail() {
               style={{
                 fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
                 cursor: generatingLetter ? 'not-allowed' : 'pointer',
-                color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent',
+                color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)', background: 'transparent',
                 opacity: generatingLetter ? 0.6 : 1, transition: 'background 120ms',
               }}
-              onMouseEnter={e => { if (!generatingLetter) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+              onMouseEnter={e => { if (!generatingLetter) e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
             >
               {generatingLetter ? 'Generating…' : 'Generate letter'}

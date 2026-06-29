@@ -80,7 +80,7 @@ export default function Layout() {
               color: '#666', background: 'none', border: '1px solid #222222', borderRadius: '4px',
               padding: '4px 10px', cursor: 'pointer', transition: 'color 120ms, border-color 120ms',
             }}
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)'; e.currentTarget.style.borderColor = 'rgba(243,202,15,0.4)' }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)'; e.currentTarget.style.borderColor = 'rgba(var(--brand-accent-rgb),0.4)' }}
             onMouseLeave={e => { e.currentTarget.style.color = '#666'; e.currentTarget.style.borderColor = '#222222' }}
           >
             Sign out

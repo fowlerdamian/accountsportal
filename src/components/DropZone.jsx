@@ -55,8 +55,8 @@ export default function DropZone({ onFile }) {
       aria-label="Drop Excel file here or click to browse"
       style={{
         border: `2px dashed ${dragging ? 'var(--brand-accent)' : '#333'}`,
-        background: dragging ? 'rgba(243,202,15,0.04)' : '#101010',
-        boxShadow: dragging ? '0 0 48px rgba(243,202,15,0.08)' : 'none',
+        background: dragging ? 'rgba(var(--brand-accent-rgb),0.04)' : '#101010',
+        boxShadow: dragging ? '0 0 48px rgba(var(--brand-accent-rgb),0.08)' : 'none',
       }}
       className="
         w-full max-w-lg cursor-pointer select-none outline-none

@@ -12,7 +12,7 @@ function Tab({ label, count, active, warn, onClick }) {
       style={{
         color: active ? 'var(--brand-accent)' : '#666',
         borderBottomColor: active ? 'var(--brand-accent)' : 'transparent',
-        background: active ? 'rgba(243,202,15,0.04)' : 'transparent',
+        background: active ? 'rgba(var(--brand-accent-rgb),0.04)' : 'transparent',
       }}
       onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = '#AAA' }}
       onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = '#666' }}
@@ -22,7 +22,7 @@ function Tab({ label, count, active, warn, onClick }) {
         className="px-1.5 py-0.5 rounded text-[10px] font-mono"
         style={{
           background: active
-            ? 'rgba(243,202,15,0.15)'
+            ? 'rgba(var(--brand-accent-rgb),0.15)'
             : warn
               ? 'rgba(127,29,29,0.5)'
               : '#1a1a1a',
@@ -87,10 +87,10 @@ export default function ProfitDashboard({ result, onReset, orderLinks = {}, link
             className="px-4 py-1.5 text-xs font-medium rounded uppercase tracking-wide transition-colors"
             style={{
               color: 'var(--brand-accent)',
-              border: '1px solid rgba(243,202,15,0.35)',
+              border: '1px solid rgba(var(--brand-accent-rgb),0.35)',
               background: 'transparent',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
             New Report

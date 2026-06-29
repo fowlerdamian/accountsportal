@@ -187,7 +187,7 @@ function AccountSection({ user }) {
                   fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em',
                   textTransform: 'uppercase', color: saving ? '#444' : 'var(--brand-accent)',
                   background: 'none', border: '1px solid',
-                  borderColor: saving ? '#222222' : 'rgba(243,202,15,0.4)',
+                  borderColor: saving ? '#222222' : 'rgba(var(--brand-accent-rgb),0.4)',
                   borderRadius: '4px', padding: '6px 14px',
                   cursor: saving ? 'not-allowed' : 'pointer',
                 }}
@@ -233,7 +233,7 @@ function InviteUserForm({ onInvited }) {
       style={{
         fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
         color: 'var(--brand-accent)', background: 'none',
-        border: '1px solid rgba(243,202,15,0.3)', borderRadius: '4px',
+        border: '1px solid rgba(var(--brand-accent-rgb),0.3)', borderRadius: '4px',
         padding: '6px 14px', cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace',
       }}
     >
@@ -294,7 +294,7 @@ function InviteUserForm({ onInvited }) {
               fontFamily: '"JetBrains Mono", monospace',
               color: (sending || !email.trim()) ? '#444' : 'var(--brand-accent)',
               background: 'none', border: '1px solid',
-              borderColor: (sending || !email.trim()) ? '#222' : 'rgba(243,202,15,0.4)',
+              borderColor: (sending || !email.trim()) ? '#222' : 'rgba(var(--brand-accent-rgb),0.4)',
               borderRadius: '4px', padding: '6px 16px',
               cursor: (sending || !email.trim()) ? 'not-allowed' : 'pointer',
             }}

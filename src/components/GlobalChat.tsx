@@ -156,7 +156,7 @@ export default function GlobalChat() {
             background: 'var(--brand-accent)', color: '#000000',
             border: 'none', cursor: 'pointer',
             fontSize: '13px', fontWeight: 600,
-            boxShadow: '0 4px 24px rgba(243,202,15,0.35)',
+            boxShadow: '0 4px 24px rgba(var(--brand-accent-rgb),0.35)',
             transition: 'opacity 150ms, transform 150ms',
           }}
           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.9' }}
@@ -273,7 +273,7 @@ export default function GlobalChat() {
               {msg.role === 'assistant' && (
                 <div style={{
                   width: '22px', height: '22px', borderRadius: '50%',
-                  background: 'rgba(243,202,15,0.15)', flexShrink: 0,
+                  background: 'rgba(var(--brand-accent-rgb),0.15)', flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '2px',
                 }}>
                   <Sparkles style={{ width: '11px', height: '11px', color: 'var(--brand-accent)' }} />
@@ -306,7 +306,7 @@ export default function GlobalChat() {
             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
               <div style={{
                 width: '22px', height: '22px', borderRadius: '50%',
-                background: 'rgba(243,202,15,0.15)', flexShrink: 0,
+                background: 'rgba(var(--brand-accent-rgb),0.15)', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <Sparkles style={{ width: '11px', height: '11px', color: 'var(--brand-accent)' }} />

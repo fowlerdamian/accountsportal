@@ -18,7 +18,7 @@ const STATUS_STYLE = {
   Draft:      { color: '#a0a0a0', background: '#0a0a0a',               border: '1px solid #222222' },
   Authorised: { color: '#60a5fa', background: 'rgba(96,165,250,0.1)',  border: '1px solid rgba(96,165,250,0.3)' },
   Ordered:    { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)' },
-  Receiving:  { color: 'var(--brand-accent)', background: 'rgba(243,202,15,0.1)',  border: '1px solid rgba(243,202,15,0.3)' },
+  Receiving:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)',  border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
   Completed:  { color: '#4ade80', background: 'rgba(74,222,128,0.1)',  border: '1px solid rgba(74,222,128,0.3)' },
   Cancelled:  { color: '#888',    background: '#0a0a0a',               border: '1px solid #222' },
 }
@@ -170,7 +170,7 @@ function NotesCell({ poId, notes, onSaved }) {
           if (e.key === 'Escape') { setValue(notes ?? ''); setEditing(false) }
         }}
         style={{
-          background: '#1a1a1a', border: '1px solid rgba(243,202,15,0.5)',
+          background: '#1a1a1a', border: '1px solid rgba(var(--brand-accent-rgb),0.5)',
           borderRadius: '4px', color: '#ffffff', fontSize: '13px',
           padding: '6px 8px', outline: 'none',
           fontFamily: 'inherit', width: '100%',
@@ -438,7 +438,7 @@ export default function PurchaseOrders() {
         </p>
         <button
           onClick={() => { setFetchError(null); setLoading(true); fetchOrders(activeFilters.flatMap(f => FILTER_MATCH[f] ?? [f])) }}
-          style={{ padding: '6px 14px', fontSize: '12px', color: 'var(--brand-accent)', border: '1px solid rgba(243,202,15,0.35)', background: 'transparent', borderRadius: '6px', cursor: 'pointer' }}
+          style={{ padding: '6px 14px', fontSize: '12px', color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)', background: 'transparent', borderRadius: '6px', cursor: 'pointer' }}
         >
           Retry
         </button>
@@ -474,11 +474,11 @@ export default function PurchaseOrders() {
             style={{
               padding: '8px 16px', fontSize: '12px', fontWeight: 500, letterSpacing: '0.04em',
               textTransform: 'uppercase', color: syncing ? '#555' : 'var(--brand-accent)',
-              border: `1px solid ${syncing ? '#333' : 'rgba(243,202,15,0.35)'}`,
+              border: `1px solid ${syncing ? '#333' : 'rgba(var(--brand-accent-rgb),0.35)'}`,
               background: 'transparent', borderRadius: '6px',
               cursor: syncing ? 'not-allowed' : 'pointer', transition: 'background 150ms',
             }}
-            onMouseEnter={e => { if (!syncing) e.currentTarget.style.background = 'rgba(243,202,15,0.08)' }}
+            onMouseEnter={e => { if (!syncing) e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
             {syncing ? '↻ Syncing…' : '↻ Sync Cin7'}

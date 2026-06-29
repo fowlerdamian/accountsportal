@@ -46,7 +46,7 @@ function SidebarContent({
       "flex items-center gap-3 px-3 py-2.5 text-xs font-medium transition-colors duration-150 border-l-2",
       "font-sans tracking-wide uppercase",
       isActive
-        ? "text-[var(--brand-accent)] border-[var(--brand-accent)] bg-[rgba(243,202,15,0.06)]"
+        ? "text-[var(--brand-accent)] border-[var(--brand-accent)] bg-[rgba(var(--brand-accent-rgb),0.06)]"
         : "text-[#555] border-transparent hover:text-[#ffffff] hover:border-[#333]",
     );
 
@@ -89,8 +89,8 @@ function SidebarContent({
             display: "flex", alignItems: "center", gap: "8px", width: "100%",
             padding: "6px 10px", fontSize: "11px", fontWeight: 500,
             letterSpacing: "0.08em", textTransform: "uppercase",
-            color: "var(--brand-accent)", background: "rgba(243,202,15,0.06)",
-            border: "1px solid rgba(243,202,15,0.4)", borderRadius: "4px",
+            color: "var(--brand-accent)", background: "rgba(var(--brand-accent-rgb),0.06)",
+            border: "1px solid rgba(var(--brand-accent-rgb),0.4)", borderRadius: "4px",
             cursor: "pointer", transition: "background 120ms", fontFamily: "inherit",
             marginBottom: "8px",
           }}
@@ -107,7 +107,7 @@ function SidebarContent({
             background: "none", border: "1px solid #222222", borderRadius: "4px",
             cursor: "pointer", transition: "color 120ms, border-color 120ms", fontFamily: "inherit",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--brand-accent)"; e.currentTarget.style.borderColor = "rgba(243,202,15,0.4)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--brand-accent)"; e.currentTarget.style.borderColor = "rgba(var(--brand-accent-rgb),0.4)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "#222222"; }}
         >
           <LogoutIcon size={14} strokeWidth={1.5} />
@@ -215,8 +215,8 @@ export function TasksLayout({ children }: TasksLayoutProps) {
                 style={{
                   display: "flex", alignItems: "center", gap: "6px",
                   fontSize: "11px", fontFamily: '"JetBrains Mono", monospace',
-                  color: "var(--brand-accent)", background: "rgba(243,202,15,0.06)",
-                  border: "1px solid rgba(243,202,15,0.4)",
+                  color: "var(--brand-accent)", background: "rgba(var(--brand-accent-rgb),0.06)",
+                  border: "1px solid rgba(var(--brand-accent-rgb),0.4)",
                   borderRadius: "4px", padding: "4px 10px", cursor: "pointer",
                 }}
                 title="New task [N]"

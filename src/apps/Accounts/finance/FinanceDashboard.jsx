@@ -155,7 +155,7 @@ function WaterfallTooltip({ active, payload }) {
 // ─── Main ────────────────────────────────────────────────────────────────────────
 
 export default function FinanceDashboard() {
-  const { data, isLoading, error } = useFinanceData()
+  const { data, isLoading, error, refetch } = useFinanceData()
   const [grain, setGrain] = useState('month')
   const [anchor, setAnchor] = useState(null)
 
@@ -292,6 +292,26 @@ export default function FinanceDashboard() {
     return rows
   }, [expenseRows, sort])
 
+  // ── Manual Xero sync ──────────────────────────────────────────────────────────
+  // Re-runs the Xero P&L snapshot on demand (same /api/finance-snapshot route the
+  // nightly cron hits → xero-pl-snapshot edge fn → finance_snapshot), then refetches
+  // so the dashboard shows live figures without waiting for the 01:00 AEST cron.
+  const [syncState, setSyncState] = useState('idle') // idle|syncing|done|error
+  async function handleSync() {
+    if (syncState === 'syncing') return
+    setSyncState('syncing')
+    try {
+      const resp = await fetch('/api/finance-snapshot', { method: 'POST' })
+      if (!resp.ok) throw new Error(`finance-snapshot ${resp.status}: ${await resp.text()}`)
+      await refetch()
+      setSyncState('done')
+    } catch (e) {
+      console.error('[finance sync]', e)
+      setSyncState('error')
+    }
+    setTimeout(() => setSyncState((s) => (s === 'syncing' ? s : 'idle')), 3000)
+  }
+
   // ── Share current view as an image ────────────────────────────────────────────
   // Rasterises the dashboard exactly as it's currently filtered/sorted, then —
   // best available first — opens the native share sheet (mobile), copies the PNG
@@ -351,13 +371,14 @@ export default function FinanceDashboard() {
               grain={grain} setGrain={(g) => { setGrain(g); setAnchor(null) }}
               options={options} anchor={effAnchor} setAnchor={setAnchor}
             />
+            <SyncButton state={syncState} onClick={handleSync} />
             <ShareButton state={shareState} onClick={handleShare} />
           </div>
         </div>
 
         {/* Unmapped banner */}
         {curr && curr.unmappedCount > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.accentSubtle, border: '1px solid rgba(243,202,15,0.3)', borderRadius: 8, padding: '11px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.accentSubtle, border: '1px solid rgba(var(--brand-accent-rgb),0.3)', borderRadius: 8, padding: '11px 14px' }}>
             <TriangleAlertIcon size={16} strokeWidth={1.6} style={{ color: C.accent, flexShrink: 0 }} />
             <span style={{ fontSize: 12.5, color: C.muted }}>
               <strong style={{ color: C.accent }}>{curr.unmappedCount}</strong> P&L account line{curr.unmappedCount === 1 ? '' : 's'} ({money(curr.unmappedAmount)}) in this period are not in the account map — excluded from EBITDA. Add them in the account_map table.
@@ -530,6 +551,32 @@ function FilterBar({ grain, setGrain, options, anchor, setAnchor }) {
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
+  )
+}
+
+// Manually re-run the Xero snapshot, then refetch.
+const SYNC_LABEL = { idle: 'Sync Xero', syncing: 'Syncing…', done: 'Synced ✓', error: 'Failed' }
+function SyncButton({ state, onClick }) {
+  const busy = state === 'syncing'
+  const done = state === 'done'
+  return (
+    <button onClick={onClick} disabled={busy}
+      title="Pull live data from Xero now"
+      data-html2canvas-ignore="true"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6, cursor: busy ? 'default' : 'pointer',
+        background: done ? C.accent : C.panel, color: done ? C.bg : (state === 'error' ? C.red : C.text),
+        border: `1px solid ${done ? C.accent : C.border}`, borderRadius: 7,
+        padding: '7px 12px', fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace',
+        transition: 'background 120ms, color 120ms',
+      }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        style={busy ? { animation: 'spin 0.8s linear infinite' } : undefined}>
+        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
+        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M21 21v-5h-5" />
+      </svg>
+      {SYNC_LABEL[state] ?? 'Sync Xero'}
+    </button>
   )
 }
 
