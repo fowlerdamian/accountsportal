@@ -30,11 +30,18 @@ const C = {
   faint:        '#6b7280',                 // --text-tertiary (gray-500)
   accent:       '#f3ca0f',                 // --accent (Gold)
   accentSubtle: 'rgba(243,202,15,0.1)',    // --accent-subtle
-  green:        '#2E7D32',                 // Support Hub green (kept by request; new token success = Aqua #14d9c4)
-  red:          '#ff1744',                 // negative (new token error = Pink #ff3366)
+  green:        '#14d9c4',                 // positive/good — Aqua (--status-success)
+  red:          '#ff3366',                 // negative/bad — Pink (--status-error)
   warning:      '#ff5a1f',                 // --status-warning (Orange)
   revenue:      '#f3ca0f',                 // --accent (Gold)
   cost:         '#6b7280',                 // neutral grey (--text-tertiary)
+  // Brand accent hues (= --cat-*) for graphs & tiles
+  gold:         '#f3ca0f',
+  orange:       '#ff5a1f',
+  pink:         '#ff3366',
+  blue:         '#3b82f6',
+  aqua:         '#14d9c4',
+  purple:       '#7c3aed',
 }
 
 // ─── Formatters ────────────────────────────────────────────────────────────────
@@ -80,16 +87,16 @@ function useFinanceData() {
 
 // ─── Small UI pieces ─────────────────────────────────────────────────────────────
 
-function Tile({ icon: Icon, label, value, sub, delta, valueColor = C.text, accent = false }) {
+function Tile({ icon: Icon, label, value, sub, delta, valueColor = C.text, hue = C.accent }) {
   const dColor = delta == null ? C.muted : delta >= 0 ? C.green : C.red
   const dArrow = delta == null ? '' : delta >= 0 ? '▲' : '▼'
   return (
     <div style={{
-      background: C.panel, border: `1px solid ${accent ? 'rgba(243,202,15,0.25)' : C.border}`,
-      borderRadius: 8, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8,
+      background: C.panel, border: `1px solid ${C.border}`, borderTop: `2px solid ${hue}`,
+      borderRadius: 8, padding: '14px 18px 16px', display: 'flex', flexDirection: 'column', gap: 8,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {Icon && <Icon size={14} strokeWidth={1.5} style={{ color: C.faint }} />}
+        {Icon && <Icon size={14} strokeWidth={1.5} style={{ color: hue }} />}
         <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 500 }}>{label}</span>
       </div>
       <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '1.55rem', lineHeight: 1, fontWeight: 500, color: valueColor }}>{value}</span>
@@ -233,13 +240,13 @@ export default function FinanceDashboard() {
   const waterfall = useMemo(() => {
     if (!curr) return []
     const { revenue, cogs, grossProfit, opex, ebitda } = curr
-    // each bar drawn as [base (transparent), value]
+    // each bar drawn as [base (transparent), value]; one brand hue per step
     return [
-      { name: 'Revenue', base: 0, value: revenue, disp: revenue, kind: 'pos' },
-      { name: '− COGS', base: grossProfit, value: cogs, disp: -cogs, kind: 'neg' },
-      { name: 'Gross Profit', base: 0, value: grossProfit, disp: grossProfit, kind: 'sub' },
-      { name: '− OpEx', base: ebitda, value: opex, disp: -opex, kind: 'neg' },
-      { name: 'EBITDA', base: 0, value: ebitda, disp: ebitda, kind: ebitda >= 0 ? 'sub' : 'negsub' },
+      { name: 'Revenue', base: 0, value: revenue, disp: revenue, color: C.gold },
+      { name: '− COGS', base: grossProfit, value: cogs, disp: -cogs, color: C.orange },
+      { name: 'Gross Profit', base: 0, value: grossProfit, disp: grossProfit, color: C.aqua },
+      { name: '− OpEx', base: ebitda, value: opex, disp: -opex, color: C.pink },
+      { name: 'EBITDA', base: 0, value: ebitda, disp: ebitda, color: ebitda >= 0 ? C.purple : C.red },
     ]
   }, [curr])
 
@@ -282,17 +289,17 @@ export default function FinanceDashboard() {
 
         {/* Tiles */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <Tile icon={CurrencyDollarIcon} label="Revenue" value={money(curr.revenue)}
+          <Tile icon={CurrencyDollarIcon} label="Revenue" value={money(curr.revenue)} hue={C.gold} valueColor={C.gold}
             delta={showCmp ? deltaPct(curr.revenue, prev?.revenue) : null} sub={showCmp ? 'vs prev' : ''} />
-          <Tile icon={ChartLineIcon} label="Gross Profit" value={money(curr.grossProfit)} valueColor={curr.grossProfit >= 0 ? C.green : C.red}
+          <Tile icon={ChartLineIcon} label="Gross Profit" value={money(curr.grossProfit)} hue={C.aqua} valueColor={curr.grossProfit >= 0 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.grossProfit, prev?.grossProfit) : null} sub={pct(curr.grossProfitPct)} />
-          <Tile icon={WalletIcon} label="EBITDA" value={money(curr.ebitda)} valueColor={curr.ebitda >= 0 ? C.green : C.red}
-            delta={showCmp ? deltaPct(curr.ebitda, prev?.ebitda) : null} sub={showCmp ? 'vs prev' : ''} accent />
-          <Tile icon={GaugeIcon} label="% to Breakeven" value={pct(curr.pctToBreakeven, 0)}
+          <Tile icon={WalletIcon} label="EBITDA" value={money(curr.ebitda)} hue={C.purple} valueColor={curr.ebitda >= 0 ? C.green : C.red}
+            delta={showCmp ? deltaPct(curr.ebitda, prev?.ebitda) : null} sub={showCmp ? 'vs prev' : ''} />
+          <Tile icon={GaugeIcon} label="% to Breakeven" value={pct(curr.pctToBreakeven, 0)} hue={C.orange}
             valueColor={curr.pctToBreakeven >= 1 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.pctToBreakeven, prev?.pctToBreakeven) : null}
             sub={curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : ''} />
-          <Tile icon={TargetIcon} label="Cases" value={fmt0.format(chartData.reduce((s, d) => s + d.casesTotal, 0))}
+          <Tile icon={TargetIcon} label="Cases" value={fmt0.format(chartData.reduce((s, d) => s + d.casesTotal, 0))} hue={C.blue} valueColor={C.blue}
             sub={`${chartData.reduce((s, d) => s + d.casesOpen, 0)} open`} />
         </div>
 
@@ -308,7 +315,7 @@ export default function FinanceDashboard() {
                 <Bar dataKey="base" stackId="w" fill="transparent" />
                 <Bar dataKey="value" stackId="w" radius={[2, 2, 0, 0]} name="Amount">
                   {waterfall.map((s, i) => (
-                    <Cell key={i} fill={s.kind === 'pos' ? C.revenue : s.kind === 'neg' ? C.cost : s.kind === 'negsub' ? C.red : C.green} />
+                    <Cell key={i} fill={s.color} />
                   ))}
                 </Bar>
               </ComposedChart>
