@@ -59,8 +59,19 @@ export function usePipelineMetrics(channel: PipelineChannel, range?: DateRange, 
       if (leadsRes.error) throw leadsRes.error;
       if (callsRes.error) throw callsRes.error;
 
-      const leads = leadsRes.data ?? [];
+      const allLeads = leadsRes.data ?? [];
       const calls = callsRes.data ?? [];
+
+      // Everything is scoped to the selected period by when the lead was
+      // discovered, so the whole view responds to the month / CY / FY filter.
+      // (totalDiscovered keeps the all-time count for context.)
+      const inRange = (iso?: string | null) => {
+        if (!range) return true;        // no range → all-time
+        if (!iso) return false;
+        const d = String(iso).slice(0, 10);
+        return d >= range.startDate && d <= range.endDate;
+      };
+      const leads = allLeads.filter((l) => inRange(l.discovery_date));
 
       const active = leads.filter((l) => l.status !== "disqualified");
       const scores = active.map((l) => Number(l.lead_score) || 0);
@@ -77,15 +88,8 @@ export function usePipelineMetrics(channel: PipelineChannel, range?: DateRange, 
           return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
         });
 
-      // period-bound generation
-      const inRange = (iso?: string | null) => {
-        if (!iso || !range) return !range; // no range → count all
-        const d = String(iso).slice(0, 10);
-        return d >= range.startDate && d <= range.endDate;
-      };
-      const periodLeads = leads.filter((l) => inRange(l.discovery_date));
       const byDay = new Map<string, number>();
-      for (const l of periodLeads) {
+      for (const l of leads) {
         const d = String(l.discovery_date ?? "").slice(0, 10);
         if (d) byDay.set(d, (byDay.get(d) ?? 0) + 1);
       }
@@ -94,7 +98,7 @@ export function usePipelineMetrics(channel: PipelineChannel, range?: DateRange, 
         .map(([date, leads]) => ({ date, leads }));
 
       return {
-        totalLeads: leads.length,
+        totalLeads: allLeads.length,
         activeLeads: active.length,
         qualified: active.filter((l) => (Number(l.lead_score) || 0) >= 70).length,
         warm: active.filter((l) => {
@@ -104,7 +108,7 @@ export function usePipelineMetrics(channel: PipelineChannel, range?: DateRange, 
         avgScore,
         syncedToCrm: leads.filter((l) => !!l.hubspot_synced_at).length,
         statusFunnel,
-        newLeads: periodLeads.length,
+        newLeads: leads.length,
         generationSeries,
         callsQueued: calls.length,
         callsCompleted: calls.filter((c) => c.is_complete).length,

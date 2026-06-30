@@ -6,11 +6,12 @@ import {
 } from "recharts";
 import {
   RefreshCw, Loader2, AlertCircle, ShoppingCart, Mail, TrendingUp, MousePointerClick,
-  DollarSign, Users, Target, Flame, PhoneCall, Sparkles, GitBranch,
+  DollarSign, Users, Flame, PhoneCall, Sparkles, GitBranch, BarChart3,
 } from "lucide-react";
 import {
-  useTrailbaitDashboard,
+  useTrailbaitDashboard, useBrandWebsite,
   type TrailbaitDashboard, type MarketingSegment, type ShopSegment, type EmailSegment,
+  type WebsiteAnalytics,
 } from "../hooks/useMarketingDashboard";
 import { usePipelineMetrics, type PipelineMetrics, type PipelineChannel } from "../hooks/usePipeline";
 import { GRAINS, buildOptions, defaultAnchor, dateRange, type Grain } from "../lib/periods";
@@ -19,10 +20,10 @@ import { GRAINS, buildOptions, defaultAnchor, dateRange, type Grain } from "../l
 type Brand = "trailbait" | "aga" | "fleetcraft";
 type Segment = "consumer" | "b2b";
 
-const BRANDS: { key: Brand; label: string; tagline: string; accent: () => string }[] = [
-  { key: "trailbait",  label: "TrailBait",  tagline: "Ecommerce & email", accent: () => palette.accent },
-  { key: "aga",        label: "AGA",        tagline: "B2B pipeline",      accent: () => palette.pink },
-  { key: "fleetcraft", label: "FleetCraft", tagline: "B2B pipeline",      accent: () => palette.blue },
+const BRANDS: { key: Brand; label: string; tagline: string; site: string; accent: () => string }[] = [
+  { key: "trailbait",  label: "TrailBait",  tagline: "Ecommerce & email", site: "trailbait.com.au",              accent: () => palette.accent },
+  { key: "aga",        label: "AGA",        tagline: "B2B pipeline",      site: "automotivegroupaustralia.com.au", accent: () => palette.pink },
+  { key: "fleetcraft", label: "FleetCraft", tagline: "B2B pipeline",      site: "fleetcraft.com.au",             accent: () => palette.blue },
 ];
 
 // ── formatters ────────────────────────────────────────────────────────────
@@ -89,6 +90,61 @@ function Empty({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-3 leading-relaxed">
       {children}
+    </div>
+  );
+}
+
+// ── Website (GA4) panel — shared by every brand ──────────────────────────────
+function WebsiteBody({ w, accent }: { w: WebsiteAnalytics; accent: string }) {
+  if (!w.ok) {
+    return (
+      <Empty>
+        <span className="inline-flex items-center gap-1.5 text-[var(--brand-pink)]">
+          <AlertCircle className="w-3.5 h-3.5" /> Analytics: {w.error || "not connected"}
+        </span>
+      </Empty>
+    );
+  }
+  const hasTraffic = (w.sessions ?? 0) > 0 || (w.timeseries?.length ?? 0) > 0;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Mini label="Active users" value={fmtNum(w.activeUsers)} />
+        <Mini label="Sessions" value={fmtNum(w.sessions)} />
+        <Mini label="Page views" value={fmtNum(w.pageViews)} />
+        <Mini label="Key events" value={fmtNum(w.keyEvents)} />
+      </div>
+      {hasTraffic && w.timeseries?.length ? (
+        <ResponsiveContainer width="100%" height={150}>
+          <AreaChart data={w.timeseries} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
+            <defs>
+              <linearGradient id="ga-sessions" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={accent} stopOpacity={0.5} />
+                <stop offset="100%" stopColor={accent} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+            <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#777" }} tickFormatter={fmtDate} minTickGap={24} />
+            <YAxis tick={{ fontSize: 10, fill: "#777" }} width={32} allowDecimals={false} />
+            <Tooltip {...TOOLTIP_STYLE} labelFormatter={fmtDate}
+              formatter={(v: any) => [fmtNum(Number(v)), "Sessions"]} />
+            <Area type="monotone" dataKey="sessions" stroke={accent} fill="url(#ga-sessions)" strokeWidth={2} />
+          </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        <Empty>No traffic in this period yet — newly-installed tags take ~24–48h to start collecting.</Empty>
+      )}
+      {!!w.channels?.length && (
+        <div className="space-y-1.5">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Top channels</div>
+          {w.channels.slice(0, 5).map((c) => (
+            <div key={c.channel} className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{c.channel}</span>
+              <span className="tabular-nums font-medium">{fmtNum(c.sessions)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -160,7 +216,7 @@ function EmailSegmentPanel({ d, accent }: { d: EmailSegment; accent: string }) {
   );
 }
 
-function TrailbaitView({ data, accent }: { data: TrailbaitDashboard; accent: string }) {
+function TrailbaitView({ data, accent, site }: { data: TrailbaitDashboard; accent: string; site: string }) {
   const [segment, setSegment] = useState<Segment>("consumer");
   const seg: MarketingSegment = data[segment];
   const ccy = data.currency || "AUD";
@@ -212,6 +268,11 @@ function TrailbaitView({ data, accent }: { data: TrailbaitDashboard; accent: str
             : <Empty><span className="inline-flex items-center gap-1.5 text-[var(--brand-pink)]"><AlertCircle className="w-3.5 h-3.5" /> Brevo: {data.email.error || "not connected"}</span></Empty>}
         </Panel>
       </div>
+
+      {/* Whole-store website traffic — not segmented (GA4 can't see the TIER tag). */}
+      <Panel title="Website traffic" badge={`${site} · whole store`} accent={palette.purple}>
+        <WebsiteBody w={data.website} accent={palette.purple} />
+      </Panel>
     </div>
   );
 }
@@ -237,24 +298,32 @@ function PipelineFunnel({ m, accent }: { m: PipelineMetrics; accent: string }) {
   );
 }
 
-function PipelineView({ m, accent }: { m: PipelineMetrics; accent: string }) {
-  const convRate = m.totalLeads ? Math.round((m.activeLeads / m.totalLeads) * 100) : 0;
+function PipelineView({ m, accent, website, site }: {
+  m: PipelineMetrics; accent: string; website?: WebsiteAnalytics; site: string;
+}) {
+  const keepRate = m.newLeads ? Math.round((m.activeLeads / m.newLeads) * 100) : 0;
   return (
     <div className="space-y-6">
-      {/* hero KPIs */}
+      {/* hero KPIs — all period-bound */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Sparkles} accent={accent} label="New leads"
           value={fmtNum(m.newLeads)} sub="discovered this period" />
         <StatCard icon={Users} accent={palette.aqua} label="Active pipeline"
-          value={fmtNum(m.activeLeads)} sub={`${convRate}% of all discovered`} />
+          value={fmtNum(m.activeLeads)} sub={`${keepRate}% kept (not disqualified)`} />
         <StatCard icon={Flame} accent={palette.orange} label="Hot leads"
           value={fmtNum(m.qualified)} sub={`${fmtNum(m.warm)} warm`} />
-        <StatCard icon={Target} accent={palette.purple} label="Avg lead score"
-          value={fmtNum(m.avgScore)} sub="active leads" />
+        <StatCard icon={BarChart3} accent={palette.purple} label="Website sessions"
+          value={fmtNum(website?.sessions)} sub={`${fmtNum(website?.activeUsers)} users`} />
       </div>
 
+      {/* Brand website traffic — period-bound. */}
+      <Panel title="Website traffic" badge={site} accent={palette.purple}>
+        {website ? <WebsiteBody w={website} accent={palette.purple} />
+          : <div className="flex items-center justify-center py-6 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>}
+      </Panel>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Panel title="Pipeline funnel" badge="current snapshot" accent={accent}>
+        <Panel title="Pipeline funnel" badge="discovered this period" accent={accent}>
           {m.statusFunnel.length ? <PipelineFunnel m={m} accent={accent} />
             : <Empty>No leads in this channel yet.</Empty>}
           <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
@@ -305,7 +374,7 @@ function PipelineView({ m, accent }: { m: PipelineMetrics; accent: string }) {
           </div>
         </Panel>
 
-        <Panel title="Lead quality" badge="active pipeline" accent={accent}>
+        <Panel title="Lead quality" badge="active · this period" accent={accent}>
           <div className="grid grid-cols-3 gap-2">
             <Mini label="Hot (≥70)" value={fmtNum(m.qualified)} />
             <Mini label="Warm (45–69)" value={fmtNum(m.warm)} />
@@ -371,6 +440,7 @@ export default function MarketingDashboard() {
   const tb = useTrailbaitDashboard(range);
   const pipelineChannel: PipelineChannel = brand === "fleetcraft" ? "fleetcraft" : "aga";
   const pipe = usePipelineMetrics(pipelineChannel, range, brand !== "trailbait");
+  const brandWeb = useBrandWebsite(pipelineChannel, range, brand !== "trailbait");
 
   const activeBrand = BRANDS.find((b) => b.key === brand)!;
   const accent = activeBrand.accent();
@@ -380,9 +450,9 @@ export default function MarketingDashboard() {
   const isLoading = isTrailbait ? tb.isLoading : pipe.isLoading;
   const isError = isTrailbait ? tb.isError : pipe.isError;
   const error = isTrailbait ? tb.error : pipe.error;
-  const isFetching = isTrailbait ? tb.isFetching : pipe.isFetching;
-  const generatedAt = isTrailbait ? tb.data?.generatedAt : undefined;
-  const refetch = () => (isTrailbait ? tb.refetch() : pipe.refetch());
+  const isFetching = isTrailbait ? tb.isFetching : (pipe.isFetching || brandWeb.isFetching);
+  const generatedAt = isTrailbait ? tb.data?.generatedAt : brandWeb.data?.generatedAt;
+  const refetch = () => { if (isTrailbait) { tb.refetch(); } else { pipe.refetch(); brandWeb.refetch(); } };
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto animate-fade-in">
@@ -450,10 +520,10 @@ export default function MarketingDashboard() {
       )}
 
       {!isLoading && !isError && isTrailbait && tb.data && (
-        <TrailbaitView data={tb.data} accent={accent} />
+        <TrailbaitView data={tb.data} accent={accent} site={activeBrand.site} />
       )}
       {!isLoading && !isError && !isTrailbait && pipe.data && (
-        <PipelineView m={pipe.data} accent={accent} />
+        <PipelineView m={pipe.data} accent={accent} website={brandWeb.data?.website} site={activeBrand.site} />
       )}
     </div>
   );

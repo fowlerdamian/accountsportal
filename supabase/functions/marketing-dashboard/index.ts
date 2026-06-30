@@ -1,20 +1,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// ── Marketing dashboard — TrailBait segmented snapshot ──────────────────────
-// TrailBait is the only brand with ecommerce + marketing email, so this
-// function powers TrailBait's two segmented views (Consumer / B2B).
+// ── Marketing dashboard — per-brand snapshot ────────────────────────────────
+// One function, three brands. The caller passes { brand, startDate, endDate }.
 //
-//   • Shopify sales are split per-order by the order's customer tags. A customer
-//     carrying a tag of the form TIER## (e.g. TIER20) is a B2B (distributor)
-//     account; every other customer is Consumer. The split is mutually
-//     exclusive — each order lands in exactly one segment.
-//   • Brevo email is split by the list a campaign was sent to. "End Users" is
-//     the consumer list; the "Distributor*" lists are B2B.
+//   • Every brand returns a `website` block — GA4 traffic for that brand's own
+//     web property (TrailBait / AGA / FleetCraft each have their own site).
+//   • TrailBait additionally returns segmented ecommerce + email. Shopify sales
+//     are split per-order by the customer's tags — a TIER## tag marks a B2B
+//     (distributor) account, everything else is Consumer; the split is mutually
+//     exclusive. Brevo email is split by the list a campaign targeted
+//     ("End Users" = Consumer, "Distributor*" = B2B).
 //
-// AGA & FleetCraft have no ecommerce or email — their dashboards read the
-// sales-support pipeline directly from Postgres on the client, not here.
+// AGA & FleetCraft have no ecommerce/email — their pipeline (lead funnel +
+// outbound) is read from Postgres on the client; only `website` comes from here.
 //
 // Secrets consumed (Supabase function secrets):
+//   GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY (google-drive)
+//   GA_PROPERTIES (JSON [{label,id}]) — matched to a brand by label keyword;
+//     falls back to the hardcoded property ids below.
 //   SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE_DOMAIN   – TrailBait store
 //   BREVO_API_KEY                                 – TrailBait email
 
@@ -41,23 +44,140 @@ const round = (n: number, d = 2) => {
   return Math.round(n * f) / f;
 };
 
-// A customer is B2B iff any of their tags matches TIER##. This single tag is the
-// authoritative arbiter of the Consumer/B2B split.
+interface Range { startDate: string; endDate: string }
+type Segment = "consumer" | "b2b";
+type Brand = "trailbait" | "aga" | "fleetcraft";
+
+// ── GA4 property per brand ────────────────────────────────────────────────────
+// Each brand has its own web property under the AGA Google account. Prefer the
+// GA_PROPERTIES secret (matched by label keyword); fall back to these known ids.
+const FALLBACK_GA: Record<Brand, string> = {
+  trailbait: "543687539",   // TrailBait Website (trailbait.com.au)
+  aga: "496706418",         // Automotive Group Australia Website
+  fleetcraft: "543633778",  // FleetCraft Website (fleetcraft.com.au)
+};
+const BRAND_LABEL_RE: Record<Brand, RegExp> = {
+  trailbait: /trail/i,
+  aga: /automotive group|^aga\b|aga /i,
+  fleetcraft: /fleet/i,
+};
+function resolveProperty(brand: Brand): string {
+  const raw = Deno.env.get("GA_PROPERTIES");
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as { label?: string; id?: string | number }[];
+      const hit = parsed.find((p) => p?.label && BRAND_LABEL_RE[brand].test(String(p.label)));
+      if (hit?.id) return String(hit.id);
+    } catch { /* fall through */ }
+  }
+  return FALLBACK_GA[brand];
+}
+
+// ── Google JWT → access token (mirrors supabase/functions/google-drive) ──────
+function b64url(obj: object): string {
+  return btoa(JSON.stringify(obj)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+function pemToBytes(pem: string): Uint8Array {
+  const b64 = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  const binary = atob(b64);
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+}
+async function getGoogleAccessToken(email: string, privateKeyPem: string, scope: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const claims = { iss: email, scope, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 };
+  const sigInput = `${b64url(header)}.${b64url(claims)}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8", pemToBytes(privateKeyPem),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sigBytes = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(sigInput));
+  const sig = btoa(String.fromCharCode(...new Uint8Array(sigBytes)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  const jwt = `${sigInput}.${sig}`;
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+  const data = await resp.json();
+  if (!data.access_token) throw new Error(`Google auth failed: ${JSON.stringify(data)}`);
+  return data.access_token;
+}
+
+// ── Google Analytics (GA4 Data API) — one brand's web property ───────────────
+async function fetchAnalytics(propertyId: string, range?: Range) {
+  const email = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+  const pk = (Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") ?? "").replace(/\\n/g, "\n");
+  if (!email || !pk) return { configured: false, ok: false, error: "GA service account not configured" };
+  if (!propertyId) return { configured: false, ok: false, error: "GA property not set for this brand" };
+
+  const gaRange = range ?? { startDate: "28daysAgo", endDate: "today" };
+  try {
+    const token = await getGoogleAccessToken(email, pk, "https://www.googleapis.com/auth/analytics.readonly");
+    const res = await fetch(
+      `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:batchRunReports`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(TIMEOUT),
+        body: JSON.stringify({
+          requests: [
+            { dateRanges: [gaRange], metrics: [
+                { name: "activeUsers" }, { name: "newUsers" }, { name: "sessions" },
+                { name: "screenPageViews" }, { name: "keyEvents" }, { name: "engagementRate" },
+              ] },
+            { dateRanges: [gaRange], dimensions: [{ name: "date" }],
+              metrics: [{ name: "sessions" }, { name: "activeUsers" }],
+              orderBys: [{ dimension: { dimensionName: "date" } }] },
+            { dateRanges: [gaRange], dimensions: [{ name: "sessionDefaultChannelGroup" }],
+              metrics: [{ name: "sessions" }],
+              orderBys: [{ metric: { metricName: "sessions" }, desc: true }], limit: 8 },
+          ],
+        }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text();
+      return { configured: true, ok: false, error: `GA ${res.status}: ${body.slice(0, 200)}` };
+    }
+    const data = await res.json();
+    const [totals, ts, ch] = data.reports ?? [];
+    const tRow = totals?.rows?.[0]?.metricValues ?? [];
+    const timeseries = (ts?.rows ?? []).map((r: any) => {
+      const d = r.dimensionValues?.[0]?.value ?? "";
+      return {
+        date: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`,
+        sessions: num(r.metricValues?.[0]?.value),
+        users: num(r.metricValues?.[1]?.value),
+      };
+    });
+    const channels = (ch?.rows ?? []).map((r: any) => ({
+      channel: r.dimensionValues?.[0]?.value ?? "(other)",
+      sessions: num(r.metricValues?.[0]?.value),
+    }));
+    return {
+      configured: true, ok: true, propertyId,
+      activeUsers: num(tRow[0]?.value),
+      newUsers: num(tRow[1]?.value),
+      sessions: num(tRow[2]?.value),
+      pageViews: num(tRow[3]?.value),
+      keyEvents: num(tRow[4]?.value),
+      engagementRate: round(num(tRow[5]?.value) * 100, 1),
+      timeseries, channels,
+    };
+  } catch (e) {
+    return { configured: true, ok: false, error: String(e).slice(0, 200) };
+  }
+}
+
+// ── Shopify (TrailBait) — orders split into Consumer / B2B by customer tag ───
 const TIER_RE = /(^|,)\s*TIER\s*\d+\b/i;
 const isB2bCustomerTags = (tags: unknown) => TIER_RE.test(String(tags ?? ""));
 
-interface Range { startDate: string; endDate: string }
-type Segment = "consumer" | "b2b";
-
-// ── Shopify (TrailBait) — orders split into Consumer / B2B by customer tag ───
 interface ShopSeg {
-  ok: boolean;
-  revenue: number;
-  orders: number;
-  aov: number;
-  currency: string;
-  capped: boolean;
-  timeseries: { date: string; revenue: number; orders: number }[];
+  ok: boolean; revenue: number; orders: number; aov: number; currency: string;
+  capped: boolean; timeseries: { date: string; revenue: number; orders: number }[];
 }
 const emptyShopSeg = (currency = "AUD"): ShopSeg => ({
   ok: true, revenue: 0, orders: 0, aov: 0, currency, capped: false, timeseries: [],
@@ -77,8 +197,6 @@ async function fetchShopify(range?: Range): Promise<{
   try {
     const minIso = range ? `${range.startDate}T00:00:00Z` : isoDaysAgo(30);
     const maxParam = range ? `&created_at_max=${encodeURIComponent(`${range.endDate}T23:59:59Z`)}` : "";
-    // Pull the customer object so we can read its tags per order. Cap at 8 pages
-    // (2000 orders) for latency; flag `capped` if the window is larger.
     let url: string | null =
       `${base}/orders.json?status=any&created_at_min=${encodeURIComponent(minIso)}${maxParam}&limit=250&fields=id,total_price,currency,created_at,customer`;
     const orders: any[] = [];
@@ -86,7 +204,7 @@ async function fetchShopify(range?: Range): Promise<{
     for (let page = 0; page < 8 && url; page++) {
       const res: Response = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT) });
       if (!res.ok) {
-        if (orders.length) break; // partial data is still useful
+        if (orders.length) break;
         const body = await res.text();
         return { configured: true, ok: false, error: `Shopify ${res.status}: ${body.slice(0, 160)}`, currency: "AUD", consumer: emptyShopSeg(), b2b: emptyShopSeg() };
       }
@@ -116,22 +234,17 @@ async function fetchShopify(range?: Range): Promise<{
       }
     }
 
-    const build = (s: Segment): ShopSeg => {
+    const buildSeg = (s: Segment): ShopSeg => {
       const { revenue, orders: n, byDay } = seg[s];
       return {
-        ok: true,
-        revenue: round(revenue),
-        orders: n,
-        aov: n ? round(revenue / n) : 0,
-        currency,
-        capped,
-        timeseries: Object.entries(byDay)
-          .sort(([a], [b]) => a.localeCompare(b))
+        ok: true, revenue: round(revenue), orders: n, aov: n ? round(revenue / n) : 0,
+        currency, capped,
+        timeseries: Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b))
           .map(([date, v]) => ({ date, revenue: round(v.revenue), orders: v.orders })),
       };
     };
 
-    return { configured: true, ok: true, storeDomain: store, currency, consumer: build("consumer"), b2b: build("b2b") };
+    return { configured: true, ok: true, storeDomain: store, currency, consumer: buildSeg("consumer"), b2b: buildSeg("b2b") };
   } catch (e) {
     return { configured: true, ok: false, error: String(e).slice(0, 200), currency: "AUD", consumer: emptyShopSeg(), b2b: emptyShopSeg() };
   }
@@ -150,13 +263,10 @@ const emptyEmailSeg = (): EmailSeg => ({
   ok: true, sent: 0, opens: 0, clicks: 0, openRate: 0, clickRate: 0, campaignCount: 0, campaigns: [],
 });
 
-// A list is B2B if its name reads like a distributor/wholesale/trade list;
-// otherwise it's a consumer (end-user) list.
 const B2B_LIST_RE = /distributor|wholesale|trade|dealer|reseller|b2b/i;
 
 async function fetchBrevo(range?: Range): Promise<{
-  configured: boolean; ok: boolean; error?: string;
-  consumer: EmailSeg; b2b: EmailSeg;
+  configured: boolean; ok: boolean; error?: string; consumer: EmailSeg; b2b: EmailSeg;
 }> {
   const key = Deno.env.get("BREVO_API_KEY");
   if (!key) return { configured: false, ok: false, error: "BREVO_API_KEY not set", consumer: emptyEmailSeg(), b2b: emptyEmailSeg() };
@@ -171,7 +281,6 @@ async function fetchBrevo(range?: Range): Promise<{
       const body = await campRes.text();
       return { configured: true, ok: false, error: `Brevo ${campRes.status}: ${body.slice(0, 160)}`, consumer: emptyEmailSeg(), b2b: emptyEmailSeg() };
     }
-    // Map every list id → its segment by name.
     const lists = listsRes.ok ? ((await listsRes.json()).lists ?? []) : [];
     const listSeg = new Map<number, Segment>();
     for (const l of lists) listSeg.set(Number(l.id), B2B_LIST_RE.test(String(l.name ?? "")) ? "b2b" : "consumer");
@@ -183,7 +292,6 @@ async function fetchBrevo(range?: Range): Promise<{
       if (range && !(sentDate && sentDate >= range.startDate && sentDate <= range.endDate)) continue;
       const targetLists: number[] = (c.recipients?.lists ?? []).map((x: any) => Number(x));
       if (!targetLists.length) continue;
-      // A campaign is B2B if it touches any B2B list, else Consumer.
       const segment: Segment = targetLists.some((id) => listSeg.get(id) === "b2b") ? "b2b" : "consumer";
       const g = c.statistics?.globalStats ?? {};
       const sent = num(g.sent);
@@ -199,20 +307,18 @@ async function fetchBrevo(range?: Range): Promise<{
       });
     }
 
-    const build = (s: Segment): EmailSeg => {
+    const buildSeg = (s: Segment): EmailSeg => {
       const cs = acc[s].sort((a, b) => (b.sentDate ?? "").localeCompare(a.sentDate ?? ""));
       const t = cs.reduce((a, c) => ({ sent: a.sent + c.sent, opens: a.opens + c.opens, clicks: a.clicks + c.clicks }), { sent: 0, opens: 0, clicks: 0 });
       return {
-        ok: true,
-        sent: t.sent, opens: t.opens, clicks: t.clicks,
+        ok: true, sent: t.sent, opens: t.opens, clicks: t.clicks,
         openRate: t.sent ? round((t.opens / t.sent) * 100, 1) : 0,
         clickRate: t.sent ? round((t.clicks / t.sent) * 100, 1) : 0,
-        campaignCount: cs.length,
-        campaigns: cs.slice(0, 8),
+        campaignCount: cs.length, campaigns: cs.slice(0, 8),
       };
     };
 
-    return { configured: true, ok: true, consumer: build("consumer"), b2b: build("b2b") };
+    return { configured: true, ok: true, consumer: buildSeg("consumer"), b2b: buildSeg("b2b") };
   } catch (e) {
     return { configured: true, ok: false, error: String(e).slice(0, 200), consumer: emptyEmailSeg(), b2b: emptyEmailSeg() };
   }
@@ -228,11 +334,16 @@ serve(async (req) => {
     return json({
       ok: true,
       configured: {
+        ga: !!Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY"),
+        gaProperties: Deno.env.get("GA_PROPERTIES") ?? null,
         shopify: !!Deno.env.get("SHOPIFY_ACCESS_TOKEN") && !!Deno.env.get("SHOPIFY_STORE_DOMAIN"),
         brevo: !!Deno.env.get("BREVO_API_KEY"),
       },
     });
   }
+
+  const brand: Brand =
+    body.brand === "aga" || body.brand === "fleetcraft" ? body.brand : "trailbait";
 
   const dateRe = /^\d{4}-\d{2}-\d{2}$/;
   const range: Range | undefined =
@@ -240,14 +351,25 @@ serve(async (req) => {
       ? { startDate: body.startDate, endDate: body.endDate }
       : undefined;
 
-  const [shopify, brevo] = await Promise.all([fetchShopify(range), fetchBrevo(range)]);
+  const websiteP = fetchAnalytics(resolveProperty(brand), range);
+
+  // AGA / FleetCraft: website only (their pipeline is read on the client).
+  if (brand !== "trailbait") {
+    const website = await websiteP;
+    return json({ ok: true, brand, generatedAt: new Date().toISOString(), range: range ?? null, website });
+  }
+
+  // TrailBait: website + segmented ecommerce + email.
+  const [website, shopify, brevo] = await Promise.all([websiteP, fetchShopify(range), fetchBrevo(range)]);
 
   return json({
     ok: true,
+    brand,
     generatedAt: new Date().toISOString(),
     range: range ?? null,
     store: shopify.storeDomain ?? null,
     currency: shopify.currency,
+    website,
     shopify: { ok: shopify.ok, configured: shopify.configured, error: shopify.error },
     email: { ok: brevo.ok, configured: brevo.configured, error: brevo.error },
     consumer: { shopify: shopify.consumer, email: brevo.consumer },
