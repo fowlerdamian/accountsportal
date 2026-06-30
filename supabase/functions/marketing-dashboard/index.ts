@@ -69,12 +69,15 @@ async function getGoogleAccessToken(email: string, privateKeyPem: string, scope:
 }
 
 // ── Google Analytics (GA4 Data API) ─────────────────────────────────────────
-async function fetchAnalytics(propertyId: string) {
+interface Range { startDate: string; endDate: string }
+
+async function fetchAnalytics(propertyId: string, range?: Range) {
   const email = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
   const pk = (Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") ?? "").replace(/\\n/g, "\n");
   if (!email || !pk) return { configured: false, ok: false, error: "service account not configured" };
   if (!propertyId) return { configured: false, ok: false, error: "GA_PROPERTY_ID not set" };
 
+  const gaRange = range ?? { startDate: "28daysAgo", endDate: "today" };
   try {
     const token = await getGoogleAccessToken(email, pk, "https://www.googleapis.com/auth/analytics.readonly");
     const res = await fetch(
@@ -86,7 +89,7 @@ async function fetchAnalytics(propertyId: string) {
         body: JSON.stringify({
           requests: [
             { // 0 — totals
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dateRanges: [gaRange],
               metrics: [
                 { name: "activeUsers" }, { name: "newUsers" },
                 { name: "sessions" }, { name: "screenPageViews" },
@@ -94,13 +97,13 @@ async function fetchAnalytics(propertyId: string) {
               ],
             },
             { // 1 — daily timeseries
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dateRanges: [gaRange],
               dimensions: [{ name: "date" }],
               metrics: [{ name: "sessions" }, { name: "activeUsers" }],
               orderBys: [{ dimension: { dimensionName: "date" } }],
             },
             { // 2 — channel breakdown
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dateRanges: [gaRange],
               dimensions: [{ name: "sessionDefaultChannelGroup" }],
               metrics: [{ name: "sessions" }],
               orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
@@ -145,7 +148,7 @@ async function fetchAnalytics(propertyId: string) {
 }
 
 // ── HubSpot ──────────────────────────────────────────────────────────────────
-async function fetchHubspot() {
+async function fetchHubspot(range?: Range) {
   const token = Deno.env.get("HUBSPOT_ACCESS_TOKEN");
   if (!token) return { configured: false, ok: false, error: "HUBSPOT_ACCESS_TOKEN not set" };
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -154,13 +157,16 @@ async function fetchHubspot() {
       method: "POST", headers, signal: AbortSignal.timeout(TIMEOUT), body: JSON.stringify(body),
     });
   try {
-    const since30 = Date.now() - 30 * 86400_000;
+    // New-contacts filter: a concrete period when given, else trailing 30 days.
+    const createdFilters = range
+      ? [
+          { propertyName: "createdate", operator: "GTE", value: String(Date.parse(range.startDate)) },
+          { propertyName: "createdate", operator: "LTE", value: String(Date.parse(range.endDate) + 86_399_999) },
+        ]
+      : [{ propertyName: "createdate", operator: "GTE", value: String(Date.now() - 30 * 86400_000) }];
     const [allContacts, newContacts, openDeals] = await Promise.all([
       search("contacts", { limit: 1, filterGroups: [] }),
-      search("contacts", {
-        limit: 1,
-        filterGroups: [{ filters: [{ propertyName: "createdate", operator: "GTE", value: String(since30) }] }],
-      }),
+      search("contacts", { limit: 1, filterGroups: [{ filters: createdFilters }] }),
       search("deals", {
         limit: 100, properties: ["amount"],
         filterGroups: [{ filters: [{ propertyName: "hs_is_closed", operator: "EQ", value: "false" }] }],
@@ -188,18 +194,19 @@ async function fetchHubspot() {
 }
 
 // ── Shopify ───────────────────────────────────────────────────────────────────
-async function fetchShopify() {
+async function fetchShopify(range?: Range) {
   const token = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
   const store = Deno.env.get("SHOPIFY_STORE_DOMAIN");
   if (!token || !store) return { configured: false, ok: false, error: "Shopify not configured" };
   const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
   const base = `https://${store}/admin/api/2024-01`;
   try {
-    const since = isoDaysAgo(30);
-    // Paginate the 30-day window via the Link header cursor so revenue isn't
-    // truncated at one 250-row page. Cap at 8 pages (2000 orders) for latency.
+    const minIso = range ? `${range.startDate}T00:00:00Z` : isoDaysAgo(30);
+    const maxParam = range ? `&created_at_max=${encodeURIComponent(`${range.endDate}T23:59:59Z`)}` : "";
+    // Paginate the window via the Link header cursor so revenue isn't truncated
+    // at one 250-row page. Cap at 8 pages (2000 orders) for latency.
     let url: string | null =
-      `${base}/orders.json?status=any&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,total_price,currency,created_at`;
+      `${base}/orders.json?status=any&created_at_min=${encodeURIComponent(minIso)}${maxParam}&limit=250&fields=id,total_price,currency,created_at`;
     const orders: any[] = [];
     let capped = false;
     for (let page = 0; page < 8 && url; page++) {
@@ -240,7 +247,7 @@ async function fetchShopify() {
 }
 
 // ── Brevo ─────────────────────────────────────────────────────────────────────
-async function fetchBrevo() {
+async function fetchBrevo(range?: Range) {
   const key = Deno.env.get("BREVO_API_KEY");
   if (!key) return { configured: false, ok: false, error: "BREVO_API_KEY not set" };
   const headers = { "api-key": key, accept: "application/json" };
@@ -250,7 +257,7 @@ async function fetchBrevo() {
     const [acctRes, contactsRes, campRes] = await Promise.all([
       get("account"),
       get("contacts?limit=1"),
-      get("emailCampaigns?statistics=globalStats&limit=10&sort=desc"),
+      get("emailCampaigns?statistics=globalStats&limit=50&sort=desc"),
     ]);
     if (!acctRes.ok && !campRes.ok) {
       const body = await acctRes.text();
@@ -258,7 +265,7 @@ async function fetchBrevo() {
     }
     const contacts = contactsRes.ok ? await contactsRes.json() : { count: 0 };
     const camp = campRes.ok ? await campRes.json() : { campaigns: [] };
-    const campaigns = (camp.campaigns ?? []).map((c: any) => {
+    const allCampaigns = (camp.campaigns ?? []).map((c: any) => {
       const g = c.statistics?.globalStats ?? {};
       const sent = num(g.sent);
       return {
@@ -273,6 +280,13 @@ async function fetchBrevo() {
         clickRate: sent ? round((num(g.uniqueClicks ?? g.clickers) / sent) * 100, 1) : 0,
       };
     });
+    // Restrict to campaigns sent within the selected period (when one is set).
+    const campaigns = range
+      ? allCampaigns.filter((c: any) => {
+          const d = (c.sentDate ?? "").slice(0, 10);
+          return d && d >= range.startDate && d <= range.endDate;
+        })
+      : allCampaigns.slice(0, 10);
     const totals = campaigns.reduce(
       (a: any, c: any) => ({
         sent: a.sent + c.sent, opens: a.opens + c.opens, clicks: a.clicks + c.clicks,
@@ -333,12 +347,20 @@ serve(async (req) => {
     return single ? [{ label: "Website", id: single }] : [];
   })();
 
+  // Optional explicit date range (YYYY-MM-DD). When omitted, each source uses
+  // its own trailing-window default (~last 28–30 days).
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const range: Range | undefined =
+    dateRe.test(body.startDate ?? "") && dateRe.test(body.endDate ?? "")
+      ? { startDate: body.startDate, endDate: body.endDate }
+      : undefined;
+
   const [sites, hubspot, shopify, brevo] = await Promise.all([
     Promise.all(gaProps.map((p) =>
-      fetchAnalytics(String(p.id)).then((r) => ({ label: p.label, ...r })))),
-    fetchHubspot(),
-    fetchShopify(),
-    fetchBrevo(),
+      fetchAnalytics(String(p.id), range).then((r) => ({ label: p.label, ...r })))),
+    fetchHubspot(range),
+    fetchShopify(range),
+    fetchBrevo(range),
   ]);
 
   const analytics = {
@@ -350,6 +372,7 @@ serve(async (req) => {
   return json({
     ok: true,
     generatedAt: new Date().toISOString(),
+    range: range ?? null,
     analytics, hubspot, shopify, brevo,
   });
 });

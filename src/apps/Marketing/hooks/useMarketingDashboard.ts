@@ -66,21 +66,26 @@ export interface BrevoData extends SourceBase {
 export interface MarketingDashboard {
   ok: boolean;
   generatedAt: string;
+  range: { startDate: string; endDate: string } | null;
   analytics: AnalyticsData;
   hubspot: HubspotData;
   shopify: ShopifyData;
   brevo: BrevoData;
 }
 
-export function useMarketingDashboard() {
+export interface DateRange { startDate: string; endDate: string }
+
+export function useMarketingDashboard(range?: DateRange) {
   return useQuery<MarketingDashboard>({
-    queryKey: ["marketing_dashboard"],
+    queryKey: ["marketing_dashboard", range?.startDate ?? null, range?.endDate ?? null],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("marketing-dashboard", { body: {} });
+      const body = range ? { startDate: range.startDate, endDate: range.endDate } : {};
+      const { data, error } = await supabase.functions.invoke("marketing-dashboard", { body });
       if (error) throw new Error(error.message);
       return data as MarketingDashboard;
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev, // keep the previous period visible while the new one loads
   });
 }

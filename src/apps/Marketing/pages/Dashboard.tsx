@@ -13,6 +13,7 @@ import {
   type SourceBase, type AnalyticsData, type AnalyticsSite, type HubspotData,
   type ShopifyData, type BrevoData,
 } from "../hooks/useMarketingDashboard";
+import { GRAINS, buildOptions, defaultAnchor, dateRange, type Grain } from "../lib/periods";
 
 // ── formatters ────────────────────────────────────────────────────────────
 const nf = new Intl.NumberFormat("en-AU");
@@ -116,7 +117,7 @@ function SiteAnalytics({ s }: { s: AnalyticsSite }) {
         </ResponsiveContainer>
       ) : (
         <div className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-3">
-          No traffic in the last 28 days yet — data appears within ~24–48h of the tag going live.
+          No traffic in this period yet — newly-installed tags take ~24–48h to start collecting.
         </div>
       )}
       {!!s.channels?.length && (
@@ -165,8 +166,8 @@ function ShopifyPanel({ d }: { d: ShopifyData }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
-        <Mini label="Revenue (30d)" value={fmtMoney(d.revenue30d, d.currency)} />
-        <Mini label={`Orders (30d)${d.capped ? "+" : ""}`} value={fmtNum(d.orders30d)} />
+        <Mini label="Revenue" value={fmtMoney(d.revenue30d, d.currency)} />
+        <Mini label={`Orders${d.capped ? "+" : ""}`} value={fmtNum(d.orders30d)} />
         <Mini label="Avg order" value={fmtMoney(d.aov, d.currency)} />
       </div>
       {!!d.timeseries?.length && (
@@ -192,12 +193,12 @@ function HubspotPanel({ d }: { d: HubspotData }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
         <Mini label="Total contacts" value={fmtNum(d.totalContacts)} />
-        <Mini label="New (30d)" value={fmtNum(d.newContacts30d)} />
+        <Mini label="New in period" value={fmtNum(d.newContacts30d)} />
         <Mini label="Open deals" value={fmtNum(d.openDeals)} />
         <Mini label="Open pipeline" value={fmtMoney(d.openDealsValue)} />
       </div>
       <div className="text-xs text-muted-foreground">
-        {fmtNum(d.newContacts30d)} contacts added in the last 30 days.
+        {fmtNum(d.newContacts30d)} contacts added in this period · totals &amp; open deals are live.
       </div>
     </div>
   );
@@ -244,8 +245,44 @@ function BrevoPanel({ d }: { d: BrevoData }) {
 }
 
 // ── page ────────────────────────────────────────────────────────────────────
+function FilterBar({ grain, setGrain, options, anchor, setAnchor }: {
+  grain: Grain; setGrain: (g: Grain) => void;
+  options: { value: string; label: string }[]; anchor: string; setAnchor: (a: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex rounded-lg bg-muted/30 p-0.5 text-xs font-mono">
+        {GRAINS.map((g) => (
+          <button
+            key={g.key}
+            onClick={() => setGrain(g.key)}
+            className={`px-2.5 py-1.5 rounded-md transition-colors ${
+              grain === g.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+      <select
+        value={anchor}
+        onChange={(e) => setAnchor(e.target.value)}
+        className="bg-muted/30 border border-border rounded-lg px-2.5 py-1.5 text-xs font-mono cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
 export default function MarketingDashboard() {
-  const { data, isLoading, isError, error, refetch, isFetching } = useMarketingDashboard();
+  const [grain, setGrain] = useState<Grain>("month");
+  const [anchor, setAnchor] = useState<string>(() => defaultAnchor("month"));
+  const options = buildOptions(grain);
+  const range = dateRange(grain, anchor);
+  const { data, isLoading, isError, error, refetch, isFetching } = useMarketingDashboard(range);
+
+  const periodText = options.find((o) => o.value === anchor)?.label ?? anchor;
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto animate-fade-in">
@@ -256,18 +293,27 @@ export default function MarketingDashboard() {
             Marketing
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Analytics, HubSpot, Shopify &amp; Brevo — last 28–30 days
+            Analytics, HubSpot, Shopify &amp; Brevo — {periodText}
             {data?.generatedAt && ` · updated ${new Date(data.generatedAt).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })}`}
           </p>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="flex items-center gap-2 text-xs bg-primary text-primary-foreground rounded-lg px-3 py-2 hover:bg-primary/90 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <FilterBar
+            grain={grain}
+            setGrain={(g) => { setGrain(g); setAnchor(defaultAnchor(g)); }}
+            options={options}
+            anchor={anchor}
+            setAnchor={setAnchor}
+          />
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-2 text-xs bg-primary text-primary-foreground rounded-lg px-3 py-2 hover:bg-primary/90 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+        </div>
       </div>
 
       {isLoading && (
@@ -289,16 +335,16 @@ export default function MarketingDashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard icon={ShoppingCart} accent={palette.accent} label="Shopify revenue"
               value={data.shopify.ok ? fmtMoney(data.shopify.revenue30d, data.shopify.currency) : "—"}
-              sub={data.shopify.ok ? `${fmtNum(data.shopify.orders30d)} orders · 30d` : "Not connected"} />
+              sub={data.shopify.ok ? `${fmtNum(data.shopify.orders30d)} orders` : "Not connected"} />
             <StatCard icon={Contact} accent={palette.aqua} label="HubSpot contacts"
               value={data.hubspot.ok ? fmtNum(data.hubspot.totalContacts) : "—"}
-              sub={data.hubspot.ok ? `+${fmtNum(data.hubspot.newContacts30d)} this month` : "Not connected"} />
+              sub={data.hubspot.ok ? `+${fmtNum(data.hubspot.newContacts30d)} new` : "Not connected"} />
             <StatCard icon={Mail} accent={palette.pink} label="Brevo open rate"
               value={data.brevo.ok ? fmtPct(data.brevo.totals?.openRate) : "—"}
               sub={data.brevo.ok ? `${fmtNum(data.brevo.totals?.sent)} sent` : "Not connected"} />
             <StatCard icon={BarChart3} accent={palette.purple} label="GA active users"
               value={data.analytics.ok ? fmtNum((data.analytics.sites ?? []).reduce((a, s) => a + (s.activeUsers ?? 0), 0)) : "—"}
-              sub={data.analytics.ok ? `${(data.analytics.sites ?? []).filter((s) => s.ok).length} sites · 28d` : "Action needed"} />
+              sub={data.analytics.ok ? `${(data.analytics.sites ?? []).filter((s) => s.ok).length} sites` : "Action needed"} />
           </div>
 
           {/* Source panels */}
