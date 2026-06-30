@@ -49,28 +49,27 @@ type Segment = "consumer" | "b2b";
 type Brand = "trailbait" | "aga" | "fleetcraft";
 
 // ── GA4 property per brand ────────────────────────────────────────────────────
-// Each brand has its own web property under the AGA Google account. Prefer the
-// GA_PROPERTIES secret (matched by label keyword); fall back to these known ids.
-const FALLBACK_GA: Record<Brand, string> = {
-  trailbait: "543687539",   // TrailBait Website (trailbait.com.au)
+// Each brand's web property. We use the ESTABLISHED properties that hold the
+// historical traffic (TrailBait + FleetCraft live under the agency-managed
+// "TrailBait.com.au" GA account 228088566; AGA under the AGA Google account).
+// The dashboard service account (contractor-hub@…) is a Viewer on all three.
+// Newer/empty properties (TrailBait 543687539, FleetCraft 543633778) are
+// intentionally NOT used — they were created 2026-06-30 and have no history.
+// An optional GA_BRAND_PROPERTIES secret (JSON {"trailbait":"id",…}) overrides.
+const GA_PROPERTY: Record<Brand, string> = {
+  trailbait: "317545000",   // Trailbait.com.au — full history
   aga: "496706418",         // Automotive Group Australia Website
-  fleetcraft: "543633778",  // FleetCraft Website (fleetcraft.com.au)
-};
-const BRAND_LABEL_RE: Record<Brand, RegExp> = {
-  trailbait: /trail/i,
-  aga: /automotive group|^aga\b|aga /i,
-  fleetcraft: /fleet/i,
+  fleetcraft: "536375328",  // FleetCraft — historical property
 };
 function resolveProperty(brand: Brand): string {
-  const raw = Deno.env.get("GA_PROPERTIES");
+  const raw = Deno.env.get("GA_BRAND_PROPERTIES");
   if (raw) {
     try {
-      const parsed = JSON.parse(raw) as { label?: string; id?: string | number }[];
-      const hit = parsed.find((p) => p?.label && BRAND_LABEL_RE[brand].test(String(p.label)));
-      if (hit?.id) return String(hit.id);
+      const o = JSON.parse(raw) as Partial<Record<Brand, string | number>>;
+      if (o?.[brand]) return String(o[brand]);
     } catch { /* fall through */ }
   }
-  return FALLBACK_GA[brand];
+  return GA_PROPERTY[brand];
 }
 
 // ── Google JWT → access token (mirrors supabase/functions/google-drive) ──────
