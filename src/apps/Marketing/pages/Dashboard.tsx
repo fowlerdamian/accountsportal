@@ -1,19 +1,29 @@
 import { useState } from "react";
 import { palette } from "@portal/lib/palette";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
+  BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer,
 } from "recharts";
 import {
-  RefreshCw, Loader2, AlertCircle, Users, ShoppingCart, Mail, BarChart3,
-  TrendingUp, MousePointerClick, Eye, DollarSign, Contact, Handshake,
+  RefreshCw, Loader2, AlertCircle, ShoppingCart, Mail, TrendingUp, MousePointerClick,
+  DollarSign, Users, Target, Flame, PhoneCall, Sparkles, GitBranch,
 } from "lucide-react";
 import {
-  useMarketingDashboard,
-  type SourceBase, type AnalyticsData, type AnalyticsSite, type HubspotData,
-  type ShopifyData, type BrevoData,
+  useTrailbaitDashboard,
+  type TrailbaitDashboard, type MarketingSegment, type ShopSegment, type EmailSegment,
 } from "../hooks/useMarketingDashboard";
+import { usePipelineMetrics, type PipelineMetrics, type PipelineChannel } from "../hooks/usePipeline";
 import { GRAINS, buildOptions, defaultAnchor, dateRange, type Grain } from "../lib/periods";
+
+// ── brands ──────────────────────────────────────────────────────────────────
+type Brand = "trailbait" | "aga" | "fleetcraft";
+type Segment = "consumer" | "b2b";
+
+const BRANDS: { key: Brand; label: string; tagline: string; accent: () => string }[] = [
+  { key: "trailbait",  label: "TrailBait",  tagline: "Ecommerce & email", accent: () => palette.accent },
+  { key: "aga",        label: "AGA",        tagline: "B2B pipeline",      accent: () => palette.pink },
+  { key: "fleetcraft", label: "FleetCraft", tagline: "B2B pipeline",      accent: () => palette.blue },
+];
 
 // ── formatters ────────────────────────────────────────────────────────────
 const nf = new Intl.NumberFormat("en-AU");
@@ -28,6 +38,12 @@ const TOOLTIP_STYLE = {
   contentStyle: { background: "#1a1a1a", border: "1px solid #333", borderRadius: 8, fontSize: 12 },
   labelStyle: { color: "#aaa" },
 };
+
+const STATUS_LABEL: Record<string, string> = {
+  new: "New", enriched: "Enriched", scored: "Scored", qualified: "Qualified",
+  contacted: "Contacted", converted: "Converted", disqualified: "Disqualified",
+};
+const statusLabel = (s: string) => STATUS_LABEL[s] ?? s.charAt(0).toUpperCase() + s.slice(1);
 
 // ── primitives ──────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, sub, accent }: {
@@ -45,36 +61,17 @@ function StatCard({ icon: Icon, label, value, sub, accent }: {
   );
 }
 
-function SourceCard({ title, badge, accent, source, children }: {
-  title: string; badge?: string; accent: string; source: SourceBase; children: React.ReactNode;
+function Panel({ title, badge, accent, children }: {
+  title: string; badge?: string; accent: string; children: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-border bg-card/50 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ background: accent }} />
-          <h3 className="text-sm font-semibold">{title}</h3>
-          {badge && <span className="text-xs text-muted-foreground">· {badge}</span>}
-        </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${
-          source.ok ? "bg-[rgba(51,92,103,0.18)] text-[var(--brand-aqua)]"
-                    : "bg-[rgba(158,42,43,0.15)] text-[var(--brand-pink)]"
-        }`}>
-          {source.ok ? "Connected" : source.configured ? "Action needed" : "Not connected"}
-        </span>
+      <div className="flex items-center gap-2 mb-4">
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: accent }} />
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {badge && <span className="text-xs text-muted-foreground">· {badge}</span>}
       </div>
-      {source.ok ? children : <NotConnected source={source} />}
-    </div>
-  );
-}
-
-function NotConnected({ source }: { source: SourceBase }) {
-  return (
-    <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/20 rounded-lg p-3">
-      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[var(--brand-pink)]" />
-      <span className="leading-relaxed break-words">
-        {source.error || "This integration is not configured yet."}
-      </span>
+      {children}
     </div>
   );
 }
@@ -88,90 +85,25 @@ function Mini({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ── source panels ─────────────────────────────────────────────────────────
-function SiteAnalytics({ s }: { s: AnalyticsSite }) {
-  if (!s.ok) return <NotConnected source={s} />;
+function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <Mini label="Active users" value={fmtNum(s.activeUsers)} />
-        <Mini label="Sessions" value={fmtNum(s.sessions)} />
-        <Mini label="Page views" value={fmtNum(s.pageViews)} />
-        <Mini label="Key events" value={fmtNum(s.keyEvents)} />
-      </div>
-      {!!s.timeseries?.length ? (
-        <ResponsiveContainer width="100%" height={140}>
-          <AreaChart data={s.timeseries} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-            <defs>
-              <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={palette.aqua} stopOpacity={0.5} />
-                <stop offset="100%" stopColor={palette.aqua} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
-            <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#777" }} tickFormatter={fmtDate} minTickGap={24} />
-            <YAxis tick={{ fontSize: 10, fill: "#777" }} width={36} />
-            <Tooltip {...TOOLTIP_STYLE} labelFormatter={fmtDate} />
-            <Area type="monotone" dataKey="sessions" stroke={palette.aqua} fill="url(#ga)" strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
-      ) : (
-        <div className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-3">
-          No traffic in this period yet — newly-installed tags take ~24–48h to start collecting.
-        </div>
-      )}
-      {!!s.channels?.length && (
-        <div className="space-y-1.5">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Top channels</div>
-          {s.channels.slice(0, 5).map((c) => (
-            <div key={c.channel} className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{c.channel}</span>
-              <span className="tabular-nums font-medium">{fmtNum(c.sessions)}</span>
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-3 leading-relaxed">
+      {children}
     </div>
   );
 }
 
-function AnalyticsPanel({ d }: { d: AnalyticsData }) {
-  const sites = d.sites ?? [];
-  const [active, setActive] = useState(0);
-  if (!sites.length) return <NotConnected source={d} />;
-  const sel = sites[Math.min(active, sites.length - 1)];
-  return (
-    <div className="space-y-4">
-      {sites.length > 1 && (
-        <div className="inline-flex rounded-lg bg-muted/30 p-0.5 text-xs">
-          {sites.map((s, i) => (
-            <button
-              key={s.label + i}
-              onClick={() => setActive(i)}
-              className={`px-3 py-1 rounded-md transition-colors ${
-                i === active ? "bg-[var(--brand-purple)] text-white" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      )}
-      <SiteAnalytics s={sel} />
-    </div>
-  );
-}
-
-function ShopifyPanel({ d }: { d: ShopifyData }) {
+// ── TrailBait segment panels ─────────────────────────────────────────────────
+function ShopifySegmentPanel({ d, accent }: { d: ShopSegment; accent: string }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
-        <Mini label="Revenue" value={fmtMoney(d.revenue30d, d.currency)} />
-        <Mini label={`Orders${d.capped ? "+" : ""}`} value={fmtNum(d.orders30d)} />
+        <Mini label="Revenue" value={fmtMoney(d.revenue, d.currency)} />
+        <Mini label={`Orders${d.capped ? "+" : ""}`} value={fmtNum(d.orders)} />
         <Mini label="Avg order" value={fmtMoney(d.aov, d.currency)} />
       </div>
-      {!!d.timeseries?.length && (
-        <ResponsiveContainer width="100%" height={140}>
+      {d.timeseries.length ? (
+        <ResponsiveContainer width="100%" height={150}>
           <BarChart data={d.timeseries} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#777" }} tickFormatter={fmtDate} minTickGap={24} />
@@ -179,72 +111,225 @@ function ShopifyPanel({ d }: { d: ShopifyData }) {
               tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)} />
             <Tooltip {...TOOLTIP_STYLE} labelFormatter={fmtDate}
               formatter={(v: any) => [fmtMoney(Number(v), d.currency), "Revenue"]} />
-            <Bar dataKey="revenue" fill={palette.accent} radius={[2, 2, 0, 0]} />
+            <Bar dataKey="revenue" fill={accent} radius={[2, 2, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      ) : (
+        <Empty>No orders in this segment for the selected period.</Empty>
       )}
-      <div className="text-xs text-muted-foreground">{d.storeDomain}</div>
     </div>
   );
 }
 
-function HubspotPanel({ d }: { d: HubspotData }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
-        <Mini label="Total contacts" value={fmtNum(d.totalContacts)} />
-        <Mini label="New in period" value={fmtNum(d.newContacts30d)} />
-        <Mini label="Open deals" value={fmtNum(d.openDeals)} />
-        <Mini label="Open pipeline" value={fmtMoney(d.openDealsValue)} />
-      </div>
-      <div className="text-xs text-muted-foreground">
-        {fmtNum(d.newContacts30d)} contacts added in this period · totals &amp; open deals are live.
-      </div>
-    </div>
-  );
-}
-
-function BrevoPanel({ d }: { d: BrevoData }) {
+function EmailSegmentPanel({ d, accent }: { d: EmailSegment; accent: string }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <Mini label="Contacts" value={fmtNum(d.totalContacts)} />
-        <Mini label="Emails sent" value={fmtNum(d.totals?.sent)} />
-        <Mini label="Open rate" value={fmtPct(d.totals?.openRate)} />
-        <Mini label="Click rate" value={fmtPct(d.totals?.clickRate)} />
+        <Mini label="Emails sent" value={fmtNum(d.sent)} />
+        <Mini label="Open rate" value={fmtPct(d.openRate)} />
+        <Mini label="Click rate" value={fmtPct(d.clickRate)} />
+        <Mini label="Campaigns" value={fmtNum(d.campaignCount)} />
       </div>
-      {!!d.campaigns?.length && (
-        <div className="space-y-1">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Recent campaigns</div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-muted-foreground text-left">
-                  <th className="font-medium pb-1.5 pr-2">Campaign</th>
-                  <th className="font-medium pb-1.5 px-2 text-right">Sent</th>
-                  <th className="font-medium pb-1.5 px-2 text-right">Open</th>
-                  <th className="font-medium pb-1.5 pl-2 text-right">Click</th>
+      {d.campaigns.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted-foreground text-left">
+                <th className="font-medium pb-1.5 pr-2">Campaign</th>
+                <th className="font-medium pb-1.5 px-2 text-right">Sent</th>
+                <th className="font-medium pb-1.5 px-2 text-right">Open</th>
+                <th className="font-medium pb-1.5 pl-2 text-right">Click</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.campaigns.map((c, i) => (
+                <tr key={i} className="border-t border-border/50">
+                  <td className="py-1.5 pr-2 truncate max-w-[200px]" title={c.name}>{c.name}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(c.sent)}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtPct(c.openRate)}</td>
+                  <td className="py-1.5 pl-2 text-right tabular-nums">{fmtPct(c.clickRate)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {d.campaigns.filter((c) => c.sent > 0).slice(0, 6).map((c, i) => (
-                  <tr key={i} className="border-t border-border/50">
-                    <td className="py-1.5 pr-2 truncate max-w-[180px]" title={c.name}>{c.name}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(c.sent)}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums">{fmtPct(c.openRate)}</td>
-                    <td className="py-1.5 pl-2 text-right tabular-nums">{fmtPct(c.clickRate)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
+      ) : (
+        <Empty>No campaigns sent to this segment in the selected period.</Empty>
       )}
     </div>
   );
 }
 
-// ── page ────────────────────────────────────────────────────────────────────
+function TrailbaitView({ data, accent }: { data: TrailbaitDashboard; accent: string }) {
+  const [segment, setSegment] = useState<Segment>("consumer");
+  const seg: MarketingSegment = data[segment];
+  const ccy = data.currency || "AUD";
+
+  return (
+    <div className="space-y-6">
+      {/* segment toggle */}
+      <div className="inline-flex rounded-lg bg-muted/30 p-0.5 text-xs">
+        {(["consumer", "b2b"] as Segment[]).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSegment(s)}
+            className={`px-4 py-1.5 rounded-md transition-colors font-medium ${
+              segment === s ? "text-white" : "text-muted-foreground hover:text-foreground"
+            }`}
+            style={segment === s ? { background: accent } : undefined}
+          >
+            {s === "consumer" ? "Consumer" : "B2B"}
+          </button>
+        ))}
+      </div>
+
+      {!data.shopify.ok && (
+        <Empty>
+          <span className="inline-flex items-center gap-1.5 text-[var(--brand-pink)]">
+            <AlertCircle className="w-3.5 h-3.5" /> Shopify: {data.shopify.error || "not connected"}
+          </span>
+        </Empty>
+      )}
+
+      {/* hero KPIs for the active segment */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard icon={DollarSign} accent={accent} label="Revenue"
+          value={fmtMoney(seg.shopify.revenue, ccy)} sub={`${fmtNum(seg.shopify.orders)} orders`} />
+        <StatCard icon={ShoppingCart} accent={accent} label="Avg order"
+          value={fmtMoney(seg.shopify.aov, ccy)} sub={segment === "b2b" ? "Distributor accounts" : "Consumer accounts"} />
+        <StatCard icon={Mail} accent={palette.aqua} label="Email open rate"
+          value={fmtPct(seg.email.openRate)} sub={`${fmtNum(seg.email.sent)} sent`} />
+        <StatCard icon={MousePointerClick} accent={palette.purple} label="Email click rate"
+          value={fmtPct(seg.email.clickRate)} sub={`${fmtNum(seg.email.campaignCount)} campaigns`} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel title="Shopify sales" badge={segment === "b2b" ? "B2B · TIER accounts" : "Consumer"} accent={accent}>
+          <ShopifySegmentPanel d={seg.shopify} accent={accent} />
+        </Panel>
+        <Panel title="Email engagement" badge={segment === "b2b" ? "Distributor lists" : "End-user list"} accent={palette.aqua}>
+          {data.email.ok ? <EmailSegmentPanel d={seg.email} accent={accent} />
+            : <Empty><span className="inline-flex items-center gap-1.5 text-[var(--brand-pink)]"><AlertCircle className="w-3.5 h-3.5" /> Brevo: {data.email.error || "not connected"}</span></Empty>}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+// ── AGA / FleetCraft pipeline view ───────────────────────────────────────────
+function PipelineFunnel({ m, accent }: { m: PipelineMetrics; accent: string }) {
+  const max = Math.max(1, ...m.statusFunnel.map((s) => s.count));
+  return (
+    <div className="space-y-2.5">
+      {m.statusFunnel.map((s) => (
+        <div key={s.status}>
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-muted-foreground">{statusLabel(s.status)}</span>
+            <span className="tabular-nums font-medium">{fmtNum(s.count)}</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
+            <div className="h-full rounded-full"
+              style={{ width: `${(s.count / max) * 100}%`, background: s.status === "disqualified" ? palette.pink : accent }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PipelineView({ m, accent }: { m: PipelineMetrics; accent: string }) {
+  const convRate = m.totalLeads ? Math.round((m.activeLeads / m.totalLeads) * 100) : 0;
+  return (
+    <div className="space-y-6">
+      {/* hero KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard icon={Sparkles} accent={accent} label="New leads"
+          value={fmtNum(m.newLeads)} sub="discovered this period" />
+        <StatCard icon={Users} accent={palette.aqua} label="Active pipeline"
+          value={fmtNum(m.activeLeads)} sub={`${convRate}% of all discovered`} />
+        <StatCard icon={Flame} accent={palette.orange} label="Hot leads"
+          value={fmtNum(m.qualified)} sub={`${fmtNum(m.warm)} warm`} />
+        <StatCard icon={Target} accent={palette.purple} label="Avg lead score"
+          value={fmtNum(m.avgScore)} sub="active leads" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel title="Pipeline funnel" badge="current snapshot" accent={accent}>
+          {m.statusFunnel.length ? <PipelineFunnel m={m} accent={accent} />
+            : <Empty>No leads in this channel yet.</Empty>}
+          <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs">
+            <span className="text-muted-foreground inline-flex items-center gap-1.5">
+              <GitBranch className="w-3.5 h-3.5" /> Synced to CRM
+            </span>
+            <span className="tabular-nums font-medium">{fmtNum(m.syncedToCrm)} leads</span>
+          </div>
+        </Panel>
+
+        <Panel title="Lead generation" badge="this period" accent={accent}>
+          {m.generationSeries.length ? (
+            <ResponsiveContainer width="100%" height={150}>
+              <AreaChart data={m.generationSeries} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="leadgen" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={accent} stopOpacity={0.5} />
+                    <stop offset="100%" stopColor={accent} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#777" }} tickFormatter={fmtDate} minTickGap={24} />
+                <YAxis tick={{ fontSize: 10, fill: "#777" }} width={32} allowDecimals={false} />
+                <Tooltip {...TOOLTIP_STYLE} labelFormatter={fmtDate}
+                  formatter={(v: any) => [fmtNum(Number(v)), "New leads"]} />
+                <Area type="monotone" dataKey="leads" stroke={accent} fill="url(#leadgen)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <Empty>No new leads discovered in the selected period.</Empty>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Mini label="New this period" value={fmtNum(m.newLeads)} />
+            <Mini label="Total discovered" value={fmtNum(m.totalLeads)} />
+          </div>
+        </Panel>
+
+        <Panel title="Outbound activity" badge="call list · this period" accent={accent}>
+          <div className="grid grid-cols-2 gap-2">
+            <Mini label="Prospects queued" value={fmtNum(m.callsQueued)} />
+            <Mini label="Calls completed" value={fmtNum(m.callsCompleted)} />
+          </div>
+          <div className="mt-3 text-xs text-muted-foreground inline-flex items-center gap-1.5">
+            <PhoneCall className="w-3.5 h-3.5" style={{ color: accent }} />
+            {m.callsQueued
+              ? `${fmtNum(m.callsQueued)} prospects prioritised for outreach in this window.`
+              : "No prospects queued for outreach in this period."}
+          </div>
+        </Panel>
+
+        <Panel title="Lead quality" badge="active pipeline" accent={accent}>
+          <div className="grid grid-cols-3 gap-2">
+            <Mini label="Hot (≥70)" value={fmtNum(m.qualified)} />
+            <Mini label="Warm (45–69)" value={fmtNum(m.warm)} />
+            <Mini label="Cold (<45)" value={fmtNum(Math.max(0, m.activeLeads - m.qualified - m.warm))} />
+          </div>
+          <div className="mt-4 h-2.5 rounded-full overflow-hidden flex">
+            {[
+              { v: m.qualified, c: palette.aqua },
+              { v: m.warm, c: palette.orange },
+              { v: Math.max(0, m.activeLeads - m.qualified - m.warm), c: "#444" },
+            ].map((b, i) => b.v > 0 && (
+              <div key={i} style={{ flex: b.v, background: b.c }} />
+            ))}
+          </div>
+          <div className="mt-3 text-xs text-muted-foreground">
+            {fmtNum(m.activeLeads)} active leads · avg score {fmtNum(m.avgScore)}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+// ── filter bar ────────────────────────────────────────────────────────────────
 function FilterBar({ grain, setGrain, options, anchor, setAnchor }: {
   grain: Grain; setGrain: (g: Grain) => void;
   options: { value: string; label: string }[]; anchor: string; setAnchor: (a: string) => void;
@@ -275,26 +360,41 @@ function FilterBar({ grain, setGrain, options, anchor, setAnchor }: {
   );
 }
 
+// ── page ────────────────────────────────────────────────────────────────────
 export default function MarketingDashboard() {
+  const [brand, setBrand] = useState<Brand>("trailbait");
   const [grain, setGrain] = useState<Grain>("month");
   const [anchor, setAnchor] = useState<string>(() => defaultAnchor("month"));
   const options = buildOptions(grain);
   const range = dateRange(grain, anchor);
-  const { data, isLoading, isError, error, refetch, isFetching } = useMarketingDashboard(range);
 
+  const tb = useTrailbaitDashboard(range);
+  const pipelineChannel: PipelineChannel = brand === "fleetcraft" ? "fleetcraft" : "aga";
+  const pipe = usePipelineMetrics(pipelineChannel, range, brand !== "trailbait");
+
+  const activeBrand = BRANDS.find((b) => b.key === brand)!;
+  const accent = activeBrand.accent();
   const periodText = options.find((o) => o.value === anchor)?.label ?? anchor;
+
+  const isTrailbait = brand === "trailbait";
+  const isLoading = isTrailbait ? tb.isLoading : pipe.isLoading;
+  const isError = isTrailbait ? tb.isError : pipe.isError;
+  const error = isTrailbait ? tb.error : pipe.error;
+  const isFetching = isTrailbait ? tb.isFetching : pipe.isFetching;
+  const generatedAt = isTrailbait ? tb.data?.generatedAt : undefined;
+  const refetch = () => (isTrailbait ? tb.refetch() : pipe.refetch());
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" style={{ color: palette.accent }} />
+            <TrendingUp className="w-5 h-5" style={{ color: accent }} />
             Marketing
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Analytics, HubSpot, Shopify &amp; Brevo — {periodText}
-            {data?.generatedAt && ` · updated ${new Date(data.generatedAt).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })}`}
+            {activeBrand.label} · {activeBrand.tagline} — {periodText}
+            {generatedAt && ` · updated ${new Date(generatedAt).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -306,7 +406,7 @@ export default function MarketingDashboard() {
             setAnchor={setAnchor}
           />
           <button
-            onClick={() => refetch()}
+            onClick={refetch}
             disabled={isFetching}
             className="flex items-center gap-2 text-xs bg-primary text-primary-foreground rounded-lg px-3 py-2 hover:bg-primary/90 disabled:opacity-50"
           >
@@ -316,53 +416,44 @@ export default function MarketingDashboard() {
         </div>
       </div>
 
+      {/* brand tabs */}
+      <div className="flex gap-2 mb-6 border-b border-border">
+        {BRANDS.map((b) => {
+          const on = b.key === brand;
+          const a = b.accent();
+          return (
+            <button
+              key={b.key}
+              onClick={() => setBrand(b.key)}
+              className={`relative px-4 py-2.5 text-sm font-semibold transition-colors ${
+                on ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {b.label}
+              {on && <span className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full" style={{ background: a }} />}
+            </button>
+          );
+        })}
+      </div>
+
       {isLoading && (
         <div className="flex items-center justify-center py-24 text-muted-foreground">
           <Loader2 className="w-6 h-6 animate-spin" />
         </div>
       )}
 
-      {isError && (
+      {isError && !isLoading && (
         <div className="flex items-start gap-2 text-sm text-[var(--brand-pink)] bg-[rgba(158,42,43,0.12)] rounded-lg p-4">
           <AlertCircle className="w-5 h-5 shrink-0" />
           <span>Couldn't load dashboard: {(error as Error)?.message}</span>
         </div>
       )}
 
-      {data && (
-        <div className="space-y-6">
-          {/* Hero KPIs */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard icon={ShoppingCart} accent={palette.accent} label="Shopify revenue"
-              value={data.shopify.ok ? fmtMoney(data.shopify.revenue30d, data.shopify.currency) : "—"}
-              sub={data.shopify.ok ? `${fmtNum(data.shopify.orders30d)} orders` : "Not connected"} />
-            <StatCard icon={Contact} accent={palette.aqua} label="HubSpot contacts"
-              value={data.hubspot.ok ? fmtNum(data.hubspot.totalContacts) : "—"}
-              sub={data.hubspot.ok ? `+${fmtNum(data.hubspot.newContacts30d)} new` : "Not connected"} />
-            <StatCard icon={Mail} accent={palette.pink} label="Brevo open rate"
-              value={data.brevo.ok ? fmtPct(data.brevo.totals?.openRate) : "—"}
-              sub={data.brevo.ok ? `${fmtNum(data.brevo.totals?.sent)} sent` : "Not connected"} />
-            <StatCard icon={BarChart3} accent={palette.purple} label="GA active users"
-              value={data.analytics.ok ? fmtNum((data.analytics.sites ?? []).reduce((a, s) => a + (s.activeUsers ?? 0), 0)) : "—"}
-              sub={data.analytics.ok ? `${(data.analytics.sites ?? []).filter((s) => s.ok).length} sites` : "Action needed"} />
-          </div>
-
-          {/* Source panels */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <SourceCard title="Shopify" badge="Store" accent={palette.accent} source={data.shopify}>
-              <ShopifyPanel d={data.shopify} />
-            </SourceCard>
-            <SourceCard title="Google Analytics" badge="GA4" accent={palette.purple} source={data.analytics}>
-              <AnalyticsPanel d={data.analytics} />
-            </SourceCard>
-            <SourceCard title="HubSpot" badge="CRM" accent={palette.aqua} source={data.hubspot}>
-              <HubspotPanel d={data.hubspot} />
-            </SourceCard>
-            <SourceCard title="Brevo" badge="Email" accent={palette.pink} source={data.brevo}>
-              <BrevoPanel d={data.brevo} />
-            </SourceCard>
-          </div>
-        </div>
+      {!isLoading && !isError && isTrailbait && tb.data && (
+        <TrailbaitView data={tb.data} accent={accent} />
+      )}
+      {!isLoading && !isError && !isTrailbait && pipe.data && (
+        <PipelineView m={pipe.data} accent={accent} />
       )}
     </div>
   );

@@ -1,16 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// ── Marketing dashboard aggregator ──────────────────────────────────────────
-// Pulls a snapshot from Google Analytics (GA4 Data API), HubSpot, Shopify and
-// Brevo and returns a single aggregated payload for the Marketing app.
-// Each source is isolated: one failing integration never breaks the others.
+// ── Marketing dashboard — TrailBait segmented snapshot ──────────────────────
+// TrailBait is the only brand with ecommerce + marketing email, so this
+// function powers TrailBait's two segmented views (Consumer / B2B).
+//
+//   • Shopify sales are split per-order by the order's customer tags. A customer
+//     carrying a tag of the form TIER## (e.g. TIER20) is a B2B (distributor)
+//     account; every other customer is Consumer. The split is mutually
+//     exclusive — each order lands in exactly one segment.
+//   • Brevo email is split by the list a campaign was sent to. "End Users" is
+//     the consumer list; the "Distributor*" lists are B2B.
+//
+// AGA & FleetCraft have no ecommerce or email — their dashboards read the
+// sales-support pipeline directly from Postgres on the client, not here.
 //
 // Secrets consumed (Supabase function secrets):
-//   GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY  (reused from google-drive)
-//   GA_PROPERTY_ID            – numeric GA4 property id (e.g. 317545000)
-//   HUBSPOT_ACCESS_TOKEN      – private-app token
-//   SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE_DOMAIN
-//   BREVO_API_KEY
+//   SHOPIFY_ACCESS_TOKEN / SHOPIFY_STORE_DOMAIN   – TrailBait store
+//   BREVO_API_KEY                                 – TrailBait email
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,189 +30,57 @@ function json(data: unknown, status = 200) {
   });
 }
 
-const TIMEOUT = 9000;
+const TIMEOUT = 12_000;
 const num = (v: unknown) => {
   const n = typeof v === "string" ? parseFloat(v) : (v as number);
   return Number.isFinite(n) ? n : 0;
 };
-const isoDaysAgo = (days: number) =>
-  new Date(Date.now() - days * 86400_000).toISOString();
+const isoDaysAgo = (days: number) => new Date(Date.now() - days * 86400_000).toISOString();
 const round = (n: number, d = 2) => {
   const f = 10 ** d;
   return Math.round(n * f) / f;
 };
 
-// ── Google JWT → access token (mirrors supabase/functions/google-drive) ──────
-function b64url(obj: object): string {
-  return btoa(JSON.stringify(obj)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-function pemToBytes(pem: string): Uint8Array {
-  const b64 = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
-  const binary = atob(b64);
-  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
-}
-async function getGoogleAccessToken(email: string, privateKeyPem: string, scope: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: "RS256", typ: "JWT" };
-  const claims = { iss: email, scope, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 };
-  const sigInput = `${b64url(header)}.${b64url(claims)}`;
-  const key = await crypto.subtle.importKey(
-    "pkcs8", pemToBytes(privateKeyPem),
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"],
-  );
-  const sigBytes = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(sigInput));
-  const sig = btoa(String.fromCharCode(...new Uint8Array(sigBytes)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-  const jwt = `${sigInput}.${sig}`;
-  const resp = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
-  });
-  const data = await resp.json();
-  if (!data.access_token) throw new Error(`Google auth failed: ${JSON.stringify(data)}`);
-  return data.access_token;
-}
+// A customer is B2B iff any of their tags matches TIER##. This single tag is the
+// authoritative arbiter of the Consumer/B2B split.
+const TIER_RE = /(^|,)\s*TIER\s*\d+\b/i;
+const isB2bCustomerTags = (tags: unknown) => TIER_RE.test(String(tags ?? ""));
 
-// ── Google Analytics (GA4 Data API) ─────────────────────────────────────────
 interface Range { startDate: string; endDate: string }
+type Segment = "consumer" | "b2b";
 
-async function fetchAnalytics(propertyId: string, range?: Range) {
-  const email = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
-  const pk = (Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") ?? "").replace(/\\n/g, "\n");
-  if (!email || !pk) return { configured: false, ok: false, error: "service account not configured" };
-  if (!propertyId) return { configured: false, ok: false, error: "GA_PROPERTY_ID not set" };
-
-  const gaRange = range ?? { startDate: "28daysAgo", endDate: "today" };
-  try {
-    const token = await getGoogleAccessToken(email, pk, "https://www.googleapis.com/auth/analytics.readonly");
-    const res = await fetch(
-      `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:batchRunReports`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(TIMEOUT),
-        body: JSON.stringify({
-          requests: [
-            { // 0 — totals
-              dateRanges: [gaRange],
-              metrics: [
-                { name: "activeUsers" }, { name: "newUsers" },
-                { name: "sessions" }, { name: "screenPageViews" },
-                { name: "keyEvents" }, { name: "engagementRate" },
-              ],
-            },
-            { // 1 — daily timeseries
-              dateRanges: [gaRange],
-              dimensions: [{ name: "date" }],
-              metrics: [{ name: "sessions" }, { name: "activeUsers" }],
-              orderBys: [{ dimension: { dimensionName: "date" } }],
-            },
-            { // 2 — channel breakdown
-              dateRanges: [gaRange],
-              dimensions: [{ name: "sessionDefaultChannelGroup" }],
-              metrics: [{ name: "sessions" }],
-              orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-              limit: 8,
-            },
-          ],
-        }),
-      },
-    );
-    if (!res.ok) {
-      const body = await res.text();
-      return { configured: true, ok: false, error: `GA ${res.status}: ${body.slice(0, 200)}` };
-    }
-    const data = await res.json();
-    const [totals, ts, ch] = data.reports ?? [];
-    const tRow = totals?.rows?.[0]?.metricValues ?? [];
-    const timeseries = (ts?.rows ?? []).map((r: any) => {
-      const d = r.dimensionValues?.[0]?.value ?? "";
-      return {
-        date: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`,
-        sessions: num(r.metricValues?.[0]?.value),
-        users: num(r.metricValues?.[1]?.value),
-      };
-    });
-    const channels = (ch?.rows ?? []).map((r: any) => ({
-      channel: r.dimensionValues?.[0]?.value ?? "(other)",
-      sessions: num(r.metricValues?.[0]?.value),
-    }));
-    return {
-      configured: true, ok: true, propertyId,
-      activeUsers: num(tRow[0]?.value),
-      newUsers: num(tRow[1]?.value),
-      sessions: num(tRow[2]?.value),
-      pageViews: num(tRow[3]?.value),
-      keyEvents: num(tRow[4]?.value),
-      engagementRate: round(num(tRow[5]?.value) * 100, 1),
-      timeseries, channels,
-    };
-  } catch (e) {
-    return { configured: true, ok: false, error: String(e).slice(0, 200) };
-  }
+// ── Shopify (TrailBait) — orders split into Consumer / B2B by customer tag ───
+interface ShopSeg {
+  ok: boolean;
+  revenue: number;
+  orders: number;
+  aov: number;
+  currency: string;
+  capped: boolean;
+  timeseries: { date: string; revenue: number; orders: number }[];
 }
+const emptyShopSeg = (currency = "AUD"): ShopSeg => ({
+  ok: true, revenue: 0, orders: 0, aov: 0, currency, capped: false, timeseries: [],
+});
 
-// ── HubSpot ──────────────────────────────────────────────────────────────────
-async function fetchHubspot(range?: Range) {
-  const token = Deno.env.get("HUBSPOT_ACCESS_TOKEN");
-  if (!token) return { configured: false, ok: false, error: "HUBSPOT_ACCESS_TOKEN not set" };
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-  const search = (objitle: string, body: object) =>
-    fetch(`https://api.hubapi.com/crm/v3/objects/${objitle}/search`, {
-      method: "POST", headers, signal: AbortSignal.timeout(TIMEOUT), body: JSON.stringify(body),
-    });
-  try {
-    // New-contacts filter: a concrete period when given, else trailing 30 days.
-    const createdFilters = range
-      ? [
-          { propertyName: "createdate", operator: "GTE", value: String(Date.parse(range.startDate)) },
-          { propertyName: "createdate", operator: "LTE", value: String(Date.parse(range.endDate) + 86_399_999) },
-        ]
-      : [{ propertyName: "createdate", operator: "GTE", value: String(Date.now() - 30 * 86400_000) }];
-    const [allContacts, newContacts, openDeals] = await Promise.all([
-      search("contacts", { limit: 1, filterGroups: [] }),
-      search("contacts", { limit: 1, filterGroups: [{ filters: createdFilters }] }),
-      search("deals", {
-        limit: 100, properties: ["amount"],
-        filterGroups: [{ filters: [{ propertyName: "hs_is_closed", operator: "EQ", value: "false" }] }],
-      }),
-    ]);
-    if (!allContacts.ok) {
-      const body = await allContacts.text();
-      return { configured: true, ok: false, error: `HubSpot ${allContacts.status}: ${body.slice(0, 160)}` };
-    }
-    const ac = await allContacts.json();
-    const nc = newContacts.ok ? await newContacts.json() : { total: 0 };
-    const od = openDeals.ok ? await openDeals.json() : { total: 0, results: [] };
-    const openDealsValue = (od.results ?? []).reduce(
-      (s: number, d: any) => s + num(d.properties?.amount), 0);
-    return {
-      configured: true, ok: true,
-      totalContacts: num(ac.total),
-      newContacts30d: num(nc.total),
-      openDeals: num(od.total),
-      openDealsValue: round(openDealsValue),
-    };
-  } catch (e) {
-    return { configured: true, ok: false, error: String(e).slice(0, 200) };
-  }
-}
-
-// ── Shopify ───────────────────────────────────────────────────────────────────
-async function fetchShopify(range?: Range) {
+async function fetchShopify(range?: Range): Promise<{
+  configured: boolean; ok: boolean; error?: string; storeDomain?: string;
+  currency: string; consumer: ShopSeg; b2b: ShopSeg;
+}> {
   const token = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
   const store = Deno.env.get("SHOPIFY_STORE_DOMAIN");
-  if (!token || !store) return { configured: false, ok: false, error: "Shopify not configured" };
+  if (!token || !store) {
+    return { configured: false, ok: false, error: "Shopify not configured", currency: "AUD", consumer: emptyShopSeg(), b2b: emptyShopSeg() };
+  }
   const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
   const base = `https://${store}/admin/api/2024-01`;
   try {
     const minIso = range ? `${range.startDate}T00:00:00Z` : isoDaysAgo(30);
     const maxParam = range ? `&created_at_max=${encodeURIComponent(`${range.endDate}T23:59:59Z`)}` : "";
-    // Paginate the window via the Link header cursor so revenue isn't truncated
-    // at one 250-row page. Cap at 8 pages (2000 orders) for latency.
+    // Pull the customer object so we can read its tags per order. Cap at 8 pages
+    // (2000 orders) for latency; flag `capped` if the window is larger.
     let url: string | null =
-      `${base}/orders.json?status=any&created_at_min=${encodeURIComponent(minIso)}${maxParam}&limit=250&fields=id,total_price,currency,created_at`;
+      `${base}/orders.json?status=any&created_at_min=${encodeURIComponent(minIso)}${maxParam}&limit=250&fields=id,total_price,currency,created_at,customer`;
     const orders: any[] = [];
     let capped = false;
     for (let page = 0; page < 8 && url; page++) {
@@ -214,7 +88,7 @@ async function fetchShopify(range?: Range) {
       if (!res.ok) {
         if (orders.length) break; // partial data is still useful
         const body = await res.text();
-        return { configured: true, ok: false, error: `Shopify ${res.status}: ${body.slice(0, 160)}` };
+        return { configured: true, ok: false, error: `Shopify ${res.status}: ${body.slice(0, 160)}`, currency: "AUD", consumer: emptyShopSeg(), b2b: emptyShopSeg() };
       }
       const data = await res.json();
       orders.push(...(data.orders ?? []));
@@ -223,89 +97,124 @@ async function fetchShopify(range?: Range) {
       url = next ? next[1] : null;
       if (page === 7 && url) capped = true;
     }
-    const revenue = orders.reduce((s, o) => s + num(o.total_price), 0);
-    const byDay: Record<string, number> = {};
-    for (const o of orders) {
-      const d = (o.created_at ?? "").slice(0, 10);
-      if (d) byDay[d] = (byDay[d] ?? 0) + num(o.total_price);
-    }
-    const timeseries = Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, revenue]) => ({ date, revenue: round(revenue) }));
-    return {
-      configured: true, ok: true,
-      storeDomain: store,
-      orders30d: orders.length,
-      revenue30d: round(revenue),
-      aov: orders.length ? round(revenue / orders.length) : 0,
-      currency: orders[0]?.currency ?? "AUD",
-      capped,
-      timeseries,
+
+    const currency = orders[0]?.currency ?? "AUD";
+    const seg: Record<Segment, { revenue: number; orders: number; byDay: Record<string, { revenue: number; orders: number }> }> = {
+      consumer: { revenue: 0, orders: 0, byDay: {} },
+      b2b: { revenue: 0, orders: 0, byDay: {} },
     };
+    for (const o of orders) {
+      const s: Segment = isB2bCustomerTags(o.customer?.tags) ? "b2b" : "consumer";
+      const amt = num(o.total_price);
+      seg[s].revenue += amt;
+      seg[s].orders += 1;
+      const d = (o.created_at ?? "").slice(0, 10);
+      if (d) {
+        const bucket = (seg[s].byDay[d] ??= { revenue: 0, orders: 0 });
+        bucket.revenue += amt;
+        bucket.orders += 1;
+      }
+    }
+
+    const build = (s: Segment): ShopSeg => {
+      const { revenue, orders: n, byDay } = seg[s];
+      return {
+        ok: true,
+        revenue: round(revenue),
+        orders: n,
+        aov: n ? round(revenue / n) : 0,
+        currency,
+        capped,
+        timeseries: Object.entries(byDay)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, v]) => ({ date, revenue: round(v.revenue), orders: v.orders })),
+      };
+    };
+
+    return { configured: true, ok: true, storeDomain: store, currency, consumer: build("consumer"), b2b: build("b2b") };
   } catch (e) {
-    return { configured: true, ok: false, error: String(e).slice(0, 200) };
+    return { configured: true, ok: false, error: String(e).slice(0, 200), currency: "AUD", consumer: emptyShopSeg(), b2b: emptyShopSeg() };
   }
 }
 
-// ── Brevo ─────────────────────────────────────────────────────────────────────
-async function fetchBrevo(range?: Range) {
+// ── Brevo (TrailBait) — campaigns split into Consumer / B2B by target list ───
+interface EmailCampaign {
+  name: string; sentDate: string | null; sent: number; opens: number; clicks: number;
+  openRate: number; clickRate: number;
+}
+interface EmailSeg {
+  ok: boolean; sent: number; opens: number; clicks: number; openRate: number; clickRate: number;
+  campaignCount: number; campaigns: EmailCampaign[];
+}
+const emptyEmailSeg = (): EmailSeg => ({
+  ok: true, sent: 0, opens: 0, clicks: 0, openRate: 0, clickRate: 0, campaignCount: 0, campaigns: [],
+});
+
+// A list is B2B if its name reads like a distributor/wholesale/trade list;
+// otherwise it's a consumer (end-user) list.
+const B2B_LIST_RE = /distributor|wholesale|trade|dealer|reseller|b2b/i;
+
+async function fetchBrevo(range?: Range): Promise<{
+  configured: boolean; ok: boolean; error?: string;
+  consumer: EmailSeg; b2b: EmailSeg;
+}> {
   const key = Deno.env.get("BREVO_API_KEY");
-  if (!key) return { configured: false, ok: false, error: "BREVO_API_KEY not set" };
+  if (!key) return { configured: false, ok: false, error: "BREVO_API_KEY not set", consumer: emptyEmailSeg(), b2b: emptyEmailSeg() };
   const headers = { "api-key": key, accept: "application/json" };
-  const get = (path: string) =>
-    fetch(`https://api.brevo.com/v3/${path}`, { headers, signal: AbortSignal.timeout(TIMEOUT) });
+  const get = (path: string) => fetch(`https://api.brevo.com/v3/${path}`, { headers, signal: AbortSignal.timeout(TIMEOUT) });
   try {
-    const [acctRes, contactsRes, campRes] = await Promise.all([
-      get("account"),
-      get("contacts?limit=1"),
-      get("emailCampaigns?statistics=globalStats&limit=50&sort=desc"),
+    const [listsRes, campRes] = await Promise.all([
+      get("contacts/lists?limit=50&sort=desc"),
+      get("emailCampaigns?statistics=globalStats&status=sent&limit=100&sort=desc"),
     ]);
-    if (!acctRes.ok && !campRes.ok) {
-      const body = await acctRes.text();
-      return { configured: true, ok: false, error: `Brevo ${acctRes.status}: ${body.slice(0, 160)}` };
+    if (!campRes.ok) {
+      const body = await campRes.text();
+      return { configured: true, ok: false, error: `Brevo ${campRes.status}: ${body.slice(0, 160)}`, consumer: emptyEmailSeg(), b2b: emptyEmailSeg() };
     }
-    const contacts = contactsRes.ok ? await contactsRes.json() : { count: 0 };
-    const camp = campRes.ok ? await campRes.json() : { campaigns: [] };
-    const allCampaigns = (camp.campaigns ?? []).map((c: any) => {
+    // Map every list id → its segment by name.
+    const lists = listsRes.ok ? ((await listsRes.json()).lists ?? []) : [];
+    const listSeg = new Map<number, Segment>();
+    for (const l of lists) listSeg.set(Number(l.id), B2B_LIST_RE.test(String(l.name ?? "")) ? "b2b" : "consumer");
+
+    const camp = (await campRes.json()).campaigns ?? [];
+    const acc: Record<Segment, EmailCampaign[]> = { consumer: [], b2b: [] };
+    for (const c of camp) {
+      const sentDate = (c.sentDate ?? "").slice(0, 10);
+      if (range && !(sentDate && sentDate >= range.startDate && sentDate <= range.endDate)) continue;
+      const targetLists: number[] = (c.recipients?.lists ?? []).map((x: any) => Number(x));
+      if (!targetLists.length) continue;
+      // A campaign is B2B if it touches any B2B list, else Consumer.
+      const segment: Segment = targetLists.some((id) => listSeg.get(id) === "b2b") ? "b2b" : "consumer";
       const g = c.statistics?.globalStats ?? {};
       const sent = num(g.sent);
-      return {
+      if (!sent) continue;
+      const opens = num(g.uniqueViews ?? g.viewed);
+      const clicks = num(g.uniqueClicks ?? g.clickers);
+      acc[segment].push({
         name: c.name ?? "(untitled)",
-        sentDate: c.sentDate ?? c.scheduledAt ?? null,
-        status: c.status ?? null,
-        sent,
-        delivered: num(g.delivered),
-        opens: num(g.uniqueViews ?? g.viewed),
-        clicks: num(g.uniqueClicks ?? g.clickers),
-        openRate: sent ? round((num(g.uniqueViews ?? g.viewed) / sent) * 100, 1) : 0,
-        clickRate: sent ? round((num(g.uniqueClicks ?? g.clickers) / sent) * 100, 1) : 0,
+        sentDate: c.sentDate ?? null,
+        sent, opens, clicks,
+        openRate: round((opens / sent) * 100, 1),
+        clickRate: round((clicks / sent) * 100, 1),
+      });
+    }
+
+    const build = (s: Segment): EmailSeg => {
+      const cs = acc[s].sort((a, b) => (b.sentDate ?? "").localeCompare(a.sentDate ?? ""));
+      const t = cs.reduce((a, c) => ({ sent: a.sent + c.sent, opens: a.opens + c.opens, clicks: a.clicks + c.clicks }), { sent: 0, opens: 0, clicks: 0 });
+      return {
+        ok: true,
+        sent: t.sent, opens: t.opens, clicks: t.clicks,
+        openRate: t.sent ? round((t.opens / t.sent) * 100, 1) : 0,
+        clickRate: t.sent ? round((t.clicks / t.sent) * 100, 1) : 0,
+        campaignCount: cs.length,
+        campaigns: cs.slice(0, 8),
       };
-    });
-    // Restrict to campaigns sent within the selected period (when one is set).
-    const campaigns = range
-      ? allCampaigns.filter((c: any) => {
-          const d = (c.sentDate ?? "").slice(0, 10);
-          return d && d >= range.startDate && d <= range.endDate;
-        })
-      : allCampaigns.slice(0, 10);
-    const totals = campaigns.reduce(
-      (a: any, c: any) => ({
-        sent: a.sent + c.sent, opens: a.opens + c.opens, clicks: a.clicks + c.clicks,
-      }),
-      { sent: 0, opens: 0, clicks: 0 },
-    );
-    return {
-      configured: true, ok: true,
-      totalContacts: num(contacts.count),
-      campaignCount: campaigns.length,
-      totals: {
-        sent: totals.sent, opens: totals.opens, clicks: totals.clicks,
-        openRate: totals.sent ? round((totals.opens / totals.sent) * 100, 1) : 0,
-        clickRate: totals.sent ? round((totals.clicks / totals.sent) * 100, 1) : 0,
-      },
-      campaigns,
     };
+
+    return { configured: true, ok: true, consumer: build("consumer"), b2b: build("b2b") };
   } catch (e) {
-    return { configured: true, ok: false, error: String(e).slice(0, 200) };
+    return { configured: true, ok: false, error: String(e).slice(0, 200), consumer: emptyEmailSeg(), b2b: emptyEmailSeg() };
   }
 }
 
@@ -314,65 +223,34 @@ serve(async (req) => {
 
   let body: any = {};
   try { body = await req.json(); } catch { /* no body */ }
-  const action = body.action ?? "overview";
 
-  // Lightweight diagnostic — reports which secrets are wired up (no business data).
-  if (action === "diag") {
+  if (body.action === "diag") {
     return json({
       ok: true,
-      googleServiceAccountEmail: Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL") ?? null,
       configured: {
-        ga: !!Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY"),
-        gaProperty: Deno.env.get("GA_PROPERTY_ID") ?? null,
-        hubspot: !!Deno.env.get("HUBSPOT_ACCESS_TOKEN"),
         shopify: !!Deno.env.get("SHOPIFY_ACCESS_TOKEN") && !!Deno.env.get("SHOPIFY_STORE_DOMAIN"),
         brevo: !!Deno.env.get("BREVO_API_KEY"),
       },
     });
   }
 
-  // Resolve the list of GA4 properties to report on. Prefer GA_PROPERTIES
-  // (JSON: [{"label":"AGA","id":"496706418"},...]); fall back to the single
-  // GA_PROPERTY_ID; allow a per-request override via body.properties.
-  const gaProps: { label: string; id: string }[] = (() => {
-    if (Array.isArray(body.properties) && body.properties.length) return body.properties;
-    const raw = Deno.env.get("GA_PROPERTIES");
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length) return parsed;
-      } catch { /* fall through */ }
-    }
-    const single = Deno.env.get("GA_PROPERTY_ID");
-    return single ? [{ label: "Website", id: single }] : [];
-  })();
-
-  // Optional explicit date range (YYYY-MM-DD). When omitted, each source uses
-  // its own trailing-window default (~last 28–30 days).
   const dateRe = /^\d{4}-\d{2}-\d{2}$/;
   const range: Range | undefined =
     dateRe.test(body.startDate ?? "") && dateRe.test(body.endDate ?? "")
       ? { startDate: body.startDate, endDate: body.endDate }
       : undefined;
 
-  const [sites, hubspot, shopify, brevo] = await Promise.all([
-    Promise.all(gaProps.map((p) =>
-      fetchAnalytics(String(p.id), range).then((r) => ({ label: p.label, ...r })))),
-    fetchHubspot(range),
-    fetchShopify(range),
-    fetchBrevo(range),
-  ]);
-
-  const analytics = {
-    configured: gaProps.length > 0 && sites.some((s) => s.configured),
-    ok: sites.some((s) => s.ok),
-    sites,
-  };
+  const [shopify, brevo] = await Promise.all([fetchShopify(range), fetchBrevo(range)]);
 
   return json({
     ok: true,
     generatedAt: new Date().toISOString(),
     range: range ?? null,
-    analytics, hubspot, shopify, brevo,
+    store: shopify.storeDomain ?? null,
+    currency: shopify.currency,
+    shopify: { ok: shopify.ok, configured: shopify.configured, error: shopify.error },
+    email: { ok: brevo.ok, configured: brevo.configured, error: brevo.error },
+    consumer: { shopify: shopify.consumer, email: brevo.consumer },
+    b2b: { shopify: shopify.b2b, email: brevo.b2b },
   });
 });

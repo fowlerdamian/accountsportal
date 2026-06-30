@@ -71,7 +71,7 @@ export const APPS = [
   },
   {
     name:        'Marketing',
-    description: 'Live marketing dashboard across Google Analytics, HubSpot, Shopify, and Brevo',
+    description: 'Per-brand marketing performance — TrailBait (Consumer/B2B), AGA & FleetCraft pipelines',
     route:       '/marketing',
     icon:        'Target',
     status:      'live',

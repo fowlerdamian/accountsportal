@@ -1,88 +1,76 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@portal/lib/supabase";
 
-// Shape returned by the `marketing-dashboard` edge function. Each source is
-// isolated — `ok:false` with an `error` string means that one integration is
-// down/unconfigured while the others still render.
-export interface SourceBase {
-  configured: boolean;
+// Shape returned by the `marketing-dashboard` edge function. TrailBait is the
+// only brand with ecommerce + marketing email, so this payload is split into
+// two mutually-exclusive segments — `consumer` and `b2b`. The split arbiter is
+// the Shopify customer TIER## tag (sales) and the Brevo list (email); the two
+// segments never overlap.
+
+export interface SourceFlag {
   ok: boolean;
+  configured: boolean;
   error?: string;
 }
 
-export interface AnalyticsSite extends SourceBase {
-  label: string;
-  propertyId?: string;
-  activeUsers?: number;
-  newUsers?: number;
-  sessions?: number;
-  pageViews?: number;
-  keyEvents?: number;
-  engagementRate?: number;
-  timeseries?: { date: string; sessions: number; users: number }[];
-  channels?: { channel: string; sessions: number }[];
+export interface ShopSegment {
+  ok: boolean;
+  revenue: number;
+  orders: number;
+  aov: number;
+  currency: string;
+  capped: boolean;
+  timeseries: { date: string; revenue: number; orders: number }[];
 }
 
-export interface AnalyticsData extends SourceBase {
-  sites: AnalyticsSite[];
-}
-
-export interface HubspotData extends SourceBase {
-  totalContacts?: number;
-  newContacts30d?: number;
-  openDeals?: number;
-  openDealsValue?: number;
-}
-
-export interface ShopifyData extends SourceBase {
-  storeDomain?: string;
-  orders30d?: number;
-  revenue30d?: number;
-  aov?: number;
-  currency?: string;
-  capped?: boolean;
-  timeseries?: { date: string; revenue: number }[];
-}
-
-export interface BrevoCampaign {
+export interface EmailCampaign {
   name: string;
   sentDate: string | null;
-  status: string | null;
   sent: number;
-  delivered: number;
   opens: number;
   clicks: number;
   openRate: number;
   clickRate: number;
 }
 
-export interface BrevoData extends SourceBase {
-  totalContacts?: number;
-  campaignCount?: number;
-  totals?: { sent: number; opens: number; clicks: number; openRate: number; clickRate: number };
-  campaigns?: BrevoCampaign[];
+export interface EmailSegment {
+  ok: boolean;
+  sent: number;
+  opens: number;
+  clicks: number;
+  openRate: number;
+  clickRate: number;
+  campaignCount: number;
+  campaigns: EmailCampaign[];
 }
 
-export interface MarketingDashboard {
+export interface MarketingSegment {
+  shopify: ShopSegment;
+  email: EmailSegment;
+}
+
+export interface TrailbaitDashboard {
   ok: boolean;
   generatedAt: string;
   range: { startDate: string; endDate: string } | null;
-  analytics: AnalyticsData;
-  hubspot: HubspotData;
-  shopify: ShopifyData;
-  brevo: BrevoData;
+  store: string | null;
+  currency: string;
+  shopify: SourceFlag;
+  email: SourceFlag;
+  consumer: MarketingSegment;
+  b2b: MarketingSegment;
 }
 
 export interface DateRange { startDate: string; endDate: string }
 
-export function useMarketingDashboard(range?: DateRange) {
-  return useQuery<MarketingDashboard>({
-    queryKey: ["marketing_dashboard", range?.startDate ?? null, range?.endDate ?? null],
+export function useTrailbaitDashboard(range?: DateRange) {
+  return useQuery<TrailbaitDashboard>({
+    queryKey: ["trailbait_marketing", range?.startDate ?? null, range?.endDate ?? null],
     queryFn: async () => {
       const body = range ? { startDate: range.startDate, endDate: range.endDate } : {};
       const { data, error } = await supabase.functions.invoke("marketing-dashboard", { body });
       if (error) throw new Error(error.message);
-      return data as MarketingDashboard;
+      return data as TrailbaitDashboard;
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
