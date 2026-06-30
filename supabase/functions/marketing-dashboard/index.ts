@@ -57,7 +57,7 @@ type Brand = "trailbait" | "aga" | "fleetcraft";
 // intentionally NOT used — they were created 2026-06-30 and have no history.
 // An optional GA_BRAND_PROPERTIES secret (JSON {"trailbait":"id",…}) overrides.
 const GA_PROPERTY: Record<Brand, string> = {
-  trailbait: "317545000",   // Trailbait.com.au — full history
+  trailbait: "314268188",   // TrailBait.com.au — full history (953d, ~507k sessions)
   aga: "496706418",         // Automotive Group Australia Website
   fleetcraft: "536375328",  // FleetCraft — historical property
 };
