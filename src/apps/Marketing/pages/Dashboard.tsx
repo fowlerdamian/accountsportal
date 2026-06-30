@@ -223,6 +223,12 @@ function TrailbaitView({ data, accent, site }: { data: TrailbaitDashboard; accen
 
   return (
     <div className="space-y-6">
+      {/* Whole-store website traffic — sits above the Consumer/B2B filter since
+          GA4 can't see the TIER tag and so applies to the whole store. */}
+      <Panel title="Website traffic" badge={`${site} · whole store`} accent={palette.purple}>
+        <WebsiteBody w={data.website} accent={palette.purple} />
+      </Panel>
+
       {/* segment toggle */}
       <div className="inline-flex rounded-lg bg-muted/30 p-0.5 text-xs">
         {(["consumer", "b2b"] as Segment[]).map((s) => (
@@ -268,11 +274,6 @@ function TrailbaitView({ data, accent, site }: { data: TrailbaitDashboard; accen
             : <Empty><span className="inline-flex items-center gap-1.5 text-[var(--brand-pink)]"><AlertCircle className="w-3.5 h-3.5" /> Brevo: {data.email.error || "not connected"}</span></Empty>}
         </Panel>
       </div>
-
-      {/* Whole-store website traffic — not segmented (GA4 can't see the TIER tag). */}
-      <Panel title="Website traffic" badge={`${site} · whole store`} accent={palette.purple}>
-        <WebsiteBody w={data.website} accent={palette.purple} />
-      </Panel>
     </div>
   );
 }
