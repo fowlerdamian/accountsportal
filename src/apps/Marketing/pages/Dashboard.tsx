@@ -15,6 +15,7 @@ import {
 } from "../hooks/useMarketingDashboard";
 import { usePipelineMetrics, type PipelineMetrics, type PipelineChannel } from "../hooks/usePipeline";
 import { GRAINS, buildOptions, defaultAnchor, dateRange, type Grain } from "../lib/periods";
+import ChannelAnalytics from "./ChannelAnalytics";
 
 // ── brands ──────────────────────────────────────────────────────────────────
 type Brand = "trailbait" | "aga" | "fleetcraft";
@@ -433,6 +434,7 @@ function FilterBar({ grain, setGrain, options, anchor, setAnchor }: {
 // ── page ────────────────────────────────────────────────────────────────────
 export default function MarketingDashboard() {
   const [brand, setBrand] = useState<Brand>("trailbait");
+  const [view, setView] = useState<"brand" | "channels">("brand");
   const [grain, setGrain] = useState<Grain>("month");
   const [anchor, setAnchor] = useState<string>(() => defaultAnchor("month"));
   const options = buildOptions(grain);
@@ -487,44 +489,68 @@ export default function MarketingDashboard() {
         </div>
       </div>
 
-      {/* brand tabs */}
-      <div className="flex gap-2 mb-6 border-b border-border">
-        {BRANDS.map((b) => {
-          const on = b.key === brand;
-          const a = b.accent();
-          return (
+      {/* view toggle — per-brand drill-down vs cross-channel comparison */}
+      <div className="inline-flex rounded-lg bg-muted/30 p-0.5 text-xs mb-5">
+        {([["brand", "By brand", TrendingUp], ["channels", "Channel Analytics", BarChart3]] as const).map(
+          ([key, label, Icon]) => (
             <button
-              key={b.key}
-              onClick={() => setBrand(b.key)}
-              className={`relative px-4 py-2.5 text-sm font-semibold transition-colors ${
-                on ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+              key={key}
+              onClick={() => setView(key)}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md transition-colors font-medium ${
+                view === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {b.label}
-              {on && <span className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full" style={{ background: a }} />}
+              <Icon className="w-3.5 h-3.5" />
+              {label}
             </button>
-          );
-        })}
+          ),
+        )}
       </div>
 
-      {isLoading && (
-        <div className="flex items-center justify-center py-24 text-muted-foreground">
-          <Loader2 className="w-6 h-6 animate-spin" />
-        </div>
-      )}
+      {view === "channels" ? (
+        <ChannelAnalytics range={range} periodText={periodText} />
+      ) : (
+        <>
+          {/* brand tabs */}
+          <div className="flex gap-2 mb-6 border-b border-border">
+            {BRANDS.map((b) => {
+              const on = b.key === brand;
+              const a = b.accent();
+              return (
+                <button
+                  key={b.key}
+                  onClick={() => setBrand(b.key)}
+                  className={`relative px-4 py-2.5 text-sm font-semibold transition-colors ${
+                    on ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {b.label}
+                  {on && <span className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full" style={{ background: a }} />}
+                </button>
+              );
+            })}
+          </div>
 
-      {isError && !isLoading && (
-        <div className="flex items-start gap-2 text-sm text-[var(--brand-pink)] bg-[rgba(158,42,43,0.12)] rounded-lg p-4">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <span>Couldn't load dashboard: {(error as Error)?.message}</span>
-        </div>
-      )}
+          {isLoading && (
+            <div className="flex items-center justify-center py-24 text-muted-foreground">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          )}
 
-      {!isLoading && !isError && isTrailbait && tb.data && (
-        <TrailbaitView data={tb.data} accent={accent} site={activeBrand.site} />
-      )}
-      {!isLoading && !isError && !isTrailbait && pipe.data && (
-        <PipelineView m={pipe.data} accent={accent} website={brandWeb.data?.website} site={activeBrand.site} />
+          {isError && !isLoading && (
+            <div className="flex items-start gap-2 text-sm text-[var(--brand-pink)] bg-[rgba(158,42,43,0.12)] rounded-lg p-4">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>Couldn't load dashboard: {(error as Error)?.message}</span>
+            </div>
+          )}
+
+          {!isLoading && !isError && isTrailbait && tb.data && (
+            <TrailbaitView data={tb.data} accent={accent} site={activeBrand.site} />
+          )}
+          {!isLoading && !isError && !isTrailbait && pipe.data && (
+            <PipelineView m={pipe.data} accent={accent} website={brandWeb.data?.website} site={activeBrand.site} />
+          )}
+        </>
       )}
     </div>
   );
