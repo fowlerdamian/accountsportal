@@ -412,7 +412,7 @@ export default function FinanceDashboard() {
             delta={showCmp ? deltaPct(curr.grossProfit, prev?.grossProfit) : null} sub={pct(curr.grossProfitPct)} />
           <Tile icon={WalletIcon} label="EBITDA" value={money(curr.ebitda)} hue={C.purple} valueColor={curr.ebitda >= 0 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.ebitda, prev?.ebitda) : null} sub={pct(curr.ebitdaPct)} />
-          <Tile icon={GaugeIcon} label="% to Breakeven" value={pct(curr.pctToBreakeven, 1)} hue={C.orange}
+          <Tile icon={GaugeIcon} label="% of Breakeven" value={pct(curr.pctToBreakeven, 1)} hue={C.orange}
             valueColor={curr.pctToBreakeven >= 1 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.pctToBreakeven, prev?.pctToBreakeven) : null}
             sub={curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : ''} />
@@ -593,7 +593,7 @@ function SnapshotCard({ cardRef, periodLabel, curr, currCases, prev, showCmp, as
     { label: 'Revenue', value: money(curr.revenue), accent: C.gold, sub: showCmp ? deltaLabel(deltaPct(curr.revenue, prev?.revenue)) : 'GST-excl.' },
     { label: 'Gross Profit', value: money(curr.grossProfit), accent: C.aqua, sub: `${pct(curr.grossProfitPct)} margin` },
     { label: 'EBITDA', value: money(curr.ebitda), accent: C.purple, sub: `${pct(curr.ebitdaPct)} margin` },
-    { label: '% to Breakeven', value: pct(curr.pctToBreakeven, 1), accent: C.orange, sub: curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : null },
+    { label: '% of Breakeven', value: pct(curr.pctToBreakeven, 1), accent: C.orange, sub: curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : null },
     { label: 'Cases', value: fmt0.format(currCases.total), accent: C.blue, sub: `${currCases.open} open` },
   ]
   return (
