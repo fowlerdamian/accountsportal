@@ -1,6 +1,7 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
+import InvoiceDropZone from '../apps/Logistics/components/InvoiceDropZone.jsx'
 
 const ROUTE_LABELS = {
   '/dashboard':               null,
@@ -8,7 +9,7 @@ const ROUTE_LABELS = {
   '/accounts/xero':           'Accounts / Xero',
   '/logistics':               'Logistics',
   '/logistics/invoices':      'Logistics / Invoices',
-  '/logistics/rate-cards':    'Logistics / Rate Cards',
+  '/logistics/carriers':      'Logistics / Carriers',
   '/logistics/disputes':      'Logistics / Disputes',
   '/purchase-orders':         'Purchasing',
   '/sales-support':           'Sales Support',
@@ -93,6 +94,9 @@ export default function Layout() {
       <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <Outlet />
       </main>
+
+      {/* Portal-wide freight invoice drag-and-drop (persists across pages) */}
+      <InvoiceDropZone />
     </div>
   )
 }

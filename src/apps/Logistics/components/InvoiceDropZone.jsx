@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import { DatePicker } from '@portal/components/DatePicker'
 import { autoImportInvoice, importAndCheck } from '../utils/importInvoice.js'
 import { aud } from '../utils/helpers.js'
 import { card, mono, inputStyle, btnGhost, Modal, FieldLabel, HoverBtn } from '../utils/ui.jsx'
 
-// Logistics-wide invoice drop zone: drag a PDF/CSV anywhere in the app.
-// Fully-parsed invoices import + rate-check with zero manual entry; the
+// Portal-wide freight-invoice drop zone (mounted in Layout so parsing and the
+// completion modal survive navigation between pages). Drag a PDF/CSV anywhere:
+// fully-parsed invoices import + rate-check with zero manual entry; the
 // completion modal only appears when extraction couldn't fill every field.
-export default function LogisticsLayout() {
+export default function InvoiceDropZone() {
   const navigate = useNavigate()
   const dragDepth = useRef(0)
   const [dragging, setDragging] = useState(false)
@@ -83,8 +84,6 @@ export default function LogisticsLayout() {
 
   return (
     <>
-      <Outlet />
-
       {/* Drag highlight */}
       {dragging && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
