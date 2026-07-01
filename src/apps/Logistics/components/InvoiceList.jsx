@@ -16,7 +16,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 // ─── CSV invoice parser ───────────────────────────────────────────────────────
 // Required: description, charged_total. Optional structured columns feed the
-// rate engine: service, origin, destination, weight_kg, qty, detail.
+// rate engine: service, origin, destination, weight_kg, qty, detail, tracking.
 function parseCsvLines(text) {
   const allRows = parseDelimitedText(text)
   if (allRows.length < 2) return { rows: [], error: 'CSV has no data rows' }
@@ -45,6 +45,7 @@ function parseCsvLines(text) {
       destination: cell(cells, 'destination') || null,
       weight_kg:   isNaN(weight) ? null : weight,
       qty:         isNaN(qty) ? null : qty,
+      tracking:    cell(cells, 'tracking') || null,
       charged_total,
     })
   }

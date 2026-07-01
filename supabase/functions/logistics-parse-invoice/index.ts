@@ -18,7 +18,8 @@ Extract the following and return ONLY valid JSON — no markdown, no preamble, n
   "lines": [
     {
       "description": "string — charge description as printed",
-      "detail": "string or null — shipment ref, con note, zone, etc.",
+      "detail": "string or null — shipment ref, zone, extra detail",
+      "tracking": "string or null — con note / consignment / tracking number for this shipment line",
       "service": "string or null — normalised service name (e.g. 'Road Express', 'Overnight', 'Fuel Levy', 'GST')",
       "origin": "string or null — origin city/zone code (e.g. 'SYD')",
       "destination": "string or null — destination city/zone code (e.g. 'MEL')",
@@ -34,6 +35,7 @@ Rules:
 - lines: one per distinct charge row — freight legs, fuel levy, surcharges, handling, GST
 - service: normalise to the carrier's service name; use 'Fuel Levy' for fuel surcharges and 'GST' for tax lines
 - origin/destination: use 3-letter city codes where identifiable (SYD, MEL, BNE, ADL, PER, HBA, DRW, CBR); otherwise the name as printed; null if not applicable (e.g. levy lines)
+- tracking: the con note / consignment / article / tracking number tied to the shipment — critical for weight verification; null for levy/tax lines
 - weight_kg: chargeable/billed weight if shown, else actual weight; null if none
 - qty: item/consignment count if shown
 - charged_total: numeric dollars, no $ or commas, always positive

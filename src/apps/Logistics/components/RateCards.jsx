@@ -203,6 +203,7 @@ export default function RateCards() {
     return carrierEdits[carrierId] ?? {
       name: c?.name ?? '', email: c?.email ?? '', claims_email: c?.claims_email ?? '',
       fuel_levy_pct: c?.fuel_levy_pct != null ? String(c.fuel_levy_pct) : '',
+      cubic_factor_kg_m3: c?.cubic_factor_kg_m3 != null ? String(c.cubic_factor_kg_m3) : '250',
     }
   }
 
@@ -213,13 +214,15 @@ export default function RateCards() {
   const saveCarrier = async (carrierId) => {
     const edit = getCarrierEdit(carrierId)
     if (!edit.name.trim()) { flash('err', 'Carrier name is required'); return }
-    const levy = parseFloat(edit.fuel_levy_pct)
+    const levy  = parseFloat(edit.fuel_levy_pct)
+    const cubic = parseFloat(edit.cubic_factor_kg_m3)
     setSavingCarrier(carrierId)
     const { error } = await supabase.from('carriers').update({
       name:          edit.name.trim(),
       email:         edit.email.trim() || null,
       claims_email:  edit.claims_email.trim() || null,
       fuel_levy_pct: isNaN(levy) ? null : levy,
+      cubic_factor_kg_m3: isNaN(cubic) ? 250 : cubic,
     }).eq('id', carrierId)
     setSavingCarrier(null)
     if (error) { flash('err', error.message); return }
@@ -363,7 +366,7 @@ export default function RateCards() {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '720px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                {['Name', 'Billing Email', 'Claims Email', 'Fuel Levy %', ''].map((h, i) => (
+                {['Name', 'Billing Email', 'Claims Email', 'Fuel Levy %', 'Cubic kg/m³', ''].map((h, i) => (
                   <th key={i} style={thStyle()}>{h}</th>
                 ))}
               </tr>
@@ -374,6 +377,7 @@ export default function RateCards() {
                 const clean = {
                   name: carrier.name ?? '', email: carrier.email ?? '', claims_email: carrier.claims_email ?? '',
                   fuel_levy_pct: carrier.fuel_levy_pct != null ? String(carrier.fuel_levy_pct) : '',
+                  cubic_factor_kg_m3: carrier.cubic_factor_kg_m3 != null ? String(carrier.cubic_factor_kg_m3) : '250',
                 }
                 const dirty = JSON.stringify(edit) !== JSON.stringify(clean)
                 const isSaving = savingCarrier === carrier.id
@@ -390,6 +394,9 @@ export default function RateCards() {
                     </td>
                     <td style={{ padding: '10px 14px' }}>
                       <input value={edit.fuel_levy_pct} onChange={e => updateCarrierEdit(carrier.id, 'fuel_levy_pct', e.target.value)} placeholder="e.g. 18.5" style={{ ...inputStyle, width: '90px' }} />
+                    </td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <input value={edit.cubic_factor_kg_m3} onChange={e => updateCarrierEdit(carrier.id, 'cubic_factor_kg_m3', e.target.value)} placeholder="250" style={{ ...inputStyle, width: '80px' }} />
                     </td>
                     <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                       <HoverBtn onClick={() => saveCarrier(carrier.id)} disabled={!dirty || isSaving}>

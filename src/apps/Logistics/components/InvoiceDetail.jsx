@@ -94,7 +94,10 @@ export default function InvoiceDetail() {
   const runMatch = () => withBusy('Checking rates…', async () => {
     const { data, error } = await supabase.functions.invoke('logistics-match-invoice', { body: { invoice_id: id } })
     if (error || data?.error) { flash('err', data?.error ?? error.message); return }
-    flash('ok', `Rate check: ${data.matched} matched, ${data.no_rate} no rate${data.overcharge_aud > 0 ? ` — ${aud(data.overcharge_aud)} overcharged` : ' — no overcharge'}`)
+    const weightBit = data.weights_checked > 0
+      ? ` · ${data.weights_checked} weight${data.weights_checked !== 1 ? 's' : ''} verified vs ShipStation${data.overbilled > 0 ? ` (${data.overbilled} OVERBILLED)` : ''}`
+      : ''
+    flash('ok', `Rate check: ${data.matched} matched, ${data.no_rate} no rate${data.overcharge_aud > 0 ? ` — ${aud(data.overcharge_aud)} overcharged` : ' — no overcharge'}${weightBit}`)
     await fetchInvoice()
   })
 
@@ -113,7 +116,14 @@ export default function InvoiceDetail() {
     const lines = inv.freight_invoice_lines ?? []
     const flaggedLines = lines
       .filter(l => { const v = lineVariance(l); return v != null && v > 0 })
-      .map(l => ({ description: l.description, detail: l.detail ?? '', variance_aud: lineVariance(l) }))
+      .map(l => {
+        // Weight discrepancies carry the strongest evidence — cite our
+        // ShipStation weight/dims against the carrier's billed weight.
+        const weightNote = l.weight_check === 'overbilled'
+          ? ` [billed at ${l.weight_kg}kg but actual chargeable weight is ${l.chargeable_weight_kg}kg per our dispatch records (${l.actual_weight_kg}kg dead weight${l.actual_cubic_m3 ? `, ${l.actual_cubic_m3}m³ cubic` : ''})${l.tracking_ref ? ` — con note ${l.tracking_ref}` : ''}]`
+          : ''
+        return { description: l.description, detail: `${l.detail ?? ''}${weightNote}`, variance_aud: lineVariance(l) }
+      })
     const { data, error } = await supabase.functions.invoke('generate-dispute-letter', {
       body: {
         invoice_ref:          inv.invoice_ref,
@@ -225,6 +235,7 @@ export default function InvoiceDetail() {
   const over    = invoiceOvercharge(lines)
   const flagN   = lines.filter(l => { const v = lineVariance(l); return v != null && v > 0 }).length
   const noRateN = lines.filter(l => l.match_status === 'no_rate').length
+  const overbilledN = lines.filter(l => l.weight_check === 'overbilled').length
 
   return (
     <div style={pageWrap}>
@@ -279,6 +290,7 @@ export default function InvoiceDetail() {
             { label: 'Total Charged', value: aud(total),                 style: {} },
             { label: 'Overcharge',    value: over > 0 ? aud(over) : '—', style: over > 0 ? { color: 'var(--brand-pink)' } : {} },
             { label: 'Lines Flagged', value: flagN,                      style: flagN > 0   ? { color: 'var(--brand-pink)' } : {} },
+            { label: 'Weight Overbilled', value: overbilledN,            style: overbilledN > 0 ? { color: 'var(--brand-pink)' } : {} },
             { label: 'No Rate Match', value: noRateN,                    style: noRateN > 0 ? { color: 'var(--brand-accent)' } : {} },
           ].map(({ label, value, style }) => (
             <div key={label}>
@@ -318,8 +330,21 @@ export default function InvoiceDetail() {
                     {line.service ?? '—'}
                     {(line.origin || line.destination) && <span> · {line.origin ?? '?'} → {line.destination ?? '?'}</span>}
                   </td>
-                  <td style={{ ...tdStyle, fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono }}>
-                    {[line.weight_kg != null ? `${line.weight_kg}kg` : null, line.qty != null ? `×${line.qty}` : null].filter(Boolean).join(' · ') || '—'}
+                  <td style={{ ...tdStyle, fontSize: '12px', fontFamily: mono }}>
+                    <span style={{ color: line.weight_check === 'overbilled' ? 'var(--brand-pink)' : 'var(--text-secondary)' }}>
+                      {[line.weight_kg != null ? `${line.weight_kg}kg` : null, line.qty != null ? `×${line.qty}` : null].filter(Boolean).join(' · ') || '—'}
+                    </span>
+                    {line.weight_check === 'overbilled' && (
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--brand-aqua)', marginTop: '2px' }}>
+                        actual {line.chargeable_weight_kg}kg (SS)
+                      </span>
+                    )}
+                    {line.weight_check === 'ok' && (
+                      <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-disabled)', marginTop: '2px' }}>✓ verified</span>
+                    )}
+                    {line.weight_check === 'unmatched' && line.tracking_ref && (
+                      <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-disabled)', marginTop: '2px' }}>not in SS</span>
+                    )}
                   </td>
                   <td style={{ ...tdStyle, color: 'var(--text-primary)', textAlign: 'right' }}>{aud(line.charged_total)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
