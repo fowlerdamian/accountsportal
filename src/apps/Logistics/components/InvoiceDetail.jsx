@@ -97,7 +97,7 @@ export default function InvoiceDetail() {
     const weightBit = (data.ss_booked > 0 || data.weights_checked > 0)
       ? ` · ${data.ss_booked ?? 0} priced from ShipStation bookings${data.overbilled > 0 ? ` (${data.overbilled} weight OVERBILLED)` : ''}`
       : ''
-    flash('ok', `Rate check: ${data.matched} matched, ${data.no_rate} no rate${data.overcharge_aud > 0 ? ` — ${aud(data.overcharge_aud)} overcharged` : ' — no overcharge'}${weightBit}`)
+    flash('ok', `Checked: ${data.matched} priced, ${data.no_rate} no baseline${data.overcharge_aud > 0 ? ` — ${aud(data.overcharge_aud)} overcharged` : ' — no overcharge'}${weightBit}`)
     await fetchInvoice()
   })
 
@@ -263,7 +263,7 @@ export default function InvoiceDetail() {
         <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: mono,
           background: 'rgba(var(--brand-accent-rgb),0.08)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', color: 'var(--brand-accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-          <span>No claims email set for this carrier — add one in Rate Cards → Carriers before sending.</span>
+          <span>No claims email set for this carrier — add one in the Carriers tab before sending.</span>
           <button onClick={() => setNoClaimsWarning(false)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}>×</button>
         </div>
       )}
@@ -361,7 +361,7 @@ export default function InvoiceDetail() {
                             <span style={{ color: 'var(--text-secondary)' }}>{aud(line.expected_total)}</span>
                             {line.expected_source && (
                               <span style={{ display: 'block', fontSize: '10px', fontFamily: mono, color: 'var(--text-disabled)', marginTop: '2px' }}>
-                                {line.expected_source === 'shipstation' ? 'booked (SS)' : 'rate card'}
+                                {line.expected_source === 'shipstation' ? 'booked (SS)' : 'fuel levy %'}
                               </span>
                             )}
                           </>

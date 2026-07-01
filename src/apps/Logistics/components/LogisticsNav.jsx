@@ -5,7 +5,7 @@ import { supabase } from '@portal/lib/supabase'
 const tabs = [
   { label: 'Overview',     to: '/logistics',              end: true  },
   { label: 'Invoices',     to: '/logistics/invoices',     end: false, flagKey: 'flagged'  },
-  { label: 'Rate Cards',   to: '/logistics/rate-cards',   end: false },
+  { label: 'Carriers',     to: '/logistics/carriers',     end: false },
   { label: 'Disputes',     to: '/logistics/disputes',     end: false, flagKey: 'disputed' },
   { label: 'Manual Label', to: '/logistics/manual-label', end: false },
 ]

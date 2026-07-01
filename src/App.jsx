@@ -16,7 +16,7 @@ import LogisticsDashboard from './apps/Logistics/components/LogisticsDashboard.j
 import PurchaseOrders from './apps/PurchaseOrders/index.jsx'
 import InvoiceList from './apps/Logistics/components/InvoiceList.jsx'
 import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
-import RateCards from './apps/Logistics/components/RateCards.jsx'
+import Carriers from './apps/Logistics/components/Carriers.jsx'
 import Disputes from './apps/Logistics/components/Disputes.jsx'
 import ManualLabel from './apps/Logistics/components/ManualLabel.jsx'
 import SupportApp from './apps/Support/SupportApp'
@@ -107,7 +107,7 @@ const PATH_TITLES = [
   ['/accounts/xero',         'Xero'],
   ['/accounts',              'Accounts'],
   ['/logistics/invoices',    'Invoices'],
-  ['/logistics/rate-cards',  'Rate Cards'],
+  ['/logistics/carriers',    'Carriers'],
   ['/logistics/disputes',    'Disputes'],
   ['/logistics/manual-label','Manual Label'],
   ['/logistics',             'Logistics'],
@@ -240,7 +240,7 @@ export default function App() {
               <Route path="logistics" element={<LogisticsDashboard />} />
               <Route path="logistics/invoices" element={<InvoiceList />} />
               <Route path="logistics/invoices/:id" element={<InvoiceDetail />} />
-              <Route path="logistics/rate-cards" element={<RateCards />} />
+              <Route path="logistics/carriers" element={<Carriers />} />
               <Route path="logistics/disputes" element={<Disputes />} />
               <Route path="logistics/manual-label" element={<ManualLabel />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
