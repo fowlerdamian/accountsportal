@@ -47,7 +47,7 @@ function MissingInvoices({ carriers, invoices }) {
       {groups.map(g => (
         <div key={g.carrier} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '6px' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: 500, flexShrink: 0 }}>
-            {g.carrier} <span style={{ color: 'var(--text-tertiary)', fontFamily: mono, fontSize: '11px' }}>({g.frequency}, {g.missing.length})</span>
+            {g.carrier}
           </span>
           <span style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
             {g.missing.map(p => (
