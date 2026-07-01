@@ -41,12 +41,12 @@ function toKg(value: number, units: string | null | undefined): number {
   }
 }
 
-function toMetres(value: number, units: string | null | undefined): number {
-  switch ((units ?? "").toLowerCase()) {
-    case "centimeters": return value / 100;
-    case "inches":      return value * 0.0254;
-    default:            return value / 100; // AU accounts use cm
-  }
+// NOTE: verified 2026-07-02 against shipment 276112793 (DHI143383462): the AGA
+// ShipStation account is metric — the UI shows "16.5l x 20w x 2h (cm)" but the
+// v1 API reports the SAME numbers with units:"inches". The unit label is the
+// account display default, not the entered unit, so treat values as cm always.
+function toMetres(value: number): number {
+  return value / 100;
 }
 
 // Look up a shipment by tracking number; returns dead weight (kg) + cubic (m³)
@@ -59,12 +59,14 @@ async function shipstationLookup(tracking: string, auth: string) {
   const data = await res.json();
   const sh = data?.shipments?.[0];
   if (!sh) return null;
+  // Guard: only trust an exact tracking-number match — never a "closest" result
+  if ((sh.trackingNumber ?? "").trim().toLowerCase() !== tracking.trim().toLowerCase()) return null;
 
   const weightKg = sh.weight?.value != null ? toKg(Number(sh.weight.value), sh.weight.units) : null;
   let cubicM3: number | null = null;
   const d = sh.dimensions;
   if (d?.length != null && d?.width != null && d?.height != null) {
-    cubicM3 = toMetres(Number(d.length), d.units) * toMetres(Number(d.width), d.units) * toMetres(Number(d.height), d.units);
+    cubicM3 = toMetres(Number(d.length)) * toMetres(Number(d.width)) * toMetres(Number(d.height));
   }
   return { weightKg, cubicM3 };
 }
