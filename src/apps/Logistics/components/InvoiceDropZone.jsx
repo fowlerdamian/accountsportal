@@ -45,7 +45,7 @@ export default function InvoiceDropZone() {
         setCarriers(carrierList)
         const result = await autoImportInvoice(file, carrierList)
         if (result.status === 'imported') {
-          navigate(`/logistics/invoices/${result.invoiceId}`)
+          navigate('/logistics/invoices')
         } else if (result.status === 'needs_input') {
           setPrefill(result.prefill)
         } else {
@@ -77,7 +77,7 @@ export default function InvoiceDropZone() {
     setImporting(false)
     if (result.status === 'error') { setError(result.message); return }
     setPrefill(null)
-    navigate(`/logistics/invoices/${result.invoiceId}`)
+    navigate('/logistics/invoices')
   }
 
   const overlayText = { fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }
@@ -100,7 +100,7 @@ export default function InvoiceDropZone() {
           <div style={{ ...card, padding: '32px 48px', textAlign: 'center' }}>
             <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ margin: '0 auto 14px', borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />
             <p style={overlayText}>Reading invoice…</p>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', fontFamily: mono, color: 'var(--text-secondary)' }}>Extracting, importing and checking against ShipStation</p>
+            <p style={{ margin: '6px 0 0', fontSize: '12px', fontFamily: mono, color: 'var(--text-secondary)' }}>Extracting invoice number, date and carrier</p>
           </div>
         </div>
       )}

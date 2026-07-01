@@ -59,12 +59,31 @@ const greyTint = {
 }
 
 export const INVOICE_STATUS_STYLE = {
-  pending:  greyTint,
-  matched:  tint('--brand-aqua-rgb', '--brand-aqua'),
-  flagged:  tint('--brand-accent-rgb', '--brand-accent'),
-  disputed: tint('--brand-pink-rgb', '--brand-pink'),
-  approved: tint('--brand-aqua-rgb', '--brand-aqua'),
-  resolved: tint('--brand-aqua-rgb', '--brand-blue'),
+  pending:   greyTint,
+  matched:   tint('--brand-aqua-rgb', '--brand-aqua'),
+  processed: tint('--brand-aqua-rgb', '--brand-aqua'),
+  flagged:   tint('--brand-accent-rgb', '--brand-accent'),
+  disputed:  tint('--brand-pink-rgb', '--brand-pink'),
+  approved:  tint('--brand-aqua-rgb', '--brand-aqua'),
+  resolved:  tint('--brand-aqua-rgb', '--brand-blue'),
+}
+
+// 'matched' is internal jargon — surface it as "processed"
+export const displayStatus = (s) => (s === 'matched' ? 'processed' : s)
+
+// An invoice that has been imported but not yet cross-referenced with
+// ShipStation (step 2 runs in the background straight after upload).
+export const isProcessing = (inv) =>
+  inv.status === 'pending' && inv.matched_at == null &&
+  Date.now() - new Date(inv.created_at).getTime() < 10 * 60 * 1000  // stale-guard
+
+export function ProcessingIndicator() {
+  return (
+    <span className="animate-pulse" style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontSize: '11px', fontFamily: mono, color: 'var(--brand-accent)' }}>
+      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--brand-accent)', flexShrink: 0 }} />
+      Processing invoice…
+    </span>
+  )
 }
 
 export const DISPUTE_STATUS_STYLE = {

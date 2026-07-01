@@ -4,11 +4,12 @@ import { supabase } from '@portal/lib/supabase'
 import { DatePicker } from '@portal/components/DatePicker'
 import LogisticsNav from './LogisticsNav.jsx'
 import { aud, fmtDate, invoiceTotal, invoiceOvercharge, missingInvoicePeriods } from '../utils/helpers.js'
-import { parseCsvLines, extractPdfText } from '../utils/importInvoice.js'
+import { parseCsvLines, extractPdfText, importInvoiceRows, runAuditCheck } from '../utils/importInvoice.js'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import {
   pageWrap, card, mono, thStyle, tdStyle, inputStyle, btnGhost,
   Badge, Spinner, Flash, useFlash, INVOICE_STATUS_STYLE, PageHeader, HoverBtn, Modal, FieldLabel, rowHover,
+  displayStatus, isProcessing, ProcessingIndicator,
 } from '../utils/ui.jsx'
 
 const ALL_STATUSES = ['pending', 'matched', 'flagged', 'disputed', 'approved', 'resolved']
@@ -74,7 +75,6 @@ export default function InvoiceList() {
 
   // Upload modal
   const [uploadModal,     setUploadModal]     = useState(false)
-  const [uploadStep,      setUploadStep]      = useState('form')   // form | done
   const [uploadCarrierId, setUploadCarrierId] = useState('')
   const [uploadInvRef,    setUploadInvRef]    = useState('')
   const [uploadInvDate,   setUploadInvDate]   = useState('')
@@ -83,7 +83,6 @@ export default function InvoiceList() {
   const [uploadPreview,   setUploadPreview]   = useState(null)
   const [uploadError,     setUploadError]     = useState(null)
   const [uploading,       setUploading]       = useState(false)
-  const [uploadResult,    setUploadResult]    = useState(null)    // { ref, lines, match }
   const parseTokenRef = useRef(0)
 
   const fetchInvoices = () =>
@@ -95,24 +94,29 @@ export default function InvoiceList() {
       fetchInvoices(),
       supabase.from('carriers').select('*').order('name').then(({ data }) => { if (data) setCarriers(data) }),
     ]).finally(() => setLoading(false))
+
+    // Live updates: new imports appear immediately; "Processing invoice…"
+    // flips to Processed/Flagged when the background ShipStation check lands.
+    const channel = supabase
+      .channel('invoice_list_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'freight_invoices' }, fetchInvoices)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const openUploadModal = () => {
     setUploadModal(true)
-    setUploadStep('form')
     setUploadCarrierId('')
     setUploadInvRef('')
     setUploadInvDate('')
     setUploadDueDate('')
     setUploadPreview(null)
     setUploadError(null)
-    setUploadResult(null)
   }
 
   const closeUploadModal = () => {
     if (uploading) return
     setUploadModal(false)
-    if (uploadResult) fetchInvoices()
   }
 
   const handleFileChange = async (e) => {
@@ -165,27 +169,22 @@ export default function InvoiceList() {
     setUploading(true)
     setUploadError(null)
 
-    // Atomic header + lines insert
-    const { data: invoiceId, error: rpcErr } = await supabase.rpc('import_freight_invoice', {
-      _invoice_ref:  uploadInvRef.trim(),
-      _carrier_id:   uploadCarrierId,
-      _invoice_date: uploadInvDate,
-      _due_date:     uploadDueDate || null,
-      _lines:        uploadPreview.lines,
-    })
-    if (rpcErr) { setUploadError(rpcErr.message); setUploading(false); return }
-
-    // Run the rate engine immediately
-    const { data: match, error: matchErr } = await supabase.functions.invoke('logistics-match-invoice', {
-      body: { invoice_id: invoiceId },
+    // Step 1 — import; close the window as soon as the invoice is in the table
+    const result = await importInvoiceRows({
+      invoice_ref:  uploadInvRef,
+      carrier_id:   uploadCarrierId,
+      invoice_date: uploadInvDate,
+      due_date:     uploadDueDate,
+      lines:        uploadPreview.lines,
     })
     setUploading(false)
-    setUploadResult({
-      ref: uploadInvRef.trim(),
-      lines: uploadPreview.lines.length,
-      match: matchErr || match?.error ? null : match,
-    })
-    setUploadStep('done')
+    if (result.status === 'error') { setUploadError(result.message); return }
+
+    // Step 2 — background ShipStation cross-reference; the row shows
+    // "Processing invoice…" and flips to Processed via the live subscription.
+    runAuditCheck(result.invoiceId)
+    setUploadModal(false)
+    flash('ok', `${uploadInvRef.trim()} imported`)
     fetchInvoices()
   }
 
@@ -257,7 +256,11 @@ export default function InvoiceList() {
                       ? <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{aud(over)}</span>
                       : <span style={{ color: 'var(--text-disabled)' }}>—</span>}
                   </td>
-                  <td style={tdStyle}><Badge map={INVOICE_STATUS_STYLE} value={inv.status} /></td>
+                  <td style={tdStyle}>
+                    {isProcessing(inv)
+                      ? <ProcessingIndicator />
+                      : <Badge map={INVOICE_STATUS_STYLE} value={displayStatus(inv.status)} />}
+                  </td>
                   <td style={{ ...tdStyle, color: 'var(--text-disabled)', fontSize: '14px' }}>›</td>
                 </tr>
               )
@@ -271,31 +274,11 @@ export default function InvoiceList() {
 
       {/* ── Upload modal ─────────────────────────────────────────────────────── */}
       <Modal open={uploadModal} onClose={closeUploadModal}>
-        {uploadStep === 'done' ? (
-          <>
-            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 12px' }}>Invoice imported</p>
-            <div style={{ ...card, padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: mono }}>
-              <p style={{ margin: '0 0 4px', color: 'var(--brand-aqua)' }}>{uploadResult.ref} — {uploadResult.lines} line{uploadResult.lines !== 1 ? 's' : ''} added</p>
-              {uploadResult.match ? (
-                <>
-                  <p style={{ margin: '0 0 4px', color: 'var(--text-secondary)' }}>
-                    Rate check: {uploadResult.match.matched} matched · {uploadResult.match.no_rate} no rate · {uploadResult.match.skipped} skipped
-                  </p>
-                  {uploadResult.match.overcharge_aud > 0
-                    ? <p style={{ margin: 0, color: 'var(--brand-pink)' }}>Overcharge detected: {aud(uploadResult.match.overcharge_aud)} — flagged for review</p>
-                    : <p style={{ margin: 0, color: 'var(--brand-aqua)' }}>No overcharge against contracted rates</p>}
-                </>
-              ) : (
-                <p style={{ margin: 0, color: 'var(--brand-accent)' }}>Rate check could not run — open the invoice and use “Run rate check”</p>
-              )}
-            </div>
-            <HoverBtn onClick={closeUploadModal}>Done</HoverBtn>
-          </>
-        ) : (
+        {uploadModal && (
           <>
             <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>Upload invoice</p>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, margin: '0 0 20px' }}>
-              PDF (AI-parsed) or CSV — rates are checked automatically after import
+              PDF (AI-parsed) or CSV — ShipStation cross-reference runs after import
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
@@ -366,7 +349,7 @@ export default function InvoiceList() {
 
             <div style={{ display: 'flex', gap: '8px' }}>
               <HoverBtn onClick={handleImport} disabled={uploading || uploadParsing || !uploadPreview}>
-                {uploading ? 'Importing…' : 'Import & check rates'}
+                {uploading ? 'Importing…' : 'Import'}
               </HoverBtn>
               <button onClick={closeUploadModal} disabled={uploading} style={{ ...btnGhost, opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer' }}>
                 Cancel

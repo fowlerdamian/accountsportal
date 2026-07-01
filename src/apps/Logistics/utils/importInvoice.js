@@ -61,8 +61,9 @@ export const matchCarrier = (carriers, name) => {
   return carriers.find(c => c.name.toLowerCase().includes(n) || n.includes(c.name.toLowerCase())) ?? null
 }
 
-// Import header + lines atomically, then run the audit engine.
-export async function importAndCheck({ invoice_ref, carrier_id, invoice_date, due_date, lines }) {
+// Step 1 — import header + lines atomically. Returns fast so the upload
+// window can close as soon as the invoice is in the table.
+export async function importInvoiceRows({ invoice_ref, carrier_id, invoice_date, due_date, lines }) {
   const { data: invoiceId, error } = await supabase.rpc('import_freight_invoice', {
     _invoice_ref:  invoice_ref.trim(),
     _carrier_id:   carrier_id,
@@ -71,10 +72,22 @@ export async function importAndCheck({ invoice_ref, carrier_id, invoice_date, du
     _lines:        lines,
   })
   if (error) return { status: 'error', message: error.message }
-  const { data: match, error: matchErr } = await supabase.functions.invoke('logistics-match-invoice', {
-    body: { invoice_id: invoiceId },
-  })
-  return { status: 'imported', invoiceId, match: matchErr || match?.error ? null : match }
+  return { status: 'imported', invoiceId }
+}
+
+// Step 2 — background ShipStation cross-reference. Fire-and-forget; the
+// invoice row shows "Processing invoice…" until matched_at is written, and the
+// realtime subscription flips it to Processed/Flagged.
+export function runAuditCheck(invoiceId) {
+  return supabase.functions.invoke('logistics-match-invoice', { body: { invoice_id: invoiceId } })
+    .catch(() => { /* row stays pending; re-run from the invoice detail page */ })
+}
+
+// Back-compat: import then kick off the background check.
+export async function importAndCheck(payload) {
+  const result = await importInvoiceRows(payload)
+  if (result.status === 'imported') runAuditCheck(result.invoiceId)
+  return result
 }
 
 // Full drop pipeline. Returns:

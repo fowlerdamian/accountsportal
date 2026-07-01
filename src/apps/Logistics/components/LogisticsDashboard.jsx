@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
 import { aud, fmtDate, invoiceTotal, invoiceOvercharge } from '../utils/helpers.js'
-import { pageWrap, card, mono, sectionLabel, thStyle, tdStyle, Badge, Spinner, INVOICE_STATUS_STYLE, PageHeader, rowHover } from '../utils/ui.jsx'
+import { pageWrap, card, mono, sectionLabel, thStyle, tdStyle, Badge, Spinner, INVOICE_STATUS_STYLE, PageHeader, rowHover, displayStatus, isProcessing, ProcessingIndicator } from '../utils/ui.jsx'
 
 function KpiCard({ label, value, valueStyle }) {
   return (
@@ -95,7 +95,11 @@ export default function LogisticsDashboard() {
                       ? <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{aud(over)}</span>
                       : <span style={{ color: 'var(--text-disabled)' }}>—</span>}
                   </td>
-                  <td style={tdStyle}><Badge map={INVOICE_STATUS_STYLE} value={inv.status} /></td>
+                  <td style={tdStyle}>
+                    {isProcessing(inv)
+                      ? <ProcessingIndicator />
+                      : <Badge map={INVOICE_STATUS_STYLE} value={displayStatus(inv.status)} />}
+                  </td>
                 </tr>
               )
             })}

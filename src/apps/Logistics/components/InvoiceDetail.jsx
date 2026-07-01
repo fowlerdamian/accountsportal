@@ -6,6 +6,7 @@ import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../
 import {
   pageWrap, card, mono, sectionLabel, thStyle, tdStyle,
   Badge, Spinner, Flash, useFlash, INVOICE_STATUS_STYLE, DISPUTE_STATUS_STYLE, HoverBtn, btnGhost, rowHover,
+  displayStatus,
 } from '../utils/ui.jsx'
 
 function ActionBtn({ label, color, disabled, onClick }) {
@@ -285,7 +286,7 @@ export default function InvoiceDetail() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
             <HoverBtn onClick={runMatch} disabled={busy}>{busyLabel === 'Checking rates…' ? 'Checking…' : 'Run rate check'}</HoverBtn>
-            <Badge map={INVOICE_STATUS_STYLE} value={invoice.status} />
+            <Badge map={INVOICE_STATUS_STYLE} value={displayStatus(invoice.status)} />
           </div>
         </div>
 
