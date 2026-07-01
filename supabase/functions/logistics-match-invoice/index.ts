@@ -1,21 +1,20 @@
 // logistics-match-invoice — the rate engine.
-// Two independent checks per invoice line:
 //
-// 1. WEIGHT CHECK (the big one): carriers mis-key shipment size and bill as a
-//    larger shipment. For lines with a con-note/tracking number, look up the
-//    shipment in ShipStation and compare the BILLED weight against the
-//    chargeable weight from what we physically entered:
-//        chargeable = max(dead weight, cubic (L×W×H) × carrier cubic factor)
-//    If billed > chargeable (beyond rounding tolerance), the line is
-//    'overbilled' and the expected cost is computed from OUR weight.
+// PRIMARY baseline — ShipStation booked cost: for lines with a con-note /
+// tracking number, look up the shipment in ShipStation. The cost quoted at
+// booking is based on the weight/dims WE entered, so expected = booked cost
+// catches both wrong rates and re-rated weights in a single comparison.
+// The weight check still runs alongside as evidence:
+//     chargeable = max(dead weight, cubic (L×W×H) × carrier cubic factor)
+//     billed > chargeable (beyond rounding tolerance) → 'overbilled'
 //
-// 2. RATE CHECK: match each line against the carrier's ACTIVE rate card
-//    entries and compute the expected charge.
-//      • service: case-insensitive exact match
-//      • origin/destination: entry NULL = wildcard; most specific wins
-//      • per_kg → base + rate × weight   • per_item → base + rate × qty
-//      • flat → rate                     • percent → rate% × freight subtotal
-//      • min_charge floors the result    • GST lines skipped
+// FALLBACK baseline — rate cards: lines not booked through ShipStation are
+// matched against the carrier's ACTIVE rate card entries.
+//   • service: case-insensitive exact match
+//   • origin/destination: entry NULL = wildcard; most specific wins
+//   • per_kg → base + rate × weight   • per_item → base + rate × qty
+//   • flat → rate                     • percent → rate% × freight subtotal
+//   • min_charge floors the result    • GST lines skipped
 //
 // Auto-flags the invoice when total overcharge exceeds tolerance.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -49,7 +48,7 @@ function toMetres(value: number): number {
   return value / 100;
 }
 
-// Look up a shipment by tracking number; returns dead weight (kg) + cubic (m³)
+// Look up a shipment by tracking number; returns booked cost + dead weight (kg) + cubic (m³)
 async function shipstationLookup(tracking: string, auth: string) {
   const res = await fetch(
     `https://ssapi.shipstation.com/shipments?trackingNumber=${encodeURIComponent(tracking)}&pageSize=1`,
@@ -62,13 +61,14 @@ async function shipstationLookup(tracking: string, auth: string) {
   // Guard: only trust an exact tracking-number match — never a "closest" result
   if ((sh.trackingNumber ?? "").trim().toLowerCase() !== tracking.trim().toLowerCase()) return null;
 
+  const cost = sh.shipmentCost != null && Number(sh.shipmentCost) > 0 ? Number(sh.shipmentCost) : null;
   const weightKg = sh.weight?.value != null ? toKg(Number(sh.weight.value), sh.weight.units) : null;
   let cubicM3: number | null = null;
   const d = sh.dimensions;
   if (d?.length != null && d?.width != null && d?.height != null) {
     cubicM3 = toMetres(Number(d.length)) * toMetres(Number(d.width)) * toMetres(Number(d.height));
   }
-  return { weightKg, cubicM3 };
+  return { cost, weightKg, cubicM3 };
 }
 
 Deno.serve(async (req) => {
@@ -133,38 +133,39 @@ Deno.serve(async (req) => {
     const ssAuth   = ssKey && ssSecret ? btoa(`${ssKey}:${ssSecret}`) : null;
     const cubicFactor = Number(invoice.carriers?.cubic_factor_kg_m3 ?? 250);
 
-    // weightData: line.id → { actual, cubic, chargeable, check }
-    const weightData = new Map<string, { actual: number | null; cubic: number | null; chargeable: number | null; check: string }>();
+    // ssData: line.id → { cost, actual, cubic, chargeable, check }
+    const ssData = new Map<string, { cost: number | null; actual: number | null; cubic: number | null; chargeable: number | null; check: string | null }>();
     let lookups = 0;
     for (const line of lines) {
-      if (!line.tracking_ref || line.weight_kg == null) continue;
+      if (!line.tracking_ref) continue;
       if (!ssAuth || lookups >= MAX_SHIPSTATION_LOOKUPS) {
-        weightData.set(line.id, { actual: null, cubic: null, chargeable: null, check: "unmatched" });
+        ssData.set(line.id, { cost: null, actual: null, cubic: null, chargeable: null, check: "unmatched" });
         continue;
       }
       lookups++;
       let found = null;
       try { found = await shipstationLookup(line.tracking_ref, ssAuth); } catch { /* network — treat as unmatched */ }
-      if (!found || (found.weightKg == null && found.cubicM3 == null)) {
-        weightData.set(line.id, { actual: null, cubic: null, chargeable: null, check: "unmatched" });
+      if (!found || (found.cost == null && found.weightKg == null && found.cubicM3 == null)) {
+        ssData.set(line.id, { cost: null, actual: null, cubic: null, chargeable: null, check: "unmatched" });
         continue;
       }
       const dead  = found.weightKg;
       const cubic = found.cubicM3;
       const cubicWeight = cubic != null ? cubic * cubicFactor : null;
       const chargeable  = Math.max(dead ?? 0, cubicWeight ?? 0) || null;
-      if (chargeable == null) {
-        weightData.set(line.id, { actual: dead, cubic, chargeable: null, check: "unmatched" });
-        continue;
+      // Weight verdict only when both sides of the comparison exist
+      let check: string | null = null;
+      if (line.weight_kg != null && chargeable != null) {
+        // Tolerance: carriers round up to the next kg — allow ceil(chargeable) + 1kg or 5%
+        const tolerance = Math.max(1, chargeable * 0.05);
+        check = Number(line.weight_kg) > Math.ceil(chargeable) + tolerance ? "overbilled" : "ok";
       }
-      // Tolerance: carriers round up to the next kg — allow ceil(chargeable) + 1kg or 5%
-      const tolerance = Math.max(1, chargeable * 0.05);
-      const overbilled = Number(line.weight_kg) > Math.ceil(chargeable) + tolerance;
-      weightData.set(line.id, {
+      ssData.set(line.id, {
+        cost: found.cost,
         actual: dead != null ? Math.round(dead * 100) / 100 : null,
         cubic:  cubic != null ? Math.round(cubic * 10000) / 10000 : null,
-        chargeable: Math.round(chargeable * 100) / 100,
-        check: overbilled ? "overbilled" : "ok",
+        chargeable: chargeable != null ? Math.round(chargeable * 100) / 100 : null,
+        check,
       });
     }
 
@@ -183,15 +184,15 @@ Deno.serve(async (req) => {
       return best;
     };
 
-    type Result = { id: string; expected_total: number | null; matched_entry_id: string | null; match_status: string };
+    type Result = { id: string; expected_total: number | null; matched_entry_id: string | null; match_status: string; source: string | null };
     const results: Result[] = [];
     const percentLines: Record<string, unknown>[] = [];
     let freightExpectedSubtotal = 0;
 
-    // Billing weight for expected-cost calc: our chargeable weight when the
-    // carrier overbilled, otherwise the carrier's billed weight.
+    // Billing weight for rate-card fallback calc: our chargeable weight when
+    // the carrier overbilled, otherwise the carrier's billed weight.
     const billingWeight = (line: Record<string, unknown>) => {
-      const wd = weightData.get(line.id as string);
+      const wd = ssData.get(line.id as string);
       return wd?.check === "overbilled" ? wd.chargeable : (line.weight_kg != null ? Number(line.weight_kg) : null);
     };
 
@@ -199,11 +200,22 @@ Deno.serve(async (req) => {
     for (const line of lines) {
       const isGst = norm(line.description).includes("gst") || norm(line.service) === "gst";
       if (isGst) {
-        results.push({ id: line.id, expected_total: null, matched_entry_id: null, match_status: "skipped" });
+        results.push({ id: line.id, expected_total: null, matched_entry_id: null, match_status: "skipped", source: null });
         continue;
       }
+
+      // PRIMARY: ShipStation booked cost for this con note
+      const ss = ssData.get(line.id);
+      if (ss?.cost != null) {
+        const expected = Math.round(ss.cost * 100) / 100;
+        freightExpectedSubtotal += expected;
+        results.push({ id: line.id, expected_total: expected, matched_entry_id: null, match_status: "matched", source: "shipstation" });
+        continue;
+      }
+
+      // FALLBACK: rate card
       if (!line.service) {
-        results.push({ id: line.id, expected_total: null, matched_entry_id: null, match_status: "no_rate" });
+        results.push({ id: line.id, expected_total: null, matched_entry_id: null, match_status: "no_rate", source: null });
         continue;
       }
       const entry = findEntry(line, entries.filter(e => e.rate_type !== "percent"));
@@ -211,7 +223,7 @@ Deno.serve(async (req) => {
         const pctEntry = findEntry(line, entries.filter(e => e.rate_type === "percent"));
         const looksLikeLevy = norm(line.service).includes("fuel") || norm(line.description).includes("fuel");
         if (pctEntry || looksLikeLevy) { percentLines.push(line); continue; }
-        results.push({ id: line.id, expected_total: null, matched_entry_id: null, match_status: "no_rate" });
+        results.push({ id: line.id, expected_total: null, matched_entry_id: null, match_status: "no_rate", source: null });
         continue;
       }
       const rate = Number(entry.rate);
@@ -224,34 +236,39 @@ Deno.serve(async (req) => {
       if (entry.rate_type === "per_item") expected = line.qty != null ? base + rate * Number(line.qty) : null;
       if (entry.rate_type === "flat")     expected = rate;
       if (expected == null) {
-        results.push({ id: line.id, expected_total: null, matched_entry_id: entry.id as string, match_status: "no_rate" });
+        results.push({ id: line.id, expected_total: null, matched_entry_id: entry.id as string, match_status: "no_rate", source: null });
         continue;
       }
       if (entry.min_charge != null && expected < Number(entry.min_charge)) expected = Number(entry.min_charge);
       expected = Math.round(expected * 100) / 100;
       freightExpectedSubtotal += expected;
-      results.push({ id: line.id, expected_total: expected, matched_entry_id: entry.id as string, match_status: "matched" });
+      results.push({ id: line.id, expected_total: expected, matched_entry_id: entry.id as string, match_status: "matched", source: "rate_card" });
     }
 
-    // Pass 2 — percent lines (fuel levy) against the matched freight subtotal
+    // Pass 2 — percent lines (fuel levy) against the matched freight subtotal.
+    // Note: ShipStation booked costs are typically levy-inclusive, so a separate
+    // levy line priced on top of SS costs errs in the carrier's favour (never a
+    // false-positive overcharge claim).
     for (const line of percentLines) {
       const entry = findEntry(line, entries.filter(e => e.rate_type === "percent"));
       const pct = entry ? Number(entry.rate) : (invoice.carriers?.fuel_levy_pct != null ? Number(invoice.carriers.fuel_levy_pct) : null);
       if (pct == null || freightExpectedSubtotal <= 0) {
-        results.push({ id: line.id, expected_total: null, matched_entry_id: entry?.id as string ?? null, match_status: "no_rate" });
+        results.push({ id: line.id, expected_total: null, matched_entry_id: entry?.id as string ?? null, match_status: "no_rate", source: null });
         continue;
       }
       const expected = Math.round(freightExpectedSubtotal * pct) / 100;
-      results.push({ id: line.id, expected_total: expected, matched_entry_id: entry?.id as string ?? null, match_status: "matched" });
+      results.push({ id: line.id, expected_total: expected, matched_entry_id: entry?.id as string ?? null, match_status: "matched", source: "rate_card" });
     }
 
-    // Write results back (rate + weight data together)
+    // Write results back (baseline + weight evidence together)
     for (const r of results) {
-      const wd = weightData.get(r.id);
+      const wd = ssData.get(r.id);
       const { error } = await supabase
         .from("freight_invoice_lines")
         .update({
           expected_total:       r.expected_total,
+          expected_source:      r.source,
+          booked_cost:          wd?.cost ?? null,
           matched_entry_id:     r.matched_entry_id,
           match_status:         r.match_status,
           actual_weight_kg:     wd?.actual ?? null,
@@ -277,9 +294,10 @@ Deno.serve(async (req) => {
       matched: results.filter(r => r.match_status === "matched").length,
       no_rate: results.filter(r => r.match_status === "no_rate").length,
       skipped: results.filter(r => r.match_status === "skipped").length,
-      weights_checked:   [...weightData.values()].filter(w => w.check !== "unmatched").length,
-      weights_unmatched: [...weightData.values()].filter(w => w.check === "unmatched").length,
-      overbilled:        [...weightData.values()].filter(w => w.check === "overbilled").length,
+      ss_booked:         results.filter(r => r.source === "shipstation").length,
+      weights_checked:   [...ssData.values()].filter(w => w.check === "ok" || w.check === "overbilled").length,
+      weights_unmatched: [...ssData.values()].filter(w => w.check === "unmatched").length,
+      overbilled:        [...ssData.values()].filter(w => w.check === "overbilled").length,
     };
 
     // Only advance status from pending/matched/flagged — never clobber a dispute

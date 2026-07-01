@@ -94,8 +94,8 @@ export default function InvoiceDetail() {
   const runMatch = () => withBusy('Checking rates…', async () => {
     const { data, error } = await supabase.functions.invoke('logistics-match-invoice', { body: { invoice_id: id } })
     if (error || data?.error) { flash('err', data?.error ?? error.message); return }
-    const weightBit = data.weights_checked > 0
-      ? ` · ${data.weights_checked} weight${data.weights_checked !== 1 ? 's' : ''} verified vs ShipStation${data.overbilled > 0 ? ` (${data.overbilled} OVERBILLED)` : ''}`
+    const weightBit = (data.ss_booked > 0 || data.weights_checked > 0)
+      ? ` · ${data.ss_booked ?? 0} priced from ShipStation bookings${data.overbilled > 0 ? ` (${data.overbilled} weight OVERBILLED)` : ''}`
       : ''
     flash('ok', `Rate check: ${data.matched} matched, ${data.no_rate} no rate${data.overcharge_aud > 0 ? ` — ${aud(data.overcharge_aud)} overcharged` : ' — no overcharge'}${weightBit}`)
     await fetchInvoice()
@@ -120,9 +120,13 @@ export default function InvoiceDetail() {
         // Weight discrepancies carry the strongest evidence — cite our
         // ShipStation weight/dims against the carrier's billed weight.
         const weightNote = l.weight_check === 'overbilled'
-          ? ` [billed at ${l.weight_kg}kg but actual chargeable weight is ${l.chargeable_weight_kg}kg per our dispatch records (${l.actual_weight_kg}kg dead weight${l.actual_cubic_m3 ? `, ${l.actual_cubic_m3}m³ cubic` : ''})${l.tracking_ref ? ` — con note ${l.tracking_ref}` : ''}]`
+          ? ` [billed at ${l.weight_kg}kg but actual chargeable weight is ${l.chargeable_weight_kg}kg per our dispatch records (${l.actual_weight_kg}kg dead weight${l.actual_cubic_m3 ? `, ${l.actual_cubic_m3}m³ cubic` : ''})]`
           : ''
-        return { description: l.description, detail: `${l.detail ?? ''}${weightNote}`, variance_aud: lineVariance(l) }
+        const bookedNote = l.expected_source === 'shipstation' && l.booked_cost != null
+          ? ` [quoted/booked at $${Number(l.booked_cost).toFixed(2)} in our freight system at dispatch]`
+          : ''
+        const conNote = l.tracking_ref ? ` — con note ${l.tracking_ref}` : ''
+        return { description: l.description, detail: `${l.detail ?? ''}${weightNote}${bookedNote}${conNote}`, variance_aud: lineVariance(l) }
       })
     const { data, error } = await supabase.functions.invoke('generate-dispute-letter', {
       body: {
@@ -349,10 +353,19 @@ export default function InvoiceDetail() {
                   <td style={{ ...tdStyle, color: 'var(--text-primary)', textAlign: 'right' }}>{aud(line.charged_total)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     {line.match_status === 'no_rate'
-                      ? <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', borderRadius: '4px', padding: '2px 7px', whiteSpace: 'nowrap' }}>No rate</span>
+                      ? <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', borderRadius: '4px', padding: '2px 7px', whiteSpace: 'nowrap' }}>No baseline</span>
                       : line.match_status === 'skipped'
                         ? <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--text-disabled)' }}>n/a</span>
-                        : <span style={{ color: 'var(--text-secondary)' }}>{aud(line.expected_total)}</span>}
+                        : (
+                          <>
+                            <span style={{ color: 'var(--text-secondary)' }}>{aud(line.expected_total)}</span>
+                            {line.expected_source && (
+                              <span style={{ display: 'block', fontSize: '10px', fontFamily: mono, color: 'var(--text-disabled)', marginTop: '2px' }}>
+                                {line.expected_source === 'shipstation' ? 'booked (SS)' : 'rate card'}
+                              </span>
+                            )}
+                          </>
+                        )}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     {variance == null
