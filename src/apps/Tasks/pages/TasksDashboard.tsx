@@ -20,7 +20,7 @@ import { useTasksUi } from "../components/TasksLayout";
 
 type ViewMode = "grid" | "kanban" | "matrix";
 
-type Scope     = "mine" | "involving_me" | "all";
+type Scope     = "mine" | "assigned_by_me" | "involving_me" | "all";
 type DueWindow = "overdue" | "today" | "week" | "later" | "done" | "none";
 
 function dueWindow(t: StaffTask): DueWindow {
@@ -65,12 +65,23 @@ export function TasksDashboard() {
 
   const queryParams = scope === "mine"
     ? { assignedTo: userId }
-    : scope === "involving_me"
-      ? { involving:  userId }
-      : {};
+    : scope === "assigned_by_me"
+      ? { createdBy: userId }
+      : scope === "involving_me"
+        ? { involving:  userId }
+        : {};
 
-  const { data: tasks = [], isLoading } = useStaffTasks(queryParams);
-  const { data: profiles = [] }         = useStaffProfiles();
+  const { data: rawTasks = [], isLoading } = useStaffTasks(queryParams);
+  const { data: profiles = [] }            = useStaffProfiles();
+
+  // "Assigned by me" = tasks I created for *someone else*; drop the ones I
+  // kept for myself so this scope only shows work I've delegated out.
+  const tasks = useMemo(
+    () => (scope === "assigned_by_me"
+      ? rawTasks.filter((t) => t.assigned_to !== userId)
+      : rawTasks),
+    [rawTasks, scope, userId],
+  );
 
   const filtered = useMemo(() => {
     return tasks
@@ -123,6 +134,7 @@ export function TasksDashboard() {
         {/* Scope */}
         <div className="flex items-center gap-1 flex-wrap">
           <FilterPill active={scope === "mine"} onClick={() => setScope("mine")}>Mine</FilterPill>
+          <FilterPill active={scope === "assigned_by_me"} onClick={() => setScope("assigned_by_me")}>Assigned by me</FilterPill>
           <FilterPill active={scope === "involving_me"} onClick={() => setScope("involving_me")}>Involving me</FilterPill>
           <FilterPill active={scope === "all"} onClick={() => setScope("all")}>Everyone</FilterPill>
         </div>
