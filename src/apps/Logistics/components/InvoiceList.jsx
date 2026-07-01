@@ -7,13 +7,17 @@ import { DatePicker } from '@portal/components/DatePicker'
 import LogisticsNav from './LogisticsNav.jsx'
 import { aud, fmtDate, invoiceTotal, invoiceOvercharge, parseDelimitedText, parseMoney } from '../utils/helpers.js'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
+import {
+  pageWrap, card, mono, thStyle, tdStyle, inputStyle, btnGhost,
+  Badge, Spinner, Flash, useFlash, INVOICE_STATUS_STYLE, PageHeader, HoverBtn, Modal, FieldLabel, rowHover,
+} from '../utils/ui.jsx'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 // ─── CSV invoice parser ───────────────────────────────────────────────────────
-// Expected columns: description, detail, charged_total, contracted_total
+// Required: description, charged_total. Optional structured columns feed the
+// rate engine: service, origin, destination, weight_kg, qty, detail.
 function parseCsvLines(text) {
-  // RFC-4180-ish parse — quoted fields may contain commas (e.g. "1,234.56")
   const allRows = parseDelimitedText(text)
   if (allRows.length < 2) return { rows: [], error: 'CSV has no data rows' }
 
@@ -23,18 +27,26 @@ function parseCsvLines(text) {
   }
 
   const idx = k => headers.indexOf(k)
+  const cell = (cells, k) => (idx(k) !== -1 ? (cells[idx(k)] ?? '').trim() : '')
   const rows = []
   let skipped = 0
   for (let i = 1; i < allRows.length; i++) {
-    const cells = allRows[i].map(c => c.trim())
-    const description    = cells[idx('description')]     ?? ''
-    const detail         = cells[idx('detail')]          ?? ''
-    const charged_total  = parseMoney(cells[idx('charged_total')]  ?? '')
-    const contracted_raw = idx('contracted_total') !== -1 ? cells[idx('contracted_total')] : ''
-    const contracted_total = contracted_raw ? parseMoney(contracted_raw) : null
-
+    const cells = allRows[i]
+    const description   = cell(cells, 'description')
+    const charged_total = parseMoney(cell(cells, 'charged_total'))
     if (!description || isNaN(charged_total)) { skipped++; continue }
-    rows.push({ description, detail: detail || null, charged_total, contracted_total: isNaN(contracted_total) ? null : contracted_total })
+    const weight = parseMoney(cell(cells, 'weight_kg'))
+    const qty    = parseInt(cell(cells, 'qty'), 10)
+    rows.push({
+      description,
+      detail:      cell(cells, 'detail') || null,
+      service:     cell(cells, 'service') || null,
+      origin:      cell(cells, 'origin') || null,
+      destination: cell(cells, 'destination') || null,
+      weight_kg:   isNaN(weight) ? null : weight,
+      qty:         isNaN(qty) ? null : qty,
+      charged_total,
+    })
   }
   return { rows, skipped }
 }
@@ -50,15 +62,7 @@ async function extractPdfText(buffer) {
   return text
 }
 
-const STATUS_STYLE = {
-  pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
-  flagged:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
-  disputed: { color: 'var(--brand-pink)', background: 'rgba(var(--brand-pink-rgb),0.1)',  border: '1px solid rgba(var(--brand-pink-rgb),0.3)'  },
-  approved: { color: 'var(--brand-aqua)', background: 'rgba(var(--brand-aqua-rgb),0.1)', border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
-  resolved: { color: 'var(--brand-blue)', background: 'rgba(var(--brand-aqua-rgb),0.1)', border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
-}
-
-const ALL_STATUSES = ['pending', 'flagged', 'disputed', 'approved', 'resolved']
+const ALL_STATUSES = ['pending', 'matched', 'flagged', 'disputed', 'approved', 'resolved']
 
 function SelectFilter({ label, value, onChange, options }) {
   return (
@@ -66,8 +70,8 @@ function SelectFilter({ label, value, onChange, options }) {
       value={value}
       onChange={e => onChange(e.target.value)}
       style={{
-        background: '#0a0a0a', border: '1px solid #222222', borderRadius: '6px',
-        color: '#AAA', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
+        background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px',
+        color: 'var(--text-secondary)', fontSize: '12px', fontFamily: mono,
         padding: '6px 10px', cursor: 'pointer', outline: 'none',
       }}
     >
@@ -77,62 +81,40 @@ function SelectFilter({ label, value, onChange, options }) {
   )
 }
 
-const inputStyle = {
-  background: '#0a0a0a', border: '1px solid #222222', borderRadius: '6px',
-  color: '#ffffff', fontSize: '13px', padding: '7px 10px', outline: 'none',
-  fontFamily: 'inherit', width: '100%', boxSizing: 'border-box',
-}
-const btnPrimary = {
-  fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
-  cursor: 'pointer', color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)',
-  background: 'transparent', transition: 'background 120ms',
-}
-const btnGhost = {
-  fontSize: '12px', padding: '6px 14px', borderRadius: '6px',
-  cursor: 'pointer', color: '#a0a0a0', border: '1px solid #222', background: 'transparent',
-}
-
 export default function InvoiceList() {
   const [invoices,      setInvoices]      = useState([])
   const [carriers,      setCarriers]      = useState([])
   const [statusFilter,  setStatusFilter]  = useState('all')
   const [carrierFilter, setCarrierFilter] = useState('all')
   const [loading,       setLoading]       = useState(true)
+  const [msg,           flash]            = useFlash()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
   // Upload modal
   const [uploadModal,     setUploadModal]     = useState(false)
-  const [uploadStep,      setUploadStep]      = useState('form')   // form | preview | done
+  const [uploadStep,      setUploadStep]      = useState('form')   // form | done
   const [uploadCarrierId, setUploadCarrierId] = useState('')
   const [uploadInvRef,    setUploadInvRef]    = useState('')
   const [uploadInvDate,   setUploadInvDate]   = useState('')
   const [uploadDueDate,   setUploadDueDate]   = useState('')
-  const [uploadFile,      setUploadFile]      = useState(null)
   const [uploadParsing,   setUploadParsing]   = useState(false)
-  const [uploadPreview,   setUploadPreview]   = useState(null)    // { invoice_ref, carrier_name, invoice_date, due_date, lines[] }
+  const [uploadPreview,   setUploadPreview]   = useState(null)
   const [uploadError,     setUploadError]     = useState(null)
   const [uploading,       setUploading]       = useState(false)
-  const [uploadResult,    setUploadResult]    = useState(null)
+  const [uploadResult,    setUploadResult]    = useState(null)    // { ref, lines, match }
   const parseTokenRef = useRef(0)
-
-  useEffect(() => {
-    Promise.all([
-      supabase.from('freight_invoices').select('*, carriers(*), freight_invoice_lines(*)').order('invoice_date', { ascending: false }),
-      supabase.from('carriers').select('*').order('name'),
-    ]).then(([invRes, carRes]) => {
-      if (invRes.data) setInvoices(invRes.data)
-      if (carRes.data) setCarriers(carRes.data)
-    }).catch(() => {
-      // Queries failed — leave lists empty, still exit loading state
-    }).finally(() => {
-      setLoading(false)
-    })
-  }, [])
 
   const fetchInvoices = () =>
     supabase.from('freight_invoices').select('*, carriers(*), freight_invoice_lines(*)').order('invoice_date', { ascending: false })
       .then(({ data }) => { if (data) setInvoices(data) })
+
+  useEffect(() => {
+    Promise.all([
+      fetchInvoices(),
+      supabase.from('carriers').select('*').order('name').then(({ data }) => { if (data) setCarriers(data) }),
+    ]).finally(() => setLoading(false))
+  }, [])
 
   const openUploadModal = () => {
     setUploadModal(true)
@@ -141,13 +123,13 @@ export default function InvoiceList() {
     setUploadInvRef('')
     setUploadInvDate('')
     setUploadDueDate('')
-    setUploadFile(null)
     setUploadPreview(null)
     setUploadError(null)
     setUploadResult(null)
   }
 
   const closeUploadModal = () => {
+    if (uploading) return
     setUploadModal(false)
     if (uploadResult) fetchInvoices()
   }
@@ -155,7 +137,6 @@ export default function InvoiceList() {
   const handleFileChange = async (e) => {
     const file = e.target.files[0]
     if (!file) return
-    setUploadFile(file)
     setUploadError(null)
     setUploadPreview(null)
 
@@ -165,7 +146,7 @@ export default function InvoiceList() {
       const text = await file.text()
       const { rows, skipped = 0, error } = parseCsvLines(text)
       if (error) { setUploadError(error); return }
-      if (!rows.length) { setUploadError(`No valid line items found in CSV${skipped ? ` (${skipped} row${skipped !== 1 ? 's' : ''} skipped)` : ''}`); return }
+      if (!rows.length) { setUploadError(`No valid line items found in CSV${skipped ? ` (${skipped} skipped)` : ''}`); return }
       setUploadPreview({ lines: rows, _skipped: skipped, _source: 'csv' })
     } else if (ext === 'pdf') {
       const token = ++parseTokenRef.current
@@ -189,89 +170,60 @@ export default function InvoiceList() {
       } finally {
         if (parseTokenRef.current === token) setUploadParsing(false)
       }
+    } else {
+      setUploadError('Unsupported file type — use PDF or CSV')
     }
   }
 
   const handleImport = async () => {
-    if (!uploadCarrierId)    { setUploadError('Select a carrier'); return }
+    if (!uploadCarrierId)     { setUploadError('Select a carrier'); return }
     if (!uploadInvRef.trim()) { setUploadError('Enter an invoice reference'); return }
-    if (!uploadInvDate)      { setUploadError('Enter an invoice date'); return }
+    if (!uploadInvDate)       { setUploadError('Enter an invoice date'); return }
     if (!uploadPreview?.lines?.length) { setUploadError('No line items to import'); return }
 
     setUploading(true)
     setUploadError(null)
 
-    const { data: inv, error: invErr } = await supabase.from('freight_invoices').insert({
-      invoice_ref:  uploadInvRef.trim(),
-      carrier_id:   uploadCarrierId,
-      invoice_date: uploadInvDate,
-      due_date:     uploadDueDate || null,
-      status:       'pending',
-    }).select().single()
+    // Atomic header + lines insert
+    const { data: invoiceId, error: rpcErr } = await supabase.rpc('import_freight_invoice', {
+      _invoice_ref:  uploadInvRef.trim(),
+      _carrier_id:   uploadCarrierId,
+      _invoice_date: uploadInvDate,
+      _due_date:     uploadDueDate || null,
+      _lines:        uploadPreview.lines,
+    })
+    if (rpcErr) { setUploadError(rpcErr.message); setUploading(false); return }
 
-    if (invErr) { setUploadError(invErr.message); setUploading(false); return }
-
-    const lineRows = uploadPreview.lines.map((l, i) => ({
-      invoice_id:       inv.id,
-      description:      l.description,
-      detail:           l.detail ?? null,
-      charged_total:    l.charged_total,
-      contracted_total: l.contracted_total ?? null,
-      sort_order:       i,
-    }))
-
-    const { error: linesErr } = await supabase.from('freight_invoice_lines').insert(lineRows)
+    // Run the rate engine immediately
+    const { data: match, error: matchErr } = await supabase.functions.invoke('logistics-match-invoice', {
+      body: { invoice_id: invoiceId },
+    })
     setUploading(false)
-
-    if (linesErr) {
-      // Roll back the header insert — and surface it if the rollback itself fails
-      const { error: rollbackErr } = await supabase.from('freight_invoices').delete().eq('id', inv.id)
-      if (rollbackErr) {
-        console.error('Invoice rollback failed:', rollbackErr)
-        setUploadError(`${linesErr.message} — rollback also failed (${rollbackErr.message}): invoice ${uploadInvRef.trim()} may exist without line items`)
-      } else {
-        setUploadError(linesErr.message)
-      }
-      return
-    }
-    setUploadResult({ ref: uploadInvRef.trim(), lines: lineRows.length })
+    setUploadResult({
+      ref: uploadInvRef.trim(),
+      lines: uploadPreview.lines.length,
+      match: matchErr || match?.error ? null : match,
+    })
     setUploadStep('done')
     fetchInvoices()
   }
 
   const filtered = invoices.filter(inv => {
-    if (statusFilter  !== 'all' && inv.status      !== statusFilter)  return false
-    if (carrierFilter !== 'all' && inv.carrier_id  !== carrierFilter) return false
+    if (statusFilter  !== 'all' && inv.status     !== statusFilter)  return false
+    if (carrierFilter !== 'all' && inv.carrier_id !== carrierFilter) return false
     return true
   })
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />
-      </div>
-    )
-  }
+  if (loading) return <Spinner />
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 24px', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0 }}>Invoices</h1>
-          <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>All carrier freight invoices</p>
-        </div>
-        <button
-          onClick={openUploadModal}
-          style={btnPrimary}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-        >
-          Upload invoice
-        </button>
-      </div>
+    <div style={{ ...pageWrap, padding: isMobile ? '20px 16px' : pageWrap.padding }}>
+      <PageHeader title="Invoices" subtitle="All carrier freight invoices">
+        <HoverBtn onClick={openUploadModal}>Upload invoice</HoverBtn>
+      </PageHeader>
 
       <LogisticsNav />
+      <Flash msg={msg} />
 
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
         <SelectFilter
@@ -286,19 +238,17 @@ export default function InvoiceList() {
           onChange={setCarrierFilter}
           options={carriers.map(c => ({ value: c.id, label: c.name }))}
         />
-        <span style={{ marginLeft: 'auto', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#444' }}>
+        <span style={{ marginLeft: 'auto', fontSize: '11px', fontFamily: mono, color: 'var(--text-disabled)' }}>
           {filtered.length} invoice{filtered.length !== 1 ? 's' : ''}
         </span>
       </div>
 
-      <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflowX: 'auto' }}>
+      <div style={{ ...card, overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
+            <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               {['Invoice #', 'Carrier', 'Date', 'Due', 'Charged', 'Overcharge', 'Status', ''].map((h, i) => (
-                <th key={i} style={{ padding: '10px 14px', textAlign: ['Charged', 'Overcharge'].includes(h) ? 'right' : 'left', fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>
-                  {h}
-                </th>
+                <th key={i} style={thStyle(['Charged', 'Overcharge'].includes(h))}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -307,148 +257,141 @@ export default function InvoiceList() {
               const lines = inv.freight_invoice_lines ?? []
               const over  = invoiceOvercharge(lines)
               const total = invoiceTotal(lines)
-              const ss    = STATUS_STYLE[inv.status] ?? STATUS_STYLE.pending
               return (
                 <tr
                   key={inv.id}
                   onClick={() => navigate(`/logistics/invoices/${inv.id}`)}
-                  style={{ borderBottom: '1px solid #181818', cursor: 'pointer', transition: 'background 120ms' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#0a0a0a'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'background 120ms' }}
+                  {...rowHover}
                 >
-                  <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff', fontWeight: 500 }}>{inv.invoice_ref}</td>
-                  <td style={{ padding: '11px 14px', fontSize: '13px', color: '#AAA' }}>{inv.carriers?.name ?? '—'}</td>
-                  <td style={{ padding: '11px 14px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: '#666' }}>{fmtDate(inv.invoice_date)}</td>
-                  <td style={{ padding: '11px 14px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0' }}>{fmtDate(inv.due_date)}</td>
-                  <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff', textAlign: 'right' }}>{aud(total)}</td>
-                  <td style={{ padding: '11px 14px', fontSize: '13px', textAlign: 'right' }}>
+                  <td style={{ ...tdStyle, color: 'var(--text-primary)', fontWeight: 500 }}>{inv.invoice_ref}</td>
+                  <td style={{ ...tdStyle, color: 'var(--text-secondary)' }}>{inv.carriers?.name ?? '—'}</td>
+                  <td style={{ ...tdStyle, fontSize: '12px', fontFamily: mono, color: 'var(--text-tertiary)' }}>{fmtDate(inv.invoice_date)}</td>
+                  <td style={{ ...tdStyle, fontSize: '12px', fontFamily: mono, color: 'var(--text-secondary)' }}>{fmtDate(inv.due_date)}</td>
+                  <td style={{ ...tdStyle, color: 'var(--text-primary)', textAlign: 'right' }}>{aud(total)}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
                     {over > 0
                       ? <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{aud(over)}</span>
-                      : <span style={{ color: '#444' }}>—</span>}
+                      : <span style={{ color: 'var(--text-disabled)' }}>—</span>}
                   </td>
-                  <td style={{ padding: '11px 14px' }}>
-                    <span style={{ ...ss, display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', textTransform: 'capitalize' }}>
-                      {inv.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '11px 14px', color: '#333', fontSize: '14px' }}>›</td>
+                  <td style={tdStyle}><Badge map={INVOICE_STATUS_STYLE} value={inv.status} /></td>
+                  <td style={{ ...tdStyle, color: 'var(--text-disabled)', fontSize: '14px' }}>›</td>
                 </tr>
               )
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#444', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>No invoices match the selected filters.</td></tr>
+              <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-disabled)', fontSize: '13px', fontFamily: mono }}>No invoices match the selected filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
       {/* ── Upload modal ─────────────────────────────────────────────────────── */}
-      {uploadModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ background: '#0a0a0a', border: '1px solid #222222', borderRadius: '10px', width: '100%', maxWidth: '560px', padding: '24px', maxHeight: '90vh', overflowY: 'auto' }}>
+      <Modal open={uploadModal} onClose={closeUploadModal}>
+        {uploadStep === 'done' ? (
+          <>
+            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 12px' }}>Invoice imported</p>
+            <div style={{ ...card, padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: mono }}>
+              <p style={{ margin: '0 0 4px', color: 'var(--brand-aqua)' }}>{uploadResult.ref} — {uploadResult.lines} line{uploadResult.lines !== 1 ? 's' : ''} added</p>
+              {uploadResult.match ? (
+                <>
+                  <p style={{ margin: '0 0 4px', color: 'var(--text-secondary)' }}>
+                    Rate check: {uploadResult.match.matched} matched · {uploadResult.match.no_rate} no rate · {uploadResult.match.skipped} skipped
+                  </p>
+                  {uploadResult.match.overcharge_aud > 0
+                    ? <p style={{ margin: 0, color: 'var(--brand-pink)' }}>Overcharge detected: {aud(uploadResult.match.overcharge_aud)} — flagged for review</p>
+                    : <p style={{ margin: 0, color: 'var(--brand-aqua)' }}>No overcharge against contracted rates</p>}
+                </>
+              ) : (
+                <p style={{ margin: 0, color: 'var(--brand-accent)' }}>Rate check could not run — open the invoice and use “Run rate check”</p>
+              )}
+            </div>
+            <HoverBtn onClick={closeUploadModal}>Done</HoverBtn>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>Upload invoice</p>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, margin: '0 0 20px' }}>
+              PDF (AI-parsed) or CSV — rates are checked automatically after import
+            </p>
 
-            {uploadStep === 'done' ? (
-              <>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', margin: '0 0 12px' }}>Invoice imported</p>
-                <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', marginBottom: '16px', fontSize: '13px', fontFamily: '"JetBrains Mono", monospace' }}>
-                  <p style={{ margin: '0 0 4px', color: 'var(--brand-aqua)' }}>{uploadResult.ref} — {uploadResult.lines} line{uploadResult.lines !== 1 ? 's' : ''} added</p>
-                </div>
-                <button onClick={closeUploadModal} style={btnPrimary} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>Done</button>
-              </>
-            ) : (
-              <>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', margin: '0 0 4px' }}>Upload invoice</p>
-                <p style={{ fontSize: '12px', color: '#a0a0a0', fontFamily: '"JetBrains Mono", monospace', margin: '0 0 20px' }}>Accepts PDF (AI-parsed) or CSV (line items)</p>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-
-                  {/* File picker — first so PDF auto-fills fields below */}
-                  <div>
-                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>
-                      File <span style={{ color: '#444', textTransform: 'none' }}>(PDF or CSV)</span>
-                    </label>
-                    <input type="file" accept=".pdf,.csv" onChange={handleFileChange} style={{ fontSize: '12px', color: '#AAA', fontFamily: '"JetBrains Mono", monospace', width: '100%' }} />
-                    {uploadParsing && <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0' }}>Extracting & parsing…</p>}
-                    {uploadPreview && !uploadParsing && (
-                      <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-aqua)' }}>
-                        {uploadPreview.lines.length} line{uploadPreview.lines.length !== 1 ? 's' : ''} ready
-                        {uploadPreview._skipped > 0 ? `, ${uploadPreview._skipped} skipped` : ''}
-                        {uploadPreview._source === 'pdf' && uploadPreview.carrier_name ? ` · ${uploadPreview.carrier_name}` : ''}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Carrier */}
-                  <div>
-                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>Carrier</label>
-                    <select value={uploadCarrierId} onChange={e => setUploadCarrierId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-                      <option value="">Select carrier…</option>
-                      {carriers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Invoice ref */}
-                  <div>
-                    <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>Invoice reference</label>
-                    <input value={uploadInvRef} onChange={e => setUploadInvRef(e.target.value)} placeholder="e.g. INV-00123" style={inputStyle} />
-                  </div>
-
-                  {/* Dates */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>Invoice date</label>
-                      <DatePicker value={uploadInvDate || null} onChange={v => setUploadInvDate(v ?? '')} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: '6px' }}>Due date <span style={{ color: '#444' }}>(optional)</span></label>
-                      <DatePicker value={uploadDueDate || null} onChange={v => setUploadDueDate(v ?? '')} />
-                    </div>
-                  </div>
-
-                  {/* Line items preview */}
-                  {uploadPreview?.lines?.length > 0 && (
-                    <div>
-                      <p style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>Line items</p>
-                      <div style={{ background: '#050505', border: '1px solid #1e1e1e', borderRadius: '6px', overflow: 'hidden', maxHeight: '200px', overflowY: 'auto' }}>
-                        {uploadPreview.lines.map((l, i) => (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderBottom: i < uploadPreview.lines.length - 1 ? '1px solid #181818' : 'none', fontSize: '12px' }}>
-                            <span style={{ color: '#AAA' }}>{l.description}{l.detail ? <span style={{ color: '#555', fontFamily: '"JetBrains Mono", monospace' }}> · {l.detail}</span> : null}</span>
-                            <span style={{ color: 'var(--brand-accent)', fontFamily: '"JetBrains Mono", monospace', whiteSpace: 'nowrap', marginLeft: '12px' }}>${l.charged_total.toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {uploadError && (
-                  <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', background: 'rgba(var(--brand-pink-rgb),0.1)', border: '1px solid rgba(var(--brand-pink-rgb),0.3)', color: 'var(--brand-pink)' }}>
-                    {uploadError}
-                  </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div>
+                <FieldLabel>File <span style={{ color: 'var(--text-disabled)', textTransform: 'none' }}>(PDF or CSV)</span></FieldLabel>
+                <input type="file" accept=".pdf,.csv" onChange={handleFileChange} style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, width: '100%' }} />
+                {uploadParsing && <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: mono, color: 'var(--text-secondary)' }}>Extracting & parsing…</p>}
+                {uploadPreview && !uploadParsing && (
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: mono, color: 'var(--brand-aqua)' }}>
+                    {uploadPreview.lines.length} line{uploadPreview.lines.length !== 1 ? 's' : ''} ready
+                    {uploadPreview._skipped > 0 ? `, ${uploadPreview._skipped} skipped` : ''}
+                    {uploadPreview._source === 'pdf' && uploadPreview.carrier_name ? ` · ${uploadPreview.carrier_name}` : ''}
+                  </p>
                 )}
+              </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={handleImport}
-                    disabled={uploading || uploadParsing || !uploadPreview}
-                    style={{ ...btnPrimary, opacity: (uploading || uploadParsing || !uploadPreview) ? 0.5 : 1, cursor: (uploading || uploadParsing || !uploadPreview) ? 'not-allowed' : 'pointer' }}
-                    onMouseEnter={e => { if (!uploading && !uploadParsing && uploadPreview) e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-                  >
-                    {uploading ? 'Importing…' : 'Import'}
-                  </button>
-                  <button
-                    onClick={closeUploadModal}
-                    disabled={uploading}
-                    style={{ ...btnGhost, opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer' }}
-                  >
-                    Cancel
-                  </button>
+              <div>
+                <FieldLabel>Carrier</FieldLabel>
+                <select value={uploadCarrierId} onChange={e => setUploadCarrierId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                  <option value="">Select carrier…</option>
+                  {carriers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <FieldLabel>Invoice reference</FieldLabel>
+                <input value={uploadInvRef} onChange={e => setUploadInvRef(e.target.value)} placeholder="e.g. INV-00123" style={inputStyle} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <FieldLabel>Invoice date</FieldLabel>
+                  <DatePicker value={uploadInvDate || null} onChange={v => setUploadInvDate(v ?? '')} />
                 </div>
-              </>
+                <div>
+                  <FieldLabel>Due date <span style={{ color: 'var(--text-disabled)' }}>(optional)</span></FieldLabel>
+                  <DatePicker value={uploadDueDate || null} onChange={v => setUploadDueDate(v ?? '')} />
+                </div>
+              </div>
+
+              {uploadPreview?.lines?.length > 0 && (
+                <div>
+                  <FieldLabel>Line items</FieldLabel>
+                  <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px', overflow: 'hidden', maxHeight: '200px', overflowY: 'auto' }}>
+                    {uploadPreview.lines.map((l, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderBottom: i < uploadPreview.lines.length - 1 ? '1px solid var(--border-subtle)' : 'none', fontSize: '12px' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          {l.description}
+                          {(l.service || l.origin) && (
+                            <span style={{ color: 'var(--text-disabled)', fontFamily: mono }}>
+                              {' '}· {[l.service, l.origin && `${l.origin} → ${l.destination ?? '?'}`, l.weight_kg && `${l.weight_kg}kg`].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                        </span>
+                        <span style={{ color: 'var(--brand-accent)', fontFamily: mono, whiteSpace: 'nowrap', marginLeft: '12px' }}>${l.charged_total.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {uploadError && (
+              <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: mono, background: 'rgba(var(--brand-pink-rgb),0.1)', border: '1px solid rgba(var(--brand-pink-rgb),0.3)', color: 'var(--brand-pink)' }}>
+                {uploadError}
+              </div>
             )}
-          </div>
-        </div>
-      )}
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <HoverBtn onClick={handleImport} disabled={uploading || uploadParsing || !uploadPreview}>
+                {uploading ? 'Importing…' : 'Import & check rates'}
+              </HoverBtn>
+              <button onClick={closeUploadModal} disabled={uploading} style={{ ...btnGhost, opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   )
 }

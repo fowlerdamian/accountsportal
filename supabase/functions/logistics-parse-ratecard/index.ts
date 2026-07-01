@@ -1,5 +1,6 @@
-// logistics-parse-invoice v2 — extract STRUCTURED line data so the rate engine
-// (logistics-match-invoice) can match lines against rate card entries.
+// logistics-parse-ratecard — AI importer: maps any carrier rate card document
+// (text extracted from PDF/CSV/XLSX client-side) into structured entries that
+// the rate engine can compute against.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveModel } from "../_shared/model.ts";
 
@@ -8,36 +9,30 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `You are an expert at parsing freight carrier invoices.
-Extract the following and return ONLY valid JSON — no markdown, no preamble, no backticks:
+const SYSTEM_PROMPT = `You are an expert at parsing freight carrier rate cards / pricing schedules.
+Extract the contracted rates and return ONLY valid JSON — no markdown, no preamble, no backticks:
 {
-  "invoice_ref": "string — invoice/reference number",
-  "carrier_name": "string — carrier or company name that issued this invoice",
-  "invoice_date": "YYYY-MM-DD or null",
-  "due_date": "YYYY-MM-DD or null",
-  "lines": [
+  "name": "string — short label for this rate card (e.g. 'Toll FY26 National Rates')",
+  "effective_from": "YYYY-MM-DD or null",
+  "entries": [
     {
-      "description": "string — charge description as printed",
-      "detail": "string or null — shipment ref, con note, zone, etc.",
-      "service": "string or null — normalised service name (e.g. 'Road Express', 'Overnight', 'Fuel Levy', 'GST')",
-      "origin": "string or null — origin city/zone code (e.g. 'SYD')",
-      "destination": "string or null — destination city/zone code (e.g. 'MEL')",
-      "weight_kg": number or null,
-      "qty": number or null,
-      "charged_total": number
+      "service": "string — service name (e.g. 'Road Express', 'Overnight', 'Fuel Levy')",
+      "origin": "string or null — origin city/zone (3-letter code where identifiable: SYD, MEL, BNE, ADL, PER, HBA, DRW, CBR); null if the rate applies to all origins",
+      "destination": "string or null — destination city/zone; null if all destinations",
+      "rate_type": "per_kg | per_item | flat | percent",
+      "rate": number,
+      "base_charge": number — fixed charge added on top of per_kg/per_item calc; 0 if none,
+      "min_charge": number or null — minimum charge floor,
+      "notes": "string or null"
     }
   ]
 }
 Rules:
-- invoice_ref: look for Invoice No, Invoice Number, Ref, Reference, Tax Invoice #
-- carrier_name: the company that ISSUED the invoice (not the recipient)
-- lines: one per distinct charge row — freight legs, fuel levy, surcharges, handling, GST
-- service: normalise to the carrier's service name; use 'Fuel Levy' for fuel surcharges and 'GST' for tax lines
-- origin/destination: use 3-letter city codes where identifiable (SYD, MEL, BNE, ADL, PER, HBA, DRW, CBR); otherwise the name as printed; null if not applicable (e.g. levy lines)
-- weight_kg: chargeable/billed weight if shown, else actual weight; null if none
-- qty: item/consignment count if shown
-- charged_total: numeric dollars, no $ or commas, always positive
-- If a value cannot be found, use null
+- One entry per service+lane combination. A rate matrix (origins × destinations) becomes one entry per cell.
+- rate_type 'percent' is for fuel levies / surcharges expressed as % — rate is the percentage number (18.5, not 0.185)
+- rate for per_kg is $/kg; per_item is $/item; flat is total $
+- Never invent rates. Only extract what is in the document.
+- If a value cannot be found, use null (or 0 for base_charge)
 - Return ONLY the raw JSON object`;
 
 Deno.serve(async (req) => {
@@ -78,9 +73,9 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: await resolveModel(apiKey),
-        max_tokens: 8192,
+        max_tokens: 16384,
         system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: `Parse this freight invoice:\n\n${text}` }],
+        messages: [{ role: "user", content: `Parse this carrier rate card:\n\n${text}` }],
       }),
     });
 
@@ -97,19 +92,18 @@ Deno.serve(async (req) => {
     if (!jsonMatch) throw new Error("Claude did not return valid JSON");
 
     const parsed = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(parsed.lines) || parsed.lines.length === 0) {
-      throw new Error("No line items found in the document");
-    }
-    // Defensive numeric coercion — drop unusable rows rather than fail the import
-    parsed.lines = parsed.lines
-      .filter((l: Record<string, unknown>) => l.description && l.charged_total != null)
-      .map((l: Record<string, unknown>) => ({
-        ...l,
-        charged_total: Number(l.charged_total),
-        weight_kg: l.weight_kg != null ? Number(l.weight_kg) : null,
-        qty: l.qty != null ? Number(l.qty) : null,
-      }))
-      .filter((l: { charged_total: number }) => !Number.isNaN(l.charged_total));
+    const VALID_TYPES = ["per_kg", "per_item", "flat", "percent"];
+    if (!Array.isArray(parsed.entries)) throw new Error("No rate entries found in the document");
+    parsed.entries = parsed.entries
+      .filter((e: Record<string, unknown>) =>
+        e.service && VALID_TYPES.includes(e.rate_type as string) && e.rate != null && !Number.isNaN(Number(e.rate)))
+      .map((e: Record<string, unknown>) => ({
+        ...e,
+        rate: Number(e.rate),
+        base_charge: e.base_charge != null && !Number.isNaN(Number(e.base_charge)) ? Number(e.base_charge) : 0,
+        min_charge: e.min_charge != null && !Number.isNaN(Number(e.min_charge)) ? Number(e.min_charge) : null,
+      }));
+    if (parsed.entries.length === 0) throw new Error("No valid rate entries found in the document");
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

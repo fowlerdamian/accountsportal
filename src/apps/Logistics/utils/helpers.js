@@ -45,11 +45,35 @@ export const fmtDate = (str) => {
   return new Date(y, m - 1, d).toLocaleDateString('en-AU')
 }
 
+// ─── Rate engine derived values ───────────────────────────────────────────────
+// expected_total is written by the logistics-match-invoice edge function.
+
 export const lineVariance = (line) =>
-  line.contracted_total == null ? null : line.charged_total - line.contracted_total
+  line.expected_total == null ? null : line.charged_total - line.expected_total
 
 export const invoiceOvercharge = (lines) =>
   lines.reduce((sum, l) => { const v = lineVariance(l); return sum + (v != null && v > 0 ? v : 0) }, 0)
 
 export const invoiceTotal = (lines) =>
   lines.reduce((sum, l) => sum + l.charged_total, 0)
+
+// ─── Rate card formatting ─────────────────────────────────────────────────────
+
+export const fmtRate = (entry) => {
+  const r = Number(entry.rate)
+  switch (entry.rate_type) {
+    case 'per_kg':   return `$${r.toFixed(2)}/kg`
+    case 'per_item': return `$${r.toFixed(2)}/item`
+    case 'percent':  return `${r}%`
+    default:         return `$${r.toFixed(2)}`
+  }
+}
+
+export const fmtLane = (entry) =>
+  entry.origin || entry.destination
+    ? `${entry.origin ?? 'Any'} → ${entry.destination ?? 'Any'}`
+    : 'All lanes'
+
+// Age in whole days from an ISO timestamp/date to now
+export const daysSince = (iso) =>
+  iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null

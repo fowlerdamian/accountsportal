@@ -1,24 +1,14 @@
-import { useEffect, useState, useRef, Fragment } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useParams } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
 import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../utils/helpers.js'
+import {
+  pageWrap, card, mono, sectionLabel, thStyle, tdStyle,
+  Badge, Spinner, Flash, useFlash, INVOICE_STATUS_STYLE, DISPUTE_STATUS_STYLE, HoverBtn, btnGhost, rowHover,
+} from '../utils/ui.jsx'
 
-const STATUS_STYLE = {
-  pending:  { color: '#888',    background: '#1a1a1a',              border: '1px solid #222222' },
-  flagged:  { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
-  disputed: { color: 'var(--brand-pink)', background: 'rgba(var(--brand-pink-rgb),0.1)',  border: '1px solid rgba(var(--brand-pink-rgb),0.3)'  },
-  approved: { color: 'var(--brand-aqua)', background: 'rgba(var(--brand-aqua-rgb),0.1)', border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
-  resolved: { color: 'var(--brand-blue)', background: 'rgba(var(--brand-aqua-rgb),0.1)', border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
-}
-
-const EMAIL_STATUS_STYLE = {
-  sent:  { color: 'var(--brand-aqua)', background: 'rgba(var(--brand-aqua-rgb),0.1)',  border: '1px solid rgba(var(--brand-aqua-rgb),0.3)' },
-  draft: { color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)' },
-}
-
-function ActionBtn({ label, color, borderColor, disabled, onClick }) {
+function ActionBtn({ label, color, disabled, onClick }) {
   const [hover, setHover] = useState(false)
   return (
     <button
@@ -27,9 +17,9 @@ function ActionBtn({ label, color, borderColor, disabled, onClick }) {
       style={{
         fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
         cursor: disabled ? 'not-allowed' : 'pointer', transition: 'background 120ms',
-        color: disabled ? '#444' : color,
-        border: `1px solid ${disabled ? '#222222' : (hover ? borderColor : '#222222')}`,
-        background: hover && !disabled ? `${borderColor}18` : 'transparent',
+        color: disabled ? 'var(--text-disabled)' : `var(${color})`,
+        border: `1px solid ${disabled ? 'var(--border-default)' : (hover ? `var(${color})` : 'var(--border-default)')}`,
+        background: hover && !disabled ? `rgba(var(${color}-rgb),0.08)` : 'transparent',
         opacity: disabled ? 0.5 : 1,
       }}
       onMouseEnter={() => setHover(true)}
@@ -40,34 +30,32 @@ function ActionBtn({ label, color, borderColor, disabled, onClick }) {
   )
 }
 
-const sectionLabel = {
-  fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0',
-  textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px',
+const MATCH_DOT = {
+  matched: null,                    // clean — no dot
+  no_rate: 'var(--brand-accent)',
+  skipped: null,
 }
 
 export default function InvoiceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
 
-  // Existing state
-  const [invoice,          setInvoice]          = useState(null)
-  const [loading,          setLoading]          = useState(true)
-  const [notes,            setNotes]            = useState('')
-  const [savingNotes,      setSavingNotes]      = useState(false)
-  // Typed-but-unsaved notes must survive background refetches
-  const notesDirty = useRef(false)
-  const [updatingStatus,   setUpdatingStatus]   = useState(false)
-  const [generatingLetter, setGeneratingLetter] = useState(false)
-  const [letter,           setLetter]           = useState('')
-  const [msg,              setMsg]              = useState(null)
+  const [invoice,     setInvoice]     = useState(null)
+  const [disputes,    setDisputes]    = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [notes,       setNotes]       = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const notesDirty = useRef(false)    // typed-but-unsaved notes must survive refetches
+  const [busy,        setBusy]        = useState(false)   // status updates / matching / letter gen
+  const [busyLabel,   setBusyLabel]   = useState('')
+  const [msg,         flash]          = useFlash()
 
-  // Dispute email state
-  const [disputeEmails,    setDisputeEmails]    = useState([])
-  const [showPanel,        setShowPanel]        = useState(false)
-  const [panelLetter,      setPanelLetter]      = useState('')
-  const [panelBusy,        setPanelBusy]        = useState(false)
-  const [expandedEmail,    setExpandedEmail]    = useState(null)
-  const [noClaimsWarning,  setNoClaimsWarning]  = useState(false)
+  // Dispute letter panel
+  const [showPanel,       setShowPanel]       = useState(false)
+  const [panelDisputeId,  setPanelDisputeId]  = useState(null)
+  const [panelLetter,     setPanelLetter]     = useState('')
+  const [panelBusy,       setPanelBusy]       = useState(false)
+  const [noClaimsWarning, setNoClaimsWarning] = useState(false)
 
   const fetchInvoice = async () => {
     if (!id) return
@@ -84,119 +72,135 @@ export default function InvoiceDetail() {
     setLoading(false)
   }
 
-  const fetchDisputeEmails = async () => {
+  const fetchDisputes = async () => {
     if (!id) return
     const { data } = await supabase
-      .from('dispute_emails')
-      .select('*')
+      .from('disputes')
+      .select('*, dispute_events(*)')
       .eq('invoice_id', id)
-      .order('sent_at', { ascending: false })
-    if (data) setDisputeEmails(data)
+      .order('created_at', { ascending: false })
+    if (data) setDisputes(data)
   }
 
-  useEffect(() => { notesDirty.current = false; fetchInvoice(); fetchDisputeEmails() }, [id])
+  useEffect(() => { notesDirty.current = false; setLoading(true); fetchInvoice(); fetchDisputes() }, [id])
 
-  const flash = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 3000) }
+  const withBusy = async (label, fn) => {
+    setBusy(true); setBusyLabel(label)
+    try { await fn() } finally { setBusy(false); setBusyLabel('') }
+  }
 
-  // ─── Status actions ──────────────────────────────────────────────────────────
+  // ─── Rate engine ─────────────────────────────────────────────────────────────
 
-  const updateStatus = async (status) => {
-    if (!invoice) return
-    setUpdatingStatus(true)
+  const runMatch = () => withBusy('Checking rates…', async () => {
+    const { data, error } = await supabase.functions.invoke('logistics-match-invoice', { body: { invoice_id: id } })
+    if (error || data?.error) { flash('err', data?.error ?? error.message); return }
+    flash('ok', `Rate check: ${data.matched} matched, ${data.no_rate} no rate${data.overcharge_aud > 0 ? ` — ${aud(data.overcharge_aud)} overcharged` : ' — no overcharge'}`)
+    await fetchInvoice()
+  })
+
+  // ─── Status ──────────────────────────────────────────────────────────────────
+
+  const updateStatus = (status) => withBusy('Updating…', async () => {
     const { error } = await supabase.from('freight_invoices').update({ status }).eq('id', invoice.id)
-    setUpdatingStatus(false)
     if (error) { flash('err', error.message); return }
     flash('ok', `Status updated to ${status}`)
     await fetchInvoice()
-  }
+  })
 
-  const raiseDispute = async () => {
-    if (!invoice) return
-    setUpdatingStatus(true)
-    const { error } = await supabase.from('freight_invoices').update({ status: 'disputed' }).eq('id', invoice.id)
-    setUpdatingStatus(false)
-    if (error) { flash('err', error.message); return }
-    await fetchInvoice()
+  // ─── Disputes ────────────────────────────────────────────────────────────────
 
-    const claimsEmail = invoice.carriers?.claims_email
-    if (!claimsEmail) {
-      setNoClaimsWarning(true)
-      return
-    }
-
-    await openPanelWithNewLetter(invoice)
-  }
-
-  // ─── Letter generation ───────────────────────────────────────────────────────
-
-  const openPanelWithNewLetter = async (inv) => {
+  const generateLetter = async (inv) => {
     const lines = inv.freight_invoice_lines ?? []
     const flaggedLines = lines
       .filter(l => { const v = lineVariance(l); return v != null && v > 0 })
       .map(l => ({ description: l.description, detail: l.detail ?? '', variance_aud: lineVariance(l) }))
-    const totalOver = invoiceOvercharge(lines)
-
-    setGeneratingLetter(true)
     const { data, error } = await supabase.functions.invoke('generate-dispute-letter', {
       body: {
         invoice_ref:          inv.invoice_ref,
         carrier_name:         inv.carriers?.name ?? '',
         invoice_date:         inv.invoice_date,
         flagged_lines:        flaggedLines,
-        total_overcharge_aud: totalOver,
+        total_overcharge_aud: invoiceOvercharge(lines),
       },
     })
-    setGeneratingLetter(false)
-    if (error) { flash('err', error.message); return }
-    setPanelLetter(data.letter ?? '')
-    setShowPanel(true)
+    if (error || data?.error) throw new Error(data?.error ?? error.message)
+    return data.letter ?? ''
   }
 
-  const openPanelForResend = async () => {
-    const draft = disputeEmails.find(e => e.status === 'draft')
+  const raiseDispute = () => withBusy('Raising dispute…', async () => {
+    // Reuse an open draft if one exists
+    const draft = disputes.find(d => d.status === 'draft')
     if (draft) {
+      setPanelDisputeId(draft.id)
       setPanelLetter(draft.letter_text ?? '')
       setShowPanel(true)
       return
     }
-    await openPanelWithNewLetter(invoice)
-  }
 
-  // ─── Existing AI letter (unchanged) ─────────────────────────────────────────
-
-  const generateLetter = async () => {
-    if (!invoice) return
-    const lines = invoice.freight_invoice_lines ?? []
-    const flaggedLines = lines
-      .filter(l => { const v = lineVariance(l); return v != null && v > 0 })
-      .map(l => ({ description: l.description, detail: l.detail ?? '', variance_aud: lineVariance(l) }))
-    const totalOver = invoiceOvercharge(lines)
-
-    setGeneratingLetter(true)
-    setLetter('')
-    const { data, error } = await supabase.functions.invoke('generate-dispute-letter', {
-      body: {
-        invoice_ref:          invoice.invoice_ref,
-        carrier_name:         invoice.carriers?.name ?? '',
-        invoice_date:         invoice.invoice_date,
-        flagged_lines:        flaggedLines,
-        total_overcharge_aud: totalOver,
-      },
-    })
-    setGeneratingLetter(false)
+    const over = invoiceOvercharge(invoice.freight_invoice_lines ?? [])
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: dispute, error } = await supabase.from('disputes').insert({
+      invoice_id:     invoice.id,
+      amount_claimed: over,
+      created_by:     user?.id ?? null,
+    }).select().single()
     if (error) { flash('err', error.message); return }
-    setLetter(data.letter ?? '')
+
+    await supabase.from('dispute_events').insert({
+      dispute_id: dispute.id,
+      event_type: 'created',
+      detail:     `Dispute raised — ${aud(over)} claimed`,
+      amount:     over,
+      created_by: user?.id ?? null,
+    })
+    await supabase.from('freight_invoices').update({ status: 'disputed' }).eq('id', invoice.id)
+    await Promise.all([fetchInvoice(), fetchDisputes()])
+
+    if (!invoice.carriers?.claims_email) { setNoClaimsWarning(true) }
+
+    try {
+      const letter = await generateLetter(invoice)
+      await supabase.from('disputes').update({ letter_text: letter }).eq('id', dispute.id)
+      await supabase.from('dispute_events').insert({ dispute_id: dispute.id, event_type: 'letter_generated', detail: 'AI dispute letter generated', created_by: user?.id ?? null })
+      setPanelDisputeId(dispute.id)
+      setPanelLetter(letter)
+      setShowPanel(true)
+    } catch (err) {
+      flash('err', `Dispute created but letter generation failed: ${err.message}`)
+    }
+  })
+
+  const reopenPanel = (dispute) => {
+    setPanelDisputeId(dispute.id)
+    setPanelLetter(dispute.letter_text ?? '')
+    setShowPanel(true)
   }
 
-  const copyLetter = () => {
-    navigator.clipboard.writeText(letter)
-    flash('ok', 'Letter copied to clipboard')
+  const saveDraft = async () => {
+    setPanelBusy(true)
+    const { error } = await supabase.from('disputes').update({ letter_text: panelLetter }).eq('id', panelDisputeId)
+    setPanelBusy(false)
+    if (error) { flash('err', error.message); return }
+    setShowPanel(false)
+    flash('ok', 'Draft saved')
+    fetchDisputes()
+  }
+
+  const sendDisputeEmail = async () => {
+    setPanelBusy(true)
+    const { data, error } = await supabase.functions.invoke('send-dispute-email', {
+      body: { dispute_id: panelDisputeId, letter_text: panelLetter },
+    })
+    setPanelBusy(false)
+    if (error || data?.error) { flash('err', data?.error ?? error.message); return }
+    flash('ok', `Dispute email sent to ${data.sent_to}`)
+    setShowPanel(false)
+    Promise.all([fetchInvoice(), fetchDisputes()])
   }
 
   // ─── Notes ───────────────────────────────────────────────────────────────────
 
   const saveNotes = async () => {
-    if (!invoice) return
     setSavingNotes(true)
     const { error } = await supabase.from('freight_invoices').update({ notes }).eq('id', invoice.id)
     setSavingNotes(false)
@@ -205,133 +209,81 @@ export default function InvoiceDetail() {
     flash('ok', 'Notes saved')
   }
 
-  // ─── Dispute panel actions ───────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
-  const saveDraft = async () => {
-    if (!invoice) return
-    setPanelBusy(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const existingDraft = disputeEmails.find(e => e.status === 'draft')
-    const { error } = existingDraft
-      ? await supabase.from('dispute_emails').update({ letter_text: panelLetter }).eq('id', existingDraft.id)
-      : await supabase.from('dispute_emails').insert({
-          invoice_id:  invoice.id,
-          sent_to:     invoice.carriers?.claims_email,
-          letter_text: panelLetter,
-          sent_by:     user?.id ?? null,
-          status:      'draft',
-        })
-    setPanelBusy(false)
-    if (error) { flash('err', error.message); return }
-    setShowPanel(false)
-    fetchDisputeEmails()
-  }
-
-  const sendDisputeEmail = async () => {
-    if (!invoice) return
-    setPanelBusy(true)
-    const { error } = await supabase.functions.invoke('send-dispute-email', {
-      body: { invoice_id: invoice.id, letter_text: panelLetter },
-    })
-    setPanelBusy(false)
-    if (error) { flash('err', error.message); return }
-    flash('ok', `Dispute email sent to ${invoice.carriers?.claims_email}`)
-    setShowPanel(false)
-    fetchDisputeEmails()
-  }
-
-  // ─── Loading / not found ─────────────────────────────────────────────────────
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center" style={{ flex: 1 }}>
-        <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />
-      </div>
-    )
-  }
+  if (loading) return <Spinner />
   if (!invoice) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#444', fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-disabled)', fontFamily: mono, fontSize: '13px' }}>
         Invoice not found.
       </div>
     )
   }
 
-  const lines    = invoice.freight_invoice_lines ?? []
-  const total    = invoiceTotal(lines)
-  const over     = invoiceOvercharge(lines)
-  const flagN    = lines.filter(l => { const v = lineVariance(l); return v != null && v > 0 }).length
-  const noRateN  = lines.filter(l => l.contracted_total == null).length
-  const ss       = STATUS_STYLE[invoice.status] ?? STATUS_STYLE.pending
-  const hasSent  = disputeEmails.some(e => e.status === 'sent')
+  const lines   = invoice.freight_invoice_lines ?? []
+  const total   = invoiceTotal(lines)
+  const over    = invoiceOvercharge(lines)
+  const flagN   = lines.filter(l => { const v = lineVariance(l); return v != null && v > 0 }).length
+  const noRateN = lines.filter(l => l.match_status === 'no_rate').length
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-
+    <div style={pageWrap}>
       <div style={{ marginBottom: '24px' }}>
         <button
           onClick={() => navigate('/logistics/invoices')}
-          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: '#555', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '4px', transition: 'color 120ms' }}
-          onMouseEnter={e => { e.currentTarget.style.color = '#a0a0a0' }}
-          onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '12px', fontFamily: mono, color: 'var(--text-tertiary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '4px', transition: 'color 120ms' }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-secondary)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
         >
           ← Invoices
         </button>
-        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0 }}>Invoice Detail</h1>
-        <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>Review and manage carrier invoice</p>
+        <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Invoice Detail</h1>
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>Review, rate-check and dispute carrier invoices</p>
       </div>
 
       <LogisticsNav />
+      <Flash msg={msg} />
 
-      {/* Toast */}
-      {msg && (
-        <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
-          background: msg.type === 'ok' ? 'rgba(var(--brand-aqua-rgb),0.1)' : 'rgba(var(--brand-pink-rgb),0.1)',
-          border: `1px solid ${msg.type === 'ok' ? 'rgba(var(--brand-aqua-rgb),0.3)' : 'rgba(var(--brand-pink-rgb),0.3)'}`,
-          color: msg.type === 'ok' ? 'var(--brand-aqua)' : 'var(--brand-pink)' }}>
-          {msg.text}
-        </div>
-      )}
-
-      {/* No claims email warning */}
       {noClaimsWarning && (
-        <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
+        <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: mono,
           background: 'rgba(var(--brand-accent-rgb),0.08)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', color: 'var(--brand-accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-          <span>No claims email set for this carrier — add one in Carrier settings.</span>
+          <span>No claims email set for this carrier — add one in Rate Cards → Carriers before sending.</span>
           <button onClick={() => setNoClaimsWarning(false)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}>×</button>
         </div>
       )}
 
       {/* Header card */}
-      <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
+      <div style={{ ...card, padding: '20px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', marginBottom: '20px' }}>
           <div>
-            <p style={{ fontSize: '22px', fontWeight: 700, color: '#ffffff', margin: 0 }}>{invoice.invoice_ref}</p>
-            <p style={{ fontSize: '13px', color: '#888', margin: '4px 0 0' }}>
+            <p style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{invoice.invoice_ref}</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
               {invoice.carriers?.name}
               {invoice.carriers?.email && <> · <a href={`mailto:${invoice.carriers.email}`} style={{ color: 'var(--brand-accent)', textDecoration: 'none' }}>{invoice.carriers.email}</a></>}
             </p>
-            <p style={{ fontSize: '12px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>
               Invoice: {fmtDate(invoice.invoice_date)}
               {invoice.due_date && <> · Due: {fmtDate(invoice.due_date)}</>}
+              {invoice.matched_at && <> · Rate-checked {new Date(invoice.matched_at).toLocaleDateString('en-AU')}</>}
             </p>
           </div>
-          <span style={{ ...ss, display: 'inline-block', padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', textTransform: 'capitalize', flexShrink: 0 }}>
-            {invoice.status}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            <HoverBtn onClick={runMatch} disabled={busy}>{busyLabel === 'Checking rates…' ? 'Checking…' : 'Run rate check'}</HoverBtn>
+            <Badge map={INVOICE_STATUS_STYLE} value={invoice.status} />
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px', paddingTop: '16px', borderTop: '1px solid #1a1a1a' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
           {[
-            { label: 'Total Charged', value: aud(total),                   style: {} },
-            { label: 'Overcharge',    value: over > 0 ? aud(over) : '—',   style: over > 0 ? { color: 'var(--brand-pink)' } : {} },
-            { label: 'Lines Flagged', value: flagN,                         style: flagN > 0   ? { color: 'var(--brand-pink)' } : {} },
-            { label: 'No Rate Card',  value: noRateN,                       style: noRateN > 0 ? { color: 'var(--brand-accent)' } : {} },
+            { label: 'Total Charged', value: aud(total),                 style: {} },
+            { label: 'Overcharge',    value: over > 0 ? aud(over) : '—', style: over > 0 ? { color: 'var(--brand-pink)' } : {} },
+            { label: 'Lines Flagged', value: flagN,                      style: flagN > 0   ? { color: 'var(--brand-pink)' } : {} },
+            { label: 'No Rate Match', value: noRateN,                    style: noRateN > 0 ? { color: 'var(--brand-accent)' } : {} },
           ].map(({ label, value, style }) => (
             <div key={label}>
-              <p style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{label}</p>
-              <p style={{ fontSize: '20px', fontWeight: 600, color: '#ffffff', margin: '6px 0 0', ...style }}>{value}</p>
+              <p style={{ fontSize: '10px', fontFamily: mono, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{label}</p>
+              <p style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', margin: '6px 0 0', ...style }}>{value}</p>
             </div>
           ))}
         </div>
@@ -339,54 +291,62 @@ export default function InvoiceDetail() {
 
       {/* Line items */}
       <p style={sectionLabel}>Line items</p>
-      <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden', marginBottom: '24px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ ...card, overflowX: 'auto', marginBottom: '24px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '640px' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
-              {['Description', 'Detail', 'Charged', 'Contracted', 'Variance'].map(h => (
-                <th key={h} style={{ padding: '10px 14px', textAlign: ['Charged', 'Contracted', 'Variance'].includes(h) ? 'right' : 'left', fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>{h}</th>
+            <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              {['Description', 'Service / Lane', 'Weight / Qty', 'Charged', 'Expected', 'Variance'].map(h => (
+                <th key={h} style={thStyle(['Charged', 'Expected', 'Variance'].includes(h))}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {lines.map(line => {
               const variance = lineVariance(line)
-              const isOver   = variance != null && variance > 0
-              const noRate   = line.contracted_total == null
+              const isOver   = variance != null && variance > 0.005
+              const dot      = isOver ? 'var(--brand-pink)' : MATCH_DOT[line.match_status]
               return (
-                <tr key={line.id} style={{ borderBottom: '1px solid #181818', background: isOver ? 'rgba(var(--brand-pink-rgb),0.04)' : 'transparent' }}>
-                  <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff' }}>
+                <tr key={line.id} style={{ borderBottom: '1px solid var(--border-subtle)', background: isOver ? 'rgba(var(--brand-pink-rgb),0.04)' : 'transparent' }}>
+                  <td style={{ ...tdStyle, color: 'var(--text-primary)' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {isOver  && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--brand-pink)', flexShrink: 0 }} />}
-                      {noRate && !isOver && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--brand-accent)', flexShrink: 0 }} />}
+                      {dot && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: dot, flexShrink: 0 }} />}
                       {line.description}
                     </span>
+                    {line.detail && <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: mono, marginTop: '2px' }}>{line.detail}</span>}
                   </td>
-                  <td style={{ padding: '11px 14px', fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace' }}>{line.detail ?? '—'}</td>
-                  <td style={{ padding: '11px 14px', fontSize: '13px', color: '#ffffff', textAlign: 'right' }}>{aud(line.charged_total)}</td>
-                  <td style={{ padding: '11px 14px', textAlign: 'right' }}>
-                    {noRate
-                      ? <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', borderRadius: '4px', padding: '2px 7px' }}>No rate card</span>
-                      : <span style={{ fontSize: '13px', color: '#AAA' }}>{aud(line.contracted_total)}</span>}
+                  <td style={{ ...tdStyle, fontSize: '12px', color: 'var(--text-tertiary)', fontFamily: mono }}>
+                    {line.service ?? '—'}
+                    {(line.origin || line.destination) && <span> · {line.origin ?? '?'} → {line.destination ?? '?'}</span>}
                   </td>
-                  <td style={{ padding: '11px 14px', fontSize: '13px', textAlign: 'right' }}>
+                  <td style={{ ...tdStyle, fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono }}>
+                    {[line.weight_kg != null ? `${line.weight_kg}kg` : null, line.qty != null ? `×${line.qty}` : null].filter(Boolean).join(' · ') || '—'}
+                  </td>
+                  <td style={{ ...tdStyle, color: 'var(--text-primary)', textAlign: 'right' }}>{aud(line.charged_total)}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                    {line.match_status === 'no_rate'
+                      ? <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-accent)', background: 'rgba(var(--brand-accent-rgb),0.1)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', borderRadius: '4px', padding: '2px 7px', whiteSpace: 'nowrap' }}>No rate</span>
+                      : line.match_status === 'skipped'
+                        ? <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--text-disabled)' }}>n/a</span>
+                        : <span style={{ color: 'var(--text-secondary)' }}>{aud(line.expected_total)}</span>}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
                     {variance == null
-                      ? <span style={{ color: '#444' }}>—</span>
-                      : variance > 0
+                      ? <span style={{ color: 'var(--text-disabled)' }}>—</span>
+                      : variance > 0.005
                         ? <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>+{aud(variance)}</span>
-                        : variance < 0
+                        : variance < -0.005
                           ? <span style={{ color: 'var(--brand-aqua)' }}>{aud(variance)}</span>
-                          : <span style={{ color: '#444' }}>—</span>}
+                          : <span style={{ color: 'var(--text-disabled)' }}>—</span>}
                   </td>
                 </tr>
               )
             })}
-            <tr style={{ background: '#0a0a0a' }}>
-              <td colSpan={2} style={{ padding: '11px 14px', fontSize: '12px', fontWeight: 600, color: '#888', fontFamily: '"JetBrains Mono", monospace', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</td>
-              <td style={{ padding: '11px 14px', fontSize: '13px', fontWeight: 600, color: '#ffffff', textAlign: 'right' }}>{aud(total)}</td>
+            <tr>
+              <td colSpan={3} style={{ ...tdStyle, fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', fontFamily: mono, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</td>
+              <td style={{ ...tdStyle, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'right' }}>{aud(total)}</td>
               <td />
-              <td style={{ padding: '11px 14px', textAlign: 'right' }}>
-                {over > 0 ? <span style={{ color: 'var(--brand-pink)', fontWeight: 600, fontSize: '13px' }}>+{aud(over)}</span> : <span style={{ color: '#444' }}>—</span>}
+              <td style={{ ...tdStyle, textAlign: 'right' }}>
+                {over > 0 ? <span style={{ color: 'var(--brand-pink)', fontWeight: 600 }}>+{aud(over)}</span> : <span style={{ color: 'var(--text-disabled)' }}>—</span>}
               </td>
             </tr>
           </tbody>
@@ -394,38 +354,67 @@ export default function InvoiceDetail() {
       </div>
 
       {/* Status actions */}
-      <p style={sectionLabel}>Update status</p>
+      <p style={sectionLabel}>Actions</p>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px', alignItems: 'center' }}>
-        <ActionBtn label="Approve"         color="var(--brand-aqua)" borderColor="var(--brand-aqua)" disabled={updatingStatus || generatingLetter || invoice.status === 'approved'} onClick={() => updateStatus('approved')} />
-        <ActionBtn label="Flag for Review" color="var(--brand-accent)" borderColor="var(--brand-accent)" disabled={updatingStatus || generatingLetter || invoice.status === 'flagged'}  onClick={() => updateStatus('flagged')} />
+        <ActionBtn label="Approve"       color="--brand-aqua"   disabled={busy || invoice.status === 'approved'} onClick={() => updateStatus('approved')} />
+        <ActionBtn label="Flag for Review" color="--brand-accent" disabled={busy || invoice.status === 'flagged'} onClick={() => updateStatus('flagged')} />
         <ActionBtn
-          label={generatingLetter ? 'Generating…' : updatingStatus ? 'Raising…' : 'Raise Dispute'}
-          color="var(--brand-pink)" borderColor="var(--brand-pink)"
-          disabled={updatingStatus || generatingLetter || invoice.status === 'disputed'}
+          label={busyLabel === 'Raising dispute…' ? 'Raising…' : 'Raise Dispute'}
+          color="--brand-pink"
+          disabled={busy || over <= 0}
           onClick={raiseDispute}
         />
-        <ActionBtn label="Mark Resolved"   color="var(--brand-blue)" borderColor="var(--brand-blue)" disabled={updatingStatus || generatingLetter || invoice.status === 'resolved'} onClick={() => updateStatus('resolved')} />
-        {(updatingStatus || generatingLetter) && <div className="w-4 h-4 rounded-full border animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />}
+        <ActionBtn label="Mark Resolved" color="--brand-aqua" disabled={busy || invoice.status === 'resolved'} onClick={() => updateStatus('resolved')} />
+        {busy && <div className="w-4 h-4 rounded-full border animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />}
+        {over <= 0 && <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--text-disabled)' }}>Disputes need a detected overcharge — run the rate check first</span>}
       </div>
 
-      {/* Send dispute email — persistent button */}
-      {invoice.status === 'disputed' && !hasSent && invoice.carriers?.claims_email && (
-        <div style={{ marginBottom: '24px' }}>
-          <button
-            onClick={openPanelForResend}
-            disabled={generatingLetter}
-            style={{
-              fontSize: '12px', fontWeight: 500, padding: '7px 16px', borderRadius: '6px',
-              cursor: generatingLetter ? 'not-allowed' : 'pointer',
-              color: 'var(--brand-pink)', border: '1px solid rgba(var(--brand-pink-rgb),0.35)', background: 'transparent',
-              opacity: generatingLetter ? 0.6 : 1, transition: 'background 120ms',
-            }}
-            onMouseEnter={e => { if (!generatingLetter) e.currentTarget.style.background = 'rgba(var(--brand-pink-rgb),0.08)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-          >
-            {generatingLetter ? 'Generating…' : 'Send dispute email'}
-          </button>
-        </div>
+      {/* Disputes on this invoice */}
+      {disputes.length > 0 && (
+        <>
+          <p style={sectionLabel}>Disputes</p>
+          <div style={{ ...card, overflow: 'hidden', marginBottom: '24px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  {['Raised', 'Status', 'Claimed', 'Recovered', 'Sent to', ''].map((h, i) => (
+                    <th key={i} style={thStyle(h === 'Claimed' || h === 'Recovered')}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {disputes.map(d => (
+                  <tr
+                    key={d.id}
+                    style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'background 120ms' }}
+                    onClick={() => navigate('/logistics/disputes')}
+                    {...rowHover}
+                  >
+                    <td style={{ ...tdStyle, fontSize: '12px', fontFamily: mono, color: 'var(--text-tertiary)' }}>{fmtDate(d.created_at?.slice(0, 10))}</td>
+                    <td style={tdStyle}><Badge map={DISPUTE_STATUS_STYLE} value={d.status} /></td>
+                    <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-primary)' }}>{aud(Number(d.amount_claimed))}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      {Number(d.amount_recovered) > 0
+                        ? <span style={{ color: 'var(--brand-aqua)', fontWeight: 500 }}>{aud(Number(d.amount_recovered))}</span>
+                        : <span style={{ color: 'var(--text-disabled)' }}>—</span>}
+                    </td>
+                    <td style={{ ...tdStyle, fontSize: '12px', fontFamily: mono, color: 'var(--text-secondary)' }}>{d.sent_to ?? '—'}</td>
+                    <td style={tdStyle}>
+                      {d.status === 'draft' && (
+                        <button
+                          onClick={e => { e.stopPropagation(); reopenPanel(d) }}
+                          style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          Edit & send
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Notes */}
@@ -437,185 +426,50 @@ export default function InvoiceDetail() {
           placeholder="Add internal notes about this invoice…"
           rows={3}
           style={{
-            width: '100%', boxSizing: 'border-box', background: '#0a0a0a', border: '1px solid #222222',
-            borderRadius: '6px', color: '#ffffff', fontSize: '13px', padding: '10px 12px',
+            width: '100%', boxSizing: 'border-box', background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
+            borderRadius: '6px', color: 'var(--text-primary)', fontSize: '13px', padding: '10px 12px',
             fontFamily: 'inherit', resize: 'vertical', outline: 'none',
           }}
         />
-        <button
-          onClick={saveNotes}
-          disabled={savingNotes}
-          style={{
-            marginTop: '8px', fontSize: '12px', fontWeight: 500, padding: '6px 14px',
-            borderRadius: '6px', cursor: savingNotes ? 'not-allowed' : 'pointer',
-            color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)', background: 'transparent',
-            opacity: savingNotes ? 0.5 : 1, transition: 'background 120ms',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-        >
-          {savingNotes ? 'Saving…' : 'Save notes'}
-        </button>
+        <div style={{ marginTop: '8px' }}>
+          <HoverBtn onClick={saveNotes} disabled={savingNotes}>{savingNotes ? 'Saving…' : 'Save notes'}</HoverBtn>
+        </div>
       </div>
 
-      {/* AI dispute letter (existing, unchanged) */}
-      {over > 0 && (
-        <>
-          <p style={sectionLabel}>AI Dispute Letter</p>
-          <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
-            <p style={{ fontSize: '13px', color: '#888', margin: '0 0 14px' }}>
-              <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{flagN} overcharged line{flagN !== 1 ? 's' : ''}</span>
-              {' · '}
-              <span style={{ color: '#ffffff' }}>{aud(over)} to recover</span>
-            </p>
-            <button
-              onClick={generateLetter}
-              disabled={generatingLetter}
-              style={{
-                fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px',
-                cursor: generatingLetter ? 'not-allowed' : 'pointer',
-                color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)', background: 'transparent',
-                opacity: generatingLetter ? 0.6 : 1, transition: 'background 120ms',
-              }}
-              onMouseEnter={e => { if (!generatingLetter) e.currentTarget.style.background = 'rgba(var(--brand-accent-rgb),0.08)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-            >
-              {generatingLetter ? 'Generating…' : 'Generate letter'}
-            </button>
-
-            {letter && (
-              <div style={{ marginTop: '16px', background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '16px' }}>
-                <pre style={{ margin: 0, fontSize: '13px', color: '#ffffff', whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: 1.6 }}>{letter}</pre>
-                <button
-                  onClick={copyLetter}
-                  style={{ marginTop: '12px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#a0a0a0', background: 'none', border: 'none', cursor: 'pointer', padding: 0, transition: 'color 120ms' }}
-                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-accent)' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
-                >
-                  copy letter
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Dispute history */}
-      {disputeEmails.length > 0 && (
-        <>
-          <p style={sectionLabel}>Dispute history</p>
-          <div style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '8px', overflow: 'hidden', marginBottom: '24px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
-                  {['Sent to', 'Date', 'Status', 'Actions'].map(h => (
-                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#444', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {disputeEmails.map((em) => {
-                  const es = EMAIL_STATUS_STYLE[em.status] ?? EMAIL_STATUS_STYLE.sent
-                  const isExpanded = expandedEmail === em.id
-                  return (
-                    <Fragment key={em.id}>
-                      <tr
-                        style={{ borderBottom: isExpanded ? 'none' : '1px solid #181818', cursor: em.status === 'sent' ? 'pointer' : 'default', transition: 'background 120ms' }}
-                        onClick={() => { if (em.status === 'sent') setExpandedEmail(isExpanded ? null : em.id) }}
-                        onMouseEnter={e => { if (em.status === 'sent') e.currentTarget.style.background = '#0a0a0a' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-                      >
-                        <td style={{ padding: '11px 14px', fontSize: '12px', color: '#888', fontFamily: '"JetBrains Mono", monospace' }}>{em.sent_to ?? '—'}</td>
-                        <td style={{ padding: '11px 14px', fontSize: '12px', color: '#666', fontFamily: '"JetBrains Mono", monospace' }}>
-                          {fmtDate(em.sent_at?.slice(0, 10))}
-                        </td>
-                        <td style={{ padding: '11px 14px' }}>
-                          <span style={{ ...es, display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', textTransform: 'capitalize' }}>
-                            {em.status}
-                          </span>
-                        </td>
-                        <td style={{ padding: '11px 14px' }}>
-                          {em.status === 'draft' && (
-                            <button
-                              onClick={e => { e.stopPropagation(); setPanelLetter(em.letter_text ?? ''); setShowPanel(true) }}
-                              style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, transition: 'opacity 120ms' }}
-                              onMouseEnter={e => { e.currentTarget.style.opacity = '0.7' }}
-                              onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
-                            >
-                              Send now
-                            </button>
-                          )}
-                          {em.status === 'sent' && (
-                            <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#444' }}>
-                              {isExpanded ? 'collapse ▲' : 'view ▼'}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                      {isExpanded && em.status === 'sent' && (
-                        <tr style={{ borderBottom: '1px solid #181818' }}>
-                          <td colSpan={4} style={{ padding: '0 14px 14px' }}>
-                            <pre style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '6px', padding: '14px', margin: 0, fontSize: '12px', color: '#ffffff', whiteSpace: 'pre-wrap', fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.6 }}>
-                              {em.letter_text}
-                            </pre>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {/* ── Slide-in dispute letter preview panel ─────────────────────────────── */}
-
-      {/* Backdrop */}
+      {/* ── Slide-in dispute letter panel ─────────────────────────────────────── */}
       {showPanel && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40 }}
-          onClick={() => setShowPanel(false)}
-        />
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40 }} onClick={() => setShowPanel(false)} />
       )}
-
-      {/* Panel */}
       <div
         style={{
-          position: 'fixed', right: 0, top: 0, height: '100%', width: '480px',
-          background: '#0a0a0a', borderLeft: '1px solid #1e1e1e',
+          position: 'fixed', right: 0, top: 0, height: '100%', width: '480px', maxWidth: '100vw',
+          background: 'var(--bg-elevated)', borderLeft: '1px solid var(--border-default)',
           transform: showPanel ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 220ms ease',
-          zIndex: 50, display: 'flex', flexDirection: 'column',
-          boxSizing: 'border-box',
+          zIndex: 50, display: 'flex', flexDirection: 'column', boxSizing: 'border-box',
         }}
       >
-        {/* Panel header */}
-        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #1e1e1e', flexShrink: 0 }}>
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
             <div>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', margin: 0 }}>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                 Dispute letter — {invoice.invoice_ref}
               </p>
               {invoice.carriers?.claims_email && (
-                <p style={{ fontSize: '12px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>
                   To: {invoice.carriers.claims_email}
                 </p>
               )}
             </div>
             <button
               onClick={() => setShowPanel(false)}
-              style={{ background: 'none', border: 'none', color: '#a0a0a0', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: 0, flexShrink: 0, marginTop: '2px' }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#AAA' }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#555' }}
+              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: 0, flexShrink: 0, marginTop: '2px' }}
             >
               ×
             </button>
           </div>
         </div>
 
-        {/* Letter textarea */}
         <div style={{ flex: 1, padding: '16px 24px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <textarea
             value={panelLetter}
@@ -623,45 +477,32 @@ export default function InvoiceDetail() {
             rows={12}
             style={{
               flex: 1, width: '100%', boxSizing: 'border-box',
-              background: '#0a0a0a', border: '1px solid #222222', borderRadius: '6px',
-              color: '#ffffff', fontSize: '13px', padding: '14px',
-              fontFamily: '"JetBrains Mono", monospace', resize: 'none', outline: 'none',
-              lineHeight: 1.7,
+              background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px',
+              color: 'var(--text-primary)', fontSize: '13px', padding: '14px',
+              fontFamily: mono, resize: 'none', outline: 'none', lineHeight: 1.7,
             }}
           />
         </div>
 
-        {/* Panel footer */}
-        <div style={{ padding: '16px 24px 24px', borderTop: '1px solid #1e1e1e', flexShrink: 0, display: 'flex', gap: '10px' }}>
+        <div style={{ padding: '16px 24px 24px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0, display: 'flex', gap: '10px' }}>
           <button
             onClick={sendDisputeEmail}
-            disabled={panelBusy || !panelLetter.trim()}
+            disabled={panelBusy || !panelLetter.trim() || !invoice.carriers?.claims_email}
             style={{
               flex: 1, fontSize: '13px', fontWeight: 600, padding: '9px 16px', borderRadius: '6px',
-              cursor: (panelBusy || !panelLetter.trim()) ? 'not-allowed' : 'pointer',
-              color: '#000000', background: (panelBusy || !panelLetter.trim()) ? '#444' : '#ffffff',
-              border: 'none', transition: 'background 120ms',
-              opacity: (panelBusy || !panelLetter.trim()) ? 0.6 : 1,
+              cursor: (panelBusy || !panelLetter.trim() || !invoice.carriers?.claims_email) ? 'not-allowed' : 'pointer',
+              color: 'var(--accent-text)', background: 'var(--brand-accent)',
+              border: 'none', opacity: (panelBusy || !panelLetter.trim() || !invoice.carriers?.claims_email) ? 0.5 : 1,
             }}
-            onMouseEnter={e => { if (!panelBusy && panelLetter.trim()) e.currentTarget.style.background = '#FFF' }}
-            onMouseLeave={e => { if (!panelBusy && panelLetter.trim()) e.currentTarget.style.background = '#ffffff' }}
           >
             {panelBusy ? 'Sending…' : `Send to ${invoice.carriers?.name ?? 'carrier'}`}
           </button>
           <button
             onClick={saveDraft}
             disabled={panelBusy || !panelLetter.trim()}
-            style={{
-              fontSize: '13px', fontWeight: 500, padding: '9px 16px', borderRadius: '6px',
-              cursor: (panelBusy || !panelLetter.trim()) ? 'not-allowed' : 'pointer',
-              color: '#888', border: '1px solid #222222', background: 'transparent',
-              transition: 'border-color 120ms, color 120ms',
-              opacity: (panelBusy || !panelLetter.trim()) ? 0.6 : 1,
-            }}
-            onMouseEnter={e => { if (!panelBusy) { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.borderColor = '#555' } }}
-            onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#222222' }}
+            style={{ ...btnGhost, padding: '9px 16px', fontSize: '13px', opacity: (panelBusy || !panelLetter.trim()) ? 0.6 : 1 }}
           >
-            Save draft — send later
+            Save draft
           </button>
         </div>
       </div>

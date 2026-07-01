@@ -3,10 +3,10 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@portal/lib/supabase'
 
 const tabs = [
-  { label: 'Overview',   to: '/logistics',          end: true  },
-  { label: 'Invoices',   to: '/logistics/invoices', end: false, flagKey: 'flagged'   },
-  { label: 'Rate Cards', to: '/logistics/rate-cards', end: false },
-  { label: 'Disputes',   to: '/logistics/disputes', end: false, flagKey: 'disputed'  },
+  { label: 'Overview',     to: '/logistics',              end: true  },
+  { label: 'Invoices',     to: '/logistics/invoices',     end: false, flagKey: 'flagged'  },
+  { label: 'Rate Cards',   to: '/logistics/rate-cards',   end: false },
+  { label: 'Disputes',     to: '/logistics/disputes',     end: false, flagKey: 'disputed' },
   { label: 'Manual Label', to: '/logistics/manual-label', end: false },
 ]
 
@@ -16,14 +16,12 @@ export default function LogisticsNav() {
   const [disputedCount, setDisputedCount] = useState(0)
 
   const fetchCounts = async () => {
-    const { data } = await supabase
-      .from('freight_invoices')
-      .select('status')
-      .in('status', ['flagged', 'disputed'])
-    if (data) {
-      setFlaggedCount(data.filter(r => r.status === 'flagged').length)
-      setDisputedCount(data.filter(r => r.status === 'disputed').length)
-    }
+    const [inv, disp] = await Promise.all([
+      supabase.from('freight_invoices').select('id', { count: 'exact', head: true }).eq('status', 'flagged'),
+      supabase.from('disputes').select('id', { count: 'exact', head: true }).in('status', ['draft', 'sent', 'acknowledged']),
+    ])
+    setFlaggedCount(inv.count ?? 0)
+    setDisputedCount(disp.count ?? 0)
   }
 
   useEffect(() => {
@@ -31,6 +29,7 @@ export default function LogisticsNav() {
     const channel = supabase
       .channel('logistics_nav_counts')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'freight_invoices' }, fetchCounts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'disputes' }, fetchCounts)
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
@@ -40,12 +39,10 @@ export default function LogisticsNav() {
   return (
     <div
       className="flex flex-shrink-0 logistics-nav"
-      style={{ borderBottom: '1px solid #222222', marginBottom: '24px' }}
+      style={{ borderBottom: '1px solid var(--border-default)', marginBottom: '24px' }}
     >
       {tabs.map((tab) => {
-        const isActive = tab.end
-          ? pathname === tab.to
-          : pathname.startsWith(tab.to)
+        const isActive = tab.end ? pathname === tab.to : pathname.startsWith(tab.to)
         const count = tab.flagKey ? badgeCount[tab.flagKey] : 0
         const isDanger = tab.flagKey === 'disputed'
 
@@ -56,7 +53,7 @@ export default function LogisticsNav() {
             end={tab.end}
             className="flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors border-b-2 outline-none"
             style={{
-              color: isActive ? 'var(--brand-accent)' : '#666',
+              color: isActive ? 'var(--brand-accent)' : 'var(--text-tertiary)',
               borderBottomColor: isActive ? 'var(--brand-accent)' : 'transparent',
               background: isActive ? 'rgba(var(--brand-accent-rgb),0.04)' : 'transparent',
               textDecoration: 'none',
@@ -66,9 +63,7 @@ export default function LogisticsNav() {
             {count > 0 && (
               <span
                 style={{
-                  width: '7px',
-                  height: '7px',
-                  borderRadius: '50%',
+                  width: '7px', height: '7px', borderRadius: '50%',
                   background: isDanger ? 'var(--brand-pink)' : 'var(--brand-accent)',
                   flexShrink: 0,
                 }}
