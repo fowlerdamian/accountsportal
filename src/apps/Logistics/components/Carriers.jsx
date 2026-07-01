@@ -27,6 +27,7 @@ export default function Carriers() {
     name: c?.name ?? '', email: c?.email ?? '', claims_email: c?.claims_email ?? '',
     fuel_levy_pct: c?.fuel_levy_pct != null ? String(c.fuel_levy_pct) : '',
     cubic_factor_kg_m3: c?.cubic_factor_kg_m3 != null ? String(c.cubic_factor_kg_m3) : '250',
+    billing_frequency: c?.billing_frequency ?? '',
   })
 
   const getEdit = (id) => carrierEdits[id] ?? cleanOf(carriers.find(x => x.id === id))
@@ -46,6 +47,7 @@ export default function Carriers() {
       claims_email:  edit.claims_email.trim() || null,
       fuel_levy_pct: isNaN(levy) ? null : levy,
       cubic_factor_kg_m3: isNaN(cubic) ? 250 : cubic,
+      billing_frequency: edit.billing_frequency || null,
     }).eq('id', id)
     setSavingCarrier(null)
     if (error) { flash('err', error.message); return }
@@ -75,7 +77,7 @@ export default function Carriers() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              {['Name', 'Billing Email', 'Claims Email', 'Fuel Levy %', 'Cubic kg/m³', ''].map((h, i) => (
+              {['Name', 'Billing Email', 'Claims Email', 'Fuel Levy %', 'Cubic kg/m³', 'Billing', ''].map((h, i) => (
                 <th key={i} style={thStyle()}>{h}</th>
               ))}
             </tr>
@@ -101,6 +103,13 @@ export default function Carriers() {
                   </td>
                   <td style={{ padding: '10px 14px' }}>
                     <input value={edit.cubic_factor_kg_m3} onChange={e => updateEdit(carrier.id, 'cubic_factor_kg_m3', e.target.value)} placeholder="250" style={{ ...inputStyle, width: '80px' }} />
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <select value={edit.billing_frequency} onChange={e => updateEdit(carrier.id, 'billing_frequency', e.target.value)} style={{ ...inputStyle, width: '110px', cursor: 'pointer' }}>
+                      <option value="">Not tracked</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
                   </td>
                   <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                     <HoverBtn onClick={() => saveCarrier(carrier.id)} disabled={!dirty || isSaving}>

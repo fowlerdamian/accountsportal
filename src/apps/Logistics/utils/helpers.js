@@ -60,3 +60,51 @@ export const invoiceTotal = (lines) =>
 // Age in whole days from an ISO timestamp/date to now
 export const daysSince = (iso) =>
   iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null
+
+// ─── Missing-invoice detection ────────────────────────────────────────────────
+// Carriers with a billing_frequency are expected to invoice every period since
+// the anchor (first 2026 invoice, 03/01/2026). Returns fully-elapsed periods
+// with no invoice, grouped per carrier.
+
+export const BILLING_ANCHOR = new Date(2026, 0, 3) // 03/01/2026
+
+const parseLocalDate = (str) => {
+  const [y, m, d] = str.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+export function missingInvoicePeriods(carriers, invoices, today = new Date()) {
+  const now = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const groups = []
+
+  for (const c of carriers) {
+    if (!c.billing_frequency) continue
+    const dates = invoices
+      .filter(inv => inv.carrier_id === c.id && inv.invoice_date)
+      .map(inv => parseLocalDate(inv.invoice_date))
+    const missing = []
+
+    if (c.billing_frequency === 'weekly') {
+      // 7-day windows from the anchor; only windows that have fully elapsed
+      for (let start = new Date(BILLING_ANCHOR); ; start.setDate(start.getDate() + 7)) {
+        const end = new Date(start); end.setDate(end.getDate() + 7)
+        if (end > now) break
+        if (!dates.some(d => d >= start && d < end)) {
+          missing.push(`w/c ${start.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: '2-digit' })}`)
+        }
+      }
+    } else if (c.billing_frequency === 'monthly') {
+      // Calendar months from Jan 2026; only fully completed months
+      for (let m = new Date(BILLING_ANCHOR.getFullYear(), BILLING_ANCHOR.getMonth(), 1); ; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+        const next = new Date(m.getFullYear(), m.getMonth() + 1, 1)
+        if (next > now) break
+        if (!dates.some(d => d >= m && d < next)) {
+          missing.push(m.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' }))
+        }
+      }
+    }
+
+    if (missing.length) groups.push({ carrier: c.name, frequency: c.billing_frequency, missing })
+  }
+  return groups
+}

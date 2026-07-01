@@ -5,7 +5,7 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { supabase } from '@portal/lib/supabase'
 import { DatePicker } from '@portal/components/DatePicker'
 import LogisticsNav from './LogisticsNav.jsx'
-import { aud, fmtDate, invoiceTotal, invoiceOvercharge, parseDelimitedText, parseMoney } from '../utils/helpers.js'
+import { aud, fmtDate, invoiceTotal, invoiceOvercharge, parseDelimitedText, parseMoney, missingInvoicePeriods } from '../utils/helpers.js'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import {
   pageWrap, card, mono, thStyle, tdStyle, inputStyle, btnGhost,
@@ -79,6 +79,38 @@ function SelectFilter({ label, value, onChange, options }) {
       <option value="all">{label}</option>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
+  )
+}
+
+// Red banner listing expected-but-missing billing periods per tracked carrier
+// (weekly/monthly cadence set in the Carriers tab; anchored at 03/01/2026).
+function MissingInvoices({ carriers, invoices }) {
+  const groups = missingInvoicePeriods(carriers, invoices)
+  if (!groups.length) return null
+  const total = groups.reduce((s, g) => s + g.missing.length, 0)
+  return (
+    <div style={{
+      marginBottom: '20px', padding: '14px 16px', borderRadius: '8px',
+      background: 'rgba(var(--brand-pink-rgb),0.07)', border: '1px solid rgba(var(--brand-pink-rgb),0.35)',
+    }}>
+      <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 600, color: 'var(--brand-pink)' }}>
+        {total} missing invoice{total !== 1 ? 's' : ''} <span style={{ fontWeight: 400, fontFamily: mono, fontSize: '11px' }}>· expected billing periods since 03/01/2026 with no invoice loaded</span>
+      </p>
+      {groups.map(g => (
+        <div key={g.carrier} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '6px' }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: 500, flexShrink: 0 }}>
+            {g.carrier} <span style={{ color: 'var(--text-tertiary)', fontFamily: mono, fontSize: '11px' }}>({g.frequency}, {g.missing.length})</span>
+          </span>
+          <span style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+            {g.missing.map(p => (
+              <span key={p} style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-pink)', background: 'rgba(var(--brand-pink-rgb),0.12)', border: '1px solid rgba(var(--brand-pink-rgb),0.3)', borderRadius: '4px', padding: '1px 7px', whiteSpace: 'nowrap' }}>
+                {p}
+              </span>
+            ))}
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -225,6 +257,8 @@ export default function InvoiceList() {
 
       <LogisticsNav />
       <Flash msg={msg} />
+
+      <MissingInvoices carriers={carriers} invoices={invoices} />
 
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
         <SelectFilter
