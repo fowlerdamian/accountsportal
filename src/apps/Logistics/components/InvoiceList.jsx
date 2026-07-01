@@ -1,67 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { supabase } from '@portal/lib/supabase'
 import { DatePicker } from '@portal/components/DatePicker'
 import LogisticsNav from './LogisticsNav.jsx'
-import { aud, fmtDate, invoiceTotal, invoiceOvercharge, parseDelimitedText, parseMoney, missingInvoicePeriods } from '../utils/helpers.js'
+import { aud, fmtDate, invoiceTotal, invoiceOvercharge, missingInvoicePeriods } from '../utils/helpers.js'
+import { parseCsvLines, extractPdfText } from '../utils/importInvoice.js'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import {
   pageWrap, card, mono, thStyle, tdStyle, inputStyle, btnGhost,
   Badge, Spinner, Flash, useFlash, INVOICE_STATUS_STYLE, PageHeader, HoverBtn, Modal, FieldLabel, rowHover,
 } from '../utils/ui.jsx'
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
-
-// ─── CSV invoice parser ───────────────────────────────────────────────────────
-// Required: description, charged_total. Optional structured columns feed the
-// rate engine: service, origin, destination, weight_kg, qty, detail, tracking.
-function parseCsvLines(text) {
-  const allRows = parseDelimitedText(text)
-  if (allRows.length < 2) return { rows: [], error: 'CSV has no data rows' }
-
-  const headers = allRows[0].map(h => h.trim().toLowerCase())
-  if (!headers.includes('description') || !headers.includes('charged_total')) {
-    return { rows: [], error: 'Missing required columns: description, charged_total' }
-  }
-
-  const idx = k => headers.indexOf(k)
-  const cell = (cells, k) => (idx(k) !== -1 ? (cells[idx(k)] ?? '').trim() : '')
-  const rows = []
-  let skipped = 0
-  for (let i = 1; i < allRows.length; i++) {
-    const cells = allRows[i]
-    const description   = cell(cells, 'description')
-    const charged_total = parseMoney(cell(cells, 'charged_total'))
-    if (!description || isNaN(charged_total)) { skipped++; continue }
-    const weight = parseMoney(cell(cells, 'weight_kg'))
-    const qty    = parseInt(cell(cells, 'qty'), 10)
-    rows.push({
-      description,
-      detail:      cell(cells, 'detail') || null,
-      service:     cell(cells, 'service') || null,
-      origin:      cell(cells, 'origin') || null,
-      destination: cell(cells, 'destination') || null,
-      weight_kg:   isNaN(weight) ? null : weight,
-      qty:         isNaN(qty) ? null : qty,
-      tracking:    cell(cells, 'tracking') || null,
-      charged_total,
-    })
-  }
-  return { rows, skipped }
-}
-
-async function extractPdfText(buffer) {
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
-  let text = ''
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p)
-    const content = await page.getTextContent()
-    text += content.items.map(i => i.str).join(' ') + '\n'
-  }
-  return text
-}
 
 const ALL_STATUSES = ['pending', 'matched', 'flagged', 'disputed', 'approved', 'resolved']
 
@@ -94,7 +42,7 @@ function MissingInvoices({ carriers, invoices }) {
       background: 'rgba(var(--brand-pink-rgb),0.07)', border: '1px solid rgba(var(--brand-pink-rgb),0.35)',
     }}>
       <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 600, color: 'var(--brand-pink)' }}>
-        {total} missing invoice{total !== 1 ? 's' : ''} <span style={{ fontWeight: 400, fontFamily: mono, fontSize: '11px' }}>· expected billing periods since 03/01/2026 with no invoice loaded</span>
+        {total} missing invoice{total !== 1 ? 's' : ''}
       </p>
       {groups.map(g => (
         <div key={g.carrier} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '6px' }}>

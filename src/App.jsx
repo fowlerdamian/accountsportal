@@ -17,6 +17,7 @@ import PurchaseOrders from './apps/PurchaseOrders/index.jsx'
 import InvoiceList from './apps/Logistics/components/InvoiceList.jsx'
 import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
 import Carriers from './apps/Logistics/components/Carriers.jsx'
+import LogisticsLayout from './apps/Logistics/components/LogisticsLayout.jsx'
 import Disputes from './apps/Logistics/components/Disputes.jsx'
 import ManualLabel from './apps/Logistics/components/ManualLabel.jsx'
 import SupportApp from './apps/Support/SupportApp'
@@ -237,12 +238,14 @@ export default function App() {
                 <Route path="xero" element={<XeroChat />} />
                 <Route path="chat-functions" element={<ChatFunctions />} />
               </Route>
-              <Route path="logistics" element={<LogisticsDashboard />} />
-              <Route path="logistics/invoices" element={<InvoiceList />} />
-              <Route path="logistics/invoices/:id" element={<InvoiceDetail />} />
-              <Route path="logistics/carriers" element={<Carriers />} />
-              <Route path="logistics/disputes" element={<Disputes />} />
-              <Route path="logistics/manual-label" element={<ManualLabel />} />
+              <Route path="logistics" element={<LogisticsLayout />}>
+                <Route index element={<LogisticsDashboard />} />
+                <Route path="invoices" element={<InvoiceList />} />
+                <Route path="invoices/:id" element={<InvoiceDetail />} />
+                <Route path="carriers" element={<Carriers />} />
+                <Route path="disputes" element={<Disputes />} />
+                <Route path="manual-label" element={<ManualLabel />} />
+              </Route>
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
               <Route path="marketing/*" element={<Marketing />} />

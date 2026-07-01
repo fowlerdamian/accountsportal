@@ -90,7 +90,7 @@ export function missingInvoicePeriods(carriers, invoices, today = new Date()) {
         const end = new Date(start); end.setDate(end.getDate() + 7)
         if (end > now) break
         if (!dates.some(d => d >= start && d < end)) {
-          missing.push(`w/c ${start.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: '2-digit' })}`)
+          missing.push(start.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: '2-digit' }))
         }
       }
     } else if (c.billing_frequency === 'monthly') {
