@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import { DatePicker } from '@portal/components/DatePicker'
-import { autoImportInvoice, importAndCheck } from '../utils/importInvoice.js'
+import { autoImportInvoice, importAndCheck, importInvoiceRows, extractLinesInBackground } from '../utils/importInvoice.js'
 import { aud } from '../utils/helpers.js'
 import { card, mono, inputStyle, btnGhost, Modal, FieldLabel, HoverBtn } from '../utils/ui.jsx'
 
@@ -73,7 +73,10 @@ export default function InvoiceDropZone() {
   const completeImport = async () => {
     if (!prefill.carrier_id || !prefill.invoice_ref?.trim() || !prefill.invoice_date) return
     setImporting(true)
-    const result = await importAndCheck(prefill)
+    const result = prefill.lines
+      ? await importAndCheck(prefill)                                       // CSV — lines already parsed
+      : await importInvoiceRows({ ...prefill, lines: [] })                  // PDF — lines extract in background
+    if (result.status === 'imported' && !prefill.lines) extractLinesInBackground(result.invoiceId, prefill.pdfText)
     setImporting(false)
     if (result.status === 'error') { setError(result.message); return }
     setPrefill(null)
@@ -119,7 +122,9 @@ export default function InvoiceDropZone() {
           <>
             <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>Almost there</p>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, margin: '0 0 18px' }}>
-              {prefill.lines.length} line{prefill.lines.length !== 1 ? 's' : ''} extracted ({aud(prefill.lines.reduce((s, l) => s + l.charged_total, 0))})
+              {prefill.lines
+                ? `${prefill.lines.length} line${prefill.lines.length !== 1 ? 's' : ''} extracted (${aud(prefill.lines.reduce((s, l) => s + l.charged_total, 0))})`
+                : 'Invoice details read — line items process in the background'}
               {prefill.carrier_name && !prefill.carrier_id ? ` — couldn't match carrier "${prefill.carrier_name}"` : ' — fill in the missing details'}
             </p>
 

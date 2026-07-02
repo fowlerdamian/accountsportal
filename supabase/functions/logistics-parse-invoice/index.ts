@@ -8,6 +8,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Haiku on purpose: 3-5x faster than Sonnet for structured extraction.
 const PARSE_MODEL = "claude-haiku-4-5-20251001";
 
+// mode:"header" — fast first stage: only the invoice header fields, from the
+// start of the document. Lets the upload window close in seconds while the
+// full line extraction runs as a second background call.
+const HEADER_PROMPT = `You are an expert at reading freight carrier invoices.
+Extract ONLY the invoice header and return ONLY valid JSON — no markdown, no preamble:
+{
+  "invoice_ref": "string — invoice/reference number (Invoice No, Tax Invoice Number, Ref)",
+  "carrier_name": "string — the company that ISSUED the invoice (not the recipient)",
+  "invoice_date": "YYYY-MM-DD or null",
+  "due_date": "YYYY-MM-DD or null"
+}
+Return ONLY the raw JSON object.`;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -74,8 +87,9 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const { text } = await req.json();
+    const { text, mode } = await req.json();
     if (!text) throw new Error("No text provided");
+    const isHeader = mode === "header";
 
     const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -86,10 +100,14 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: PARSE_MODEL,
-        max_tokens: 32000,   // large weekly invoices — never truncate
+        max_tokens: isHeader ? 400 : 32000,   // large weekly invoices — never truncate
         stream: true,        // required for large max_tokens; also avoids idle timeouts
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: `Parse this freight invoice:\n\n${text}` }],
+        system: isHeader ? HEADER_PROMPT : SYSTEM_PROMPT,
+        messages: [{
+          role: "user",
+          // Header fields live at the top of the document — a slice keeps it fast
+          content: `Parse this freight invoice:\n\n${isHeader ? text.slice(0, 6000) : text}`,
+        }],
       }),
     });
 
@@ -123,6 +141,11 @@ Deno.serve(async (req) => {
     if (!jsonMatch) throw new Error("Claude did not return valid JSON");
 
     const parsed = JSON.parse(jsonMatch[0]);
+    if (isHeader) {
+      return new Response(JSON.stringify(parsed), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     if (!Array.isArray(parsed.lines) || parsed.lines.length === 0) {
       throw new Error("No line items found in the document");
     }

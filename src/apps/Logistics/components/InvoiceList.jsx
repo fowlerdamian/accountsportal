@@ -264,7 +264,9 @@ export default function InvoiceList() {
                   <td style={{ ...tdStyle, color: 'var(--text-secondary)' }}>{inv.carriers?.name ?? '—'}</td>
                   <td style={{ ...tdStyle, fontSize: '12px', fontFamily: mono, color: 'var(--text-tertiary)' }}>{fmtDate(inv.invoice_date)}</td>
                   <td style={{ ...tdStyle, fontSize: '12px', fontFamily: mono, color: 'var(--text-secondary)' }}>{fmtDate(inv.due_date)}</td>
-                  <td style={{ ...tdStyle, color: 'var(--text-primary)', textAlign: 'right' }}>{aud(total)}</td>
+                  <td style={{ ...tdStyle, color: 'var(--text-primary)', textAlign: 'right' }}>
+                    {isProcessing(inv) && lines.length === 0 ? <span style={{ color: 'var(--text-disabled)' }}>—</span> : aud(total)}
+                  </td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     {over > 0
                       ? <span style={{ color: 'var(--brand-pink)', fontWeight: 500 }}>{aud(over)}</span>

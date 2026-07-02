@@ -108,6 +108,32 @@ export async function importAndCheck(payload) {
   return result
 }
 
+// Step 1b (background) — full line extraction for a header-only import, then
+// the ShipStation cross-reference. Runs while the row shows
+// "Processing invoice…"; fire-and-forget.
+export async function extractLinesInBackground(invoiceId, text) {
+  try {
+    const { data, error } = await supabase.functions.invoke('logistics-parse-invoice', { body: { text } })
+    if (!error && !data?.error && data?.lines?.length) {
+      const rows = data.lines.map((l, i) => ({
+        invoice_id:    invoiceId,
+        description:   l.description,
+        detail:        l.detail ?? null,
+        service:       l.service ?? null,
+        origin:        l.origin ?? null,
+        destination:   l.destination ?? null,
+        weight_kg:     l.weight_kg ?? null,
+        qty:           l.qty ?? null,
+        charged_total: l.charged_total,
+        tracking_ref:  l.tracking ?? null,
+        sort_order:    i,
+      }))
+      await supabase.from('freight_invoice_lines').insert(rows)
+    }
+  } catch { /* row stays pending — re-run from the invoice detail page */ }
+  return runAuditCheck(invoiceId)
+}
+
 // Full drop pipeline. Returns:
 //   { status:'imported', invoiceId, match }  — fully automatic
 //   { status:'needs_input', prefill }        — parsed but a field is missing
@@ -125,22 +151,28 @@ export async function autoImportInvoice(file, carriers) {
 
   if (ext !== 'pdf') return { status: 'error', message: 'Unsupported file — drop a PDF or CSV invoice' }
 
+  // FAST first stage: header only (inv no, date, carrier) so the window can
+  // close in seconds. Line extraction + rate check continue in the background.
   const text = await extractPdfText(new Uint8Array(await file.arrayBuffer()))
-  const { data: result, error: fnErr } = await supabase.functions.invoke('logistics-parse-invoice', { body: { text } })
-  if (fnErr || result?.error) return { status: 'error', message: result?.error ?? fnErr?.message ?? 'Failed to parse PDF' }
+  const { data: header, error: fnErr } = await supabase.functions.invoke('logistics-parse-invoice', { body: { text, mode: 'header' } })
+  if (fnErr || header?.error) return { status: 'error', message: header?.error ?? fnErr?.message ?? 'Failed to parse PDF' }
 
-  const carrier = matchCarrier(carriers, result.carrier_name)
+  const carrier = matchCarrier(carriers, header.carrier_name)
   const prefill = {
-    lines:        result.lines ?? [],
+    lines:        null,             // extracted in the background
+    pdfText:      text,
     carrier_id:   carrier?.id ?? '',
-    carrier_name: result.carrier_name ?? '',
-    invoice_ref:  result.invoice_ref ?? '',
-    invoice_date: result.invoice_date ?? '',
-    due_date:     result.due_date ?? '',
+    carrier_name: header.carrier_name ?? '',
+    invoice_ref:  header.invoice_ref ?? '',
+    invoice_date: header.invoice_date ?? '',
+    due_date:     header.due_date ?? '',
   }
 
-  if (carrier && prefill.invoice_ref && prefill.invoice_date && prefill.lines.length) {
-    return importAndCheck(prefill)
+  if (carrier && prefill.invoice_ref && prefill.invoice_date) {
+    const result = await importInvoiceRows({ ...prefill, lines: [] })
+    if (result.status === 'error') return result
+    extractLinesInBackground(result.invoiceId, text)   // fire-and-forget
+    return result
   }
   return { status: 'needs_input', prefill }
 }
