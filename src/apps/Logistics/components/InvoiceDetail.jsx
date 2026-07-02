@@ -6,7 +6,7 @@ import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../
 import {
   pageWrap, card, mono, sectionLabel, thStyle, tdStyle,
   Badge, Spinner, Flash, useFlash, INVOICE_STATUS_STYLE, DISPUTE_STATUS_STYLE, HoverBtn, btnGhost, rowHover,
-  displayStatus,
+  displayStatus, Modal,
 } from '../utils/ui.jsx'
 
 function ActionBtn({ label, color, disabled, onClick }) {
@@ -50,6 +50,10 @@ export default function InvoiceDetail() {
   const [busy,        setBusy]        = useState(false)   // status updates / matching / letter gen
   const [busyLabel,   setBusyLabel]   = useState('')
   const [msg,         flash]          = useFlash()
+
+  // Delete confirmation
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting,         setDeleting]         = useState(false)
 
   // Dispute letter panel
   const [showPanel,       setShowPanel]       = useState(false)
@@ -211,6 +215,16 @@ export default function InvoiceDetail() {
     flash('ok', `Dispute email sent to ${data.sent_to}`)
     setShowPanel(false)
     Promise.all([fetchInvoice(), fetchDisputes()])
+  }
+
+  // ─── Delete ──────────────────────────────────────────────────────────────────
+
+  const deleteInvoice = async () => {
+    setDeleting(true)
+    const { error } = await supabase.from('freight_invoices').delete().eq('id', invoice.id)
+    setDeleting(false)
+    if (error) { flash('err', error.message); setConfirmingDelete(false); return }
+    navigate('/logistics/invoices')
   }
 
   // ─── Notes ───────────────────────────────────────────────────────────────────
@@ -404,6 +418,7 @@ export default function InvoiceDetail() {
           onClick={raiseDispute}
         />
         <ActionBtn label="Mark Resolved" color="--brand-aqua" disabled={busy || invoice.status === 'resolved'} onClick={() => updateStatus('resolved')} />
+        <ActionBtn label="Delete" color="--brand-pink" disabled={busy} onClick={() => setConfirmingDelete(true)} />
         {busy && <div className="w-4 h-4 rounded-full border animate-spin" style={{ borderColor: 'var(--brand-accent)', borderTopColor: 'transparent' }} />}
         {over <= 0 && <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--text-disabled)' }}>Disputes need a detected overcharge — run the rate check first</span>}
       </div>
@@ -474,6 +489,26 @@ export default function InvoiceDetail() {
           <HoverBtn onClick={saveNotes} disabled={savingNotes}>{savingNotes ? 'Saving…' : 'Save notes'}</HoverBtn>
         </div>
       </div>
+
+      {/* ── Delete confirmation ───────────────────────────────────────────────── */}
+      <Modal open={confirmingDelete} onClose={() => { if (!deleting) setConfirmingDelete(false) }} width={400}>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>Delete {invoice.invoice_ref}?</p>
+        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, margin: '0 0 18px' }}>
+          Removes the invoice, its line items and any disputes raised on it. This cannot be undone.
+        </p>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={deleteInvoice}
+            disabled={deleting}
+            style={{ fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px', cursor: deleting ? 'not-allowed' : 'pointer', color: 'var(--brand-pink)', border: '1px solid rgba(var(--brand-pink-rgb),0.4)', background: 'transparent', opacity: deleting ? 0.5 : 1 }}
+            onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = 'rgba(var(--brand-pink-rgb),0.08)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
+            {deleting ? 'Deleting…' : 'Delete invoice'}
+          </button>
+          <button onClick={() => setConfirmingDelete(false)} disabled={deleting} style={btnGhost}>Cancel</button>
+        </div>
+      </Modal>
 
       {/* ── Slide-in dispute letter panel ─────────────────────────────────────── */}
       {showPanel && (

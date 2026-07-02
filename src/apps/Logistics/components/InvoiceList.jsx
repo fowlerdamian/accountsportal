@@ -85,6 +85,10 @@ export default function InvoiceList() {
   const [uploading,       setUploading]       = useState(false)
   const parseTokenRef = useRef(0)
 
+  // Delete confirmation
+  const [deleteFor,  setDeleteFor]  = useState(null)   // invoice row
+  const [deleting,   setDeleting]   = useState(false)
+
   const fetchInvoices = () =>
     supabase.from('freight_invoices').select('*, carriers(*), freight_invoice_lines(*)').order('invoice_date', { ascending: false })
       .then(({ data }) => { if (data) setInvoices(data) })
@@ -188,6 +192,16 @@ export default function InvoiceList() {
     fetchInvoices()
   }
 
+  const confirmDelete = async () => {
+    setDeleting(true)
+    const { error } = await supabase.from('freight_invoices').delete().eq('id', deleteFor.id)
+    setDeleting(false)
+    if (error) { flash('err', error.message); return }
+    setDeleteFor(null)
+    flash('ok', `${deleteFor.invoice_ref} deleted`)
+    fetchInvoices()
+  }
+
   const filtered = invoices.filter(inv => {
     if (statusFilter  !== 'all' && inv.status     !== statusFilter)  return false
     if (carrierFilter !== 'all' && inv.carrier_id !== carrierFilter) return false
@@ -261,7 +275,18 @@ export default function InvoiceList() {
                       ? <ProcessingIndicator />
                       : <Badge map={INVOICE_STATUS_STYLE} value={displayStatus(inv.status)} />}
                   </td>
-                  <td style={{ ...tdStyle, color: 'var(--text-disabled)', fontSize: '14px' }}>›</td>
+                  <td style={{ ...tdStyle, whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => setDeleteFor(inv)}
+                      title="Delete invoice"
+                      style={{ background: 'none', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', fontSize: '14px', padding: '0 4px', lineHeight: 1, transition: 'color 120ms' }}
+                      onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand-pink)' }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-disabled)' }}
+                    >
+                      ×
+                    </button>
+                    <span style={{ color: 'var(--text-disabled)', fontSize: '14px', marginLeft: '6px' }}>›</span>
+                  </td>
                 </tr>
               )
             })}
@@ -271,6 +296,30 @@ export default function InvoiceList() {
           </tbody>
         </table>
       </div>
+
+      {/* ── Delete confirmation ──────────────────────────────────────────────── */}
+      <Modal open={!!deleteFor} onClose={() => { if (!deleting) setDeleteFor(null) }} width={400}>
+        {deleteFor && (
+          <>
+            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>Delete {deleteFor.invoice_ref}?</p>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, margin: '0 0 18px' }}>
+              Removes the invoice, its line items and any disputes raised on it. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                style={{ fontSize: '12px', fontWeight: 500, padding: '6px 14px', borderRadius: '6px', cursor: deleting ? 'not-allowed' : 'pointer', color: 'var(--brand-pink)', border: '1px solid rgba(var(--brand-pink-rgb),0.4)', background: 'transparent', opacity: deleting ? 0.5 : 1 }}
+                onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = 'rgba(var(--brand-pink-rgb),0.08)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+              >
+                {deleting ? 'Deleting…' : 'Delete invoice'}
+              </button>
+              <button onClick={() => setDeleteFor(null)} disabled={deleting} style={btnGhost}>Cancel</button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       {/* ── Upload modal ─────────────────────────────────────────────────────── */}
       <Modal open={uploadModal} onClose={closeUploadModal}>
