@@ -48,17 +48,18 @@ export default function DisputeLetterPanel({
   const subject = `Invoice Dispute - ${invoiceRef ?? ''}`
 
   // Open a prefilled Gmail compose window (AGA is on Google Workspace).
-  // Gmail wants comma-separated addresses — carriers store them ";"-separated.
+  // Gmail's compose reliably prefills to/cc/subject but silently drops the
+  // body param (new-Gmail regression, verified 2026-07) — so the body is
+  // auto-copied to the clipboard for a single paste.
   const gmailAddr = (s) => (s ?? '').split(';').map(a => a.trim()).filter(Boolean).join(',')
+  const [gmailOpened, setGmailOpened] = useState(false)
   const openInGmail = () => {
-    const params = new URLSearchParams({
-      view: 'cm', fs: '1',
-      to: gmailAddr(claimsEmail),
-      su: subject,
-      body: letter,
-    })
+    navigator.clipboard.writeText(letter)
+    const params = new URLSearchParams({ view: 'cm', fs: '1', to: gmailAddr(claimsEmail), su: subject })
     if (claimsCc) params.set('cc', gmailAddr(claimsCc))
     window.open(`https://mail.google.com/mail/?${params.toString()}`, '_blank')
+    setGmailOpened(true)
+    setTimeout(() => setGmailOpened(false), 6000)
   }
   return (
     <>
@@ -89,7 +90,7 @@ export default function DisputeLetterPanel({
                 </button>
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>
-                Open in Gmail to send, then mark as sent
+                Opens Gmail with addresses + subject filled; the body is copied — just paste
               </p>
             </div>
 
@@ -138,7 +139,7 @@ export default function DisputeLetterPanel({
                   border: 'none', opacity: (busy || !letter.trim()) ? 0.5 : 1,
                 }}
               >
-                Open in Gmail
+                {gmailOpened ? 'Body copied — paste into Gmail (Ctrl+V)' : 'Open in Gmail'}
               </button>
               <button
                 onClick={onMarkSent}
