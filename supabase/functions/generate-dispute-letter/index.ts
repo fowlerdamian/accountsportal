@@ -54,11 +54,14 @@ ${bulletLines}
 Total disputed: $${total_overcharge_aud.toFixed(2)}
 ${termsBlock}
 - Professional, firm and CONCISE — no over-explaining
+- PLAIN TEXT ONLY — this is pasted into an email client. Absolutely NO markdown: no asterisks, no pipe tables, no headings, no blockquotes. Use plain sentences and simple bullet lines starting with "- "
 - Reference the invoice number and date. Do NOT name or describe the recipient company (never write "issued to ..." or similar)
-- Where the carrier's published terms are provided above, quote the specific relevant criteria verbatim ONCE, then present ONE compact table of the disputed items: con note | recorded dimensions | recorded weight | amount. Do NOT add per-item paragraphs, a second summary table, or sentences about calibrated equipment / contractual records — the table is the evidence
-- Where a charge exceeds the booked/quoted amount, cite the booked figure as the agreed price
-- Close with a single sentence requesting a credit note for the full disputed amount within 5 business days
-- Under 180 words. BODY TEXT ONLY: no subject line, no letterhead, no address blocks, and NO signature block or sign-off — end after the credit request`;
+- Structure, in this exact order:
+  1. Opening: one or two sentences disputing the charges on the invoice (number + date), stating the total disputed and requesting a credit note for the full amount within 5 business days
+  2. Itemised list, ONE plain line per disputed item, e.g.: - DHI123456789 - 840 x 180 x 170 mm, 8,500 g - $9.93   (end with a "- Total - $X" line)
+  3. LAST: the explanation — quote the carrier's relevant published criteria verbatim (in quotation marks) and state plainly that the items above fall outside those criteria (or, for overcharges, that the booked/quoted figure is the agreed price)
+- No per-item paragraphs and no sentences about calibrated equipment / contractual records
+- Under 180 words. BODY TEXT ONLY: no subject line, no letterhead, no address blocks, and NO signature block or sign-off`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
