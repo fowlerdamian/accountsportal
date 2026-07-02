@@ -47,20 +47,18 @@ serve(async (req) => {
       ? `\nThe carrier's OWN PUBLISHED TERMS relevant to these charges:\n"""\n${carrier_terms}\n"""\n`
       : "";
 
-    const prompt = `Write a professional freight invoice dispute letter from Automotive Group Australia (AGA) to ${carrier_name} for invoice ${invoice_ref} dated ${invoice_date}.
+    const prompt = `Write a professional freight invoice dispute email body to ${carrier_name} for invoice ${invoice_ref} dated ${invoice_date}.
 
 Disputed line items (with supporting evidence from our booking records in square brackets):
 ${bulletLines}
 Total disputed: $${total_overcharge_aud.toFixed(2)}
 ${termsBlock}
-- Professional but firm tone
-- Reference the invoice number and date
-- Where the carrier's published terms are provided above, QUOTE the specific relevant criteria verbatim back to them, then demonstrate — item by item, using the booking evidence (recorded dimensions, weight, con note) — that each disputed fee fails the carrier's own published criteria and therefore should not have been charged
+- Professional, firm and CONCISE — no over-explaining
+- Reference the invoice number and date. Do NOT name or describe the recipient company (never write "issued to ..." or similar)
+- Where the carrier's published terms are provided above, quote the specific relevant criteria verbatim ONCE, then present ONE compact table of the disputed items: con note | recorded dimensions | recorded weight | amount. Do NOT add per-item paragraphs, a second summary table, or sentences about calibrated equipment / contractual records — the table is the evidence
 - Where a charge exceeds the booked/quoted amount, cite the booked figure as the agreed price
-- Reference each con note number so the carrier can verify against their records
-- State that our dimensions and weights are recorded at dispatch on calibrated equipment
-- Request a credit note for the full disputed amount within 5 business days
-- Under 350 words. BODY TEXT ONLY: no subject line, no letterhead, no address blocks, and NO signature block or sign-off — end after the final substantive paragraph (the subject and signature are added separately)`;
+- Close with a single sentence requesting a credit note for the full disputed amount within 5 business days
+- Under 180 words. BODY TEXT ONLY: no subject line, no letterhead, no address blocks, and NO signature block or sign-off — end after the credit request`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

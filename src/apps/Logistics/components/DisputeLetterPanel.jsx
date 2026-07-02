@@ -46,6 +46,25 @@ export default function DisputeLetterPanel({
   letter, setLetter, busy, onMarkSent, onSaveDraft,
 }) {
   const subject = `Invoice Dispute - ${invoiceRef ?? ''}`
+
+  // Download a .eml draft (X-Unsent opens it as an editable compose window in
+  // Outlook / Windows Mail; other clients open it ready to forward)
+  const downloadEml = () => {
+    const eml = [
+      `To: ${claimsEmail ?? ''}`,
+      `Subject: ${subject}`,
+      'X-Unsent: 1',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      letter,
+    ].join('\r\n')
+    const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${subject}.eml`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
   return (
     <>
       {open && (
@@ -75,7 +94,7 @@ export default function DisputeLetterPanel({
                 </button>
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>
-                Copy the fields into your email client, then mark as sent
+                Download the email, send it from your mail client, then mark as sent
               </p>
             </div>
 
@@ -109,13 +128,25 @@ export default function DisputeLetterPanel({
 
             <div style={{ padding: '14px 24px 22px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0, display: 'flex', gap: '10px' }}>
               <button
-                onClick={onMarkSent}
+                onClick={downloadEml}
                 disabled={busy || !letter.trim()}
                 style={{
                   flex: 1, fontSize: '13px', fontWeight: 600, padding: '9px 16px', borderRadius: '6px',
                   cursor: (busy || !letter.trim()) ? 'not-allowed' : 'pointer',
                   color: 'var(--accent-text)', background: 'var(--brand-accent)',
                   border: 'none', opacity: (busy || !letter.trim()) ? 0.5 : 1,
+                }}
+              >
+                Download email (.eml)
+              </button>
+              <button
+                onClick={onMarkSent}
+                disabled={busy || !letter.trim()}
+                style={{
+                  fontSize: '13px', fontWeight: 500, padding: '9px 16px', borderRadius: '6px',
+                  cursor: (busy || !letter.trim()) ? 'not-allowed' : 'pointer',
+                  color: 'var(--brand-aqua)', border: '1px solid rgba(var(--brand-aqua-rgb),0.4)', background: 'transparent',
+                  opacity: (busy || !letter.trim()) ? 0.5 : 1,
                 }}
               >
                 {busy ? 'Saving…' : 'Mark as sent'}
