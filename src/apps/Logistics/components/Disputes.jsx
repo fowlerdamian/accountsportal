@@ -2,6 +2,7 @@ import { useEffect, useState, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
+import DisputeLetterPanel from './DisputeLetterPanel.jsx'
 import { aud, fmtDate, daysSince } from '../utils/helpers.js'
 import {
   pageWrap, card, mono, thStyle, tdStyle, inputStyle, btnGhost,
@@ -97,15 +98,27 @@ export default function Disputes() {
     fetchDisputes()
   }
 
-  const sendLetter = async () => {
+  // Email goes out via the user's own mail client — this records it.
+  const markSent = async () => {
     setPanelBusy(true)
-    const { data, error } = await supabase.functions.invoke('send-dispute-email', {
-      body: { dispute_id: panelFor.id, letter_text: panelLetter },
-    })
+    const claimsEmail = panelFor.freight_invoices?.carriers?.claims_email ?? null
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error } = await supabase.from('disputes').update({
+      status: 'sent',
+      sent_to: claimsEmail,
+      sent_at: new Date().toISOString(),
+      letter_text: panelLetter,
+    }).eq('id', panelFor.id)
     setPanelBusy(false)
-    if (error || data?.error) { flash('err', data?.error ?? error.message); return }
+    if (error) { flash('err', error.message); return }
+    await supabase.from('dispute_events').insert({
+      dispute_id: panelFor.id,
+      event_type: 'email_sent',
+      detail: `Dispute email sent manually${claimsEmail ? ` to ${claimsEmail}` : ''}`,
+      created_by: user?.id ?? null,
+    })
     setPanelFor(null)
-    flash('ok', `Dispute email sent to ${data.sent_to}`)
+    flash('ok', 'Dispute marked as sent')
     fetchDisputes()
   }
 
@@ -243,80 +256,18 @@ export default function Disputes() {
       </div>
 
       {/* ── Slide-in dispute letter panel ─────────────────────────────────────── */}
-      {panelFor && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40 }} onClick={() => { if (!panelBusy) setPanelFor(null) }} />
-      )}
-      <div
-        style={{
-          position: 'fixed', right: 0, top: 0, height: '100%', width: '480px', maxWidth: '100vw',
-          background: 'var(--bg-elevated)', borderLeft: '1px solid var(--border-default)',
-          transform: panelFor ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 220ms ease',
-          zIndex: 50, display: 'flex', flexDirection: 'column', boxSizing: 'border-box',
-        }}
-      >
-        {panelFor && (
-          <>
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-                <div>
-                  <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                    Dispute letter — {panelFor.freight_invoices?.invoice_ref}
-                  </p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>
-                    {panelFor.freight_invoices?.carriers?.claims_email
-                      ? `To: ${panelFor.freight_invoices.carriers.claims_email}`
-                      : 'No claims email set — add one in the Carriers tab'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setPanelFor(null)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: 0, flexShrink: 0, marginTop: '2px' }}
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-
-            <div style={{ flex: 1, padding: '16px 24px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <textarea
-                value={panelLetter}
-                onChange={e => setPanelLetter(e.target.value)}
-                placeholder="Write the dispute letter…"
-                rows={12}
-                style={{
-                  flex: 1, width: '100%', boxSizing: 'border-box',
-                  background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px',
-                  color: 'var(--text-primary)', fontSize: '13px', padding: '14px',
-                  fontFamily: mono, resize: 'none', outline: 'none', lineHeight: 1.7,
-                }}
-              />
-            </div>
-
-            <div style={{ padding: '16px 24px 24px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0, display: 'flex', gap: '10px' }}>
-              <button
-                onClick={sendLetter}
-                disabled={panelBusy || !panelLetter.trim() || !panelFor.freight_invoices?.carriers?.claims_email}
-                style={{
-                  flex: 1, fontSize: '13px', fontWeight: 600, padding: '9px 16px', borderRadius: '6px',
-                  cursor: (panelBusy || !panelLetter.trim() || !panelFor.freight_invoices?.carriers?.claims_email) ? 'not-allowed' : 'pointer',
-                  color: 'var(--accent-text)', background: 'var(--brand-accent)',
-                  border: 'none', opacity: (panelBusy || !panelLetter.trim() || !panelFor.freight_invoices?.carriers?.claims_email) ? 0.5 : 1,
-                }}
-              >
-                {panelBusy ? 'Sending…' : `Send to ${panelFor.freight_invoices?.carriers?.name ?? 'carrier'}`}
-              </button>
-              <button
-                onClick={saveDraft}
-                disabled={panelBusy || !panelLetter.trim()}
-                style={{ ...btnGhost, padding: '9px 16px', fontSize: '13px', opacity: (panelBusy || !panelLetter.trim()) ? 0.6 : 1 }}
-              >
-                Save draft
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+      <DisputeLetterPanel
+        open={!!panelFor}
+        onClose={() => setPanelFor(null)}
+        invoiceRef={panelFor?.freight_invoices?.invoice_ref}
+        carrierName={panelFor?.freight_invoices?.carriers?.name}
+        claimsEmail={panelFor?.freight_invoices?.carriers?.claims_email}
+        letter={panelLetter}
+        setLetter={setPanelLetter}
+        busy={panelBusy}
+        onMarkSent={markSent}
+        onSaveDraft={saveDraft}
+      />
 
       {/* ── Log credit modal ───────────────────────────────────────────────────── */}
       <Modal open={!!creditFor} onClose={() => { if (!creditSaving) setCreditFor(null) }} width={420}>

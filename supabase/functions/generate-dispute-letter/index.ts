@@ -60,7 +60,7 @@ ${termsBlock}
 - Reference each con note number so the carrier can verify against their records
 - State that our dimensions and weights are recorded at dispatch on calibrated equipment
 - Request a credit note for the full disputed amount within 5 business days
-- Under 350 words, letter body only — no letterhead or address blocks`;
+- Under 350 words. BODY TEXT ONLY: no subject line, no letterhead, no address blocks, and NO signature block or sign-off — end after the final substantive paragraph (the subject and signature are added separately)`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
