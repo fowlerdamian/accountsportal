@@ -47,24 +47,18 @@ export default function DisputeLetterPanel({
 }) {
   const subject = `Invoice Dispute - ${invoiceRef ?? ''}`
 
-  // Download a .eml draft (X-Unsent opens it as an editable compose window in
-  // Outlook / Windows Mail; other clients open it ready to forward)
-  const downloadEml = () => {
-    const eml = [
-      `To: ${claimsEmail ?? ''}`,
-      ...(claimsCc ? [`Cc: ${claimsCc}`] : []),
-      `Subject: ${subject}`,
-      'X-Unsent: 1',
-      'Content-Type: text/plain; charset=utf-8',
-      '',
-      letter,
-    ].join('\r\n')
-    const url = URL.createObjectURL(new Blob([eml], { type: 'message/rfc822' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${subject}.eml`
-    a.click()
-    URL.revokeObjectURL(url)
+  // Open a prefilled Gmail compose window (AGA is on Google Workspace).
+  // Gmail wants comma-separated addresses — carriers store them ";"-separated.
+  const gmailAddr = (s) => (s ?? '').split(';').map(a => a.trim()).filter(Boolean).join(',')
+  const openInGmail = () => {
+    const params = new URLSearchParams({
+      view: 'cm', fs: '1',
+      to: gmailAddr(claimsEmail),
+      su: subject,
+      body: letter,
+    })
+    if (claimsCc) params.set('cc', gmailAddr(claimsCc))
+    window.open(`https://mail.google.com/mail/?${params.toString()}`, '_blank')
   }
   return (
     <>
@@ -95,7 +89,7 @@ export default function DisputeLetterPanel({
                 </button>
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>
-                Download the email, send it from your mail client, then mark as sent
+                Open in Gmail to send, then mark as sent
               </p>
             </div>
 
@@ -135,7 +129,7 @@ export default function DisputeLetterPanel({
 
             <div style={{ padding: '14px 24px 22px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0, display: 'flex', gap: '10px' }}>
               <button
-                onClick={downloadEml}
+                onClick={openInGmail}
                 disabled={busy || !letter.trim()}
                 style={{
                   flex: 1, fontSize: '13px', fontWeight: 600, padding: '9px 16px', borderRadius: '6px',
@@ -144,7 +138,7 @@ export default function DisputeLetterPanel({
                   border: 'none', opacity: (busy || !letter.trim()) ? 0.5 : 1,
                 }}
               >
-                Download email (.eml)
+                Open in Gmail
               </button>
               <button
                 onClick={onMarkSent}
