@@ -32,7 +32,7 @@ export function buildTntQueries(lines) {
       queries.push({
         line: l,
         type: 'Price discrepancy',
-        info: `Manual Handling Processing Fee of ${aud(l.charged_total)} has been charged on con note ${l.tracking_ref}. Our dispatch records show this item measures ${l.actual_dims ?? 'within published parameters'} and weighs ${l.actual_weight_kg != null ? `${(l.actual_weight_kg * 1000).toFixed(0)} g` : 'within published parameters'} — inside TNT's published sortation-compatibility parameters (Length 200-1200mm, Width 100-600mm, Height 15-800mm, diagonal up to 1200mm, weight 250g-30kg). Per TNT's published MHP terms the fee does not apply. Please reverse the ${aud(l.charged_total)} charge.`,
+        info: `A Manual Handling Processing Fee of ${aud(l.charged_total)} has been charged on con note ${l.tracking_ref}. Our dispatch records show this item measures ${l.actual_dims ?? 'standard dimensions'} and weighs ${l.actual_weight_kg != null ? `${(l.actual_weight_kg * 1000).toFixed(0)} g` : 'a standard weight'}, which does not warrant a manual handling fee. Please review and reverse the ${aud(l.charged_total)} charge.`,
       })
     } else if (l.weight_check === 'overbilled') {
       queries.push({
