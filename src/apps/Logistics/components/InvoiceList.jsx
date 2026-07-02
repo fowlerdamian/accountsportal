@@ -31,6 +31,15 @@ function SelectFilter({ label, value, onChange, options }) {
   )
 }
 
+function KpiCard({ label, value, valueStyle }) {
+  return (
+    <div style={{ ...card, padding: '16px 18px' }}>
+      <p style={{ fontSize: '11px', fontFamily: mono, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{label}</p>
+      <p style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', margin: '6px 0 0', ...valueStyle }}>{value}</p>
+    </div>
+  )
+}
+
 // Red banner listing expected-but-missing billing periods per tracked carrier
 // (weekly/monthly cadence set in the Carriers tab; anchored at 03/01/2026).
 function MissingInvoices({ carriers, invoices }) {
@@ -66,6 +75,7 @@ function MissingInvoices({ carriers, invoices }) {
 export default function InvoiceList() {
   const [invoices,      setInvoices]      = useState([])
   const [carriers,      setCarriers]      = useState([])
+  const [disputes,      setDisputes]      = useState([])
   const [statusFilter,  setStatusFilter]  = useState('all')
   const [carrierFilter, setCarrierFilter] = useState('all')
   const [loading,       setLoading]       = useState(true)
@@ -97,6 +107,7 @@ export default function InvoiceList() {
     Promise.all([
       fetchInvoices(),
       supabase.from('carriers').select('*').order('name').then(({ data }) => { if (data) setCarriers(data) }),
+      supabase.from('disputes').select('status, amount_recovered').then(({ data }) => { if (data) setDisputes(data) }),
     ]).finally(() => setLoading(false))
 
     // Live updates: new imports appear immediately; "Processing invoice…"
@@ -218,6 +229,25 @@ export default function InvoiceList() {
 
       <LogisticsNav />
       <Flash msg={msg} />
+
+      {/* KPI strip (was the Overview tab) */}
+      {(() => {
+        const allLines   = invoices.flatMap(inv => inv.freight_invoice_lines ?? [])
+        const totalInv   = invoiceTotal(allLines)
+        const totalOver  = invoices.reduce((s, inv) => s + invoiceOvercharge(inv.freight_invoice_lines ?? []), 0)
+        const recovered  = disputes.reduce((s, d) => s + Number(d.amount_recovered ?? 0), 0)
+        const openDisp   = disputes.filter(d => ['draft', 'sent', 'acknowledged'].includes(d.status)).length
+        const needAction = invoices.filter(inv => inv.status === 'pending' || inv.status === 'flagged').length
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+            <KpiCard label="Total Invoiced"        value={aud(totalInv)} />
+            <KpiCard label="Overcharge Identified" value={aud(totalOver)} valueStyle={totalOver > 0 ? { color: 'var(--brand-pink)' } : {}} />
+            <KpiCard label="Recovered"             value={aud(recovered)} valueStyle={recovered > 0 ? { color: 'var(--brand-aqua)' } : {}} />
+            <KpiCard label="Open Disputes"         value={openDisp}      valueStyle={openDisp > 0   ? { color: 'var(--brand-pink)' } : {}} />
+            <KpiCard label="Need Action"           value={needAction}    valueStyle={needAction > 0 ? { color: 'var(--brand-accent)' } : {}} />
+          </div>
+        )
+      })()}
 
       <MissingInvoices carriers={carriers} invoices={invoices} />
 

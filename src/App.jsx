@@ -12,7 +12,6 @@ import TileSettings from './pages/TileSettings.jsx'
 import Settings from './pages/Settings.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
 import ProfitProcessor from './apps/ProfitProcessor/index.jsx'
-import LogisticsDashboard from './apps/Logistics/components/LogisticsDashboard.jsx'
 import PurchaseOrders from './apps/PurchaseOrders/index.jsx'
 import InvoiceList from './apps/Logistics/components/InvoiceList.jsx'
 import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
@@ -237,7 +236,7 @@ export default function App() {
                 <Route path="xero" element={<XeroChat />} />
                 <Route path="chat-functions" element={<ChatFunctions />} />
               </Route>
-              <Route path="logistics" element={<LogisticsDashboard />} />
+              <Route path="logistics" element={<Navigate to="/logistics/invoices" replace />} />
               <Route path="logistics/invoices" element={<InvoiceList />} />
               <Route path="logistics/invoices/:id" element={<InvoiceDetail />} />
               <Route path="logistics/carriers" element={<Carriers />} />

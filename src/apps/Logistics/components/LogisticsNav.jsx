@@ -3,9 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@portal/lib/supabase'
 
 const tabs = [
-  { label: 'Overview',     to: '/logistics',              end: true  },
   { label: 'Invoices',     to: '/logistics/invoices',     end: false, flagKey: 'flagged'  },
-  { label: 'Carriers',     to: '/logistics/carriers',     end: false },
   { label: 'Disputes',     to: '/logistics/disputes',     end: false, flagKey: 'disputed' },
   { label: 'Manual Label', to: '/logistics/manual-label', end: false },
 ]
@@ -72,6 +70,26 @@ export default function LogisticsNav() {
           </NavLink>
         )
       })}
+
+      {/* Carriers = settings, right-aligned gear */}
+      <NavLink
+        to="/logistics/carriers"
+        title="Carriers & settings"
+        className="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 outline-none"
+        style={{
+          marginLeft: 'auto',
+          color: pathname.startsWith('/logistics/carriers') ? 'var(--brand-accent)' : 'var(--text-tertiary)',
+          borderBottomColor: pathname.startsWith('/logistics/carriers') ? 'var(--brand-accent)' : 'transparent',
+          background: pathname.startsWith('/logistics/carriers') ? 'rgba(var(--brand-accent-rgb),0.04)' : 'transparent',
+          textDecoration: 'none',
+        }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        Carriers
+      </NavLink>
     </div>
   )
 }
