@@ -1,15 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@portal/lib/supabase'
 import { aud } from '../utils/helpers.js'
 import { mono, btnGhost, FieldLabel, inputStyle } from '../utils/ui.jsx'
 
 // TNT lodges invoice disputes via its public invoice-query form — ONE
-// SUBMISSION PER QUERY (per disputed con-note line), not per invoice. This
-// panel builds a query per disputed line and submits them through the
-// logistics-submit-tnt-query edge function, tracking progress per line.
+// SUBMISSION PER QUERY (per disputed con-note line), not per invoice. The form
+// is protected by reCAPTCHA, so it can't be auto-submitted; instead we open the
+// form with the query's field values in the URL fragment and a one-time
+// bookmarklet fills the fields. The user solves the captcha and clicks Submit,
+// then marks the query lodged here for pipeline tracking.
 
 const CONTACT_KEY = 'logistics_tnt_contact'
 const TNT_QUERY_PHONE = '1300 770 966'   // AGA main line — used on all TNT queries
+const TNT_FORM_URL = 'https://www.tnt.com/express/en_au/site/support/invoice-query.html'
+
+// Reads the JSON payload from the page URL fragment and fills the TNT form.
+const BOOKMARKLET =
+  "javascript:(function(){try{var d=JSON.parse(decodeURIComponent(location.hash.slice(1)));" +
+  "var f=document.getElementById('InvoiceQuery')||document;var n=0;" +
+  "Object.keys(d).forEach(function(k){var el=f.querySelector('[name=\"'+k+'\"]');if(!el)return;" +
+  "el.value=d[k];el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));n++;});" +
+  "alert('AGA: '+n+' fields filled. Solve the reCAPTCHA and click Submit.');}" +
+  "catch(e){alert('AGA fill failed: '+e.message);}})();"
 
 // Build the query list from the invoice's disputed lines
 export function buildTntQueries(lines) {
@@ -45,8 +57,11 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
   const [phone, setPhone] = useState(saved.phone ?? TNT_QUERY_PHONE)
   const [email, setEmail] = useState('')
   const [queries, setQueries] = useState([])
-  const [busyId,  setBusyId]  = useState(null)   // line id being submitted, or 'all'
-  const [errors,  setErrors]  = useState({})     // line id → message
+  const [busyId,  setBusyId]  = useState(null)
+  const [showSetup, setShowSetup] = useState(false)
+
+  // Draggable bookmarklet — set href via DOM so React doesn't sanitise the javascript: URL
+  const bmRef = useCallback(node => { if (node) node.setAttribute('href', BOOKMARKLET) }, [])
 
   useEffect(() => {
     if (!open) return
@@ -54,7 +69,6 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
       const user = data?.user
       if (!user) return
       setEmail(e => e || user.email || '')
-      // Prefill the user's name from their portal profile
       setName(n => {
         if (n) return n
         const metaName = user.user_metadata?.full_name || user.user_metadata?.name
@@ -64,42 +78,46 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
         return n
       })
     })
-    setQueries(buildTntQueries(invoice?.freight_invoice_lines).map(q => ({
-      ...q,
-      submitted: !!q.line.query_submitted_at,
-      info: q.info,
-    })))
-    setErrors({})
+    setQueries(buildTntQueries(invoice?.freight_invoice_lines).map(q => ({ ...q, submitted: !!q.line.query_submitted_at })))
   }, [open, invoice])
 
   if (!invoice) return null
   const accountNumber = invoice.carriers?.account_number ?? ''
   const contactOk = name.trim() && phone.trim() && email.trim() && accountNumber
 
-  const submitOne = async (q) => {
+  const payloadFor = (q) => ({
+    LNAME:          name,
+    COMPANYNAME:    'Automotive Group Australia',
+    PHONENUMBER:    phone,
+    Address:        email,
+    ACCOUNTNUMBER:  accountNumber,
+    INVOICENUMBER:  invoice.invoice_ref,
+    SHIPMENTNUMBER: q.line.tracking_ref ?? '',
+    SUBJECT:        q.type,
+    ADDITIONALINFO: q.info,
+  })
+
+  const openForm = (q) => {
     localStorage.setItem(CONTACT_KEY, JSON.stringify({ name, phone }))
+    const hash = encodeURIComponent(JSON.stringify(payloadFor(q)))
+    window.open(`${TNT_FORM_URL}#${hash}`, '_blank')
+  }
+
+  const markLodged = async (q) => {
     setBusyId(q.line.id)
-    setErrors(prev => ({ ...prev, [q.line.id]: null }))
-    const { data, error } = await supabase.functions.invoke('logistics-submit-tnt-query', {
-      body: {
-        name, company: 'Automotive Group Australia', phone, email,
-        account_number: accountNumber,
-        invoice_number: invoice.invoice_ref,
-        con_note: q.line.tracking_ref,
-        query_type: q.type,
-        info: q.info,
-        line_id: q.line.id,
-        dispute_id: dispute?.id ?? null,
-      },
-    })
-    setBusyId(null)
-    if (error || data?.error) {
-      setErrors(prev => ({ ...prev, [q.line.id]: data?.error ?? error.message }))
-      return false
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('freight_invoice_lines').update({ query_submitted_at: new Date().toISOString() }).eq('id', q.line.id)
+    if (dispute) {
+      await supabase.from('dispute_events').insert({
+        dispute_id: dispute.id,
+        event_type: 'query_submitted',
+        detail: `TNT invoice query lodged — ${q.type}${q.line.tracking_ref ? ` — con note ${q.line.tracking_ref}` : ''}`,
+        created_by: user?.id ?? null,
+      })
     }
+    setBusyId(null)
     setQueries(prev => {
       const next = prev.map(x => x.line.id === q.line.id ? { ...x, submitted: true } : x)
-      // All lodged → move the dispute to 'sent'
       if (dispute && next.every(x => x.submitted)) {
         supabase.from('disputes').update({ status: 'sent', sent_to: 'TNT invoice query form', sent_at: new Date().toISOString() })
           .eq('id', dispute.id).then(() => onChange?.())
@@ -107,19 +125,11 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
       return next
     })
     onChange?.()
-    return true
-  }
-
-  const submitAll = async () => {
-    setBusyId('all')
-    for (const q of queries.filter(x => !x.submitted)) {
-      const ok = await submitOne(q)
-      if (!ok) break
-    }
-    setBusyId(null)
   }
 
   const remaining = queries.filter(q => !q.submitted).length
+
+  const linkBtn = { fontSize: '11px', fontFamily: mono, padding: '4px 12px', borderRadius: '5px', flexShrink: 0, cursor: 'pointer' }
 
   return (
     <>
@@ -145,11 +155,34 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
                 <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: 0 }}>×</button>
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>
-                Lodged via TNT's invoice query form — one submission per con note query
+                Open each query in TNT's form (reCAPTCHA), then mark it lodged
               </p>
             </div>
 
             <div style={{ flex: 1, padding: '16px 24px', overflowY: 'auto' }}>
+              {/* One-time bookmarklet setup */}
+              <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
+                <button onClick={() => setShowSetup(s => !s)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '12px', fontFamily: mono, padding: 0 }}>
+                  {showSetup ? '▾' : '▸'} One-time setup: “Fill TNT form” bookmarklet
+                </button>
+                {showSetup && (
+                  <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    Drag this button to your bookmarks bar (once):
+                    <div style={{ margin: '8px 0' }}>
+                      <a
+                        ref={bmRef}
+                        onClick={e => e.preventDefault()}
+                        draggable
+                        style={{ display: 'inline-block', fontSize: '12px', fontWeight: 600, padding: '6px 14px', borderRadius: '6px', color: 'var(--accent-text)', background: 'var(--brand-accent)', textDecoration: 'none', cursor: 'grab' }}
+                      >
+                        ⭑ Fill TNT form
+                      </a>
+                    </div>
+                    Then on any query: click <strong>Open TNT form</strong> below, click your bookmark to fill the fields, solve the reCAPTCHA, and Submit.
+                  </div>
+                )}
+              </div>
+
               {/* Contact details (sent with every query) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '8px' }}>
                 <div>
@@ -176,20 +209,8 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
               )}
 
               {/* Queries */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '14px 0 8px' }}>
+              <div style={{ margin: '14px 0 8px' }}>
                 <FieldLabel>{queries.length} quer{queries.length === 1 ? 'y' : 'ies'} · {remaining} to lodge</FieldLabel>
-                <button
-                  onClick={submitAll}
-                  disabled={!!busyId || !contactOk || remaining === 0}
-                  style={{
-                    fontSize: '12px', fontWeight: 600, padding: '5px 14px', borderRadius: '6px',
-                    cursor: (!!busyId || !contactOk || remaining === 0) ? 'not-allowed' : 'pointer',
-                    color: 'var(--accent-text)', background: 'var(--brand-accent)', border: 'none',
-                    opacity: (!!busyId || !contactOk || remaining === 0) ? 0.5 : 1,
-                  }}
-                >
-                  {busyId === 'all' ? 'Submitting…' : remaining === 0 ? 'All lodged ✓' : `Submit all (${remaining})`}
-                </button>
               </div>
 
               {queries.length === 0 && (
@@ -203,22 +224,28 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
                       {q.line.tracking_ref ?? '—'}
                       <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}> · {q.type} · {aud(q.line.charged_total)}</span>
                     </span>
-                    {q.submitted ? (
-                      <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-aqua)', flexShrink: 0 }}>Lodged ✓</span>
-                    ) : (
-                      <button
-                        onClick={() => submitOne(q)}
-                        disabled={!!busyId || !contactOk}
-                        style={{
-                          fontSize: '11px', fontFamily: mono, padding: '4px 12px', borderRadius: '5px', flexShrink: 0,
-                          cursor: (!!busyId || !contactOk) ? 'not-allowed' : 'pointer',
-                          color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)', background: 'transparent',
-                          opacity: (!!busyId || !contactOk) ? 0.5 : 1,
-                        }}
-                      >
-                        {busyId === q.line.id ? 'Submitting…' : 'Submit'}
-                      </button>
-                    )}
+                    <span style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                      {q.submitted ? (
+                        <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-aqua)' }}>Lodged ✓</span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => openForm(q)}
+                            disabled={!contactOk}
+                            style={{ ...linkBtn, color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)', background: 'transparent', opacity: contactOk ? 1 : 0.5, cursor: contactOk ? 'pointer' : 'not-allowed' }}
+                          >
+                            Open TNT form
+                          </button>
+                          <button
+                            onClick={() => markLodged(q)}
+                            disabled={busyId === q.line.id}
+                            style={{ ...linkBtn, color: 'var(--brand-aqua)', border: '1px solid rgba(var(--brand-aqua-rgb),0.4)', background: 'transparent' }}
+                          >
+                            {busyId === q.line.id ? '…' : 'Mark lodged'}
+                          </button>
+                        </>
+                      )}
+                    </span>
                   </div>
                   <textarea
                     value={q.info}
@@ -232,15 +259,12 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
                       fontFamily: mono, resize: 'vertical', outline: 'none', lineHeight: 1.6,
                     }}
                   />
-                  {errors[q.line.id] && (
-                    <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: mono, color: 'var(--brand-pink)' }}>{errors[q.line.id]}</p>
-                  )}
                 </div>
               ))}
             </div>
 
             <div style={{ padding: '12px 24px 20px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-              <button onClick={onClose} disabled={busyId === 'all'} style={btnGhost}>Close</button>
+              <button onClick={onClose} style={btnGhost}>Close</button>
             </div>
           </>
         )}
