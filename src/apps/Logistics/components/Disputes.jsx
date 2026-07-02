@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
 import DisputeLetterPanel from './DisputeLetterPanel.jsx'
+import TntQueryPanel from './TntQueryPanel.jsx'
 import { aud, fmtDate, daysSince } from '../utils/helpers.js'
 import {
   pageWrap, card, mono, thStyle, tdStyle, inputStyle, btnGhost,
@@ -32,10 +33,26 @@ export default function Disputes() {
   const fetchDisputes = async () => {
     const { data } = await supabase
       .from('disputes')
-      .select('*, freight_invoices(id, invoice_ref, invoice_date, carriers(name, claims_email, claims_cc)), dispute_events(*)')
+      .select('*, freight_invoices(id, invoice_ref, invoice_date, carriers(name, claims_email, claims_cc, account_number)), dispute_events(*)')
       .order('created_at', { ascending: false })
     if (data) setDisputes(data)
     setLoading(false)
+  }
+
+  // TNT query panel (needs the invoice's lines)
+  const [tntPanel, setTntPanel] = useState(null)   // { invoice, dispute }
+  const isTntDispute = (d) => /tnt|fedex/i.test(d.freight_invoices?.carriers?.name ?? '')
+
+  const openTntPanel = async (d) => {
+    const { data: lines } = await supabase
+      .from('freight_invoice_lines')
+      .select('*')
+      .eq('invoice_id', d.invoice_id)
+      .order('sort_order')
+    setTntPanel({
+      dispute: d,
+      invoice: { ...d.freight_invoices, freight_invoice_lines: lines ?? [] },
+    })
   }
 
   useEffect(() => { fetchDisputes() }, [])
@@ -208,8 +225,8 @@ export default function Disputes() {
                     <td style={{ ...tdStyle, whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                       {isOpen && (
                         <span style={{ display: 'flex', gap: '10px' }}>
-                          <button onClick={() => openPanel(d)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>
-                            {d.status === 'draft' ? 'Edit & send' : 'Letter'}
+                          <button onClick={() => isTntDispute(d) ? openTntPanel(d) : openPanel(d)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>
+                            {isTntDispute(d) ? 'Queries' : d.status === 'draft' ? 'Edit & send' : 'Letter'}
                           </button>
                           <button onClick={() => openCreditModal(d)} style={{ background: 'none', border: 'none', color: 'var(--brand-aqua)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Log credit</button>
                           {d.status === 'sent' && (
@@ -255,7 +272,16 @@ export default function Disputes() {
         </table>
       </div>
 
-      {/* ── Slide-in dispute letter panel ─────────────────────────────────────── */}
+      {/* ── TNT per-query submission panel ────────────────────────────────────── */}
+      <TntQueryPanel
+        open={!!tntPanel}
+        onClose={() => setTntPanel(null)}
+        invoice={tntPanel?.invoice}
+        dispute={tntPanel?.dispute}
+        onChange={fetchDisputes}
+      />
+
+      {/* ── Slide-in dispute letter panel (non-TNT) ───────────────────────────── */}
       <DisputeLetterPanel
         open={!!panelFor}
         onClose={() => setPanelFor(null)}

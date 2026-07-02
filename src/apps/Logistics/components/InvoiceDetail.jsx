@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
 import DisputeLetterPanel from './DisputeLetterPanel.jsx'
+import TntQueryPanel from './TntQueryPanel.jsx'
 import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../utils/helpers.js'
 import {
   pageWrap, card, mono, sectionLabel, thStyle, tdStyle,
@@ -62,6 +63,10 @@ export default function InvoiceDetail() {
   // Delete confirmation
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting,         setDeleting]         = useState(false)
+
+  // TNT query panel (TNT disputes are lodged via TNT's web form, per query)
+  const [showTntPanel,   setShowTntPanel]   = useState(false)
+  const [tntDispute,     setTntDispute]     = useState(null)
 
   // Dispute letter panel
   const [showPanel,       setShowPanel]       = useState(false)
@@ -161,10 +166,13 @@ export default function InvoiceDetail() {
     return data.letter ?? ''
   }
 
+  const isTnt = /tnt|fedex/i.test(invoice?.carriers?.name ?? '')
+
   const raiseDispute = () => withBusy('Raising dispute…', async () => {
     // Reuse an open draft if one exists
     const draft = disputes.find(d => d.status === 'draft')
     if (draft) {
+      if (isTnt) { setTntDispute(draft); setShowTntPanel(true); return }
       setPanelDisputeId(draft.id)
       setPanelLetter(draft.letter_text ?? '')
       setShowPanel(true)
@@ -190,6 +198,13 @@ export default function InvoiceDetail() {
     await supabase.from('freight_invoices').update({ status: 'disputed' }).eq('id', invoice.id)
     await Promise.all([fetchInvoice(), fetchDisputes()])
 
+    // TNT: disputes are lodged via TNT's invoice-query form, per query
+    if (isTnt) {
+      setTntDispute(dispute)
+      setShowTntPanel(true)
+      return
+    }
+
     if (!invoice.carriers?.claims_email) { setNoClaimsWarning(true) }
 
     try {
@@ -205,6 +220,7 @@ export default function InvoiceDetail() {
   })
 
   const reopenPanel = (dispute) => {
+    if (isTnt) { setTntDispute(dispute); setShowTntPanel(true); return }
     setPanelDisputeId(dispute.id)
     setPanelLetter(dispute.letter_text ?? '')
     setShowPanel(true)
@@ -485,12 +501,12 @@ export default function InvoiceDetail() {
                     </td>
                     <td style={{ ...tdStyle, fontSize: '12px', fontFamily: mono, color: 'var(--text-secondary)' }}>{d.sent_to ?? '—'}</td>
                     <td style={tdStyle}>
-                      {d.status === 'draft' && (
+                      {(d.status === 'draft' || (isTnt && d.status === 'sent')) && (
                         <button
                           onClick={e => { e.stopPropagation(); reopenPanel(d) }}
                           style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                         >
-                          Edit & send
+                          {isTnt ? 'Queries' : 'Edit & send'}
                         </button>
                       )}
                     </td>
@@ -541,7 +557,16 @@ export default function InvoiceDetail() {
         </div>
       </Modal>
 
-      {/* ── Slide-in dispute letter panel ─────────────────────────────────────── */}
+      {/* ── TNT per-query submission panel ────────────────────────────────────── */}
+      <TntQueryPanel
+        open={showTntPanel}
+        onClose={() => setShowTntPanel(false)}
+        invoice={invoice}
+        dispute={tntDispute}
+        onChange={() => { fetchInvoice(); fetchDisputes() }}
+      />
+
+      {/* ── Slide-in dispute letter panel (non-TNT carriers) ──────────────────── */}
       <DisputeLetterPanel
         open={showPanel}
         onClose={() => setShowPanel(false)}
