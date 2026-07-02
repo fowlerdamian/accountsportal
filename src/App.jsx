@@ -106,7 +106,7 @@ const PATH_TITLES = [
   ['/accounts/xero',         'Xero'],
   ['/accounts',              'Accounts'],
   ['/logistics/invoices',    'Invoices'],
-  ['/logistics/carriers',    'Carriers'],
+  ['/logistics/settings',    'Settings'],
   ['/logistics/disputes',    'Disputes'],
   ['/logistics/manual-label','Manual Label'],
   ['/logistics',             'Logistics'],
@@ -239,7 +239,8 @@ export default function App() {
               <Route path="logistics" element={<Navigate to="/logistics/invoices" replace />} />
               <Route path="logistics/invoices" element={<InvoiceList />} />
               <Route path="logistics/invoices/:id" element={<InvoiceDetail />} />
-              <Route path="logistics/carriers" element={<Carriers />} />
+              <Route path="logistics/settings" element={<Carriers />} />
+              <Route path="logistics/carriers" element={<Navigate to="/logistics/settings" replace />} />
               <Route path="logistics/disputes" element={<Disputes />} />
               <Route path="logistics/manual-label" element={<ManualLabel />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />

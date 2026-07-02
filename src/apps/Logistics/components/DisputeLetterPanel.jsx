@@ -96,7 +96,7 @@ export default function DisputeLetterPanel({
 
             <div style={{ flex: 1, padding: '16px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               <FieldRow label="To" value={claimsEmail ?? ''}>
-                <input readOnly value={claimsEmail ?? ''} placeholder="No claims email — set one in the Carriers tab" style={roStyle} />
+                <input readOnly value={claimsEmail ?? ''} placeholder="No claims email — set one in Settings" style={roStyle} />
               </FieldRow>
 
               {claimsCc && (

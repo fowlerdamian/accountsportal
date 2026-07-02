@@ -5,6 +5,7 @@ import {
   pageWrap, card, thStyle, inputStyle,
   Spinner, Flash, useFlash, PageHeader, HoverBtn,
 } from '../utils/ui.jsx'
+import TntSetup from './TntSetup.jsx'
 
 // Carrier settings — claims email drives dispute emails; fuel levy % prices
 // levy lines; cubic kg/m³ converts ShipStation dims to chargeable weight.
@@ -70,7 +71,7 @@ export default function Carriers() {
 
   return (
     <div style={pageWrap}>
-      <PageHeader title="Carriers" subtitle="Claims contacts, fuel levy and cubic conversion per carrier">
+      <PageHeader title="Settings" subtitle="Carriers, dispute contacts and TNT form setup">
         <HoverBtn onClick={addCarrier}>+ Add carrier</HoverBtn>
       </PageHeader>
 
@@ -132,6 +133,8 @@ export default function Carriers() {
           </tbody>
         </table>
       </div>
+
+      <TntSetup />
     </div>
   )
 }

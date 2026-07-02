@@ -9,7 +9,7 @@ const ROUTE_LABELS = {
   '/accounts/xero':           'Accounts / Xero',
   '/logistics':               'Logistics',
   '/logistics/invoices':      'Logistics / Invoices',
-  '/logistics/carriers':      'Logistics / Carriers',
+  '/logistics/settings':      'Logistics / Settings',
   '/logistics/disputes':      'Logistics / Disputes',
   '/purchase-orders':         'Purchasing',
   '/sales-support':           'Sales Support',

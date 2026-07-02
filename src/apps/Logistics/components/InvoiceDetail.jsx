@@ -321,7 +321,7 @@ export default function InvoiceDetail() {
         <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: mono,
           background: 'rgba(var(--brand-accent-rgb),0.08)', border: '1px solid rgba(var(--brand-accent-rgb),0.3)', color: 'var(--brand-accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-          <span>No claims email set for this carrier — add one in the Carriers tab before sending.</span>
+          <span>No claims email set for this carrier — add one in Settings before sending.</span>
           <button onClick={() => setNoClaimsWarning(false)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}>×</button>
         </div>
       )}

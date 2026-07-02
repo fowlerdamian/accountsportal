@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@portal/lib/supabase'
 import { aud } from '../utils/helpers.js'
 import { mono, btnGhost, FieldLabel, inputStyle } from '../utils/ui.jsx'
@@ -13,15 +13,6 @@ import { mono, btnGhost, FieldLabel, inputStyle } from '../utils/ui.jsx'
 const CONTACT_KEY = 'logistics_tnt_contact'
 const TNT_QUERY_PHONE = '1300 770 966'   // AGA main line — used on all TNT queries
 const TNT_FORM_URL = 'https://www.tnt.com/express/en_au/site/support/invoice-query.html'
-
-// Reads the JSON payload from the page URL fragment and fills the TNT form.
-const BOOKMARKLET =
-  "javascript:(function(){try{var d=JSON.parse(decodeURIComponent(location.hash.slice(1)));" +
-  "var f=document.getElementById('InvoiceQuery')||document;var n=0;" +
-  "Object.keys(d).forEach(function(k){var el=f.querySelector('[name=\"'+k+'\"]');if(!el)return;" +
-  "el.value=d[k];el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));n++;});" +
-  "alert('AGA: '+n+' fields filled. Solve the reCAPTCHA and click Submit.');}" +
-  "catch(e){alert('AGA fill failed: '+e.message);}})();"
 
 // Build the query list from the invoice's disputed lines
 export function buildTntQueries(lines) {
@@ -58,23 +49,7 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
   const [email, setEmail] = useState('')
   const [queries, setQueries] = useState([])
   const [busyId,  setBusyId]  = useState(null)
-  // Setup is open until the user marks the bookmarklet installed (persisted)
-  const [installed, setInstalled] = useState(() => localStorage.getItem('logistics_tnt_bm_installed') === '1')
-  const [showSetup, setShowSetup] = useState(!installed)
-  const [copiedBm,  setCopiedBm]  = useState(false)
   const [openedId,  setOpenedId]  = useState(null)   // last query whose form we opened
-
-  const copyBookmarklet = () => {
-    navigator.clipboard.writeText(BOOKMARKLET)
-    setCopiedBm(true); setTimeout(() => setCopiedBm(false), 2000)
-  }
-  const markInstalled = () => {
-    localStorage.setItem('logistics_tnt_bm_installed', '1')
-    setInstalled(true); setShowSetup(false)
-  }
-
-  // Draggable bookmarklet — set href via DOM so React doesn't sanitise the javascript: URL
-  const bmRef = useCallback(node => { if (node) node.setAttribute('href', BOOKMARKLET) }, [])
 
   useEffect(() => {
     if (!open) return
@@ -169,42 +144,11 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
                 <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: 0 }}>×</button>
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0', fontFamily: mono }}>
-                Open each query in TNT's form (reCAPTCHA), then mark it lodged
+                Open each query in TNT's form, fill with your bookmark, solve the reCAPTCHA, Submit, then mark lodged. First time? Install the “Fill TNT form” button in Settings.
               </p>
             </div>
 
             <div style={{ flex: 1, padding: '16px 24px', overflowY: 'auto' }}>
-              {/* One-time bookmarklet setup */}
-              <div style={{ background: 'var(--bg-surface)', border: `1px solid ${installed ? 'var(--border-default)' : 'rgba(var(--brand-accent-rgb),0.35)'}`, borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
-                <button onClick={() => setShowSetup(s => !s)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '12px', fontFamily: mono, padding: 0, fontWeight: 600 }}>
-                  {showSetup ? '▾' : '▸'} One-time setup: “Fill TNT form” button {installed ? '✓' : ''}
-                </button>
-                {showSetup && (
-                  <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                    <p style={{ margin: '0 0 8px' }}><strong style={{ color: 'var(--text-primary)' }}>1.</strong> Show your bookmarks bar (<span style={{ fontFamily: mono }}>Ctrl+Shift+B</span>), then <strong>drag</strong> this button onto it:</p>
-                    <div style={{ margin: '0 0 6px' }}>
-                      <a
-                        ref={bmRef}
-                        onClick={e => e.preventDefault()}
-                        draggable
-                        style={{ display: 'inline-block', fontSize: '12px', fontWeight: 600, padding: '6px 14px', borderRadius: '6px', color: 'var(--accent-text)', background: 'var(--brand-accent)', textDecoration: 'none', cursor: 'grab' }}
-                      >
-                        ⭑ Fill TNT form
-                      </a>
-                    </div>
-                    <p style={{ margin: '0 0 8px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                      Can’t drag? <button onClick={copyBookmarklet} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontFamily: mono, fontSize: '11px', padding: 0, textDecoration: 'underline' }}>{copiedBm ? 'Copied ✓' : 'Copy the code'}</button> → new bookmark → paste as the URL.
-                    </p>
-                    <p style={{ margin: '0 0 10px' }}><strong style={{ color: 'var(--text-primary)' }}>2.</strong> Per query below: <strong>Open TNT form</strong> → on the TNT tab click your <strong>⭑ Fill TNT form</strong> bookmark → solve the reCAPTCHA → Submit.</p>
-                    {!installed && (
-                      <button onClick={markInstalled} style={{ fontSize: '11px', fontFamily: mono, padding: '4px 12px', borderRadius: '5px', cursor: 'pointer', color: 'var(--brand-aqua)', border: '1px solid rgba(var(--brand-aqua-rgb),0.4)', background: 'transparent' }}>
-                        Done — hide this
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* Contact details (sent with every query) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '8px' }}>
                 <div>
@@ -221,12 +165,12 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
                 </div>
                 <div>
                   <FieldLabel>TNT account</FieldLabel>
-                  <input readOnly value={accountNumber} placeholder="Set in Carriers tab" style={{ ...inputStyle, opacity: 0.8 }} />
+                  <input readOnly value={accountNumber} placeholder="Set in Settings" style={{ ...inputStyle, opacity: 0.8 }} />
                 </div>
               </div>
               {!accountNumber && (
                 <p style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-pink)', margin: '0 0 10px' }}>
-                  No TNT account number — set it in the Carriers tab first.
+                  No TNT account number — set it in Settings first.
                 </p>
               )}
 
