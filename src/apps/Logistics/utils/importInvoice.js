@@ -55,10 +55,28 @@ export function parseCsvLines(text) {
   return { rows, skipped }
 }
 
+// Token-based carrier matching so partial names still resolve —
+// "FedEx Express Australia Pty Ltd" → "TNT / FedEx", "StarTrack Express" →
+// "StarTrack". Generic words are ignored; the carrier sharing the most
+// distinctive tokens wins.
+const CARRIER_STOPWORDS = new Set(['australia', 'australian', 'pty', 'ltd', 'limited', 'express', 'freight', 'group', 'the', 'and', 'co', 'inc', 'logistics', 'transport', 'couriers', 'courier', 'trading', 'as'])
+const carrierTokens = (s) => (s ?? '').toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 3 && !CARRIER_STOPWORDS.has(t))
+
 export const matchCarrier = (carriers, name) => {
   if (!name) return null
   const n = name.toLowerCase()
-  return carriers.find(c => c.name.toLowerCase().includes(n) || n.includes(c.name.toLowerCase())) ?? null
+  // Exact/substring first
+  const direct = carriers.find(c => c.name.toLowerCase() === n || c.name.toLowerCase().includes(n) || n.includes(c.name.toLowerCase()))
+  if (direct) return direct
+  // Token overlap
+  const nameTok = new Set(carrierTokens(name))
+  if (!nameTok.size) return null
+  let best = null, bestScore = 0
+  for (const c of carriers) {
+    const score = carrierTokens(c.name).filter(t => nameTok.has(t)).length
+    if (score > bestScore) { best = c; bestScore = score }
+  }
+  return best
 }
 
 // Step 1 — import header + lines atomically. Returns fast so the upload

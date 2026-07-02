@@ -49,17 +49,40 @@ function toMetres(value: number): number {
   return value / 100;
 }
 
-type ShipInfo = { cost: number | null; weightKg: number | null; cubicM3: number | null };
+type ShipInfo = { cost: number | null; weightKg: number | null; cubicM3: number | null; dimsMm: number[] | null };
 
 function shipmentToInfo(sh: Record<string, any>): ShipInfo {
   const cost = sh.shipmentCost != null && Number(sh.shipmentCost) > 0 ? Number(sh.shipmentCost) : null;
   const weightKg = sh.weight?.value != null ? toKg(Number(sh.weight.value), sh.weight.units) : null;
   let cubicM3: number | null = null;
+  let dimsMm: number[] | null = null;
   const d = sh.dimensions;
   if (d?.length != null && d?.width != null && d?.height != null) {
     cubicM3 = toMetres(Number(d.length)) * toMetres(Number(d.width)) * toMetres(Number(d.height));
+    // dims are cm (see toMetres note) — convert to mm, longest first
+    dimsMm = [Number(d.length) * 10, Number(d.width) * 10, Number(d.height) * 10].sort((a, b) => b - a);
   }
-  return { cost, weightKg, cubicM3 };
+  return { cost, weightKg, cubicM3, dimsMm };
+}
+
+// ── MHP (Manual Handling Process) fee verification ──────────────────────────
+// TNT's published criteria: MHP applies to items NOT compatible with the
+// sortation system. A package IS sortation-compatible when ALL hold:
+//   length 200–1200mm, width 100–600mm, height 15–800mm,
+//   diagonal ≤ 1200mm, weight 250g–30kg.
+// If our ShipStation dims/weight show the package is compatible, the fee is
+// unjustified and gets challenged (expected = $0).
+function mhpSortationCompatible(dimsMm: number[] | null, weightKg: number | null): boolean | null {
+  if (!dimsMm || dimsMm.length !== 3 || weightKg == null) return null; // can't judge
+  const [l, w, h] = dimsMm; // sorted longest → shortest
+  const diagonal = Math.sqrt(l * l + w * w + h * h);
+  return (
+    l >= 200 && l <= 1200 &&
+    w >= 100 && w <= 600 &&
+    h >= 15  && h <= 800 &&
+    diagonal <= 1200 &&
+    weightKg >= 0.25 && weightKg <= 30
+  );
 }
 
 // Look up one shipment by tracking number
@@ -229,7 +252,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Expected-cost passes ─────────────────────────────────────────────────
-    type Result = { id: string; expected_total: number | null; match_status: string; source: string | null };
+    type Result = { id: string; expected_total: number | null; match_status: string; source: string | null; fee_check: string | null };
     const results: Result[] = [];
     const levyLines: Record<string, unknown>[] = [];
     let freightExpectedSubtotal = 0;
@@ -238,19 +261,38 @@ Deno.serve(async (req) => {
     for (const line of lines) {
       const isGst  = norm(line.description).includes("gst") || norm(line.service) === "gst";
       const isLevy = norm(line.service).includes("fuel") || norm(line.description).includes("fuel");
+      const isMhp  = norm(line.service).includes("manual") || norm(line.service) === "mhp" ||
+                     norm(line.description).includes("manual handling") || norm(line.detail) === "mhp";
       if (isGst) {
-        results.push({ id: line.id, expected_total: null, match_status: "skipped", source: null });
+        results.push({ id: line.id, expected_total: null, match_status: "skipped", source: null, fee_check: null });
         continue;
       }
       if (isLevy) { levyLines.push(line); continue; }
+
+      // MHP fee rule: challenge the fee when OUR package data shows the item
+      // is sortation-compatible (fee does not meet TNT's published criteria).
+      if (isMhp) {
+        const ref = line.tracking_ref ? norm(line.tracking_ref) : null;
+        const ship = ref ? shipByRef.get(ref) : null;
+        const compatible = ship ? mhpSortationCompatible(ship.dimsMm, ship.weightKg) : null;
+        if (compatible === true) {
+          results.push({ id: line.id, expected_total: 0, match_status: "matched", source: "shipstation", fee_check: "mhp_unjustified" });
+        } else if (compatible === false) {
+          // Fee legitimately applies — accept the charged amount
+          results.push({ id: line.id, expected_total: Number(line.charged_total), match_status: "matched", source: "shipstation", fee_check: "mhp_ok" });
+        } else {
+          results.push({ id: line.id, expected_total: null, match_status: "no_rate", source: null, fee_check: null });
+        }
+        continue;
+      }
 
       const ss = ssData.get(line.id);
       if (ss?.cost != null) {
         const expected = Math.round(ss.cost * 100) / 100;
         freightExpectedSubtotal += expected;
-        results.push({ id: line.id, expected_total: expected, match_status: "matched", source: "shipstation" });
+        results.push({ id: line.id, expected_total: expected, match_status: "matched", source: "shipstation", fee_check: null });
       } else {
-        results.push({ id: line.id, expected_total: null, match_status: "no_rate", source: null });
+        results.push({ id: line.id, expected_total: null, match_status: "no_rate", source: null, fee_check: null });
       }
     }
 
@@ -260,16 +302,19 @@ Deno.serve(async (req) => {
     for (const line of levyLines) {
       const pct = invoice.carriers?.fuel_levy_pct != null ? Number(invoice.carriers.fuel_levy_pct) : null;
       if (pct == null || freightExpectedSubtotal <= 0) {
-        results.push({ id: line.id, expected_total: null, match_status: "no_rate", source: null });
+        results.push({ id: line.id, expected_total: null, match_status: "no_rate", source: null, fee_check: null });
         continue;
       }
       const expected = Math.round(freightExpectedSubtotal * pct) / 100;
-      results.push({ id: line.id, expected_total: expected, match_status: "matched", source: "carrier_levy" });
+      results.push({ id: line.id, expected_total: expected, match_status: "matched", source: "carrier_levy", fee_check: null });
     }
 
-    // Write results back (baseline + weight evidence together)
+    // Write results back (baseline + weight/fee evidence together)
+    const byLineId = new Map(lines.map(l => [l.id, l]));
     for (const r of results) {
       const wd = ssData.get(r.id);
+      const lineRef = byLineId.get(r.id)?.tracking_ref;
+      const ship = lineRef ? shipByRef.get(norm(lineRef)) : null;
       const { error } = await supabase
         .from("freight_invoice_lines")
         .update({
@@ -277,8 +322,10 @@ Deno.serve(async (req) => {
           expected_source:      r.source,
           booked_cost:          wd?.cost ?? null,
           match_status:         r.match_status,
+          fee_check:            r.fee_check,
           actual_weight_kg:     wd?.actual ?? null,
           actual_cubic_m3:      wd?.cubic ?? null,
+          actual_dims:          ship?.dimsMm ? ship.dimsMm.map(d => Math.round(d)).join("×") + "mm" : null,
           chargeable_weight_kg: wd?.chargeable ?? null,
           weight_check:         wd?.check ?? null,
         })
@@ -304,6 +351,7 @@ Deno.serve(async (req) => {
       weights_checked:   [...ssData.values()].filter(w => w.check === "ok" || w.check === "overbilled").length,
       weights_unmatched: [...ssData.values()].filter(w => w.check === "unmatched").length,
       overbilled:        [...ssData.values()].filter(w => w.check === "overbilled").length,
+      mhp_challenged:    results.filter(r => r.fee_check === "mhp_unjustified").length,
     };
 
     // Only advance status from pending/matched/flagged — never clobber a dispute

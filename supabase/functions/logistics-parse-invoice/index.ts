@@ -37,8 +37,9 @@ Extract the following and return ONLY valid JSON — no markdown, no preamble, n
 Rules:
 - invoice_ref: look for Invoice No, Invoice Number, Ref, Reference, Tax Invoice #
 - carrier_name: the company that ISSUED the invoice (not the recipient)
-- lines: one per distinct charge row — freight legs, fuel levy, surcharges, handling, GST
-- service: normalise to the carrier's service name; use 'Fuel Levy' for fuel surcharges and 'GST' for tax lines
+- lines: one per distinct charge row — freight legs, fuel levy, surcharges, handling, GST. Skip payment/credit/balance rows (negative "Payment, Thank You" style entries).
+- charged_total: the line total EXCLUDING GST. When the invoice shows both GST-inclusive and GST-exclusive totals per line (TNT style), ALWAYS use the "Total excluding GST" figure (it already includes any per-line fuel/security surcharge). Never use the GST-inclusive figure.
+- service: normalise to the carrier's service name; use 'Fuel Levy' for standalone fuel surcharge lines, 'Manual Handling' for MHP / manual handling process fees, and 'GST' for tax lines
 - origin/destination: use 3-letter city codes where identifiable (SYD, MEL, BNE, ADL, PER, HBA, DRW, CBR); otherwise the name as printed; null if not applicable (e.g. levy lines)
 - tracking: the con note / consignment / article / tracking number tied to the shipment — critical for weight verification; null for levy/tax lines
 - weight_kg: chargeable/billed weight if shown, else actual weight; null if none

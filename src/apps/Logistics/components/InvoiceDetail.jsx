@@ -127,11 +127,14 @@ export default function InvoiceDetail() {
         const weightNote = l.weight_check === 'overbilled'
           ? ` [billed at ${l.weight_kg}kg but actual chargeable weight is ${l.chargeable_weight_kg}kg per our dispatch records (${l.actual_weight_kg}kg dead weight${l.actual_cubic_m3 ? `, ${l.actual_cubic_m3}m³ cubic` : ''})]`
           : ''
-        const bookedNote = l.expected_source === 'shipstation' && l.booked_cost != null
+        const bookedNote = l.expected_source === 'shipstation' && l.booked_cost != null && l.fee_check == null
           ? ` [quoted/booked at $${Number(l.booked_cost).toFixed(2)} in our freight system at dispatch]`
           : ''
+        const mhpNote = l.fee_check === 'mhp_unjustified'
+          ? ` [MHP fee challenged: our dispatch records show this item is sortation-compatible (${l.actual_dims ?? 'dims on file'}, ${l.actual_weight_kg != null ? `${(l.actual_weight_kg * 1000).toFixed(0)}g` : 'weight on file'}) — within TNT's published MHP size/weight parameters, so the manual handling fee does not apply]`
+          : ''
         const conNote = l.tracking_ref ? ` — con note ${l.tracking_ref}` : ''
-        return { description: l.description, detail: `${l.detail ?? ''}${weightNote}${bookedNote}${conNote}`, variance_aud: lineVariance(l) }
+        return { description: l.description, detail: `${l.detail ?? ''}${weightNote}${bookedNote}${mhpNote}${conNote}`, variance_aud: lineVariance(l) }
       })
     const { data, error } = await supabase.functions.invoke('generate-dispute-letter', {
       body: {
@@ -374,7 +377,11 @@ export default function InvoiceDetail() {
                         : (
                           <>
                             <span style={{ color: 'var(--text-secondary)' }}>{aud(line.expected_total)}</span>
-                            {line.expected_source && (
+                            {line.fee_check === 'mhp_unjustified' ? (
+                              <span style={{ display: 'block', fontSize: '10px', fontFamily: mono, color: 'var(--brand-pink)', marginTop: '2px' }}>MHP challenged</span>
+                            ) : line.fee_check === 'mhp_ok' ? (
+                              <span style={{ display: 'block', fontSize: '10px', fontFamily: mono, color: 'var(--text-disabled)', marginTop: '2px' }}>MHP valid</span>
+                            ) : line.expected_source && (
                               <span style={{ display: 'block', fontSize: '10px', fontFamily: mono, color: 'var(--text-disabled)', marginTop: '2px' }}>
                                 {line.expected_source === 'shipstation' ? 'booked (SS)' : 'fuel levy %'}
                               </span>
