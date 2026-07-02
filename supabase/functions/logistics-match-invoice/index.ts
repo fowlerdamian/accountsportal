@@ -21,7 +21,12 @@ const corsHeaders = {
 };
 
 const OVERCHARGE_TOLERANCE_AUD = 1.0;
-const MAX_SHIPSTATION_LOOKUPS = 60;
+// Above this many unique con notes, switch from per-tracking lookups to
+// paged date-range fetches (ShipStation v1 is rate-limited to 40 req/min —
+// a TNT weekly invoice has ~50+ con notes and would blow straight through it).
+const RANGE_FETCH_THRESHOLD = 8;
+const RANGE_DAYS_BACK = 75;
+const MAX_RANGE_PAGES = 12;
 
 const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
 
@@ -44,8 +49,21 @@ function toMetres(value: number): number {
   return value / 100;
 }
 
-// Look up a shipment by tracking number; returns booked cost + dead weight (kg) + cubic (m³)
-async function shipstationLookup(tracking: string, auth: string) {
+type ShipInfo = { cost: number | null; weightKg: number | null; cubicM3: number | null };
+
+function shipmentToInfo(sh: Record<string, any>): ShipInfo {
+  const cost = sh.shipmentCost != null && Number(sh.shipmentCost) > 0 ? Number(sh.shipmentCost) : null;
+  const weightKg = sh.weight?.value != null ? toKg(Number(sh.weight.value), sh.weight.units) : null;
+  let cubicM3: number | null = null;
+  const d = sh.dimensions;
+  if (d?.length != null && d?.width != null && d?.height != null) {
+    cubicM3 = toMetres(Number(d.length)) * toMetres(Number(d.width)) * toMetres(Number(d.height));
+  }
+  return { cost, weightKg, cubicM3 };
+}
+
+// Look up one shipment by tracking number
+async function shipstationLookup(tracking: string, auth: string): Promise<ShipInfo | null> {
   const res = await fetch(
     `https://ssapi.shipstation.com/shipments?trackingNumber=${encodeURIComponent(tracking)}&pageSize=1`,
     { headers: { Authorization: `Basic ${auth}` } }
@@ -56,15 +74,35 @@ async function shipstationLookup(tracking: string, auth: string) {
   if (!sh) return null;
   // Guard: only trust an exact tracking-number match — never a "closest" result
   if ((sh.trackingNumber ?? "").trim().toLowerCase() !== tracking.trim().toLowerCase()) return null;
+  return shipmentToInfo(sh);
+}
 
-  const cost = sh.shipmentCost != null && Number(sh.shipmentCost) > 0 ? Number(sh.shipmentCost) : null;
-  const weightKg = sh.weight?.value != null ? toKg(Number(sh.weight.value), sh.weight.units) : null;
-  let cubicM3: number | null = null;
-  const d = sh.dimensions;
-  if (d?.length != null && d?.width != null && d?.height != null) {
-    cubicM3 = toMetres(Number(d.length)) * toMetres(Number(d.width)) * toMetres(Number(d.height));
+// Fetch every shipment shipped in the window before the invoice date, in a
+// handful of paged calls, and index by tracking number. Stops early once all
+// wanted con notes are found.
+async function shipstationRangeFetch(wanted: Set<string>, invoiceDate: string, auth: string): Promise<Map<string, ShipInfo>> {
+  const found = new Map<string, ShipInfo>();
+  const end = new Date(invoiceDate + "T00:00:00");
+  end.setDate(end.getDate() + 1);
+  const start = new Date(end);
+  start.setDate(start.getDate() - RANGE_DAYS_BACK);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+  for (let page = 1; page <= MAX_RANGE_PAGES; page++) {
+    const res = await fetch(
+      `https://ssapi.shipstation.com/shipments?shipDateStart=${fmt(start)}&shipDateEnd=${fmt(end)}&pageSize=500&page=${page}`,
+      { headers: { Authorization: `Basic ${auth}` } }
+    );
+    if (!res.ok) break;
+    const data = await res.json();
+    for (const sh of data?.shipments ?? []) {
+      const tn = (sh.trackingNumber ?? "").trim().toLowerCase();
+      if (tn && wanted.has(tn) && !found.has(tn)) found.set(tn, shipmentToInfo(sh));
+    }
+    if (found.size >= wanted.size) break;
+    if (!data?.pages || page >= data.pages) break;
   }
-  return { cost, weightKg, cubicM3 };
+  return found;
 }
 
 Deno.serve(async (req) => {
@@ -114,17 +152,58 @@ Deno.serve(async (req) => {
     const ssAuth   = ssKey && ssSecret ? btoa(`${ssKey}:${ssSecret}`) : null;
     const cubicFactor = Number(invoice.carriers?.cubic_factor_kg_m3 ?? 250);
 
-    const ssData = new Map<string, { cost: number | null; actual: number | null; cubic: number | null; chargeable: number | null; check: string | null }>();
-    let lookups = 0;
+    // One lookup per UNIQUE con note. Small invoices: individual lookups.
+    // Big invoices (TNT weekly ≈ 50+ con notes): paged date-range fetch —
+    // a few API calls instead of one per con note.
+    const uniqueRefs = new Set<string>(
+      lines.filter(l => l.tracking_ref).map(l => norm(l.tracking_ref))
+    );
+    const shipByRef = new Map<string, ShipInfo>();
+    if (ssAuth && uniqueRefs.size > 0) {
+      try {
+        if (uniqueRefs.size > RANGE_FETCH_THRESHOLD) {
+          const found = await shipstationRangeFetch(uniqueRefs, invoice.invoice_date, ssAuth);
+          found.forEach((v, k) => shipByRef.set(k, v));
+          // Individual fallback for stragglers outside the date window (cap it)
+          const missing = [...uniqueRefs].filter(r => !shipByRef.has(r)).slice(0, 15);
+          for (const ref of missing) {
+            try {
+              const one = await shipstationLookup(ref, ssAuth);
+              if (one) shipByRef.set(ref, one);
+            } catch { /* leave unmatched */ }
+          }
+        } else {
+          for (const ref of uniqueRefs) {
+            try {
+              const one = await shipstationLookup(ref, ssAuth);
+              if (one) shipByRef.set(ref, one);
+            } catch { /* leave unmatched */ }
+          }
+        }
+      } catch { /* ShipStation unavailable — everything stays unmatched */ }
+    }
+
+    // The booked cost covers the whole consignment, but carriers bill it as a
+    // freight line plus surcharge lines on the same con note. Assign the cost
+    // to the PRIMARY (highest-charged, non-levy/GST) line per con note only.
+    const primaryByRef = new Map<string, string>(); // ref → line.id
     for (const line of lines) {
       if (!line.tracking_ref) continue;
-      if (!ssAuth || lookups >= MAX_SHIPSTATION_LOOKUPS) {
-        ssData.set(line.id, { cost: null, actual: null, cubic: null, chargeable: null, check: "unmatched" });
-        continue;
+      const isGst  = norm(line.description).includes("gst") || norm(line.service) === "gst";
+      const isLevy = norm(line.service).includes("fuel") || norm(line.description).includes("fuel");
+      if (isGst || isLevy) continue;
+      const ref = norm(line.tracking_ref);
+      const current = primaryByRef.get(ref);
+      if (!current || Number(line.charged_total) > Number(lines.find(l => l.id === current)!.charged_total)) {
+        primaryByRef.set(ref, line.id);
       }
-      lookups++;
-      let found = null;
-      try { found = await shipstationLookup(line.tracking_ref, ssAuth); } catch { /* network — treat as unmatched */ }
+    }
+
+    const ssData = new Map<string, { cost: number | null; actual: number | null; cubic: number | null; chargeable: number | null; check: string | null }>();
+    for (const line of lines) {
+      if (!line.tracking_ref) continue;
+      const ref = norm(line.tracking_ref);
+      const found = shipByRef.get(ref);
       if (!found || (found.cost == null && found.weightKg == null && found.cubicM3 == null)) {
         ssData.set(line.id, { cost: null, actual: null, cubic: null, chargeable: null, check: "unmatched" });
         continue;
@@ -141,7 +220,7 @@ Deno.serve(async (req) => {
         check = Number(line.weight_kg) > Math.ceil(chargeable) + tolerance ? "overbilled" : "ok";
       }
       ssData.set(line.id, {
-        cost: found.cost,
+        cost: primaryByRef.get(ref) === line.id ? found.cost : null,
         actual: dead != null ? Math.round(dead * 100) / 100 : null,
         cubic:  cubic != null ? Math.round(cubic * 10000) / 10000 : null,
         chargeable: chargeable != null ? Math.round(chargeable * 100) / 100 : null,

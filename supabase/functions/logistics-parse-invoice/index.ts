@@ -1,7 +1,12 @@
-// logistics-parse-invoice v2 — extract STRUCTURED line data so the rate engine
-// (logistics-match-invoice) can match lines against rate card entries.
+// logistics-parse-invoice v2 — extract STRUCTURED line data for the audit
+// engine (logistics-match-invoice).
+// Speed: real carrier invoices are big (TNT weekly ≈ 5 pages / 110 charge
+// lines ≈ 8k+ output tokens), so this uses Haiku (fast) with a 32k output
+// budget, streamed so nothing times out or truncates.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { resolveModel } from "../_shared/model.ts";
+
+// Haiku on purpose: 3-5x faster than Sonnet for structured extraction.
+const PARSE_MODEL = "claude-haiku-4-5-20251001";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,8 +84,9 @@ Deno.serve(async (req) => {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: await resolveModel(apiKey),
-        max_tokens: 8192,
+        model: PARSE_MODEL,
+        max_tokens: 32000,   // large weekly invoices — never truncate
+        stream: true,        // required for large max_tokens; also avoids idle timeouts
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: `Parse this freight invoice:\n\n${text}` }],
       }),
@@ -93,8 +99,25 @@ Deno.serve(async (req) => {
       throw new Error(`Claude API error: ${claudeRes.status} — ${errDetail}`);
     }
 
-    const claudeData = await claudeRes.json();
-    const responseText = claudeData.content?.[0]?.text ?? "";
+    // Accumulate the SSE stream into the full response text
+    let responseText = "";
+    const reader = claudeRes.body!.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const events = buf.split("\n");
+      buf = events.pop() ?? "";
+      for (const line of events) {
+        if (!line.startsWith("data: ")) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch { continue; } // keepalives/partials
+        if (ev.type === "content_block_delta" && ev.delta?.text) responseText += ev.delta.text;
+        if (ev.type === "error") throw new Error(ev.error?.message ?? "stream error");
+      }
+    }
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("Claude did not return valid JSON");
 
