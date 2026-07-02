@@ -58,7 +58,20 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
   const [email, setEmail] = useState('')
   const [queries, setQueries] = useState([])
   const [busyId,  setBusyId]  = useState(null)
-  const [showSetup, setShowSetup] = useState(false)
+  // Setup is open until the user marks the bookmarklet installed (persisted)
+  const [installed, setInstalled] = useState(() => localStorage.getItem('logistics_tnt_bm_installed') === '1')
+  const [showSetup, setShowSetup] = useState(!installed)
+  const [copiedBm,  setCopiedBm]  = useState(false)
+  const [openedId,  setOpenedId]  = useState(null)   // last query whose form we opened
+
+  const copyBookmarklet = () => {
+    navigator.clipboard.writeText(BOOKMARKLET)
+    setCopiedBm(true); setTimeout(() => setCopiedBm(false), 2000)
+  }
+  const markInstalled = () => {
+    localStorage.setItem('logistics_tnt_bm_installed', '1')
+    setInstalled(true); setShowSetup(false)
+  }
 
   // Draggable bookmarklet — set href via DOM so React doesn't sanitise the javascript: URL
   const bmRef = useCallback(node => { if (node) node.setAttribute('href', BOOKMARKLET) }, [])
@@ -101,6 +114,7 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
     localStorage.setItem(CONTACT_KEY, JSON.stringify({ name, phone }))
     const hash = encodeURIComponent(JSON.stringify(payloadFor(q)))
     window.open(`${TNT_FORM_URL}#${hash}`, '_blank')
+    setOpenedId(q.line.id)
   }
 
   const markLodged = async (q) => {
@@ -161,14 +175,14 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
 
             <div style={{ flex: 1, padding: '16px 24px', overflowY: 'auto' }}>
               {/* One-time bookmarklet setup */}
-              <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
-                <button onClick={() => setShowSetup(s => !s)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '12px', fontFamily: mono, padding: 0 }}>
-                  {showSetup ? '▾' : '▸'} One-time setup: “Fill TNT form” bookmarklet
+              <div style={{ background: 'var(--bg-surface)', border: `1px solid ${installed ? 'var(--border-default)' : 'rgba(var(--brand-accent-rgb),0.35)'}`, borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
+                <button onClick={() => setShowSetup(s => !s)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '12px', fontFamily: mono, padding: 0, fontWeight: 600 }}>
+                  {showSetup ? '▾' : '▸'} One-time setup: “Fill TNT form” button {installed ? '✓' : ''}
                 </button>
                 {showSetup && (
-                  <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Drag this button to your bookmarks bar (once):
-                    <div style={{ margin: '8px 0' }}>
+                  <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                    <p style={{ margin: '0 0 8px' }}><strong style={{ color: 'var(--text-primary)' }}>1.</strong> Show your bookmarks bar (<span style={{ fontFamily: mono }}>Ctrl+Shift+B</span>), then <strong>drag</strong> this button onto it:</p>
+                    <div style={{ margin: '0 0 6px' }}>
                       <a
                         ref={bmRef}
                         onClick={e => e.preventDefault()}
@@ -178,7 +192,15 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
                         ⭑ Fill TNT form
                       </a>
                     </div>
-                    Then on any query: click <strong>Open TNT form</strong> below, click your bookmark to fill the fields, solve the reCAPTCHA, and Submit.
+                    <p style={{ margin: '0 0 8px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                      Can’t drag? <button onClick={copyBookmarklet} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontFamily: mono, fontSize: '11px', padding: 0, textDecoration: 'underline' }}>{copiedBm ? 'Copied ✓' : 'Copy the code'}</button> → new bookmark → paste as the URL.
+                    </p>
+                    <p style={{ margin: '0 0 10px' }}><strong style={{ color: 'var(--text-primary)' }}>2.</strong> Per query below: <strong>Open TNT form</strong> → on the TNT tab click your <strong>⭑ Fill TNT form</strong> bookmark → solve the reCAPTCHA → Submit.</p>
+                    {!installed && (
+                      <button onClick={markInstalled} style={{ fontSize: '11px', fontFamily: mono, padding: '4px 12px', borderRadius: '5px', cursor: 'pointer', color: 'var(--brand-aqua)', border: '1px solid rgba(var(--brand-aqua-rgb),0.4)', background: 'transparent' }}>
+                        Done — hide this
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -234,7 +256,7 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
                             disabled={!contactOk}
                             style={{ ...linkBtn, color: 'var(--brand-accent)', border: '1px solid rgba(var(--brand-accent-rgb),0.35)', background: 'transparent', opacity: contactOk ? 1 : 0.5, cursor: contactOk ? 'pointer' : 'not-allowed' }}
                           >
-                            Open TNT form
+                            {openedId === q.line.id ? 'Reopen form' : 'Open TNT form'}
                           </button>
                           <button
                             onClick={() => markLodged(q)}
@@ -259,6 +281,11 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
                       fontFamily: mono, resize: 'vertical', outline: 'none', lineHeight: 1.6,
                     }}
                   />
+                  {openedId === q.line.id && !q.submitted && (
+                    <p style={{ margin: '8px 0 0', fontSize: '11px', fontFamily: mono, color: 'var(--brand-accent)' }}>
+                      → On the TNT tab, click your ⭑ Fill TNT form bookmark, solve the reCAPTCHA, Submit — then Mark lodged.
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
