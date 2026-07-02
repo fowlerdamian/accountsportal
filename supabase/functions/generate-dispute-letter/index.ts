@@ -34,7 +34,7 @@ serve(async (req) => {
   }
 
   try {
-    const { invoice_ref, carrier_name, invoice_date, flagged_lines, total_overcharge_aud } = await req.json();
+    const { invoice_ref, carrier_name, invoice_date, flagged_lines, total_overcharge_aud, carrier_terms } = await req.json();
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
@@ -43,18 +43,24 @@ serve(async (req) => {
       .map((l) => `• ${l.description} / ${l.detail} / overcharge: $${l.variance_aud.toFixed(2)}`)
       .join("\n");
 
+    const termsBlock = carrier_terms
+      ? `\nThe carrier's OWN PUBLISHED TERMS relevant to these charges:\n"""\n${carrier_terms}\n"""\n`
+      : "";
+
     const prompt = `Write a professional freight invoice dispute letter from Automotive Group Australia (AGA) to ${carrier_name} for invoice ${invoice_ref} dated ${invoice_date}.
 
-Disputed line items:
+Disputed line items (with supporting evidence from our booking records in square brackets):
 ${bulletLines}
-Total overcharge: $${total_overcharge_aud.toFixed(2)}
-
+Total disputed: $${total_overcharge_aud.toFixed(2)}
+${termsBlock}
 - Professional but firm tone
 - Reference the invoice number and date
-- Cite each disputed line with contracted vs charged rate
-- Reference the parties' freight agreement
-- Request a credit note within 5 business days
-- Under 180 words, letter body only — no letterhead or address blocks`;
+- Where the carrier's published terms are provided above, QUOTE the specific relevant criteria verbatim back to them, then demonstrate — item by item, using the booking evidence (recorded dimensions, weight, con note) — that each disputed fee fails the carrier's own published criteria and therefore should not have been charged
+- Where a charge exceeds the booked/quoted amount, cite the booked figure as the agreed price
+- Reference each con note number so the carrier can verify against their records
+- State that our dimensions and weights are recorded at dispatch on calibrated equipment
+- Request a credit note for the full disputed amount within 5 business days
+- Under 350 words, letter body only — no letterhead or address blocks`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -65,7 +71,7 @@ Total overcharge: $${total_overcharge_aud.toFixed(2)}
       },
       body: JSON.stringify({
         model: await resolveModel(ANTHROPIC_API_KEY),
-        max_tokens: 600,
+        max_tokens: 1500,
         messages: [{ role: "user", content: prompt }],
       }),
     });

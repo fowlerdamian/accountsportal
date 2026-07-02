@@ -37,6 +37,13 @@ const MATCH_DOT = {
   skipped: null,
 }
 
+// TNT's published MHP criteria — quoted back to the carrier in dispute
+// letters when an MHP fee is challenged.
+const TNT_MHP_TERMS = `Manual Handling Processing (MHP) Fee: The MHP Fee is $16.50 per item on items that TNT determines are not compatible with TNT's sortation system and require manual handling, which includes size, weight, fragility (including glass), poor packaging, where the parcel is unstable due to poor weight distribution, liquids, unusual shape (including tubes, cylinders, flat pack items, tyres, drums, fabric rolls) and Dangerous Goods.
+Size criteria: Length <200mm or >1200mm and/or Width <100mm or >600mm and/or Height <15mm or >800mm and/or Diagonal Length >1200mm.
+Weight criteria: Weight <250g or >30kg.
+The MHP fee is charged per item, in addition to any other applicable surcharge for the consignment.`
+
 export default function InvoiceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -136,6 +143,9 @@ export default function InvoiceDetail() {
         const conNote = l.tracking_ref ? ` — con note ${l.tracking_ref}` : ''
         return { description: l.description, detail: `${l.detail ?? ''}${weightNote}${bookedNote}${mhpNote}${conNote}`, variance_aud: lineVariance(l) }
       })
+    // Quote the carrier's own published terms back when challenged MHP fees
+    // are part of the dispute
+    const hasMhpChallenge = lines.some(l => l.fee_check === 'mhp_unjustified')
     const { data, error } = await supabase.functions.invoke('generate-dispute-letter', {
       body: {
         invoice_ref:          inv.invoice_ref,
@@ -143,6 +153,7 @@ export default function InvoiceDetail() {
         invoice_date:         inv.invoice_date,
         flagged_lines:        flaggedLines,
         total_overcharge_aud: invoiceOvercharge(lines),
+        carrier_terms:        hasMhpChallenge ? TNT_MHP_TERMS : null,
       },
     })
     if (error || data?.error) throw new Error(data?.error ?? error.message)
