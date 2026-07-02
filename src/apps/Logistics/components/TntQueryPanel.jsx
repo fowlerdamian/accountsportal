@@ -9,6 +9,7 @@ import { mono, btnGhost, FieldLabel, inputStyle } from '../utils/ui.jsx'
 // logistics-submit-tnt-query edge function, tracking progress per line.
 
 const CONTACT_KEY = 'logistics_tnt_contact'
+const TNT_QUERY_PHONE = '1300 770 966'   // AGA main line — used on all TNT queries
 
 // Build the query list from the invoice's disputed lines
 export function buildTntQueries(lines) {
@@ -41,7 +42,7 @@ export function buildTntQueries(lines) {
 export default function TntQueryPanel({ open, onClose, invoice, dispute, onChange }) {
   const saved = (() => { try { return JSON.parse(localStorage.getItem(CONTACT_KEY)) ?? {} } catch { return {} } })()
   const [name,  setName]  = useState(saved.name ?? '')
-  const [phone, setPhone] = useState(saved.phone ?? '')
+  const [phone, setPhone] = useState(saved.phone ?? TNT_QUERY_PHONE)
   const [email, setEmail] = useState('')
   const [queries, setQueries] = useState([])
   const [busyId,  setBusyId]  = useState(null)   // line id being submitted, or 'all'
@@ -49,7 +50,20 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
 
   useEffect(() => {
     if (!open) return
-    supabase.auth.getUser().then(({ data }) => { if (data?.user?.email) setEmail(e => e || data.user.email) })
+    supabase.auth.getUser().then(async ({ data }) => {
+      const user = data?.user
+      if (!user) return
+      setEmail(e => e || user.email || '')
+      // Prefill the user's name from their portal profile
+      setName(n => {
+        if (n) return n
+        const metaName = user.user_metadata?.full_name || user.user_metadata?.name
+        if (metaName) return metaName
+        supabase.from('profiles').select('full_name').eq('id', user.id).single()
+          .then(({ data: p }) => { if (p?.full_name) setName(cur => cur || p.full_name) })
+        return n
+      })
+    })
     setQueries(buildTntQueries(invoice?.freight_invoice_lines).map(q => ({
       ...q,
       submitted: !!q.line.query_submitted_at,
