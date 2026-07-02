@@ -32,7 +32,7 @@ export default function Disputes() {
   const fetchDisputes = async () => {
     const { data } = await supabase
       .from('disputes')
-      .select('*, freight_invoices(id, invoice_ref, invoice_date, carriers(name, claims_email)), dispute_events(*)')
+      .select('*, freight_invoices(id, invoice_ref, invoice_date, carriers(name, claims_email, claims_cc)), dispute_events(*)')
       .order('created_at', { ascending: false })
     if (data) setDisputes(data)
     setLoading(false)
@@ -262,6 +262,7 @@ export default function Disputes() {
         invoiceRef={panelFor?.freight_invoices?.invoice_ref}
         carrierName={panelFor?.freight_invoices?.carriers?.name}
         claimsEmail={panelFor?.freight_invoices?.carriers?.claims_email}
+        claimsCc={panelFor?.freight_invoices?.carriers?.claims_cc}
         letter={panelLetter}
         setLetter={setPanelLetter}
         busy={panelBusy}

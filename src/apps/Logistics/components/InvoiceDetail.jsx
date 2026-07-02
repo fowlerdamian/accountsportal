@@ -548,6 +548,7 @@ export default function InvoiceDetail() {
         invoiceRef={invoice.invoice_ref}
         carrierName={invoice.carriers?.name}
         claimsEmail={invoice.carriers?.claims_email}
+        claimsCc={invoice.carriers?.claims_cc}
         letter={panelLetter}
         setLetter={setPanelLetter}
         busy={panelBusy}

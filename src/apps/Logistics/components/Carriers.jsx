@@ -25,6 +25,7 @@ export default function Carriers() {
 
   const cleanOf = (c) => ({
     name: c?.name ?? '', email: c?.email ?? '', claims_email: c?.claims_email ?? '',
+    claims_cc: c?.claims_cc ?? '',
     fuel_levy_pct: c?.fuel_levy_pct != null ? String(c.fuel_levy_pct) : '',
     cubic_factor_kg_m3: c?.cubic_factor_kg_m3 != null ? String(c.cubic_factor_kg_m3) : '250',
     billing_frequency: c?.billing_frequency ?? '',
@@ -45,6 +46,7 @@ export default function Carriers() {
       name:          edit.name.trim(),
       email:         edit.email.trim() || null,
       claims_email:  edit.claims_email.trim() || null,
+      claims_cc:     edit.claims_cc.trim() || null,
       fuel_levy_pct: isNaN(levy) ? null : levy,
       cubic_factor_kg_m3: isNaN(cubic) ? 250 : cubic,
       billing_frequency: edit.billing_frequency || null,
@@ -77,7 +79,7 @@ export default function Carriers() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              {['Name', 'Billing Email', 'Claims Email', 'Fuel Levy %', 'Cubic kg/m³', 'Billing', ''].map((h, i) => (
+              {['Name', 'Billing Email', 'Claims To', 'Claims CC', 'Fuel Levy %', 'Cubic kg/m³', 'Billing', ''].map((h, i) => (
                 <th key={i} style={thStyle()}>{h}</th>
               ))}
             </tr>
@@ -96,7 +98,10 @@ export default function Carriers() {
                     <input value={edit.email} onChange={e => updateEdit(carrier.id, 'email', e.target.value)} placeholder="billing@carrier.com" style={{ ...inputStyle, width: '200px' }} />
                   </td>
                   <td style={{ padding: '10px 14px' }}>
-                    <input value={edit.claims_email} onChange={e => updateEdit(carrier.id, 'claims_email', e.target.value)} placeholder="claims@carrier.com" style={{ ...inputStyle, width: '200px' }} />
+                    <input value={edit.claims_email} onChange={e => updateEdit(carrier.id, 'claims_email', e.target.value)} placeholder="claims@x.com; billing@x.com" style={{ ...inputStyle, width: '200px' }} />
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <input value={edit.claims_cc} onChange={e => updateEdit(carrier.id, 'claims_cc', e.target.value)} placeholder="cc@x.com; cc2@x.com" style={{ ...inputStyle, width: '180px' }} />
                   </td>
                   <td style={{ padding: '10px 14px' }}>
                     <input value={edit.fuel_levy_pct} onChange={e => updateEdit(carrier.id, 'fuel_levy_pct', e.target.value)} placeholder="e.g. 18.5" style={{ ...inputStyle, width: '90px' }} />

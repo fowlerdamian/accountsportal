@@ -42,7 +42,7 @@ const roStyle = {
 }
 
 export default function DisputeLetterPanel({
-  open, onClose, invoiceRef, carrierName, claimsEmail,
+  open, onClose, invoiceRef, carrierName, claimsEmail, claimsCc,
   letter, setLetter, busy, onMarkSent, onSaveDraft,
 }) {
   const subject = `Invoice Dispute - ${invoiceRef ?? ''}`
@@ -52,6 +52,7 @@ export default function DisputeLetterPanel({
   const downloadEml = () => {
     const eml = [
       `To: ${claimsEmail ?? ''}`,
+      ...(claimsCc ? [`Cc: ${claimsCc}`] : []),
       `Subject: ${subject}`,
       'X-Unsent: 1',
       'Content-Type: text/plain; charset=utf-8',
@@ -102,6 +103,12 @@ export default function DisputeLetterPanel({
               <FieldRow label="To" value={claimsEmail ?? ''}>
                 <input readOnly value={claimsEmail ?? ''} placeholder="No claims email — set one in the Carriers tab" style={roStyle} />
               </FieldRow>
+
+              {claimsCc && (
+                <FieldRow label="Cc" value={claimsCc}>
+                  <input readOnly value={claimsCc} style={roStyle} />
+                </FieldRow>
+              )}
 
               <FieldRow label="Subject" value={subject}>
                 <input readOnly value={subject} style={roStyle} />
