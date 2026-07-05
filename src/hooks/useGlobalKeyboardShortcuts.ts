@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { submitFocusedTextBlock } from "../utils/submitTextBlock";
 
 // Press Esc this many times within ESC_WINDOW_MS to jump straight to the
 // dashboard instead of stepping back one page at a time.
@@ -49,6 +50,7 @@ export const SHORTCUTS: Shortcut[] = [
     group:       "Navigation" as const,
   })),
   { key: "n",      label: "N",      description: "New task (or new case/project when in those apps)", group: "Actions" },
+  { key: "ctrl+enter", label: "Ctrl+Enter", description: "Post / send the text box you're typing in",   group: "Actions" },
   { key: "?",      label: "Shift+/", description: "Show keyboard shortcuts",                          group: "Actions" },
   { key: "ctrl+k", label: "Ctrl+K", description: "Show keyboard shortcuts",                            group: "Actions" },
   { key: "esc",    label: "Esc",    description: "Back one page (×3 quickly → Dashboard)",              group: "Actions" },
@@ -89,6 +91,30 @@ export function useGlobalKeyboardShortcuts({ onShowShortcuts }: Opts): void {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         onShowShortcuts();
+        return;
+      }
+
+      // Ctrl/Cmd+Enter posts/sends the text block you're composing in
+      // (comment, message, note…). Scoped to multi-line fields — single-line
+      // inputs already submit on plain Enter. A mention/command picker owns
+      // the keys while open, so defer to it. submitFocusedTextBlock resolves
+      // the block's submit path; when it can't, it returns false and we leave
+      // the keystroke untouched so the field's own handler (or a newline)
+      // still happens — and, because we only swallow the event when it fires,
+      // fields that wire their own Ctrl+Enter never double-submit.
+      if (
+        (e.key === "Enter") && (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey && !e.altKey && !e.isComposing
+      ) {
+        const isTextBlock =
+          target.tagName === "TEXTAREA" || target.isContentEditable;
+        const pickerOpen = !!document.querySelector(
+          '[role="listbox"], [role="menu"][data-state="open"], [data-mentions-open="true"]'
+        );
+        if (isTextBlock && !pickerOpen && submitFocusedTextBlock(target)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
         return;
       }
 
