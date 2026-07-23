@@ -178,6 +178,31 @@ function EditCell({ value, onCommit, color }) {
   )
 }
 
+const SYNC_LABEL = { idle: 'Sync Xero', syncing: 'Requesting…', waiting: 'Syncing… ~1 min', done: 'Synced ✓', cooldown: 'On cooldown', error: 'Failed' }
+function SyncButton({ state, onClick, detail }) {
+  const busy = state === 'syncing' || state === 'waiting'
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+      <button
+        onClick={onClick}
+        disabled={busy}
+        style={{
+          background: state === 'done' ? 'rgba(51,92,103,0.2)' : C.panel,
+          border: `1px solid ${state === 'error' ? C.red : C.border}`,
+          color: state === 'error' ? C.red : state === 'done' ? C.green : C.text,
+          borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: busy ? 'wait' : 'pointer',
+          fontFamily: '"JetBrains Mono", monospace', opacity: busy ? 0.7 : 1,
+        }}
+      >
+        {SYNC_LABEL[state]}{state === 'cooldown' && detail ? ` (${detail})` : ''}
+      </button>
+      <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
+        ⚠ uses Xero API quota — sparingly, max 1 per 10 min
+      </span>
+    </div>
+  )
+}
+
 export default function RevenueTargets() {
   const { data, isLoading, error } = useTargetsData()
   const qc = useQueryClient()
@@ -185,6 +210,36 @@ export default function RevenueTargets() {
   const thisYear = now.getFullYear()
   const thisMonth = now.getMonth() + 1
   const [selYearsRaw, setSelYears] = useState(null) // null → default to current year
+  const [syncState, setSyncState] = useState('idle')
+  const [syncDetail, setSyncDetail] = useState(null)
+
+  async function handleSync() {
+    if (syncState === 'syncing' || syncState === 'waiting') return
+    setSyncState('syncing')
+    try {
+      const { data: res, error: e } = await supabase.rpc('request_xero_invoice_sync')
+      if (e) throw e
+      if (!res?.ok) {
+        if (res?.retry_in_seconds) {
+          setSyncDetail(`${Math.ceil(res.retry_in_seconds / 60)}m left`)
+          setSyncState('cooldown')
+        } else throw new Error(res?.error || 'sync refused')
+      } else {
+        // pg_net fires the edge fn async — give it a minute, then refetch.
+        setSyncState('waiting')
+        setTimeout(async () => {
+          await qc.invalidateQueries({ queryKey: ['revenue-targets'] })
+          setSyncState('done')
+          setTimeout(() => setSyncState('idle'), 4000)
+        }, 75000)
+        return
+      }
+    } catch (err) {
+      console.error('[targets sync]', err)
+      setSyncState('error')
+    }
+    setTimeout(() => setSyncState('idle'), 5000)
+  }
 
   const upsert = useMutation({
     mutationFn: async (row) => {
@@ -285,11 +340,14 @@ export default function RevenueTargets() {
     <div style={{ height: '100%', overflow: 'auto', background: C.bg, padding: 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        <div>
-          <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Revenue &amp; Targets</h1>
-          <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
-            Actuals: Xero sales invoices (GST-exclusive) · targets editable inline
-          </span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Revenue &amp; Targets</h1>
+            <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
+              Actuals: Xero sales invoices (GST-exclusive) · targets editable inline
+            </span>
+          </div>
+          <SyncButton state={syncState} detail={syncDetail} onClick={handleSync} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
