@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -126,6 +126,34 @@ export default function Dashboard() {
     },
   });
 
+  // Deep search: server-side keyword match across every case field AND the
+  // update thread — returns the matching id set, which filters the local list.
+  const { data: searchIds } = useQuery({
+    queryKey: ['case-search', debouncedSearch],
+    enabled: debouncedSearch.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('search_case_ids', { q: debouncedSearch });
+      if (error) throw error;
+      return new Set((data ?? []) as string[]);
+    },
+  });
+
+  // Self-heal: generate the one-sentence summary for any case missing it
+  // (fire-and-forget, a few at a time), then refresh the list.
+  const qc = useQueryClient();
+  const summarising = useRef(false);
+  useEffect(() => {
+    const missing = cases.filter(c => !c.ai_summary).slice(0, 5);
+    if (!missing.length || summarising.current) return;
+    summarising.current = true;
+    Promise.allSettled(
+      missing.map(c => supabase.functions.invoke('generate-case-summary', { body: { caseId: c.id } }))
+    ).then(() => {
+      summarising.current = false;
+      qc.invalidateQueries({ queryKey: ['cases'] });
+    });
+  }, [cases, qc]);
+
   const openCount = cases.filter(c => c.status === 'open').length;
   const actionedCount = cases.filter(c => c.status === 'actioned').length;
   const inHandCount = cases.filter(c => c.status === 'in_hand').length;
@@ -158,15 +186,23 @@ export default function Dashboard() {
       result = result.filter(c => c.type === typeFilter);
     }
 
-    // Search
+    // Search — server id-set (all fields + update thread) once loaded;
+    // quick client-side field match while the RPC is in flight.
     if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase();
-      result = result.filter(c =>
-        c.case_number?.toLowerCase().includes(q) ||
-        c.order_number?.toLowerCase().includes(q) ||
-        c.title?.toLowerCase().includes(q) ||
-        c.product_name?.toLowerCase().includes(q)
-      );
+      if (searchIds) {
+        result = result.filter(c => searchIds.has(c.id));
+      } else {
+        const q = debouncedSearch.toLowerCase();
+        result = result.filter(c =>
+          c.case_number?.toLowerCase().includes(q) ||
+          c.order_number?.toLowerCase().includes(q) ||
+          c.title?.toLowerCase().includes(q) ||
+          c.product_name?.toLowerCase().includes(q) ||
+          c.description?.toLowerCase().includes(q) ||
+          c.customer_name?.toLowerCase().includes(q) ||
+          c.ai_summary?.toLowerCase().includes(q)
+        );
+      }
     }
 
     // Sort
@@ -186,7 +222,7 @@ export default function Dashboard() {
     }
 
     return result;
-  }, [cases, activeTab, typeFilter, debouncedSearch, sortBy, statusFilter]);
+  }, [cases, activeTab, typeFilter, debouncedSearch, searchIds, sortBy, statusFilter]);
 
   const toggleStatusFilter = (status: StatusFilter) => {
     setStatusFilter(prev => prev === status ? null : status);

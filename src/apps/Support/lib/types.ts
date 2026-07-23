@@ -42,6 +42,8 @@ export interface Case {
   replacement_carrier: string | null;
   replacement_ship_date: string | null;
   replacement_tracked_at: string | null;
+  ai_summary: string | null;
+  ai_summary_generated_at: string | null;
   created_at: string;
   updated_at: string;
 }

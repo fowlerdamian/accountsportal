@@ -59,6 +59,16 @@ export function CaseCard({ caseData, index }: CaseCardProps) {
           {caseData.title}
         </p>
 
+        {/* One-sentence AI summary */}
+        {caseData.ai_summary && (
+          <p style={{
+            fontSize: '12px', color: '#a0a0a0', fontStyle: 'italic', margin: '0 0 6px',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}>
+            {caseData.ai_summary}
+          </p>
+        )}
+
         {/* Order + time — mono label style */}
         <div
           style={{

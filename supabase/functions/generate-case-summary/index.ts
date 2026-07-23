@@ -38,51 +38,51 @@ serve(async (req) => {
       );
     }
 
+    let summary: string | null = null;
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) {
-      // Fall back to truncated description
-      const fallback = (c.description ?? "").slice(0, 120).trim();
-      return new Response(
-        JSON.stringify({ summary: fallback || c.product_name || c.type }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+
+    if (apiKey) {
+      const context = [
+        `Type: ${c.type}`,
+        c.customer_name  ? `Customer: ${c.customer_name}`  : null,
+        c.order_number   ? `Order: ${c.order_number}`      : null,
+        c.product_name   ? `Product: ${c.product_name}`    : null,
+        c.description    ? `Description: ${c.description.slice(0, 600)}` : null,
+      ].filter(Boolean).join("\n");
+
+      try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 120,
+            messages: [{
+              role: "user",
+              content: `Summarise this support case in one concise sentence (max 100 chars). Return only the sentence, no punctuation at the end.\n\n${context}`,
+            }],
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          summary = data.content?.[0]?.text?.trim() || null;
+        }
+      } catch { /* fall through to fallback */ }
     }
 
-    const context = [
-      `Type: ${c.type}`,
-      c.customer_name  ? `Customer: ${c.customer_name}`  : null,
-      c.order_number   ? `Order: ${c.order_number}`      : null,
-      c.product_name   ? `Product: ${c.product_name}`    : null,
-      c.description    ? `Description: ${c.description.slice(0, 600)}` : null,
-    ].filter(Boolean).join("\n");
-
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 120,
-        messages: [{
-          role: "user",
-          content: `Summarise this support case in one concise sentence (max 100 chars). Return only the sentence, no punctuation at the end.\n\n${context}`,
-        }],
-      }),
-    });
-
-    if (!res.ok) {
-      const fallback = (c.description ?? "").slice(0, 100).trim();
-      return new Response(
-        JSON.stringify({ summary: fallback }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!summary) {
+      summary = (c.description ?? "").slice(0, 100).trim() || c.product_name || c.type;
     }
 
-    const data = await res.json();
-    const summary = data.content?.[0]?.text?.trim() ?? (c.description ?? "").slice(0, 100);
+    // Persist so the dashboard can show it without re-generating.
+    await supabase
+      .from("cases")
+      .update({ ai_summary: summary, ai_summary_generated_at: new Date().toISOString() })
+      .eq("id", caseId);
 
     return new Response(
       JSON.stringify({ summary }),
