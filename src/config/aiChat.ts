@@ -48,7 +48,7 @@ export const APP_CHAT_CONTEXTS: ChatContextEntry[] = [
     suggestions: ['Which documents need updating?', "What's our ISO audit status?", 'Show incomplete sections'],
   },
   {
-    prefix: '/accounts', context: 'accounts', label: 'Accounts',
+    prefix: '/accounts', context: 'accounts', label: 'Finance',
     suggestions: ['Show me the latest profit report', 'Flag any low-margin lines', 'Compare this month to last'],
   },
   {

@@ -105,7 +105,7 @@ const queryClient = new QueryClient({
 // Longest prefix wins — more specific paths must come before their parents.
 const PATH_TITLES = [
   ['/accounts/xero',         'Xero'],
-  ['/accounts',              'Accounts'],
+  ['/accounts',              'Finance'],
   ['/logistics/invoices',    'Invoices'],
   ['/logistics/settings',    'Settings'],
   ['/logistics/disputes',    'Disputes'],

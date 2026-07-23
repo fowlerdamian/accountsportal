@@ -6,7 +6,7 @@
 
 export const APPS = [
   {
-    name:        'Accounts',
+    name:        'Finance',
     description: 'Invoice profit analysis and Xero financial data',
     route:       '/accounts',
     icon:        'BarChart3',

@@ -74,7 +74,7 @@ export default function AccountsLayout() {
             textTransform: 'uppercase',
             color: '#444',
           }}>
-            Accounts
+            Finance
           </span>
         </div>
 

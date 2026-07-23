@@ -5,7 +5,7 @@ import InvoiceDropZone from '../apps/Logistics/components/InvoiceDropZone.jsx'
 
 const ROUTE_LABELS = {
   '/dashboard':               null,
-  '/accounts':                'Accounts',
+  '/accounts':                'Finance',
   '/accounts/xero':           'Accounts / Xero',
   '/logistics':               'Logistics',
   '/logistics/invoices':      'Logistics / Invoices',
