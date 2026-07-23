@@ -26,6 +26,7 @@ import XeroChat from './apps/Xero/index'
 import AccountsLayout from './apps/Accounts/AccountsLayout'
 import ChatFunctions from './apps/Accounts/ChatFunctions.jsx'
 import FinanceDashboard from './apps/Accounts/finance/FinanceDashboard.jsx'
+import RevenueTargets from './apps/Accounts/finance/RevenueTargets.jsx'
 
 // Contractor Hub
 import ContractorsList from './apps/ContractorHub/pages/ContractorsList'
@@ -230,6 +231,7 @@ export default function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="accounts" element={<AccountsLayout />}>
                 <Route index element={<FinanceDashboard />} />
+                <Route path="targets" element={<RevenueTargets />} />
                 <Route path="profit" element={<ProfitProcessor />} />
                 {/* Old direct link to the dashboard now lives at the index. */}
                 <Route path="finance" element={<Navigate to="/accounts" replace />} />
