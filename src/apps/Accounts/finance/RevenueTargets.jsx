@@ -20,6 +20,11 @@ const C = {
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// Fixed year→hue assignment (stable by position in the full years list, so
+// toggling selections never repaints a year). Brighter portal steps only —
+// the dark --cat tokens fail 3:1 on the panel surface.
+const YEAR_HUES = ['#e09f3e', '#5a8794', '#c14f50', '#eab768', '#fff3b0', '#9e2a2b']
 const fmt0 = new Intl.NumberFormat('en-AU', { maximumFractionDigits: 0 })
 function money(v) {
   if (v == null || Number.isNaN(v)) return '—'
@@ -94,18 +99,43 @@ function ChartTooltip({ active, payload, label }) {
   )
 }
 
-function LegendRow() {
-  const item = (color, label, line) => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
-      <span style={{ width: 14, height: line ? 2 : 10, background: color, borderRadius: line ? 0 : 2, display: 'inline-block' }} />
-      {label}
-    </span>
-  )
+function LegendRow({ years, hueForYear, single }) {
   return (
-    <div style={{ display: 'flex', gap: 16 }}>
-      {item(C.accent, 'Actual', true)}
-      {item(C.target, 'Target', true)}
-      {item(C.faint, 'Stretch', true)}
+    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+      {years.map((y) => (
+        <span key={y} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
+          <span style={{ width: 14, height: 2, background: hueForYear(y), display: 'inline-block' }} />
+          {y}
+        </span>
+      ))}
+      <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
+        solid actual · dashed target{single ? ' · dotted stretch' : ''}
+      </span>
+    </div>
+  )
+}
+
+function YearChips({ years, selected, onToggle }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {years.map((y) => {
+        const on = selected.includes(y)
+        return (
+          <button
+            key={y}
+            onClick={() => onToggle(y)}
+            style={{
+              background: on ? 'rgba(224,159,62,0.12)' : C.panel,
+              border: `1px solid ${on ? C.accent : C.border}`,
+              color: on ? C.accent : C.muted,
+              borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+              fontFamily: '"JetBrains Mono", monospace', transition: 'all 120ms',
+            }}
+          >
+            {y}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -154,7 +184,7 @@ export default function RevenueTargets() {
   const now = new Date()
   const thisYear = now.getFullYear()
   const thisMonth = now.getMonth() + 1
-  const [chartYear, setChartYear] = useState(thisYear)
+  const [selYearsRaw, setSelYears] = useState(null) // null → default to current year
 
   const upsert = useMutation({
     mutationFn: async (row) => {
@@ -209,12 +239,27 @@ export default function RevenueTargets() {
   const ytdRatio = ytdTarget ? ytdActual / ytdTarget : null
   const prevYtd = sumRow(thisYear - 1, 'actual', thisMonth)
 
-  const chartData = useMemo(() => MONTHS.map((label, i) => ({
-    label,
-    actual: grid[chartYear]?.[i + 1]?.actual ?? null,
-    target: grid[chartYear]?.[i + 1]?.target ?? null,
-    stretch: grid[chartYear]?.[i + 1]?.stretch ?? null,
-  })), [grid, chartYear])
+  const selYears = useMemo(() => {
+    const sel = selYearsRaw ?? [thisYear]
+    const valid = sel.filter((y) => years.includes(y))
+    return valid.length ? valid : years.slice(-1)
+  }, [selYearsRaw, years, thisYear])
+  const single = selYears.length === 1
+  const hueForYear = (y) => YEAR_HUES[Math.max(0, years.indexOf(y)) % YEAR_HUES.length]
+  const toggleYear = (y) => {
+    const next = selYears.includes(y) ? selYears.filter((v) => v !== y) : [...selYears, y].sort((a, b) => a - b)
+    if (next.length) setSelYears(next)
+  }
+
+  const chartData = useMemo(() => MONTHS.map((label, i) => {
+    const row = { label }
+    for (const y of selYears) {
+      row[`a${y}`] = grid[y]?.[i + 1]?.actual ?? null
+      row[`t${y}`] = grid[y]?.[i + 1]?.target ?? null
+      row[`s${y}`] = grid[y]?.[i + 1]?.stretch ?? null
+    }
+    return row
+  }), [grid, selYears])
 
   if (isLoading) {
     return <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: C.bg, color: C.muted, fontFamily: '"JetBrains Mono", monospace', fontSize: 13 }}>Loading revenue &amp; targets…</div>
@@ -261,21 +306,13 @@ export default function RevenueTargets() {
             sub={ytdTarget != null ? `target ${money(ytdTarget)}` : 'no targets set'} />
         </div>
 
+        {/* Year filter — drives both the chart overlay and which tables show */}
+        <YearChips years={years} selected={selYears} onToggle={toggleYear} />
+
         <Panel
-          title={`Monthly Revenue vs Target — ${chartYear}`}
+          title={`Monthly Revenue vs Target — ${selYears.join(' · ')}`}
           icon={TargetIcon}
-          right={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <LegendRow />
-              <select
-                value={chartYear}
-                onChange={(e) => setChartYear(Number(e.target.value))}
-                style={{ background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 5, padding: '4px 8px', fontSize: 12, fontFamily: '"JetBrains Mono", monospace' }}
-              >
-                {years.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-          }
+          right={<LegendRow years={selYears} hueForYear={hueForYear} single={single} />}
         >
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 8, bottom: 0 }}>
@@ -283,9 +320,19 @@ export default function RevenueTargets() {
               <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
               <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Line dataKey="actual" name="Actual" stroke={C.accent} strokeWidth={2} dot={{ r: 2.5, fill: C.accent, strokeWidth: 0 }} activeDot={{ r: 4 }} />
-              <Line dataKey="target" name="Target" stroke={C.target} strokeWidth={2} dot={false} connectNulls />
-              <Line dataKey="stretch" name="Stretch" stroke={C.faint} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls />
+              {selYears.map((y) => {
+                const hue = hueForYear(y)
+                return [
+                  <Line key={`a${y}`} dataKey={`a${y}`} name={`${y} Actual`} stroke={hue} strokeWidth={2}
+                    dot={{ r: 2.5, fill: hue, strokeWidth: 0 }} activeDot={{ r: 4 }} />,
+                  <Line key={`t${y}`} dataKey={`t${y}`} name={`${y} Target`} stroke={hue} strokeWidth={1.5}
+                    strokeDasharray="6 4" strokeOpacity={0.75} dot={false} connectNulls />,
+                  ...(single ? [
+                    <Line key={`s${y}`} dataKey={`s${y}`} name={`${y} Stretch`} stroke={C.faint} strokeWidth={1.5}
+                      strokeDasharray="2 4" dot={false} connectNulls />,
+                  ] : []),
+                ]
+              })}
             </ComposedChart>
           </ResponsiveContainer>
         </Panel>
@@ -303,7 +350,7 @@ export default function RevenueTargets() {
                 </tr>
               </thead>
               <tbody>
-                {years.map((y) => {
+                {selYears.map((y) => {
                   const hasStretch = MONTHS.some((_, i) => grid[y]?.[i + 1]?.stretch != null) || y >= thisYear
                   const rows = [
                     { key: 'actual', label: 'Actual', color: C.accent, editable: false },
