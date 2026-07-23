@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
-  CartesianGrid, Cell,
+  ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, Tooltip,
+  CartesianGrid,
 } from 'recharts'
 import { CurrencyDollarIcon, TargetIcon, ChartLineIcon, GaugeIcon } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
@@ -103,7 +103,7 @@ function LegendRow() {
   )
   return (
     <div style={{ display: 'flex', gap: 16 }}>
-      {item(C.accent, 'Actual')}
+      {item(C.accent, 'Actual', true)}
       {item(C.target, 'Target', true)}
       {item(C.faint, 'Stretch', true)}
     </div>
@@ -283,11 +283,7 @@ export default function RevenueTargets() {
               <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
               <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Bar dataKey="actual" name="Actual" radius={[2, 2, 0, 0]}>
-                {chartData.map((d, i) => (
-                  <Cell key={i} fill={C.accent} fillOpacity={d.target != null && d.actual != null && d.actual < d.target ? 0.45 : 0.85} />
-                ))}
-              </Bar>
+              <Line dataKey="actual" name="Actual" stroke={C.accent} strokeWidth={2} dot={{ r: 2.5, fill: C.accent, strokeWidth: 0 }} activeDot={{ r: 4 }} />
               <Line dataKey="target" name="Target" stroke={C.target} strokeWidth={2} dot={false} connectNulls />
               <Line dataKey="stretch" name="Stretch" stroke={C.faint} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls />
             </ComposedChart>
