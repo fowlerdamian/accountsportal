@@ -485,8 +485,13 @@ export default function RevenueTargets() {
                       label: 'Actual', color: C.text,
                       render: (m) => {
                         if (m.actual == null) return '—'
-                        const hit = m.completed ? (m.actual >= m.planBase ? ' ✓' : ' ✗') : ''
-                        return <span style={{ color: hit === ' ✓' ? C.green : hit === ' ✗' ? C.red : C.text }}>{`$${fmt0.format(Math.round(m.actual))}${hit}`}</span>
+                        if (!m.completed) return `$${fmt0.format(Math.round(m.actual))}`
+                        // ✓ hit, ~ within 5% of target (orange), ✗ miss
+                        const near = m.actual < m.planBase && m.actual >= m.planBase * 0.95
+                        const hit = m.actual >= m.planBase
+                        const mark = hit ? ' ✓' : near ? ' ~' : ' ✗'
+                        const color = hit ? C.green : near ? palette.orange : C.red
+                        return <span style={{ color }}>{`$${fmt0.format(Math.round(m.actual))}${mark}`}</span>
                       },
                       total: money(seasonality.rolling.ytdActual),
                     },
