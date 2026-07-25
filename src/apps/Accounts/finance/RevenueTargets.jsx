@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, Tooltip,
@@ -277,18 +277,30 @@ export default function RevenueTargets() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, thisYear])
 
-  const applyTargets = useMutation({
-    mutationFn: async () => {
-      // Persist ONLY months still open — completed months keep the target
-      // that was set at the time, so past hit/miss stays honest.
-      const rows = seasonality.rolling.months
-        .filter((m) => !m.completed)
-        .map((m) => ({ year: thisYear, month: m.month, target: m.base, stretch: m.stretch, updated_at: new Date().toISOString() }))
-      const { error: e } = await supabase.from('finance_revenue_targets').upsert(rows, { onConflict: 'year,month' })
-      if (e) throw e
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['revenue-targets'] }),
-  })
+  // Auto-persist adjusted targets for OPEN months only — completed months keep
+  // the target that was set at the time, so past hit/miss stays honest. Writes
+  // only when the stored values differ, so this settles after one pass.
+  const applying = useRef(false)
+  useEffect(() => {
+    if (!seasonality || !data?.targets || applying.current) return
+    const stored = new Map(data.targets.filter((t) => t.year === thisYear).map((t) => [t.month, t]))
+    const dirty = seasonality.rolling.months
+      .filter((m) => !m.completed)
+      .filter((m) => {
+        const s = stored.get(m.month)
+        return !s || Math.round(Number(s.target ?? -1)) !== m.base || Math.round(Number(s.stretch ?? -1)) !== m.stretch
+      })
+      .map((m) => ({ year: thisYear, month: m.month, target: m.base, stretch: m.stretch, updated_at: new Date().toISOString() }))
+    if (!dirty.length) return
+    applying.current = true
+    supabase.from('finance_revenue_targets').upsert(dirty, { onConflict: 'year,month' })
+      .then(({ error: e }) => {
+        if (e) console.error('[seasonality] auto-apply failed:', e)
+        else console.info(`[seasonality] auto-applied adjusted targets to ${dirty.length} open month(s)`)
+        applying.current = false
+        qc.invalidateQueries({ queryKey: ['revenue-targets'] })
+      })
+  }, [seasonality, data, thisYear, qc])
 
   // year -> month -> { actual, target, stretch }
   const grid = useMemo(() => {
@@ -439,20 +451,6 @@ export default function RevenueTargets() {
           <Panel
             title={`${thisYear} Seasonality Model — $${(BASE_TOTAL / 1e6).toFixed(1)}m base / $${(STRETCH_TOTAL / 1e6).toFixed(1)}m stretch`}
             icon={GaugeIcon}
-            right={
-              <button
-                onClick={() => applyTargets.mutate()}
-                disabled={applyTargets.isPending}
-                title="Writes adjusted base/stretch into the targets table for OPEN months only — past months keep the target that was set at the time"
-                style={{
-                  background: 'rgba(224,159,62,0.12)', border: `1px solid ${C.accent}`, color: C.accent,
-                  borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
-                  fontFamily: '"JetBrains Mono", monospace', opacity: applyTargets.isPending ? 0.6 : 1,
-                }}
-              >
-                {applyTargets.isPending ? 'Applying…' : applyTargets.isSuccess ? 'Applied ✓' : 'Apply to open months'}
-              </button>
-            }
           >
             {[...seasonality.model.warnings, ...seasonality.rolling.warnings].map((w, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(158,42,43,0.12)', border: '1px solid rgba(158,42,43,0.4)', borderRadius: 6, padding: '8px 12px' }}>
@@ -503,9 +501,6 @@ export default function RevenueTargets() {
                 </tbody>
               </table>
             </div>
-            <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-              Median seasonality from {'>'}4yrs of Xero actuals (ex-GST, invoice date) · completed months lock to actuals and keep their original set target for hit/miss · remaining months re-spread so the year totals exactly ${(BASE_TOTAL / 1e6).toFixed(1)}m / ${(STRETCH_TOTAL / 1e6).toFixed(1)}m
-            </span>
           </Panel>
         )}
 
