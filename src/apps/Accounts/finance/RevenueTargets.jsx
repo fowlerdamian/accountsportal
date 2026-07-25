@@ -284,13 +284,20 @@ export default function RevenueTargets() {
   useEffect(() => {
     if (!seasonality || !data?.targets || applying.current) return
     const stored = new Map(data.targets.filter((t) => t.year === thisYear).map((t) => [t.month, t]))
-    const dirty = seasonality.rolling.months
-      .filter((m) => !m.completed)
-      .filter((m) => {
-        const s = stored.get(m.month)
-        return !s || Math.round(Number(s.target ?? -1)) !== m.base || Math.round(Number(s.stretch ?? -1)) !== m.stretch
+    // Smart targets own the whole current year: completed months carry the
+    // static pro-rata plan (what the target WAS for that month), open months
+    // carry the rolling-adjusted values.
+    const wanted = seasonality.rolling.months.map((m) => ({
+      month: m.month,
+      target: m.completed ? m.planBase : m.base,
+      stretch: m.completed ? m.planStretch : m.stretch,
+    }))
+    const dirty = wanted
+      .filter((w) => {
+        const s = stored.get(w.month)
+        return !s || Math.round(Number(s.target ?? -1)) !== w.target || Math.round(Number(s.stretch ?? -1)) !== w.stretch
       })
-      .map((m) => ({ year: thisYear, month: m.month, target: m.base, stretch: m.stretch, updated_at: new Date().toISOString() }))
+      .map((w) => ({ year: thisYear, month: w.month, target: w.target, stretch: w.stretch, updated_at: new Date().toISOString() }))
     if (!dirty.length) return
     applying.current = true
     supabase.from('finance_revenue_targets').upsert(dirty, { onConflict: 'year,month' })
@@ -478,20 +485,18 @@ export default function RevenueTargets() {
                       label: 'Actual', color: C.text,
                       render: (m) => {
                         if (m.actual == null) return '—'
-                        const stored = grid[thisYear]?.[m.month]?.target
-                        const hit = m.completed && stored != null ? (m.actual >= stored ? ' ✓' : ' ✗') : ''
+                        const hit = m.completed ? (m.actual >= m.planBase ? ' ✓' : ' ✗') : ''
                         return <span style={{ color: hit === ' ✓' ? C.green : hit === ' ✗' ? C.red : C.text }}>{`$${fmt0.format(Math.round(m.actual))}${hit}`}</span>
                       },
                       total: money(seasonality.rolling.ytdActual),
                     },
-                    { label: 'Set target', render: (m) => { const t = grid[thisYear]?.[m.month]?.target; return t == null ? '—' : `$${fmt0.format(t)}` }, color: C.target, total: '' },
-                    { label: 'Adj base', render: (m) => (m.base == null ? 'locked' : `$${fmt0.format(m.base)}`), color: C.accent, total: money(seasonality.rolling.sums.base) },
-                    { label: 'Adj stretch', render: (m) => (m.stretch == null ? 'locked' : `$${fmt0.format(m.stretch)}`), color: C.muted, total: money(seasonality.rolling.sums.stretch) },
+                    { label: 'Target', render: (m) => `$${fmt0.format(m.completed ? m.planBase : m.base)}`, color: C.accent, total: money(seasonality.rolling.sums.base) },
+                    { label: 'Stretch', render: (m) => `$${fmt0.format(m.completed ? m.planStretch : m.stretch)}`, color: C.muted, total: money(seasonality.rolling.sums.stretch) },
                   ].map((row) => (
                     <tr key={row.label}>
                       <td style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, color: row.color, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.borderSoft}` }}>{row.label}</td>
                       {seasonality.rolling.months.map((m) => (
-                        <td key={m.month} style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, textAlign: 'right', whiteSpace: 'nowrap', color: m.completed && row.label.startsWith('Adj') ? C.faint : C.text, borderBottom: `1px solid ${C.borderSoft}` }}>
+                        <td key={m.month} style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, textAlign: 'right', whiteSpace: 'nowrap', color: m.completed && (row.label === 'Target' || row.label === 'Stretch') ? C.faint : C.text, borderBottom: `1px solid ${C.borderSoft}` }}>
                           {row.render(m)}
                         </td>
                       ))}
