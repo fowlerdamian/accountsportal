@@ -4,9 +4,10 @@ import {
   ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, Tooltip,
   CartesianGrid,
 } from 'recharts'
-import { CurrencyDollarIcon, TargetIcon, ChartLineIcon, GaugeIcon } from '@portal/components/icons'
+import { CurrencyDollarIcon, TargetIcon, ChartLineIcon, GaugeIcon, TriangleAlertIcon } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
+import { computeSeasonalityTargets, applyRollingReallocation } from './seasonalityTargets.js'
 
 // Theme mirrors FinanceDashboard.jsx (concrete hex so recharts SVG resolves).
 const C = {
@@ -250,6 +251,45 @@ export default function RevenueTargets() {
     onSettled: () => qc.invalidateQueries({ queryKey: ['revenue-targets'] }),
   })
 
+  // ── Seasonality model (client-side, pure) ────────────────────────────────────
+  // Median-of-actuals seasonality plan for the current year, with rolling
+  // reallocation: completed months lock to actuals (their STORED targets stay
+  // untouched as the historical record), remaining months re-spread so the
+  // year sums to exactly the annual totals.
+  const BASE_TOTAL = 2_000_000
+  const STRETCH_TOTAL = 2_500_000
+  const seasonality = useMemo(() => {
+    if (!data?.revenue?.length) return null
+    const actuals = data.revenue.map((r) => {
+      const d = new Date(r.period_month)
+      return { year: d.getFullYear(), month: d.getMonth() + 1, revenue: Number(r.revenue) }
+    })
+    try {
+      const model = computeSeasonalityTargets(actuals, { baseTotal: BASE_TOTAL, stretchTotal: STRETCH_TOTAL, now })
+      const rolling = applyRollingReallocation(model, actuals, { year: thisYear, baseTotal: BASE_TOTAL, stretchTotal: STRETCH_TOTAL, now })
+      for (const w of [...model.warnings, ...rolling.warnings]) console.warn('[seasonality]', w)
+      for (const l of [...model.logs, ...rolling.logs]) console.info('[seasonality]', l)
+      return { model, rolling }
+    } catch (e) {
+      console.error('[seasonality]', e)
+      return null
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, thisYear])
+
+  const applyTargets = useMutation({
+    mutationFn: async () => {
+      // Persist ONLY months still open — completed months keep the target
+      // that was set at the time, so past hit/miss stays honest.
+      const rows = seasonality.rolling.months
+        .filter((m) => !m.completed)
+        .map((m) => ({ year: thisYear, month: m.month, target: m.base, stretch: m.stretch, updated_at: new Date().toISOString() }))
+      const { error: e } = await supabase.from('finance_revenue_targets').upsert(rows, { onConflict: 'year,month' })
+      if (e) throw e
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['revenue-targets'] }),
+  })
+
   // year -> month -> { actual, target, stretch }
   const grid = useMemo(() => {
     if (!data) return {}
@@ -394,6 +434,80 @@ export default function RevenueTargets() {
             </ComposedChart>
           </ResponsiveContainer>
         </Panel>
+
+        {seasonality && (
+          <Panel
+            title={`${thisYear} Seasonality Model — $${(BASE_TOTAL / 1e6).toFixed(1)}m base / $${(STRETCH_TOTAL / 1e6).toFixed(1)}m stretch`}
+            icon={GaugeIcon}
+            right={
+              <button
+                onClick={() => applyTargets.mutate()}
+                disabled={applyTargets.isPending}
+                title="Writes adjusted base/stretch into the targets table for OPEN months only — past months keep the target that was set at the time"
+                style={{
+                  background: 'rgba(224,159,62,0.12)', border: `1px solid ${C.accent}`, color: C.accent,
+                  borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+                  fontFamily: '"JetBrains Mono", monospace', opacity: applyTargets.isPending ? 0.6 : 1,
+                }}
+              >
+                {applyTargets.isPending ? 'Applying…' : applyTargets.isSuccess ? 'Applied ✓' : 'Apply to open months'}
+              </button>
+            }
+          >
+            {[...seasonality.model.warnings, ...seasonality.rolling.warnings].map((w, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(158,42,43,0.12)', border: '1px solid rgba(158,42,43,0.4)', borderRadius: 6, padding: '8px 12px' }}>
+                <TriangleAlertIcon size={14} strokeWidth={1.6} style={{ color: C.red, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: C.muted }}>{w}</span>
+              </div>
+            ))}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 980 }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '7px 10px', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Series</th>
+                    {seasonality.rolling.months.map((m) => (
+                      <th key={m.month} style={{ padding: '7px 10px', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: m.completed ? C.faint : C.muted, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>
+                        {m.name}{m.completed ? ' ✓' : ''}
+                      </th>
+                    ))}
+                    <th style={{ padding: '7px 10px', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.text, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>Year</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: 'Index', render: (m) => `${(m.index * 100).toFixed(1)}%`, color: C.faint, total: '100%' },
+                    {
+                      label: 'Actual', color: C.text,
+                      render: (m) => {
+                        if (m.actual == null) return '—'
+                        const stored = grid[thisYear]?.[m.month]?.target
+                        const hit = m.completed && stored != null ? (m.actual >= stored ? ' ✓' : ' ✗') : ''
+                        return <span style={{ color: hit === ' ✓' ? C.green : hit === ' ✗' ? C.red : C.text }}>{`$${fmt0.format(Math.round(m.actual))}${hit}`}</span>
+                      },
+                      total: money(seasonality.rolling.ytdActual),
+                    },
+                    { label: 'Set target', render: (m) => { const t = grid[thisYear]?.[m.month]?.target; return t == null ? '—' : `$${fmt0.format(t)}` }, color: C.target, total: '' },
+                    { label: 'Adj base', render: (m) => (m.base == null ? 'locked' : `$${fmt0.format(m.base)}`), color: C.accent, total: money(seasonality.rolling.sums.base) },
+                    { label: 'Adj stretch', render: (m) => (m.stretch == null ? 'locked' : `$${fmt0.format(m.stretch)}`), color: C.muted, total: money(seasonality.rolling.sums.stretch) },
+                  ].map((row) => (
+                    <tr key={row.label}>
+                      <td style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, color: row.color, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.borderSoft}` }}>{row.label}</td>
+                      {seasonality.rolling.months.map((m) => (
+                        <td key={m.month} style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, textAlign: 'right', whiteSpace: 'nowrap', color: m.completed && row.label.startsWith('Adj') ? C.faint : C.text, borderBottom: `1px solid ${C.borderSoft}` }}>
+                          {row.render(m)}
+                        </td>
+                      ))}
+                      <td style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, textAlign: 'right', fontWeight: 600, color: row.color, borderBottom: `1px solid ${C.borderSoft}` }}>{row.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
+              Median seasonality from {'>'}4yrs of Xero actuals (ex-GST, invoice date) · completed months lock to actuals and keep their original set target for hit/miss · remaining months re-spread so the year totals exactly ${(BASE_TOTAL / 1e6).toFixed(1)}m / ${(STRETCH_TOTAL / 1e6).toFixed(1)}m
+            </span>
+          </Panel>
+        )}
 
         <Panel title="Sales Targets Matrix" icon={CurrencyDollarIcon}
           right={<span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>click a target/stretch cell to edit</span>}>
