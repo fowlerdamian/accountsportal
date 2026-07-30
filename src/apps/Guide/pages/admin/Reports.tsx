@@ -9,14 +9,29 @@ import { useInstructionSets, useBrands, useFeedback } from "@guide/hooks/use-sup
 import { palette } from "@portal/lib/palette";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
+import { Tables } from "@guide/integrations/supabase/types";
 
 function useStepViews() {
   return useQuery({
     queryKey: ["step_views_all"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("step_views").select("*");
-      if (error) throw error;
-      return data;
+      // PostgREST caps a single select at 1000 rows — page through everything
+      // in the max reporting window (365 days) or stats silently undercount.
+      const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+      const pageSize = 1000;
+      const all: Tables<"step_views">[] = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("step_views")
+          .select("*")
+          .gte("viewed_at", cutoff)
+          .order("viewed_at", { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        all.push(...data);
+        if (data.length < pageSize) break;
+      }
+      return all;
     },
   });
 }
