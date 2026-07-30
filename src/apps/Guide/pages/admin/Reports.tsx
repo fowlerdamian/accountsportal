@@ -59,7 +59,8 @@ export default function Reports() {
       const gViews = filtered.filter(sv => sv.instruction_set_id === g.id);
       const gSessions = new Set(gViews.map(sv => sv.session_id));
       const gCompleted = new Set(gViews.filter(sv => sv.completed).map(sv => sv.session_id));
-      const ratings = feedbackItems.filter((f: any) => f.instruction_set_id === g.id && f.rating);
+      const gFeedback = feedbackItems.filter((f: any) => f.instruction_set_id === g.id);
+      const ratings = gFeedback.filter((f: any) => f.rating);
       const avgRating = ratings.length > 0 ? (ratings.reduce((s: number, f: any) => s + f.rating, 0) / ratings.length).toFixed(1) : '—';
 
       const brandViews: Record<string, number> = {};
@@ -74,6 +75,7 @@ export default function Reports() {
         totalViews: gViews.length,
         sessions: gSessions.size,
         completionRate: gSessions.size > 0 ? Math.round((gCompleted.size / gSessions.size) * 100) : 0,
+        reviews: gFeedback.length,
         avgRating,
         brandViews,
       };
@@ -110,9 +112,9 @@ export default function Reports() {
   }, [stepViews, guides, brands, feedbackItems, period]);
 
   const exportCSV = () => {
-    const header = "Guide,Product Code,Total Views,Sessions,Completion %,Avg Rating";
+    const header = "Guide,Product Code,Total Views,Sessions,Completion %,Reviews,Avg Rating";
     const rows = stats.guideStats.map(g =>
-      `"${g.title}","${g.product_code}",${g.totalViews},${g.sessions},${g.completionRate}%,${g.avgRating}`
+      `"${g.title}","${g.product_code}",${g.totalViews},${g.sessions},${g.completionRate}%,${g.reviews},${g.avgRating}`
     );
     const csv = [header, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -208,6 +210,7 @@ export default function Reports() {
                 <th className="text-right p-3 text-xs font-semibold text-muted-foreground uppercase">Views</th>
                 <th className="text-right p-3 text-xs font-semibold text-muted-foreground uppercase">Sessions</th>
                 <th className="text-right p-3 text-xs font-semibold text-muted-foreground uppercase">Completion %</th>
+                <th className="text-right p-3 text-xs font-semibold text-muted-foreground uppercase">Reviews</th>
                 <th className="text-center p-3 text-xs font-semibold text-muted-foreground uppercase">Avg Rating</th>
               </tr>
             </thead>
@@ -221,11 +224,12 @@ export default function Reports() {
                   <td className="p-3 text-right text-sm">{g.totalViews}</td>
                   <td className="p-3 text-right text-sm">{g.sessions}</td>
                   <td className="p-3 text-right text-sm">{g.completionRate}%</td>
+                  <td className="p-3 text-right text-sm">{g.reviews}</td>
                   <td className="p-3 text-center text-sm">{g.avgRating}</td>
                 </tr>
               ))}
               {stats.guideStats.length === 0 && (
-                <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">No guides yet.</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No guides yet.</td></tr>
               )}
             </tbody>
           </table>
