@@ -244,9 +244,11 @@ function PacingGauge({ ratio, label }) {
   )
 }
 
-// Dial + stat grid for one pacing period (MTD or YTD). `proRata` is the
+// Dial + stat drawer for one pacing period (MTD or YTD). `proRata` is the
 // elapsed-share of `fullTarget`; the estimate is a straight-line projection.
+// The stat grid is hidden behind the dial and slides out on click.
 function PacingPanel({ title, right, prefix, estWord, actual, proRata, fullTarget, emptyHint }) {
+  const [open, setOpen] = useState(false)
   const pace = proRata ? (actual ?? 0) / proRata : null
   const projected = pace != null && fullTarget != null ? fullTarget * pace : null
   return (
@@ -254,27 +256,50 @@ function PacingPanel({ title, right, prefix, estWord, actual, proRata, fullTarge
       {fullTarget == null ? (
         <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>{emptyHint}</span>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-          <PacingGauge ratio={pace} label={`${prefix} PACE`} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', columnGap: 20, rowGap: 8, fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>
-            {[
-              { label: `${prefix} actual`, value: money(actual), color: C.accent },
-              { label: `${prefix} target (pro-rata)`, value: money(proRata), color: C.target },
-              {
-                label: `${prefix} variance`,
-                value: actual != null && proRata != null ? money(actual - proRata) : '—',
-                color: actual != null && proRata != null ? (actual >= proRata ? C.green : C.red) : C.faint,
-              },
-              { label: `Pro-rata ${estWord} estimate`, value: money(projected), color: C.text },
-              { label: `${estWord[0].toUpperCase()}${estWord.slice(1)} target`, value: money(fullTarget), color: C.muted },
-              { label: 'Estimate vs target', value: pct(pace), color: paceHue(pace) },
-            ].map((row) => (
-              <div key={row.label} style={{ display: 'contents' }}>
-                <span style={{ color: C.muted }}>{row.label}</span>
-                <span style={{ color: row.color, textAlign: 'right', fontWeight: 500 }}>{row.value}</span>
+        <div style={{ display: 'flex', alignItems: 'center', minHeight: 150, position: 'relative' }}>
+          <button
+            onClick={() => setOpen((o) => !o)}
+            title={open ? 'Hide breakdown' : 'Show breakdown'}
+            aria-expanded={open}
+            style={{
+              background: C.panel, border: 'none', padding: 0, cursor: 'pointer',
+              position: 'relative', zIndex: 1, flexShrink: 0, lineHeight: 0,
+            }}
+          >
+            <PacingGauge ratio={pace} label={`${prefix} PACE`} />
+          </button>
+          <div style={{ overflow: 'hidden', flex: 1 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 16, paddingLeft: 20,
+              transform: open ? 'translateX(0)' : 'translateX(-104%)',
+              opacity: open ? 1 : 0,
+              transition: 'transform 340ms cubic-bezier(0.22, 0.9, 0.3, 1), opacity 260ms ease',
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', columnGap: 20, rowGap: 8, fontFamily: '"JetBrains Mono", monospace', fontSize: 12, whiteSpace: 'nowrap' }}>
+                {[
+                  { label: `${prefix} actual`, value: money(actual), color: C.accent },
+                  { label: `${prefix} target (pro-rata)`, value: money(proRata), color: C.target },
+                  {
+                    label: `${prefix} variance`,
+                    value: actual != null && proRata != null ? money(actual - proRata) : '—',
+                    color: actual != null && proRata != null ? (actual >= proRata ? C.green : C.red) : C.faint,
+                  },
+                  { label: `Pro-rata ${estWord} estimate`, value: money(projected), color: C.text },
+                  { label: `${estWord[0].toUpperCase()}${estWord.slice(1)} target`, value: money(fullTarget), color: C.muted },
+                ].map((row) => (
+                  <div key={row.label} style={{ display: 'contents' }}>
+                    <span style={{ color: C.muted }}>{row.label}</span>
+                    <span style={{ color: row.color, textAlign: 'right', fontWeight: 500 }}>{row.value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
+          {!open && (
+            <span style={{ position: 'absolute', right: 18, fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace', pointerEvents: 'none' }}>
+              tap dial ›
+            </span>
+          )}
         </div>
       )}
     </Panel>
