@@ -193,15 +193,21 @@ function arcPath(cx, cy, r, startDeg, endDeg) {
 }
 const ratioDeg = (v) => -GAUGE_SWEEP / 2 + (Math.min(Math.max(v, 0), GAUGE_MAX) / GAUGE_MAX) * GAUGE_SWEEP
 
-function PacingGauge({ ratio }) {
+// Shared status colour: green on pace, orange within 25% of pace, red below.
+const paceHue = (v) => (v == null ? C.faint : v >= 1 ? C.green : v >= 0.75 ? palette.orange : C.red)
+const GAUGE_ZONES = [[0, 0.75, () => C.red], [0.75, 1, () => palette.orange], [1, GAUGE_MAX, () => C.green]]
+
+function PacingGauge({ ratio, label }) {
   const cx = 110; const cy = 104; const r = 80
-  const hue = ratio == null ? C.faint : ratio >= 1 ? C.green : ratio >= 0.9 ? palette.orange : C.red
+  const hue = paceHue(ratio)
   const deg = ratioDeg(ratio ?? 0)
   const [nx, ny] = polarXY(cx, cy, r - 16, deg)
   return (
-    <svg viewBox="0 0 220 150" style={{ width: 220, flexShrink: 0 }} role="img" aria-label={`MTD pace ${pct(ratio)}`}>
-      {/* track + value arc */}
-      <path d={arcPath(cx, cy, r, -GAUGE_SWEEP / 2, GAUGE_SWEEP / 2)} fill="none" stroke={C.surface} strokeWidth={11} strokeLinecap="round" />
+    <svg viewBox="0 0 220 150" style={{ width: 220, flexShrink: 0 }} role="img" aria-label={`${label} ${pct(ratio)}`}>
+      {/* zone band (red / orange / green) + value arc */}
+      {GAUGE_ZONES.map(([a, b, col]) => (
+        <path key={a} d={arcPath(cx, cy, r, ratioDeg(a), ratioDeg(b))} fill="none" stroke={col()} strokeOpacity={0.2} strokeWidth={11} />
+      ))}
       {ratio != null && ratio > 0 && (
         <path d={arcPath(cx, cy, r, -GAUGE_SWEEP / 2, deg)} fill="none" stroke={hue} strokeWidth={11} strokeLinecap="round" />
       )}
@@ -232,9 +238,46 @@ function PacingGauge({ ratio }) {
         {pct(ratio)}
       </text>
       <text x={cx} y={cy + 42} textAnchor="middle" fill={C.muted} fontSize={9} letterSpacing="0.1em" fontFamily='"JetBrains Mono", monospace'>
-        MTD PACE
+        {label}
       </text>
     </svg>
+  )
+}
+
+// Dial + stat grid for one pacing period (MTD or YTD). `proRata` is the
+// elapsed-share of `fullTarget`; the estimate is a straight-line projection.
+function PacingPanel({ title, right, prefix, estWord, actual, proRata, fullTarget, emptyHint }) {
+  const pace = proRata ? (actual ?? 0) / proRata : null
+  const projected = pace != null && fullTarget != null ? fullTarget * pace : null
+  return (
+    <Panel title={title} icon={GaugeIcon} right={right}>
+      {fullTarget == null ? (
+        <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>{emptyHint}</span>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+          <PacingGauge ratio={pace} label={`${prefix} PACE`} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', columnGap: 20, rowGap: 8, fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>
+            {[
+              { label: `${prefix} actual`, value: money(actual), color: C.accent },
+              { label: `${prefix} target (pro-rata)`, value: money(proRata), color: C.target },
+              {
+                label: `${prefix} variance`,
+                value: actual != null && proRata != null ? money(actual - proRata) : '—',
+                color: actual != null && proRata != null ? (actual >= proRata ? C.green : C.red) : C.faint,
+              },
+              { label: `Pro-rata ${estWord} estimate`, value: money(projected), color: C.text },
+              { label: `${estWord[0].toUpperCase()}${estWord.slice(1)} target`, value: money(fullTarget), color: C.muted },
+              { label: 'Estimate vs target', value: pct(pace), color: paceHue(pace) },
+            ].map((row) => (
+              <div key={row.label} style={{ display: 'contents' }}>
+                <span style={{ color: C.muted }}>{row.label}</span>
+                <span style={{ color: row.color, textAlign: 'right', fontWeight: 500 }}>{row.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Panel>
   )
 }
 
@@ -428,9 +471,10 @@ export default function RevenueTargets() {
   const elapsedFrac = workdaysInMonth ? Math.min(workdaysElapsed / workdaysInMonth, 1) : 0
   const mtdActual = curr?.actual ?? null
   const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
-  const pace = mtdTarget ? (mtdActual ?? 0) / mtdTarget : null
-  const projected = mtdActual != null && elapsedFrac > 0 ? mtdActual / elapsedFrac : null
-  const projRatio = projected != null && curr?.target ? projected / curr.target : null
+  // YTD pro-rata: completed months at full target + current month's elapsed share.
+  const yearTarget = sumRow(thisYear, 'target', 12)
+  const ytdProRataTarget = yearTarget == null ? null
+    : (sumRow(thisYear, 'target', thisMonth - 1) ?? 0) + (curr?.target ?? 0) * elapsedFrac
 
   const selYears = useMemo(() => {
     const sel = selYearsRaw ?? [thisYear]
@@ -502,48 +546,30 @@ export default function RevenueTargets() {
             sub={ytdTarget != null ? `target ${money(ytdTarget)}` : 'no targets set'} />
         </div>
 
-        <Panel
-          title={`MTD Pacing — ${MONTHS[thisMonth - 1]} ${thisYear}`}
-          icon={GaugeIcon}
-          right={
-            <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-              workday {workdaysElapsed} of {workdaysInMonth} · {pct(elapsedFrac)} elapsed
-            </span>
-          }
-        >
-          {curr?.target == null ? (
-            <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
-              No target set for {MONTHS[thisMonth - 1]} — enter one in the matrix below to enable pacing.
-            </span>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
-              <PacingGauge ratio={pace} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', columnGap: 24, rowGap: 8, fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>
-                {[
-                  { label: 'MTD actual', value: money(mtdActual), color: C.accent },
-                  { label: 'MTD target (pro-rata)', value: money(mtdTarget), color: C.target },
-                  {
-                    label: 'MTD variance',
-                    value: mtdActual != null && mtdTarget != null ? money(mtdActual - mtdTarget) : '—',
-                    color: mtdActual != null && mtdTarget != null ? (mtdActual >= mtdTarget ? C.green : C.red) : C.faint,
-                  },
-                  { label: 'Pro-rata month estimate', value: money(projected), color: C.text },
-                  { label: 'Month target', value: money(curr.target), color: C.muted },
-                  {
-                    label: 'Estimate vs target',
-                    value: pct(projRatio),
-                    color: projRatio == null ? C.faint : projRatio >= 1 ? C.green : projRatio >= 0.9 ? palette.orange : C.red,
-                  },
-                ].map((row) => (
-                  <div key={row.label} style={{ display: 'contents' }}>
-                    <span style={{ color: C.muted }}>{row.label}</span>
-                    <span style={{ color: row.color, textAlign: 'right', fontWeight: 500 }}>{row.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </Panel>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: 16 }}>
+          <PacingPanel
+            title={`MTD Pacing — ${MONTHS[thisMonth - 1]} ${thisYear}`}
+            prefix="MTD" estWord="month"
+            actual={mtdActual} proRata={mtdTarget} fullTarget={curr?.target ?? null}
+            right={
+              <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
+                workday {workdaysElapsed} of {workdaysInMonth} · {pct(elapsedFrac)} elapsed
+              </span>
+            }
+            emptyHint={`No target set for ${MONTHS[thisMonth - 1]} — enter one in the matrix below to enable pacing.`}
+          />
+          <PacingPanel
+            title={`YTD Pacing — ${thisYear}`}
+            prefix="YTD" estWord="year"
+            actual={ytdActual} proRata={ytdProRataTarget} fullTarget={yearTarget}
+            right={
+              <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
+                {yearTarget ? `${pct(ytdProRataTarget / yearTarget)} of year target elapsed` : ''}
+              </span>
+            }
+            emptyHint={`No ${thisYear} targets set — enter them in the matrix below to enable pacing.`}
+          />
+        </div>
 
         {/* Year filter — drives both the chart overlay and which tables show */}
         <YearChips years={years} selected={selYears} onToggle={toggleYear} />
