@@ -414,8 +414,18 @@ export default function RevenueTargets() {
 
   // MTD pacing — actual so far vs the pro-rata share of this month's target,
   // plus a straight-line projection of where the month lands at current pace.
-  const daysInMonth = new Date(thisYear, thisMonth, 0).getDate()
-  const elapsedFrac = Math.min(now.getDate() / daysInMonth, 1)
+  // Pro-rata runs on working days (Mon–Fri), not calendar days.
+  const countWorkdays = (uptoDay) => {
+    let n = 0
+    for (let d = 1; d <= uptoDay; d++) {
+      const dow = new Date(thisYear, thisMonth - 1, d).getDay()
+      if (dow !== 0 && dow !== 6) n++
+    }
+    return n
+  }
+  const workdaysInMonth = countWorkdays(new Date(thisYear, thisMonth, 0).getDate())
+  const workdaysElapsed = countWorkdays(now.getDate())
+  const elapsedFrac = workdaysInMonth ? Math.min(workdaysElapsed / workdaysInMonth, 1) : 0
   const mtdActual = curr?.actual ?? null
   const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
   const pace = mtdTarget ? (mtdActual ?? 0) / mtdTarget : null
@@ -497,7 +507,7 @@ export default function RevenueTargets() {
           icon={GaugeIcon}
           right={
             <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-              day {now.getDate()} of {daysInMonth} · {pct(elapsedFrac)} elapsed
+              workday {workdaysElapsed} of {workdaysInMonth} · {pct(elapsedFrac)} elapsed
             </span>
           }
         >
