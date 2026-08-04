@@ -179,6 +179,65 @@ function EditCell({ value, onCommit, color }) {
   )
 }
 
+// ── MTD pacing gauge ─────────────────────────────────────────────────────────
+const GAUGE_MAX = 1.5 // dial scale tops out at 150% of pace
+const GAUGE_SWEEP = 240 // degrees, from -120° to +120°
+function polarXY(cx, cy, r, deg) {
+  const a = (deg - 90) * (Math.PI / 180)
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)]
+}
+function arcPath(cx, cy, r, startDeg, endDeg) {
+  const [x1, y1] = polarXY(cx, cy, r, startDeg)
+  const [x2, y2] = polarXY(cx, cy, r, endDeg)
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${endDeg - startDeg > 180 ? 1 : 0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`
+}
+const ratioDeg = (v) => -GAUGE_SWEEP / 2 + (Math.min(Math.max(v, 0), GAUGE_MAX) / GAUGE_MAX) * GAUGE_SWEEP
+
+function PacingGauge({ ratio }) {
+  const cx = 110; const cy = 104; const r = 80
+  const hue = ratio == null ? C.faint : ratio >= 1 ? C.green : ratio >= 0.9 ? palette.orange : C.red
+  const deg = ratioDeg(ratio ?? 0)
+  const [nx, ny] = polarXY(cx, cy, r - 16, deg)
+  return (
+    <svg viewBox="0 0 220 150" style={{ width: 220, flexShrink: 0 }} role="img" aria-label={`MTD pace ${pct(ratio)}`}>
+      {/* track + value arc */}
+      <path d={arcPath(cx, cy, r, -GAUGE_SWEEP / 2, GAUGE_SWEEP / 2)} fill="none" stroke={C.surface} strokeWidth={11} strokeLinecap="round" />
+      {ratio != null && ratio > 0 && (
+        <path d={arcPath(cx, cy, r, -GAUGE_SWEEP / 2, deg)} fill="none" stroke={hue} strokeWidth={11} strokeLinecap="round" />
+      )}
+      {/* ticks */}
+      {[0, 0.5, 1, 1.5].map((t) => {
+        const d = ratioDeg(t)
+        const [ox, oy] = polarXY(cx, cy, r + 9, d)
+        const [ix, iy] = polarXY(cx, cy, r + 5, d)
+        const [tx, ty] = polarXY(cx, cy, r + 20, d)
+        const on100 = t === 1
+        return (
+          <g key={t}>
+            <line x1={ix} y1={iy} x2={ox} y2={oy} stroke={on100 ? C.text : C.faint} strokeWidth={on100 ? 2 : 1} />
+            <text x={tx} y={ty + 3} textAnchor="middle" fill={on100 ? C.muted : C.faint} fontSize={9} fontFamily='"JetBrains Mono", monospace'>
+              {Math.round(t * 100)}%
+            </text>
+          </g>
+        )
+      })}
+      {/* needle */}
+      {ratio != null && (
+        <>
+          <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={C.text} strokeWidth={2} strokeLinecap="round" />
+          <circle cx={cx} cy={cy} r={4} fill={C.text} />
+        </>
+      )}
+      <text x={cx} y={cy + 28} textAnchor="middle" fill={hue} fontSize={20} fontWeight={600} fontFamily='"JetBrains Mono", monospace'>
+        {pct(ratio)}
+      </text>
+      <text x={cx} y={cy + 42} textAnchor="middle" fill={C.muted} fontSize={9} letterSpacing="0.1em" fontFamily='"JetBrains Mono", monospace'>
+        MTD PACE
+      </text>
+    </svg>
+  )
+}
+
 const SYNC_LABEL = { idle: 'Sync Xero', syncing: 'Requesting…', waiting: 'Syncing… ~1 min', done: 'Synced ✓', cooldown: 'On cooldown', error: 'Failed' }
 function SyncButton({ state, onClick, detail }) {
   const busy = state === 'syncing' || state === 'waiting'
@@ -353,6 +412,16 @@ export default function RevenueTargets() {
   const ytdRatio = ytdTarget ? ytdActual / ytdTarget : null
   const prevYtd = sumRow(thisYear - 1, 'actual', thisMonth)
 
+  // MTD pacing — actual so far vs the pro-rata share of this month's target,
+  // plus a straight-line projection of where the month lands at current pace.
+  const daysInMonth = new Date(thisYear, thisMonth, 0).getDate()
+  const elapsedFrac = Math.min(now.getDate() / daysInMonth, 1)
+  const mtdActual = curr?.actual ?? null
+  const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
+  const pace = mtdTarget ? (mtdActual ?? 0) / mtdTarget : null
+  const projected = mtdActual != null && elapsedFrac > 0 ? mtdActual / elapsedFrac : null
+  const projRatio = projected != null && curr?.target ? projected / curr.target : null
+
   const selYears = useMemo(() => {
     const sel = selYearsRaw ?? [thisYear]
     const valid = sel.filter((y) => years.includes(y))
@@ -422,6 +491,49 @@ export default function RevenueTargets() {
             valueColor={ytdRatio == null ? C.text : ytdRatio >= 1 ? C.green : C.red}
             sub={ytdTarget != null ? `target ${money(ytdTarget)}` : 'no targets set'} />
         </div>
+
+        <Panel
+          title={`MTD Pacing — ${MONTHS[thisMonth - 1]} ${thisYear}`}
+          icon={GaugeIcon}
+          right={
+            <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
+              day {now.getDate()} of {daysInMonth} · {pct(elapsedFrac)} elapsed
+            </span>
+          }
+        >
+          {curr?.target == null ? (
+            <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
+              No target set for {MONTHS[thisMonth - 1]} — enter one in the matrix below to enable pacing.
+            </span>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
+              <PacingGauge ratio={pace} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', columnGap: 24, rowGap: 8, fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>
+                {[
+                  { label: 'MTD actual', value: money(mtdActual), color: C.accent },
+                  { label: 'MTD target (pro-rata)', value: money(mtdTarget), color: C.target },
+                  {
+                    label: 'MTD variance',
+                    value: mtdActual != null && mtdTarget != null ? money(mtdActual - mtdTarget) : '—',
+                    color: mtdActual != null && mtdTarget != null ? (mtdActual >= mtdTarget ? C.green : C.red) : C.faint,
+                  },
+                  { label: 'Pro-rata month estimate', value: money(projected), color: C.text },
+                  { label: 'Month target', value: money(curr.target), color: C.muted },
+                  {
+                    label: 'Estimate vs target',
+                    value: pct(projRatio),
+                    color: projRatio == null ? C.faint : projRatio >= 1 ? C.green : projRatio >= 0.9 ? palette.orange : C.red,
+                  },
+                ].map((row) => (
+                  <div key={row.label} style={{ display: 'contents' }}>
+                    <span style={{ color: C.muted }}>{row.label}</span>
+                    <span style={{ color: row.color, textAlign: 'right', fontWeight: 500 }}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Panel>
 
         {/* Year filter — drives both the chart overlay and which tables show */}
         <YearChips years={years} selected={selYears} onToggle={toggleYear} />
