@@ -668,8 +668,11 @@ export default function RevenueTargets() {
                       },
                       total: money(seasonality.rolling.ytdActual),
                     },
-                    { label: 'Target', render: (m) => `$${fmt0.format(m.completed ? m.planBase : m.base)}`, color: C.accent, total: money(seasonality.rolling.sums.base) },
-                    { label: 'Stretch', render: (m) => `$${fmt0.format(m.completed ? m.planStretch : m.stretch)}`, color: C.muted, total: money(seasonality.rolling.sums.stretch) },
+                    // Year totals sum the displayed cells (historical targets for
+                    // completed months + adjusted for open), matching the matrix.
+                    // The annual plan basis ($2.0m/$2.5m) lives in the panel title.
+                    { label: 'Target', render: (m) => `$${fmt0.format(m.completed ? m.planBase : m.base)}`, color: C.accent, total: money(seasonality.rolling.months.reduce((a, m) => a + (m.completed ? m.planBase : m.base), 0)) },
+                    { label: 'Stretch', render: (m) => `$${fmt0.format(m.completed ? m.planStretch : m.stretch)}`, color: C.muted, total: money(seasonality.rolling.months.reduce((a, m) => a + (m.completed ? m.planStretch : m.stretch), 0)) },
                   ].map((row) => (
                     <tr key={row.label}>
                       <td style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, color: row.color, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.borderSoft}` }}>{row.label}</td>
