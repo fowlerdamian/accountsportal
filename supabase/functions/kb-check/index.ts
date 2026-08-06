@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { resolveModel } from '../_shared/model.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,8 @@ Deno.serve(async (req) => {
   try {
     const { question, hint, documentTitle, clause, companyProfile, previousAnswers } = await req.json();
 
-    const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+    const apiKey = Deno.env.get('ANTHROPIC_API_KEY')!;
+    const client = new Anthropic({ apiKey });
 
     const previousContext = previousAnswers && Object.keys(previousAnswers).length > 0
       ? `\nPrevious answers provided:\n${Object.entries(previousAnswers).map(([q, a]) => `Q: ${q}\nA: ${a}`).join('\n\n')}`
@@ -46,7 +48,7 @@ Deno.serve(async (req) => {
     }
 
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: await resolveModel(apiKey, 'haiku'),
       max_tokens: 500,
       messages: [{
         role: 'user',

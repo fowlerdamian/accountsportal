@@ -4,9 +4,10 @@
 // lines ≈ 8k+ output tokens), so this uses Haiku (fast) with a 32k output
 // budget, streamed so nothing times out or truncates.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveModel } from "../_shared/model.ts";
 
-// Haiku on purpose: 3-5x faster than Sonnet for structured extraction.
-const PARSE_MODEL = "claude-haiku-4-5-20251001";
+// Haiku on purpose: 3-5x faster than Sonnet for structured extraction —
+// resolved via the shared model helper (haiku tier).
 
 // mode:"header" — fast first stage: only the invoice header fields, from the
 // start of the document. Lets the upload window close in seconds while the
@@ -99,7 +100,7 @@ Deno.serve(async (req) => {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: PARSE_MODEL,
+        model: await resolveModel(apiKey, "haiku"),
         max_tokens: isHeader ? 400 : 32000,   // large weekly invoices — never truncate
         stream: true,        // required for large max_tokens; also avoids idle timeouts
         system: isHeader ? HEADER_PROMPT : SYSTEM_PROMPT,

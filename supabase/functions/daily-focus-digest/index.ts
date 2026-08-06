@@ -14,6 +14,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveModel } from "../_shared/model.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -120,7 +121,7 @@ async function generateFocus(profile: Profile, data: FocusData): Promise<string>
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: await resolveModel(ANTHROPIC_KEY, "haiku"),
       max_tokens: 600,
       messages: [{ role: "user", content: prompt }],
     }),

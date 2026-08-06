@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveModel } from "../_shared/model.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -503,12 +504,27 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, context = "dashboard", userEmail = "Staff", screen } = await req.json() as {
+    const { messages, context = "dashboard", screen } = await req.json() as {
       messages: { role: string; content: string }[];
       context: AppContext;
-      userEmail: string;
       screen?: { path?: string; title?: string; text?: string };
     };
+
+    // Identity comes from the verified JWT — never from the request body
+    // (a body-supplied email lets any anon-key caller impersonate staff).
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } },
+    );
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user?.email) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const userEmail = user.email;
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
@@ -624,7 +640,7 @@ You can act, not just answer: create staff tasks, update task status, and commen
         },
         signal: AbortSignal.timeout(25000),
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: await resolveModel(anthropicKey, "haiku"),
           max_tokens: 2048,
           system: systemPrompt,
           tools: TOOLS,
