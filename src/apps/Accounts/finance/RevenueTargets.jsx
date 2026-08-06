@@ -480,26 +480,34 @@ export default function RevenueTargets() {
   const ytdRatio = ytdTarget ? ytdActual / ytdTarget : null
   const prevYtd = sumRow(thisYear - 1, 'actual', thisMonth)
 
-  // MTD pacing — actual so far vs the pro-rata share of this month's target,
-  // plus a straight-line projection of where the month lands at current pace.
-  // Pro-rata runs on working days (Mon–Fri), not calendar days.
-  const countWorkdays = (uptoDay) => {
+  // MTD/YTD pacing — actual so far vs the working-day (Mon–Fri) pro-rata share
+  // of the target, plus a straight-line projection at current pace. Both dials
+  // use the same working-day basis so they tick forward together each workday:
+  // MTD over the month's workdays, YTD over the whole year's workdays.
+  const countWorkdays = (month, uptoDay) => {
     let n = 0
-    for (let d = 1; d <= uptoDay; d++) {
-      const dow = new Date(thisYear, thisMonth - 1, d).getDay()
+    const last = uptoDay ?? new Date(thisYear, month, 0).getDate()
+    for (let d = 1; d <= last; d++) {
+      const dow = new Date(thisYear, month - 1, d).getDay()
       if (dow !== 0 && dow !== 6) n++
     }
     return n
   }
-  const workdaysInMonth = countWorkdays(new Date(thisYear, thisMonth, 0).getDate())
-  const workdaysElapsed = countWorkdays(now.getDate())
+  const workdaysInMonth = countWorkdays(thisMonth)
+  const workdaysElapsed = countWorkdays(thisMonth, now.getDate())
   const elapsedFrac = workdaysInMonth ? Math.min(workdaysElapsed / workdaysInMonth, 1) : 0
   const mtdActual = curr?.actual ?? null
   const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
-  // YTD pro-rata: completed months at full target + current month's elapsed share.
   const yearTarget = sumRow(thisYear, 'target', 12)
-  const ytdProRataTarget = yearTarget == null ? null
-    : (sumRow(thisYear, 'target', thisMonth - 1) ?? 0) + (curr?.target ?? 0) * elapsedFrac
+  let yearWorkdays = 0
+  let yearWorkdaysElapsed = 0
+  for (let m = 1; m <= 12; m++) {
+    yearWorkdays += countWorkdays(m)
+    if (m < thisMonth) yearWorkdaysElapsed += countWorkdays(m)
+    else if (m === thisMonth) yearWorkdaysElapsed += workdaysElapsed
+  }
+  const yearElapsedFrac = yearWorkdays ? Math.min(yearWorkdaysElapsed / yearWorkdays, 1) : 0
+  const ytdProRataTarget = yearTarget == null ? null : yearTarget * yearElapsedFrac
 
   const selYears = useMemo(() => {
     const sel = selYearsRaw ?? [thisYear]
@@ -589,7 +597,7 @@ export default function RevenueTargets() {
             actual={ytdActual} proRata={ytdProRataTarget} fullTarget={yearTarget}
             right={
               <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-                {yearTarget ? `${pct(ytdProRataTarget / yearTarget)} of year target elapsed` : ''}
+                workday {yearWorkdaysElapsed} of {yearWorkdays} · {pct(yearElapsedFrac)} elapsed
               </span>
             }
             emptyHint={`No ${thisYear} targets set — enter them in the matrix below to enable pacing.`}
