@@ -20,6 +20,7 @@ import Disputes from './apps/Logistics/components/Disputes.jsx'
 import ManualLabel from './apps/Logistics/components/ManualLabel.jsx'
 import SupportApp from './apps/Support/SupportApp'
 import SalesSupport from './apps/SalesSupport/index.jsx'
+import OpportunityPressure from './apps/Opportunities/OpportunityPressure'
 import Marketing from './apps/Marketing/index.jsx'
 import ComplianceApp from './apps/Compliance/index'
 import XeroChat from './apps/Xero/index'
@@ -113,6 +114,7 @@ const PATH_TITLES = [
   ['/logistics',             'Logistics'],
   ['/purchase-orders',       'Purchasing'],
   ['/sales-support',         'Sales Support'],
+  ['/opportunities',         'Opportunity Pressure'],
   ['/marketing',             'Marketing'],
   ['/compliance',            'Compliance'],
   ['/support',               'Customer Service'],
@@ -247,6 +249,7 @@ export default function App() {
               <Route path="logistics/manual-label" element={<ManualLabel />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
+              <Route path="opportunities" element={<OpportunityPressure />} />
               <Route path="marketing/*" element={<Marketing />} />
               <Route path="compliance/*" element={<GuideAuthProvider><ComplianceApp /></GuideAuthProvider>} />
             </Route>

@@ -70,6 +70,14 @@ export const APPS = [
     external:    false,
   },
   {
+    name:        'Opportunity Pressure',
+    description: 'Pipeline hygiene — every open deal is a bubble that grows until someone touches it',
+    route:       '/opportunities',
+    icon:        'DollarSign',
+    status:      'live',
+    external:    false,
+  },
+  {
     name:        'Marketing',
     description: 'Per-brand marketing performance — TrailBait (Consumer/B2B), AGA & FleetCraft pipelines',
     route:       '/marketing',
