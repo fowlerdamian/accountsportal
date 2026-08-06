@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useMemo, useState } from "react";
-import { X, RefreshCw } from "lucide-react";
+import { X, RefreshCw, ExternalLink } from "lucide-react";
 import { DatePicker } from "@portal/components/DatePicker";
 import { useAuth } from "@portal/context/AuthContext";
 import { useStaffProfiles } from "@tasks/hooks/use-task-queries";
@@ -487,6 +487,17 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
         <span>
           {opportunity.last_synced_at ? `Synced ${fmtDateTime(opportunity.last_synced_at)}` : "Not yet synced"}
         </span>
+        {/* Quiet escape hatch to the deal record in HubSpot — same deep-link
+            format the Sales Support pipeline uses. */}
+        <a
+          href={`https://app-ap1.hubspot.com/deals/22572063/${opportunity.hubspot_deal_id}`}
+          target="_blank"
+          rel="noreferrer"
+          title="Open in HubSpot"
+          style={{ color: "var(--text-tertiary)", display: "flex", padding: 2, marginLeft: "auto" }}
+        >
+          <ExternalLink size={13} />
+        </a>
         <button
           onClick={() => manualSync.mutate()}
           disabled={manualSync.isPending}
@@ -497,7 +508,6 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
             color: "var(--text-tertiary)",
             cursor: "pointer",
             padding: 2,
-            marginLeft: "auto",
             display: "flex",
           }}
         >
