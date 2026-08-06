@@ -379,10 +379,9 @@ export default function RevenueTargets() {
   })
 
   // ── Seasonality model (client-side, pure) ────────────────────────────────────
-  // Median-of-actuals seasonality plan for the current year, with rolling
-  // reallocation: completed months lock to actuals (their STORED targets stay
-  // untouched as the historical record), remaining months re-spread so the
-  // year sums to exactly the annual totals.
+  // Median-of-actuals seasonality plan for the current year. Targets come from
+  // the static plan (a strict partition of the annual totals); the rolling
+  // model is only used for completed/actual/YTD metadata in the table.
   const BASE_TOTAL = 2_000_000
   const STRETCH_TOTAL = 2_500_000
   const seasonality = useMemo(() => {
@@ -411,13 +410,14 @@ export default function RevenueTargets() {
   useEffect(() => {
     if (!seasonality || !data?.targets || applying.current) return
     const stored = new Map(data.targets.filter((t) => t.year === thisYear).map((t) => [t.month, t]))
-    // Smart targets own the whole current year: completed months carry the
-    // static pro-rata plan (what the target WAS for that month), open months
-    // carry the rolling-adjusted values.
+    // Targets are the static seasonality plan — a strict partition of the
+    // annual totals, so the 12 months always sum to exactly $2.0m/$2.5m.
+    // (No shortfall catch-up: a missed month shows in pacing, it does not
+    // inflate later months' targets.)
     const wanted = seasonality.rolling.months.map((m) => ({
       month: m.month,
-      target: m.completed ? m.planBase : m.base,
-      stretch: m.completed ? m.planStretch : m.stretch,
+      target: m.planBase,
+      stretch: m.planStretch,
     }))
     const dirty = wanted
       .filter((w) => {
@@ -668,11 +668,10 @@ export default function RevenueTargets() {
                       },
                       total: money(seasonality.rolling.ytdActual),
                     },
-                    // Year totals sum the displayed cells (historical targets for
-                    // completed months + adjusted for open), matching the matrix.
-                    // The annual plan basis ($2.0m/$2.5m) lives in the panel title.
-                    { label: 'Target', render: (m) => `$${fmt0.format(m.completed ? m.planBase : m.base)}`, color: C.accent, total: money(seasonality.rolling.months.reduce((a, m) => a + (m.completed ? m.planBase : m.base), 0)) },
-                    { label: 'Stretch', render: (m) => `$${fmt0.format(m.completed ? m.planStretch : m.stretch)}`, color: C.muted, total: money(seasonality.rolling.months.reduce((a, m) => a + (m.completed ? m.planStretch : m.stretch), 0)) },
+                    // Static plan values: allocate() partitions the annual total,
+                    // so these rows always sum to exactly $2.0m/$2.5m.
+                    { label: 'Target', render: (m) => `$${fmt0.format(m.planBase)}`, color: C.accent, total: money(seasonality.model.sums.base) },
+                    { label: 'Stretch', render: (m) => `$${fmt0.format(m.planStretch)}`, color: C.muted, total: money(seasonality.model.sums.stretch) },
                   ].map((row) => (
                     <tr key={row.label}>
                       <td style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, color: row.color, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.borderSoft}` }}>{row.label}</td>
