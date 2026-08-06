@@ -479,6 +479,8 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
           alignItems: "center",
           gap: 6,
           padding: "8px 18px 12px",
+          // Keep clear of the floating Ask AI button in the corner.
+          paddingRight: 88,
           fontSize: 11,
           fontFamily: "var(--font-mono)",
           color: "var(--text-tertiary)",
@@ -488,13 +490,14 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
           {opportunity.last_synced_at ? `Synced ${fmtDateTime(opportunity.last_synced_at)}` : "Not yet synced"}
         </span>
         {/* Quiet escape hatch to the deal record in HubSpot — same deep-link
-            format the Sales Support pipeline uses. */}
+            format the Sales Support pipeline uses. Icons stay left of centre:
+            the floating Ask AI button owns the bottom-right corner. */}
         <a
           href={`https://app-ap1.hubspot.com/deals/22572063/${opportunity.hubspot_deal_id}`}
           target="_blank"
           rel="noreferrer"
           title="Open in HubSpot"
-          style={{ color: "var(--text-tertiary)", display: "flex", padding: 2, marginLeft: "auto" }}
+          style={{ color: "var(--text-tertiary)", display: "flex", padding: 2, marginLeft: 6 }}
         >
           <ExternalLink size={13} />
         </a>
