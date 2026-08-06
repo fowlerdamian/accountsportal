@@ -154,6 +154,8 @@ export function useLogActivity() {
 
 export interface CreateOpportunityTaskPayload {
   opportunity_id: string;
+  account_name: string;
+  deal_name: string;
   title: string;
   description?: string | null;
   due_date?: string | null;
@@ -161,11 +163,34 @@ export interface CreateOpportunityTaskPayload {
   created_by: string;
 }
 
+/**
+ * Tasks are staff-portal-only: one direct insert into the SAME staff_tasks
+ * table the tasks app owns (no HubSpot task object). The title carries the
+ * account name so the row reads sensibly inside the tasks app.
+ */
 export function useCreateOpportunityTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CreateOpportunityTaskPayload) =>
-      invokeSync<{ task: StaffTask }>({ action: "create_task", ...payload }),
+    mutationFn: async (payload: CreateOpportunityTaskPayload): Promise<StaffTask> => {
+      const title = payload.account_name && !payload.title.includes(payload.account_name)
+        ? `${payload.title} — ${payload.account_name}`
+        : payload.title;
+      const { data, error } = await supabase
+        .from("staff_tasks")
+        .insert({
+          title,
+          description: payload.description || `Opportunity: ${payload.deal_name} (${payload.account_name})`,
+          status: "not_started",
+          assigned_to: payload.assigned_to,
+          created_by: payload.created_by,
+          due_date: payload.due_date ?? null,
+          opportunity_id: payload.opportunity_id,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as StaffTask;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["opportunity_tasks"] });
       queryClient.invalidateQueries({ queryKey: ["staff_tasks"] });
@@ -175,9 +200,8 @@ export function useCreateOpportunityTask() {
 
 /**
  * Complete / reopen a linked task. Writes the SAME staff_tasks row the tasks
- * app owns — the DB trigger stamps or clears completed_at. HubSpot task status
- * is pushed after the fact (and reconciled on every scheduled sync), so a
- * transient push failure never blocks the local completion.
+ * app owns — the DB trigger stamps or clears completed_at, which is what the
+ * growth engine keys off.
  */
 export function useSetTaskStatus() {
   const queryClient = useQueryClient();
@@ -190,9 +214,6 @@ export function useSetTaskStatus() {
         .select()
         .single();
       if (error) throw error;
-      invokeSync({ action: "push_task_status", staff_task_id: id }).catch(() => {
-        /* reconciled by the next scheduled sync */
-      });
       return data as StaffTask;
     },
     onSuccess: () => {

@@ -140,6 +140,8 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
     try {
       await createTask.mutateAsync({
         opportunity_id: opportunity.id,
+        account_name: opportunity.account_name,
+        deal_name: opportunity.deal_name,
         title: taskTitle.trim(),
         due_date: taskDue,
         assigned_to: taskAssignee || user.id,
@@ -149,7 +151,7 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
       setTaskDue(null);
       setForm("none");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Task could not be saved to HubSpot.");
+      setError(e instanceof Error ? e.message : "Task could not be saved.");
     }
   };
 

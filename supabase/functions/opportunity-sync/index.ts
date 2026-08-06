@@ -4,16 +4,18 @@
 // existing sales-hubspot-sync worker is untouched.
 //
 // Actions:
-//   pull              (default) mirror open deals + their engagements into
-//                     public.opportunities / public.opportunity_activities,
-//                     and reconcile linked staff_tasks status back to HubSpot.
+//   pull              (default) mirror open FleetCraft + AGA deals and their
+//                     engagements into public.opportunities /
+//                     public.opportunity_activities. Same per-channel filter
+//                     semantics as sales-hubspot-sync get_deals (the Sales
+//                     Support pipeline): dealtype EQ OR dealname CONTAINS_TOKEN.
 //   log_activity      write an engagement to HubSpot FIRST, then reflect it
 //                     locally. A HubSpot failure returns an error and nothing
 //                     is saved — the portal must never grow a second register
 //                     that drifts from the CRM.
-//   create_task       create a HubSpot task, then the ONE staff_tasks row
-//                     (linked via opportunity_id) the tasks app also renders.
-//   push_task_status  push a linked task's current status to HubSpot.
+//
+// Tasks are staff-portal-only (staff_tasks) — no HubSpot task objects are
+// created, read, or reconciled.
 //
 // Auth: HUBSPOT_ACCESS_TOKEN (same Supabase secret the other HubSpot
 // functions use). DB access via service role.
@@ -60,12 +62,13 @@ const chunk = <T>(arr: T[], size: number): T[][] => {
   return out;
 };
 
-// dealtype → division, consistent with src/lib/channels.ts
-const DIVISION_BY_DEALTYPE: Record<string, string> = {
-  "Distributor": "TrailBait",
-  "Fleet & Commercial": "FleetCraft",
-  "Bespoke Manufacturer": "OEM",
-};
+// The two divisions on the field, with the same dealtype values the Sales
+// Support pipeline uses (CHANNEL_DEAL_TYPE in sales-hubspot-sync).
+// AGA (Bespoke Manufacturer) is stored as division 'OEM'.
+const CHANNELS: Array<{ division: string; dealType: string }> = [
+  { division: "FleetCraft", dealType: "Fleet & Commercial" },
+  { division: "OEM", dealType: "Bespoke Manufacturer" },
+];
 
 // HubSpot engagement objects → register activity types
 const ENGAGEMENT_OBJECTS: Array<{
@@ -85,25 +88,44 @@ const stripHtml = (s: string) => s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ")
 // ── pull ─────────────────────────────────────────────────────────────────────
 
 async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<typeof createClient>) {
-  // 1. All open deals (paginated search).
+  // 1. Open FleetCraft + AGA deals — one paginated search per channel, with
+  //    the pipeline's OR semantics (dealtype EQ / dealname CONTAINS_TOKEN),
+  //    each group additionally constrained to open deals.
   const deals: Array<{ id: string; properties: Record<string, string | null> }> = [];
-  let after: string | undefined;
-  do {
-    const page = await hs("/crm/v3/objects/deals/search", {
-      method: "POST",
-      body: JSON.stringify({
-        filterGroups: [{ filters: [{ propertyName: "hs_is_closed", operator: "EQ", value: "false" }] }],
-        properties: [
-          "dealname", "amount", "dealstage", "pipeline", "closedate",
-          "hubspot_owner_id", "dealtype", "hs_deal_stage_probability", "createdate",
-        ],
-        limit: 100,
-        ...(after ? { after } : {}),
-      }),
-    });
-    deals.push(...(page.results ?? []));
-    after = page.paging?.next?.after;
-  } while (after && deals.length < 1000);
+  const divisionByDeal = new Map<string, string>();
+  for (const ch of CHANNELS) {
+    let after: string | undefined;
+    do {
+      const page = await hs("/crm/v3/objects/deals/search", {
+        method: "POST",
+        body: JSON.stringify({
+          filterGroups: [
+            { filters: [
+              { propertyName: "dealtype", operator: "EQ", value: ch.dealType },
+              { propertyName: "hs_is_closed", operator: "EQ", value: "false" },
+            ] },
+            { filters: [
+              { propertyName: "dealname", operator: "CONTAINS_TOKEN", value: ch.dealType },
+              { propertyName: "hs_is_closed", operator: "EQ", value: "false" },
+            ] },
+          ],
+          properties: [
+            "dealname", "amount", "dealstage", "pipeline", "closedate",
+            "hubspot_owner_id", "dealtype", "hs_deal_stage_probability", "createdate",
+          ],
+          limit: 100,
+          ...(after ? { after } : {}),
+        }),
+      });
+      for (const d of page.results ?? []) {
+        if (!divisionByDeal.has(String(d.id))) {
+          divisionByDeal.set(String(d.id), ch.division);
+          deals.push(d);
+        }
+      }
+      after = page.paging?.next?.after;
+    } while (after && deals.length < 1000);
+  }
 
   // 2. Owners id → name/email. Tolerated failure: the token may lack the
   //    owners scope; the field still works with unattributed owners.
@@ -164,7 +186,7 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
       owner_name: owner?.name ?? null,
       owner_email: owner?.email ?? null,
       stage: p.dealstage ?? null,
-      division: p.dealtype ? DIVISION_BY_DEALTYPE[p.dealtype] ?? null : null,
+      division: divisionByDeal.get(d.id) ?? null,
       is_open: true,
       hubspot_created_at: p.createdate ?? null,
       last_synced_at: nowIso,
@@ -175,7 +197,8 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
     if (error) throw new Error(`upsert opportunities: ${error.message}`);
   }
 
-  // 5. Deals that closed since last sync leave the field.
+  // 5. Deals that closed — or no longer match the FleetCraft/AGA filter —
+  //    leave the field.
   const { data: localOpen, error: openErr } = await db
     .from("opportunities").select("id, hubspot_deal_id").eq("is_open", true);
   if (openErr) throw new Error(openErr.message);
@@ -252,33 +275,6 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
     }
   }
 
-  // 7. Reconcile linked task state back to HubSpot (covers completions made in
-  //    the tasks app, where no HubSpot push runs).
-  const { data: links } = await db
-    .from("opportunity_task_sync")
-    .select("staff_task_id, hubspot_task_id, last_pushed_status, staff_tasks(status, title, due_date)");
-  for (const link of links ?? []) {
-    const task = link.staff_tasks as { status: string; title: string; due_date: string | null } | null;
-    if (!task || !link.hubspot_task_id || task.status === link.last_pushed_status) continue;
-    try {
-      await hs(`/crm/v3/objects/tasks/${link.hubspot_task_id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          properties: {
-            hs_task_status: task.status === "done" ? "COMPLETED" : "NOT_STARTED",
-            hs_task_subject: task.title,
-            ...(task.due_date ? { hs_timestamp: new Date(`${task.due_date}T09:00:00`).getTime() } : {}),
-          },
-        }),
-      });
-      await db.from("opportunity_task_sync")
-        .update({ last_pushed_status: task.status, updated_at: nowIso })
-        .eq("staff_task_id", link.staff_task_id);
-    } catch (err) {
-      console.error("[opportunity-sync] task reconcile failed:", err);
-    }
-  }
-
   return {
     synced: rows.length,
     closed: closedLocal.length,
@@ -343,88 +339,6 @@ async function logActivity(
   return json({ activity });
 }
 
-async function createTask(
-  hs: ReturnType<typeof hsFetch>,
-  db: ReturnType<typeof createClient>,
-  body: {
-    opportunity_id: string; title: string; description?: string | null;
-    due_date?: string | null; assigned_to: string; created_by: string;
-  },
-) {
-  const { data: opp, error } = await db.from("opportunities")
-    .select("id, hubspot_deal_id, account_name, deal_name").eq("id", body.opportunity_id).single();
-  if (error || !opp) return json({ error: "Opportunity not found" }, 404);
-
-  // Title carries the account so the row reads sensibly inside the tasks app.
-  const title = opp.account_name && !body.title.includes(opp.account_name)
-    ? `${body.title} — ${opp.account_name}`
-    : body.title;
-  const dueMs = body.due_date
-    ? new Date(`${body.due_date}T09:00:00`).getTime()
-    : Date.now() + 7 * 86_400_000;
-
-  // HubSpot first.
-  const hsTask = await hs("/crm/v3/objects/tasks", {
-    method: "POST",
-    body: JSON.stringify({
-      properties: {
-        hs_task_subject: title,
-        hs_task_body: body.description || `Opportunity: ${opp.deal_name} (${opp.account_name})`,
-        hs_timestamp: dueMs,
-        hs_task_status: "NOT_STARTED",
-        hs_task_type: "TODO",
-      },
-    }),
-  });
-  await associate(hs, "tasks", String(hsTask.id), opp.hubspot_deal_id, "task_to_deal");
-
-  // The ONE task row — same table, same row, the tasks app renders.
-  const { data: task, error: taskErr } = await db.from("staff_tasks")
-    .insert({
-      title,
-      description: body.description || `Opportunity: ${opp.deal_name} (${opp.account_name})`,
-      status: "not_started",
-      assigned_to: body.assigned_to,
-      created_by: body.created_by,
-      due_date: body.due_date ?? null,
-      opportunity_id: opp.id,
-    })
-    .select().single();
-  if (taskErr) return json({ error: `Saved to HubSpot but task insert failed: ${taskErr.message}` }, 500);
-
-  await db.from("opportunity_task_sync").insert({
-    staff_task_id: task.id,
-    opportunity_id: opp.id,
-    hubspot_task_id: String(hsTask.id),
-    last_pushed_status: "not_started",
-  });
-
-  return json({ task });
-}
-
-async function pushTaskStatus(
-  hs: ReturnType<typeof hsFetch>,
-  db: ReturnType<typeof createClient>,
-  body: { staff_task_id: string },
-) {
-  const { data: link } = await db.from("opportunity_task_sync")
-    .select("staff_task_id, hubspot_task_id").eq("staff_task_id", body.staff_task_id).single();
-  const { data: task } = await db.from("staff_tasks")
-    .select("status").eq("id", body.staff_task_id).single();
-  if (!link?.hubspot_task_id || !task) return json({ ok: false });
-
-  await hs(`/crm/v3/objects/tasks/${link.hubspot_task_id}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      properties: { hs_task_status: task.status === "done" ? "COMPLETED" : "NOT_STARTED" },
-    }),
-  });
-  await db.from("opportunity_task_sync")
-    .update({ last_pushed_status: task.status, updated_at: new Date().toISOString() })
-    .eq("staff_task_id", body.staff_task_id);
-  return json({ ok: true });
-}
-
 // ── router ───────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -454,10 +368,6 @@ serve(async (req) => {
         return json(await pullFromHubSpot(hs, db));
       case "log_activity":
         return await logActivity(hs, db, body as Parameters<typeof logActivity>[2]);
-      case "create_task":
-        return await createTask(hs, db, body as Parameters<typeof createTask>[2]);
-      case "push_task_status":
-        return await pushTaskStatus(hs, db, body as Parameters<typeof pushTaskStatus>[2]);
       default:
         return json({ error: `Unknown action: ${action}` }, 400);
     }
