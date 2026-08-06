@@ -410,14 +410,14 @@ export default function RevenueTargets() {
   useEffect(() => {
     if (!seasonality || !data?.targets || applying.current) return
     const stored = new Map(data.targets.filter((t) => t.year === thisYear).map((t) => [t.month, t]))
-    // Targets are the static seasonality plan — a strict partition of the
-    // annual totals, so the 12 months always sum to exactly $2.0m/$2.5m.
-    // (No shortfall catch-up: a missed month shows in pacing, it does not
-    // inflate later months' targets.)
+    // Catch-up targets: completed months keep the plan they were judged
+    // against; open months absorb the YTD shortfall so hitting them lands the
+    // year on $2.0m. The stored series sums above the plan when behind — the
+    // UI deliberately displays the plan totals instead.
     const wanted = seasonality.rolling.months.map((m) => ({
       month: m.month,
-      target: m.planBase,
-      stretch: m.planStretch,
+      target: m.completed ? m.planBase : m.base,
+      stretch: m.completed ? m.planStretch : m.stretch,
     }))
     const dirty = wanted
       .filter((w) => {
@@ -498,12 +498,13 @@ export default function RevenueTargets() {
   const elapsedFrac = workdaysInMonth ? Math.min(workdaysElapsed / workdaysInMonth, 1) : 0
   const mtdActual = curr?.actual ?? null
   const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
-  const yearTarget = sumRow(thisYear, 'target', 12)
-  // YTD measures against the seasonal plan, not a uniform spread: completed
-  // months at their full target + the current month's working-day share. Still
-  // ticks forward with the MTD dial each workday via elapsedFrac.
-  const ytdProRataTarget = yearTarget == null ? null
-    : (sumRow(thisYear, 'target', thisMonth - 1) ?? 0) + (curr?.target ?? 0) * elapsedFrac
+  // YTD paces the recovery path to the $2.0m plan: completed months count at
+  // their ACTUALS (bygones locked in), plus the current month's working-day
+  // share of its catch-up target. Since the catch-up target is sized to land
+  // the year on plan, ahead-on-the-month reads ahead-on-the-year.
+  const ytdPastActuals = sumRow(thisYear, 'actual', thisMonth - 1)
+  const ytdProRataTarget = curr?.target == null ? null
+    : (ytdPastActuals ?? 0) + curr.target * elapsedFrac
 
   const selYears = useMemo(() => {
     const sel = selYearsRaw ?? [thisYear]
@@ -590,10 +591,10 @@ export default function RevenueTargets() {
           <PacingPanel
             title={`YTD Pacing — ${thisYear}`}
             prefix="YTD" estWord="year"
-            actual={ytdActual} proRata={ytdProRataTarget} fullTarget={yearTarget}
+            actual={ytdActual} proRata={ytdProRataTarget} fullTarget={ytdProRataTarget == null ? null : BASE_TOTAL}
             right={
               <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-                {yearTarget ? `${pct(ytdProRataTarget / yearTarget)} of seasonal plan elapsed` : ''}
+                recovery path to ${(BASE_TOTAL / 1e6).toFixed(1)}m · past months at actuals
               </span>
             }
             emptyHint={`No ${thisYear} targets set — enter them in the matrix below to enable pacing.`}
@@ -672,10 +673,11 @@ export default function RevenueTargets() {
                       },
                       total: money(seasonality.rolling.ytdActual),
                     },
-                    // Static plan values: allocate() partitions the annual total,
-                    // so these rows always sum to exactly $2.0m/$2.5m.
-                    { label: 'Target', render: (m) => `$${fmt0.format(m.planBase)}`, color: C.accent, total: money(seasonality.model.sums.base) },
-                    { label: 'Stretch', render: (m) => `$${fmt0.format(m.planStretch)}`, color: C.muted, total: money(seasonality.model.sums.stretch) },
+                    // Completed months show their historical plan, open months the
+                    // catch-up value. Year cells show rolling.sums (actuals-to-date +
+                    // remaining targets) — i.e. the plan totals, not the cell sum.
+                    { label: 'Target', render: (m) => `$${fmt0.format(m.completed ? m.planBase : m.base)}`, color: C.accent, total: money(seasonality.rolling.sums.base) },
+                    { label: 'Stretch', render: (m) => `$${fmt0.format(m.completed ? m.planStretch : m.stretch)}`, color: C.muted, total: money(seasonality.rolling.sums.stretch) },
                   ].map((row) => (
                     <tr key={row.label}>
                       <td style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, color: row.color, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.borderSoft}` }}>{row.label}</td>
@@ -740,7 +742,11 @@ export default function RevenueTargets() {
                         )
                       })}
                       <td style={{ ...td, color: row.key === 'actual' ? C.accent : row.color, fontWeight: 600, borderBottom: ri === rows.length - 1 ? `1px solid ${C.border}` : td.borderBottom }}>
-                        {money(sumRow(y, row.key))}
+                        {/* Current-year target/stretch totals show the plan basis —
+                            catch-up targets intentionally sum above it. */}
+                        {y === thisYear && row.key === 'target' ? money(BASE_TOTAL)
+                          : y === thisYear && row.key === 'stretch' ? money(STRETCH_TOTAL)
+                          : money(sumRow(y, row.key))}
                       </td>
                     </tr>
                   ))
