@@ -224,6 +224,21 @@ export function useSetTaskStatus() {
   });
 }
 
+/** Win chance is portal-owned — set by hand, never synced with HubSpot. */
+export function useSetProbability() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, probability }: { id: string; probability: number | null }) => {
+      const { error } = await supabase
+        .from("opportunities")
+        .update({ probability })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["opportunities"] }),
+  });
+}
+
 export function useParkOpportunity() {
   const queryClient = useQueryClient();
   return useMutation({

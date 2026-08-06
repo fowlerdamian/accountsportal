@@ -15,7 +15,8 @@
 //                     that drifts from the CRM.
 //
 // Tasks are staff-portal-only (staff_tasks) — no HubSpot task objects are
-// created, read, or reconciled.
+// created, read, or reconciled. Win chance (probability) is likewise
+// portal-owned and never synced with HubSpot.
 //
 // Auth: HUBSPOT_ACCESS_TOKEN (same Supabase secret the other HubSpot
 // functions use). DB access via service role.
@@ -111,7 +112,7 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
           ],
           properties: [
             "dealname", "amount", "dealstage", "pipeline", "closedate",
-            "hubspot_owner_id", "dealtype", "hs_deal_stage_probability", "createdate",
+            "hubspot_owner_id", "dealtype", "createdate",
           ],
           limit: 100,
           ...(after ? { after } : {}),
@@ -191,13 +192,13 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
     for (const c of companies.results ?? []) companyNames.set(String(c.id), c.properties?.name ?? "");
   }
 
-  // 4. Upsert opportunities. is_parked is deliberately absent — parking is
-  //    portal state and survives every sync.
+  // 4. Upsert opportunities. is_parked and probability are deliberately
+  //    absent — parking and win chance are portal state and survive every
+  //    sync (win chance is set by hand in the panel, never from HubSpot).
   const nowIso = new Date().toISOString();
   const rows = deals.map((d) => {
     const p = d.properties;
     const owner = p.hubspot_owner_id ? owners.get(String(p.hubspot_owner_id)) : undefined;
-    const probability = p.hs_deal_stage_probability != null ? Number(p.hs_deal_stage_probability) : null;
     return {
       hubspot_deal_id: d.id,
       deal_name: p.dealname ?? "(unnamed deal)",
@@ -205,7 +206,6 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
       // deals with no associated company stay unlabelled on the field.
       account_name: companyNames.get(companyIdByDeal.get(d.id) ?? "") || "",
       amount: p.amount != null && p.amount !== "" ? Number(p.amount) : null,
-      probability: probability != null && Number.isFinite(probability) ? Math.min(1, Math.max(0, probability)) : null,
       expected_close_date: p.closedate ? p.closedate.slice(0, 10) : null,
       owner_name: owner?.name ?? null,
       owner_email: owner?.email ?? null,

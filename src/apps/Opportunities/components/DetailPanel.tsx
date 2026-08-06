@@ -15,6 +15,7 @@ import {
   useLogActivity,
   useCreateOpportunityTask,
   useSetTaskStatus,
+  useSetProbability,
   useParkOpportunity,
   useManualSync,
   type Opportunity,
@@ -93,8 +94,19 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
   const logActivity = useLogActivity();
   const createTask = useCreateOpportunityTask();
   const setTaskStatus = useSetTaskStatus();
+  const setProbability = useSetProbability();
   const park = useParkOpportunity();
   const manualSync = useManualSync();
+
+  const [editingProb, setEditingProb] = useState(false);
+  const [probDraft, setProbDraft] = useState("");
+
+  const saveProbability = () => {
+    setEditingProb(false);
+    const n = Number(probDraft);
+    if (probDraft.trim() === "" || !Number.isFinite(n)) return;
+    setProbability.mutate({ id: opportunity.id, probability: Math.min(100, Math.max(0, n)) / 100 });
+  };
 
   const [form, setForm] = useState<"none" | "task" | "activity">("none");
   const [taskTitle, setTaskTitle] = useState("");
@@ -252,9 +264,44 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
         </div>
         <div>
           <div style={fieldLabelStyle}>Win chance</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>
-            {fmtPercent(opportunity.probability)}
-          </div>
+          {/* Portal-owned field — click to edit; never synced with HubSpot. */}
+          {editingProb ? (
+            <input
+              type="number"
+              min={0}
+              max={100}
+              autoFocus
+              value={probDraft}
+              onChange={(e) => setProbDraft(e.target.value)}
+              onBlur={saveProbability}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveProbability();
+                if (e.key === "Escape") setEditingProb(false);
+              }}
+              style={{ ...inputStyle, padding: "3px 6px", fontFamily: "var(--font-mono)", fontSize: 14, width: 64 }}
+            />
+          ) : (
+            <div
+              onClick={() => {
+                setProbDraft(
+                  opportunity.probability != null ? String(Math.round(opportunity.probability * 100)) : "",
+                );
+                setEditingProb(true);
+              }}
+              title="Click to edit"
+              style={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                fontFamily: "var(--font-mono)",
+                cursor: "pointer",
+                borderBottom: "1px dashed var(--border-strong)",
+                display: "inline-block",
+              }}
+            >
+              {fmtPercent(opportunity.probability)}
+            </div>
+          )}
         </div>
       </div>
 
