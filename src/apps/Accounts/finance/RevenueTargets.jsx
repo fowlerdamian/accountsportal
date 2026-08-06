@@ -244,49 +244,49 @@ function PacingGauge({ ratio, label }) {
   )
 }
 
-// Probability dial: 0–100% chance of hitting the plan, from the rear-view
-// forecast distribution. Zones: red <40%, orange 40–65%, green ≥65%.
-function ChanceGauge({ probability, planLabel }) {
+// Dollar-scale forecast dial: needle at the predicted year-end, plan marked on
+// the arc. Zones are relative to plan (red <90%, orange 90–100%, green ≥plan).
+function ForecastGauge({ value, plan, min = 1_000_000, max = 2_500_000 }) {
   const cx = 110; const cy = 104; const r = 80
-  const toDeg = (p) => -GAUGE_SWEEP / 2 + Math.min(Math.max(p, 0), 1) * GAUGE_SWEEP
-  const hue = probability == null ? C.faint : probability >= 0.65 ? C.green : probability >= 0.4 ? palette.orange : C.red
-  const zones = [[0, 0.4, C.red], [0.4, 0.65, palette.orange], [0.65, 1, C.green]]
-  const deg = toDeg(probability ?? 0)
+  const toDeg = (v) => -GAUGE_SWEEP / 2 + ((Math.min(Math.max(v, min), max) - min) / (max - min)) * GAUGE_SWEEP
+  const hue = value == null ? C.faint : value >= plan ? C.green : value >= plan * 0.9 ? palette.orange : C.red
+  const zones = [[min, plan * 0.9, C.red], [plan * 0.9, plan, palette.orange], [plan, max, C.green]]
+  const deg = toDeg(value ?? min)
   const [nx, ny] = polarXY(cx, cy, r - 16, deg)
   return (
-    <svg viewBox="0 0 220 150" style={{ width: 220, flexShrink: 0 }} role="img" aria-label={`Chance of hitting ${planLabel}: ${pct(probability)}`}>
+    <svg viewBox="0 0 220 150" style={{ width: 220, flexShrink: 0 }} role="img" aria-label={`Rear view forecast ${value == null ? '—' : compact(value)}`}>
       {zones.map(([a, b, col]) => (
         <path key={a} d={arcPath(cx, cy, r, toDeg(a), toDeg(b))} fill="none" stroke={col} strokeOpacity={0.2} strokeWidth={11} />
       ))}
-      {probability != null && probability > 0 && (
+      {value != null && (
         <path d={arcPath(cx, cy, r, -GAUGE_SWEEP / 2, deg)} fill="none" stroke={hue} strokeWidth={11} strokeLinecap="round" />
       )}
-      {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+      {[min, 1_500_000, plan, max].map((t) => {
         const d = toDeg(t)
         const [ox, oy] = polarXY(cx, cy, r + 9, d)
         const [ix, iy] = polarXY(cx, cy, r + 5, d)
         const [tx, ty] = polarXY(cx, cy, r + 20, d)
-        const mid = t === 0.5
+        const onPlan = t === plan
         return (
           <g key={t}>
-            <line x1={ix} y1={iy} x2={ox} y2={oy} stroke={mid ? C.text : C.faint} strokeWidth={mid ? 2 : 1} />
-            <text x={tx} y={ty + 3} textAnchor="middle" fill={mid ? C.muted : C.faint} fontSize={9} fontFamily='"JetBrains Mono", monospace'>
-              {Math.round(t * 100)}%
+            <line x1={ix} y1={iy} x2={ox} y2={oy} stroke={onPlan ? C.text : C.faint} strokeWidth={onPlan ? 2 : 1} />
+            <text x={tx} y={ty + 3} textAnchor="middle" fill={onPlan ? C.muted : C.faint} fontSize={9} fontFamily='"JetBrains Mono", monospace'>
+              {`$${(t / 1e6).toFixed(1)}m`}
             </text>
           </g>
         )
       })}
-      {probability != null && (
+      {value != null && (
         <>
           <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={C.text} strokeWidth={2} strokeLinecap="round" />
           <circle cx={cx} cy={cy} r={4} fill={C.text} />
         </>
       )}
       <text x={cx} y={cy + 28} textAnchor="middle" fill={hue} fontSize={20} fontWeight={600} fontFamily='"JetBrains Mono", monospace'>
-        {pct(probability)}
+        {value == null ? '—' : `$${(value / 1e6).toFixed(2)}m`}
       </text>
       <text x={cx} y={cy + 42} textAnchor="middle" fill={C.muted} fontSize={9} letterSpacing="0.1em" fontFamily='"JetBrains Mono", monospace'>
-        CHANCE OF {planLabel}
+        REAR VIEW FORECAST
       </text>
     </svg>
   )
@@ -651,7 +651,7 @@ export default function RevenueTargets() {
           />
           <PacingPanel
             title={`Rear View Forecast — ${thisYear}`}
-            gauge={<ChanceGauge probability={rearView?.probability} planLabel={`$${(BASE_TOTAL / 1e6).toFixed(1)}M`} />}
+            gauge={<ForecastGauge value={rearView?.forecast} plan={BASE_TOTAL} />}
             right={
               <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
                 growth trend × seasonal shape
