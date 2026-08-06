@@ -179,7 +179,8 @@ export function useCreateOpportunityTask() {
         .from("staff_tasks")
         .insert({
           title,
-          description: payload.description || `Opportunity: ${payload.deal_name} (${payload.account_name})`,
+          description: payload.description ||
+            `Opportunity: ${payload.deal_name}${payload.account_name ? ` (${payload.account_name})` : ""}`,
           status: "not_started",
           assigned_to: payload.assigned_to,
           created_by: payload.created_by,

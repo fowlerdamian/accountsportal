@@ -215,8 +215,8 @@ export default function PressureField({
           ctx.stroke();
         }
 
-        // Label only once the bubble can hold it legibly.
-        const label = n.opp.account_name || n.opp.deal_name;
+        // Company name only, and only once the bubble can hold it legibly.
+        const label = n.opp.account_name;
         if (label) {
           const textW = ctx.measureText(label).width;
           if (textW + 10 <= n.state.haloRadius * 2) {

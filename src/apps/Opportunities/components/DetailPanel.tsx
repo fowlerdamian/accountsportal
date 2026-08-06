@@ -195,8 +195,9 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Company first, opportunity beneath — both always shown here. */}
           <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
-            {opportunity.account_name || opportunity.deal_name}
+            {opportunity.account_name || "No linked company"}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
             {opportunity.deal_name}

@@ -179,7 +179,9 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
     return {
       hubspot_deal_id: d.id,
       deal_name: p.dealname ?? "(unnamed deal)",
-      account_name: companyNames.get(companyIdByDeal.get(d.id) ?? "") || p.dealname || "",
+      // Company name only — never the deal name. Bubbles label by company;
+      // deals with no associated company stay unlabelled on the field.
+      account_name: companyNames.get(companyIdByDeal.get(d.id) ?? "") || "",
       amount: p.amount != null && p.amount !== "" ? Number(p.amount) : null,
       probability: probability != null && Number.isFinite(probability) ? Math.min(1, Math.max(0, probability)) : null,
       expected_close_date: p.closedate ? p.closedate.slice(0, 10) : null,
