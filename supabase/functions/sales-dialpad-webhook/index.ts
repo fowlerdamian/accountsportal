@@ -18,6 +18,46 @@ function deriveStatus(payload: Record<string, any>): "answered" | "missed" | "vo
   return "missed";
 }
 
+// ─── JWT verification ─────────────────────────────────────────────────────────
+// Dialpad signs webhook events as HS256 JWTs using the secret configured on the
+// webhook. Verify the signature before trusting the payload.
+
+function b64urlToBytes(b64url: string): Uint8Array {
+  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = b64.padEnd(b64.length + (4 - b64.length % 4) % 4, "=");
+  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+}
+
+async function verifyDialpadJwt(body: string, secret: string): Promise<Record<string, any> | null> {
+  const parts = body.trim().split(".");
+  if (parts.length !== 3) return null;
+  const [headerB64, payloadB64, sigB64] = parts;
+
+  try {
+    const header = JSON.parse(new TextDecoder().decode(b64urlToBytes(headerB64)));
+    if (header.alg !== "HS256") return null;
+
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      b64urlToBytes(sigB64),
+      new TextEncoder().encode(`${headerB64}.${payloadB64}`),
+    );
+    if (!valid) return null;
+
+    return JSON.parse(new TextDecoder().decode(b64urlToBytes(payloadB64)));
+  } catch {
+    return null;
+  }
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -25,22 +65,26 @@ serve(async (req) => {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
+  // Fail closed: the webhook secret must be configured, and every event must be
+  // a JWT with a valid HMAC-SHA256 signature under it.
+  const webhookSecret = Deno.env.get("DIALPAD_WEBHOOK_SECRET");
+  if (!webhookSecret) {
+    console.error("[dialpad-webhook] DIALPAD_WEBHOOK_SECRET not set — refusing request");
+    return new Response(JSON.stringify({ error: "auth not configured" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   let payload: Record<string, any>;
   try {
     const body = await req.text();
-    // Dialpad sends events as a JWT — decode the payload segment (base64url → JSON)
-    if (body.includes(".")) {
-      const parts = body.trim().split(".");
-      if (parts.length >= 2) {
-        const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-        const json = atob(b64.padEnd(b64.length + (4 - b64.length % 4) % 4, "="));
-        payload = JSON.parse(json);
-      } else {
-        payload = JSON.parse(body);
-      }
-    } else {
-      payload = JSON.parse(body);
+    const verified = await verifyDialpadJwt(body, webhookSecret);
+    if (!verified) {
+      console.warn("[dialpad-webhook] rejected event with invalid/missing JWT signature");
+      return new Response("Unauthorized", { status: 401 });
     }
+    payload = verified;
   } catch {
     return new Response("Bad Request", { status: 400 });
   }
