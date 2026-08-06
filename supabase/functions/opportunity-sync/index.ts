@@ -127,6 +127,28 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
     } while (after && deals.length < 1000);
   }
 
+  // 1b. Stage id → label (dealstage holds internal ids for custom pipelines).
+  const stageLabels = new Map<string, string>();
+  try {
+    const pipes = await hs("/crm/v3/pipelines/deals");
+    for (const pl of pipes.results ?? []) {
+      for (const s of pl.stages ?? []) stageLabels.set(String(s.id), s.label ?? String(s.id));
+    }
+  } catch (err) {
+    console.warn("[opportunity-sync] stage labels unavailable:", err instanceof Error ? err.message : err);
+  }
+
+  // 1c. MQL-stage deals and $0 / no-amount deals never reach the field.
+  const fetchedCount = deals.length;
+  const kept = deals.filter((d) => {
+    const amount = d.properties.amount != null && d.properties.amount !== "" ? Number(d.properties.amount) : 0;
+    if (!(amount > 0)) return false;
+    const label = stageLabels.get(String(d.properties.dealstage ?? "")) ?? d.properties.dealstage ?? "";
+    return !/mql/i.test(label);
+  });
+  deals.length = 0;
+  deals.push(...kept);
+
   // 2. Owners id → name/email. Tolerated failure: the token may lack the
   //    owners scope; the field still works with unattributed owners.
   const owners = new Map<string, { name: string; email: string }>();
@@ -187,7 +209,7 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
       expected_close_date: p.closedate ? p.closedate.slice(0, 10) : null,
       owner_name: owner?.name ?? null,
       owner_email: owner?.email ?? null,
-      stage: p.dealstage ?? null,
+      stage: p.dealstage ? stageLabels.get(String(p.dealstage)) ?? p.dealstage : null,
       division: divisionByDeal.get(d.id) ?? null,
       is_open: true,
       hubspot_created_at: p.createdate ?? null,
@@ -199,8 +221,8 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
     if (error) throw new Error(`upsert opportunities: ${error.message}`);
   }
 
-  // 5. Deals that closed — or no longer match the FleetCraft/AGA filter —
-  //    leave the field.
+  // 5. Deals that closed — or no longer match the FleetCraft/AGA filter, or
+  //    dropped to MQL/$0 — leave the field.
   const { data: localOpen, error: openErr } = await db
     .from("opportunities").select("id, hubspot_deal_id").eq("is_open", true);
   if (openErr) throw new Error(openErr.message);
@@ -279,6 +301,7 @@ async function pullFromHubSpot(hs: ReturnType<typeof hsFetch>, db: ReturnType<ty
 
   return {
     synced: rows.length,
+    excluded: fetchedCount - rows.length,
     closed: closedLocal.length,
     activities: activityCount,
     ...(scopeWarnings.length > 0 ? { warnings: scopeWarnings } : {}),
