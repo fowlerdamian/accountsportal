@@ -76,17 +76,15 @@ serve(async (req) => {
     //   b) Store in Supabase Vault (KV)
     //   c) Manually set via: supabase secrets set UPWORK_ACCESS_TOKEN=... UPWORK_REFRESH_TOKEN=...
     //
-    // For the stub, log to console so the admin can copy and set manually:
-    console.log("=== UPWORK TOKENS ===");
-    console.log("Access token:", tokens.access_token);
-    console.log("Refresh token:", tokens.refresh_token);
-    console.log("Expires in:", tokens.expires_in, "seconds");
-    console.log("Run: supabase secrets set UPWORK_ACCESS_TOKEN=<above> UPWORK_REFRESH_TOKEN=<above>");
+    // Never log token values — edge function logs are not a secret store.
+    console.log(`[upwork-oauth-callback] tokens received (expires in ${tokens.expires_in}s)`);
 
     return new Response(
       `<html><body style="font-family:sans-serif;padding:40px">
         <h2>Upwork Connected</h2>
-        <p>OAuth tokens received. Check the Edge Function logs and run the supabase secrets set commands shown there.</p>
+        <p>OAuth tokens received. Set UPWORK_ACCESS_TOKEN / UPWORK_REFRESH_TOKEN via
+        <code>supabase secrets set</code> (tokens are intentionally not logged — re-run the
+        authorisation with token persistence wired up, per the notes in this function).</p>
         <p>Once secrets are set, the sync functions will activate on the next cron run.</p>
       </body></html>`,
       { headers: { "Content-Type": "text/html" } },
