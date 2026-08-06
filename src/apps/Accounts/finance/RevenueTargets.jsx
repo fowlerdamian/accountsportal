@@ -244,9 +244,57 @@ function PacingGauge({ ratio, label }) {
   )
 }
 
-// Dial + stat drawer. `ratio` drives the gauge; `rows` is the breakdown that
-// slides out from behind the dial on click (null rows → emptyHint).
-function PacingPanel({ title, right, gaugeLabel, ratio, rows, emptyHint }) {
+// Dollar-scale run-rate dial: needle at the forecast year-end, plan marked on
+// the arc. Zones are relative to plan (red <90%, orange 90–100%, green ≥plan).
+function RunRateGauge({ value, plan, min = 1_000_000, max = 2_500_000 }) {
+  const cx = 110; const cy = 104; const r = 80
+  const toDeg = (v) => -GAUGE_SWEEP / 2 + ((Math.min(Math.max(v, min), max) - min) / (max - min)) * GAUGE_SWEEP
+  const hue = value == null ? C.faint : value >= plan ? C.green : value >= plan * 0.9 ? palette.orange : C.red
+  const zones = [[min, plan * 0.9, C.red], [plan * 0.9, plan, palette.orange], [plan, max, C.green]]
+  const deg = toDeg(value ?? min)
+  const [nx, ny] = polarXY(cx, cy, r - 16, deg)
+  return (
+    <svg viewBox="0 0 220 150" style={{ width: 220, flexShrink: 0 }} role="img" aria-label={`Rear view forecast ${value == null ? '—' : compact(value)}`}>
+      {zones.map(([a, b, col]) => (
+        <path key={a} d={arcPath(cx, cy, r, toDeg(a), toDeg(b))} fill="none" stroke={col} strokeOpacity={0.2} strokeWidth={11} />
+      ))}
+      {value != null && (
+        <path d={arcPath(cx, cy, r, -GAUGE_SWEEP / 2, deg)} fill="none" stroke={hue} strokeWidth={11} strokeLinecap="round" />
+      )}
+      {[min, 1_500_000, plan, max].map((t) => {
+        const d = toDeg(t)
+        const [ox, oy] = polarXY(cx, cy, r + 9, d)
+        const [ix, iy] = polarXY(cx, cy, r + 5, d)
+        const [tx, ty] = polarXY(cx, cy, r + 20, d)
+        const onPlan = t === plan
+        return (
+          <g key={t}>
+            <line x1={ix} y1={iy} x2={ox} y2={oy} stroke={onPlan ? C.text : C.faint} strokeWidth={onPlan ? 2 : 1} />
+            <text x={tx} y={ty + 3} textAnchor="middle" fill={onPlan ? C.muted : C.faint} fontSize={9} fontFamily='"JetBrains Mono", monospace'>
+              {`$${(t / 1e6).toFixed(1)}m`}
+            </text>
+          </g>
+        )
+      })}
+      {value != null && (
+        <>
+          <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={C.text} strokeWidth={2} strokeLinecap="round" />
+          <circle cx={cx} cy={cy} r={4} fill={C.text} />
+        </>
+      )}
+      <text x={cx} y={cy + 28} textAnchor="middle" fill={hue} fontSize={20} fontWeight={600} fontFamily='"JetBrains Mono", monospace'>
+        {value == null ? '—' : `$${(value / 1e6).toFixed(2)}m`}
+      </text>
+      <text x={cx} y={cy + 42} textAnchor="middle" fill={C.muted} fontSize={9} letterSpacing="0.1em" fontFamily='"JetBrains Mono", monospace'>
+        REAR VIEW FORECAST
+      </text>
+    </svg>
+  )
+}
+
+// Dial + stat drawer. `ratio` drives the gauge (or pass a custom `gauge` node);
+// `rows` is the breakdown that slides out from behind the dial on click.
+function PacingPanel({ title, right, gaugeLabel, ratio, gauge, rows, emptyHint }) {
   const [open, setOpen] = useState(false)
   return (
     <Panel title={title} icon={GaugeIcon} right={right}>
@@ -263,7 +311,7 @@ function PacingPanel({ title, right, gaugeLabel, ratio, rows, emptyHint }) {
               position: 'relative', zIndex: 1, flexShrink: 0, lineHeight: 0,
             }}
           >
-            <PacingGauge ratio={ratio} label={gaugeLabel} />
+            {gauge ?? <PacingGauge ratio={ratio} label={gaugeLabel} />}
           </button>
           <div style={{ overflow: 'hidden', flex: 1 }}>
             <div style={{
@@ -487,15 +535,17 @@ export default function RevenueTargets() {
   const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
   const mtdPace = mtdTarget ? (mtdActual ?? 0) / mtdTarget : null
   const mtdProjected = mtdPace != null && curr?.target != null ? curr.target * mtdPace : null
-  // Year outlook: actuals banked + current month at its run-rate + remaining
-  // catch-up targets, measured against the $2.0m plan. Moves proportionally
-  // with this month's performance without being pinned near 100%.
-  const ytdPastActuals = sumRow(thisYear, 'actual', thisMonth - 1)
-  const monthAtRunRate = mtdActual != null && elapsedFrac > 0 ? mtdActual / elapsedFrac : curr?.target ?? null
-  const remainingTargets = (sumRow(thisYear, 'target', 12) ?? 0) - (sumRow(thisYear, 'target', thisMonth) ?? 0)
-  const hasYearTargets = sumRow(thisYear, 'target', 12) != null
-  const yearProjection = hasYearTargets ? (ytdPastActuals ?? 0) + (monthAtRunRate ?? 0) + remainingTargets : null
-  const yearOutlookRatio = yearProjection != null ? yearProjection / BASE_TOTAL : null
+  // Rear View Forecast: purely backward-looking. Assume the rest of the year
+  // runs at the same %-of-seasonal-plan pace as the year to date, and project
+  // the year-end dollar figure. Plan-to-date uses the static seasonal plan
+  // (planBase), not catch-up targets, so past misses aren't double-counted.
+  const planToDate = seasonality
+    ? seasonality.rolling.months.reduce((a, m) => (
+        a + (m.month < thisMonth ? m.planBase : m.month === thisMonth ? m.planBase * elapsedFrac : 0)
+      ), 0)
+    : null
+  const trailingPace = planToDate ? (ytdActual ?? 0) / planToDate : null
+  const rearViewForecast = trailingPace != null ? BASE_TOTAL * trailingPace : null
 
   const selYears = useMemo(() => {
     const sel = selYearsRaw ?? [thisYear]
@@ -591,27 +641,30 @@ export default function RevenueTargets() {
             emptyHint={`No target set for ${MONTHS[thisMonth - 1]} — enter one in the matrix below to enable pacing.`}
           />
           <PacingPanel
-            title={`Year Outlook — ${thisYear}`}
-            gaugeLabel="YEAR OUTLOOK"
-            ratio={yearOutlookRatio}
+            title={`Rear View Forecast — ${thisYear}`}
+            gauge={<RunRateGauge value={rearViewForecast} plan={BASE_TOTAL} />}
             right={
               <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-                projected year-end vs ${(BASE_TOTAL / 1e6).toFixed(1)}m plan
+                if the rest of {thisYear} runs at YTD pace
               </span>
             }
-            rows={!hasYearTargets ? null : [
-              { label: 'Completed months actual', value: money(ytdPastActuals), color: C.accent },
-              { label: `${MONTHS[thisMonth - 1]} at run-rate`, value: money(monthAtRunRate), color: C.text },
-              { label: 'Remaining month targets', value: money(remainingTargets), color: C.target },
-              { label: 'Projected year-end', value: money(yearProjection), color: paceHue(yearOutlookRatio) },
+            rows={rearViewForecast == null ? null : [
+              { label: 'YTD actual', value: money(ytdActual), color: C.accent },
+              { label: 'Seasonal plan to date', value: money(planToDate), color: C.target },
+              { label: 'Trailing pace', value: pct(trailingPace, 1), color: paceHue(trailingPace) },
               {
-                label: 'Projected variance',
-                value: money(yearProjection - BASE_TOTAL),
-                color: yearProjection >= BASE_TOTAL ? C.green : C.red,
+                label: 'Forecast year-end',
+                value: money(rearViewForecast),
+                color: rearViewForecast >= BASE_TOTAL ? C.green : rearViewForecast >= BASE_TOTAL * 0.9 ? palette.orange : C.red,
+              },
+              {
+                label: 'Forecast variance',
+                value: money(rearViewForecast - BASE_TOTAL),
+                color: rearViewForecast >= BASE_TOTAL ? C.green : C.red,
               },
               { label: 'Year plan', value: money(BASE_TOTAL), color: C.muted },
             ]}
-            emptyHint={`No ${thisYear} targets set — enter them in the matrix below to enable pacing.`}
+            emptyHint="Needs revenue history to compute the seasonal plan — check the sync."
           />
         </div>
 
