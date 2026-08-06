@@ -7,7 +7,7 @@ import {
 import { CurrencyDollarIcon, TargetIcon, ChartLineIcon, GaugeIcon, TriangleAlertIcon } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
-import { computeSeasonalityTargets, applyRollingReallocation } from './seasonalityTargets.js'
+import { computeSeasonalityTargets, applyRollingReallocation, computeRearViewForecast } from './seasonalityTargets.js'
 
 // Theme mirrors FinanceDashboard.jsx (concrete hex so recharts SVG resolves).
 const C = {
@@ -244,49 +244,49 @@ function PacingGauge({ ratio, label }) {
   )
 }
 
-// Dollar-scale run-rate dial: needle at the forecast year-end, plan marked on
-// the arc. Zones are relative to plan (red <90%, orange 90–100%, green ≥plan).
-function RunRateGauge({ value, plan, min = 1_000_000, max = 2_500_000 }) {
+// Probability dial: 0–100% chance of hitting the plan, from the rear-view
+// forecast distribution. Zones: red <40%, orange 40–65%, green ≥65%.
+function ChanceGauge({ probability, planLabel }) {
   const cx = 110; const cy = 104; const r = 80
-  const toDeg = (v) => -GAUGE_SWEEP / 2 + ((Math.min(Math.max(v, min), max) - min) / (max - min)) * GAUGE_SWEEP
-  const hue = value == null ? C.faint : value >= plan ? C.green : value >= plan * 0.9 ? palette.orange : C.red
-  const zones = [[min, plan * 0.9, C.red], [plan * 0.9, plan, palette.orange], [plan, max, C.green]]
-  const deg = toDeg(value ?? min)
+  const toDeg = (p) => -GAUGE_SWEEP / 2 + Math.min(Math.max(p, 0), 1) * GAUGE_SWEEP
+  const hue = probability == null ? C.faint : probability >= 0.65 ? C.green : probability >= 0.4 ? palette.orange : C.red
+  const zones = [[0, 0.4, C.red], [0.4, 0.65, palette.orange], [0.65, 1, C.green]]
+  const deg = toDeg(probability ?? 0)
   const [nx, ny] = polarXY(cx, cy, r - 16, deg)
   return (
-    <svg viewBox="0 0 220 150" style={{ width: 220, flexShrink: 0 }} role="img" aria-label={`Rear view forecast ${value == null ? '—' : compact(value)}`}>
+    <svg viewBox="0 0 220 150" style={{ width: 220, flexShrink: 0 }} role="img" aria-label={`Chance of hitting ${planLabel}: ${pct(probability)}`}>
       {zones.map(([a, b, col]) => (
         <path key={a} d={arcPath(cx, cy, r, toDeg(a), toDeg(b))} fill="none" stroke={col} strokeOpacity={0.2} strokeWidth={11} />
       ))}
-      {value != null && (
+      {probability != null && probability > 0 && (
         <path d={arcPath(cx, cy, r, -GAUGE_SWEEP / 2, deg)} fill="none" stroke={hue} strokeWidth={11} strokeLinecap="round" />
       )}
-      {[min, 1_500_000, plan, max].map((t) => {
+      {[0, 0.25, 0.5, 0.75, 1].map((t) => {
         const d = toDeg(t)
         const [ox, oy] = polarXY(cx, cy, r + 9, d)
         const [ix, iy] = polarXY(cx, cy, r + 5, d)
         const [tx, ty] = polarXY(cx, cy, r + 20, d)
-        const onPlan = t === plan
+        const mid = t === 0.5
         return (
           <g key={t}>
-            <line x1={ix} y1={iy} x2={ox} y2={oy} stroke={onPlan ? C.text : C.faint} strokeWidth={onPlan ? 2 : 1} />
-            <text x={tx} y={ty + 3} textAnchor="middle" fill={onPlan ? C.muted : C.faint} fontSize={9} fontFamily='"JetBrains Mono", monospace'>
-              {`$${(t / 1e6).toFixed(1)}m`}
+            <line x1={ix} y1={iy} x2={ox} y2={oy} stroke={mid ? C.text : C.faint} strokeWidth={mid ? 2 : 1} />
+            <text x={tx} y={ty + 3} textAnchor="middle" fill={mid ? C.muted : C.faint} fontSize={9} fontFamily='"JetBrains Mono", monospace'>
+              {Math.round(t * 100)}%
             </text>
           </g>
         )
       })}
-      {value != null && (
+      {probability != null && (
         <>
           <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={C.text} strokeWidth={2} strokeLinecap="round" />
           <circle cx={cx} cy={cy} r={4} fill={C.text} />
         </>
       )}
       <text x={cx} y={cy + 28} textAnchor="middle" fill={hue} fontSize={20} fontWeight={600} fontFamily='"JetBrains Mono", monospace'>
-        {value == null ? '—' : `$${(value / 1e6).toFixed(2)}m`}
+        {pct(probability)}
       </text>
       <text x={cx} y={cy + 42} textAnchor="middle" fill={C.muted} fontSize={9} letterSpacing="0.1em" fontFamily='"JetBrains Mono", monospace'>
-        REAR VIEW FORECAST
+        CHANCE OF {planLabel}
       </text>
     </svg>
   )
@@ -438,6 +438,26 @@ export default function RevenueTargets() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, thisYear])
 
+  // Rear-view forecast: completed 2026 months × historical (full-year ÷ same-
+  // months) ratios → year-end distribution → chance of hitting the plan.
+  const rearView = useMemo(() => {
+    if (!data?.revenue?.length) return null
+    const actuals = data.revenue.map((r) => {
+      const d = new Date(r.period_month)
+      return { year: d.getFullYear(), month: d.getMonth() + 1, revenue: Number(r.revenue) }
+    })
+    try {
+      const rv = computeRearViewForecast(actuals, { year: thisYear, planTotal: BASE_TOTAL, now })
+      for (const w of rv.warnings) console.warn('[rear-view]', w)
+      for (const l of rv.logs) console.info('[rear-view]', l)
+      return rv
+    } catch (e) {
+      console.error('[rear-view]', e)
+      return null
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, thisYear])
+
   // Auto-persist adjusted targets for OPEN months only — completed months keep
   // the target that was set at the time, so past hit/miss stays honest. Writes
   // only when the stored values differ, so this settles after one pass.
@@ -535,17 +555,6 @@ export default function RevenueTargets() {
   const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
   const mtdPace = mtdTarget ? (mtdActual ?? 0) / mtdTarget : null
   const mtdProjected = mtdPace != null && curr?.target != null ? curr.target * mtdPace : null
-  // Rear View Forecast: purely backward-looking. Assume the rest of the year
-  // runs at the same %-of-seasonal-plan pace as the year to date, and project
-  // the year-end dollar figure. Plan-to-date uses the static seasonal plan
-  // (planBase), not catch-up targets, so past misses aren't double-counted.
-  const planToDate = seasonality
-    ? seasonality.rolling.months.reduce((a, m) => (
-        a + (m.month < thisMonth ? m.planBase : m.month === thisMonth ? m.planBase * elapsedFrac : 0)
-      ), 0)
-    : null
-  const trailingPace = planToDate ? (ytdActual ?? 0) / planToDate : null
-  const rearViewForecast = trailingPace != null ? BASE_TOTAL * trailingPace : null
 
   const selYears = useMemo(() => {
     const sel = selYearsRaw ?? [thisYear]
@@ -642,29 +651,29 @@ export default function RevenueTargets() {
           />
           <PacingPanel
             title={`Rear View Forecast — ${thisYear}`}
-            gauge={<RunRateGauge value={rearViewForecast} plan={BASE_TOTAL} />}
+            gauge={<ChanceGauge probability={rearView?.probability} planLabel={`$${(BASE_TOTAL / 1e6).toFixed(1)}M`} />}
             right={
               <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-                if the rest of {thisYear} runs at YTD pace
+                {rearView?.forecast != null ? `calibrated on ${rearView.factors.length} yrs of seasonality` : ''}
               </span>
             }
-            rows={rearViewForecast == null ? null : [
-              { label: 'YTD actual', value: money(ytdActual), color: C.accent },
-              { label: 'Seasonal plan to date', value: money(planToDate), color: C.target },
-              { label: 'Trailing pace', value: pct(trailingPace, 1), color: paceHue(trailingPace) },
+            rows={rearView?.forecast == null ? null : [
+              { label: `Completed months (${rearView.monthsUsed}) actual`, value: money(rearView.ytd), color: C.accent },
+              { label: 'Historical multiplier (median)', value: `×${rearView.medianFactor.toFixed(2)}`, color: C.target },
               {
                 label: 'Forecast year-end',
-                value: money(rearViewForecast),
-                color: rearViewForecast >= BASE_TOTAL ? C.green : rearViewForecast >= BASE_TOTAL * 0.9 ? palette.orange : C.red,
+                value: money(rearView.forecast),
+                color: rearView.forecast >= BASE_TOTAL ? C.green : rearView.forecast >= BASE_TOTAL * 0.9 ? palette.orange : C.red,
               },
+              { label: '±1σ range', value: `${compact(rearView.forecast - rearView.sigma)}–${compact(rearView.forecast + rearView.sigma)}`, color: C.muted },
               {
-                label: 'Forecast variance',
-                value: money(rearViewForecast - BASE_TOTAL),
-                color: rearViewForecast >= BASE_TOTAL ? C.green : C.red,
+                label: `Chance of ≥ $${(BASE_TOTAL / 1e6).toFixed(1)}m`,
+                value: pct(rearView.probability),
+                color: rearView.probability >= 0.65 ? C.green : rearView.probability >= 0.4 ? palette.orange : C.red,
               },
               { label: 'Year plan', value: money(BASE_TOTAL), color: C.muted },
             ]}
-            emptyHint="Needs revenue history to compute the seasonal plan — check the sync."
+            emptyHint="Not enough history for a rear-view forecast — needs 2+ complete prior years."
           />
         </div>
 

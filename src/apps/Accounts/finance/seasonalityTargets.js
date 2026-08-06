@@ -126,6 +126,88 @@ export function computeSeasonalityTargets(actuals, opts = {}) {
   }
 }
 
+// Standard normal CDF via the Abramowitz–Stegun 7.1.26 erf approximation
+// (|error| < 1.5e-7 — far tighter than the 4-sample spread it's applied to).
+function normCdf(z) {
+  const x = Math.abs(z) / Math.SQRT2
+  const t = 1 / (1 + 0.3275911 * x)
+  const erf = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x)
+  return 0.5 * (1 + (z < 0 ? -erf : erf))
+}
+
+/**
+ * Rear-view year-end forecast: extrapolate the target year's completed months
+ * using the ratio (full year ÷ same months) observed in each complete
+ * historical year — i.e. cross-reference YTD with historical seasonality —
+ * then estimate the chance of reaching `planTotal` from the spread of the
+ * implied outcomes (normal approximation, sample std, n−1).
+ *
+ * @param {Array<{year:number, month:number, revenue:number}>} actuals
+ * @param {{year:number, planTotal?:number, now?:Date}} opts
+ * @returns {{
+ *   forecast:number|null, probability:number|null, sigma:number|null,
+ *   ytd:number, medianFactor:number|null, monthsUsed:number,
+ *   factors:Array<{year:number, factor:number}>, logs:string[], warnings:string[],
+ * }}
+ */
+export function computeRearViewForecast(actuals, opts) {
+  const { year, planTotal = 2_000_000, now = new Date() } = opts
+  const logs = []
+  const warnings = []
+  const empty = { forecast: null, probability: null, sigma: null, ytd: 0, medianFactor: null, monthsUsed: 0, factors: [], logs, warnings }
+
+  const curYear = now.getFullYear()
+  const curMonth = now.getMonth() + 1
+  // Completed months of the target year only — the partial current month is
+  // excluded from both sides of the ratio.
+  const uptoMonth = year < curYear ? 13 : year > curYear ? 1 : curMonth
+  const window = []
+  for (let m = 1; m < uptoMonth; m++) window.push(m)
+  if (!window.length) {
+    warnings.push('No completed months in the target year yet — rear-view forecast unavailable')
+    return empty
+  }
+
+  const byYear = new Map()
+  for (const a of actuals) {
+    if (!byYear.has(a.year)) byYear.set(a.year, new Map())
+    byYear.get(a.year).set(a.month, a.revenue)
+  }
+
+  const ytd = window.reduce((s, m) => s + (byYear.get(year)?.get(m) ?? 0), 0)
+  if (ytd <= 0) {
+    warnings.push(`No actuals recorded for ${year}'s completed months — rear-view forecast unavailable`)
+    return empty
+  }
+
+  const factors = []
+  for (const y of [...byYear.keys()].sort()) {
+    if (y >= year) continue
+    const months = byYear.get(y)
+    const complete = months.size >= 12 && window.every((m) => months.get(m) != null)
+    if (!complete) { logs.push(`${y} skipped for rear-view factor (incomplete year)`); continue }
+    const portion = window.reduce((s, m) => s + months.get(m), 0)
+    if (portion <= 0) { logs.push(`${y} skipped for rear-view factor (zero revenue in window)`); continue }
+    let total = 0
+    for (let m = 1; m <= 12; m++) total += months.get(m) ?? 0
+    factors.push({ year: y, factor: total / portion })
+  }
+  if (factors.length < 2) {
+    warnings.push(`Only ${factors.length} complete historical year(s) — not enough to calibrate a rear-view forecast`)
+    return { ...empty, ytd, factors, monthsUsed: window.length }
+  }
+
+  const fs = factors.map((f) => f.factor)
+  const medianFactor = median(fs)
+  const forecast = ytd * medianFactor
+  const implied = fs.map((f) => ytd * f)
+  const mean = implied.reduce((a, b) => a + b, 0) / implied.length
+  const sigma = Math.sqrt(implied.reduce((a, v) => a + (v - mean) ** 2, 0) / (implied.length - 1))
+  const probability = sigma > 0 ? 1 - normCdf((planTotal - forecast) / sigma) : (forecast >= planTotal ? 1 : 0)
+  logs.push(`Rear-view: ${window.length} completed month(s) × factors [${fs.map((f) => f.toFixed(3)).join(', ')}] → median ×${medianFactor.toFixed(3)}, σ $${Math.round(sigma).toLocaleString()}`)
+  return { forecast, probability, sigma, ytd, medianFactor, monthsUsed: window.length, factors, logs, warnings }
+}
+
 // Round `total` across the given index weights, residual to the largest slot.
 function allocateOver(total, weights) {
   const weightSum = weights.reduce((a, b) => a + b, 0)
