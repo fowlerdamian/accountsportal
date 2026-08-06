@@ -85,6 +85,12 @@ export default function PressureField({
   // Data changes (new sync, ticked task) recompute immediately.
   const dataRef = useRef({ activitiesByOpp, tasksByOpp });
   dataRef.current = { activitiesByOpp, tasksByOpp };
+  const oppsRef = useRef(opportunities);
+  oppsRef.current = opportunities;
+
+  // Rebuild the simulation only when the SET of deals changes — a refetch that
+  // merely produces a new array identity must not reset the field's energy.
+  const membershipKey = opportunities.map((o) => o.id).sort().join("|");
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -116,7 +122,10 @@ export default function PressureField({
     sizeCanvas();
 
     const computeStates = (nowMs: number) => {
+      // Always read the freshest opportunity rows (parked flags, amounts).
+      const oppById = new Map(oppsRef.current.map((o) => [o.id, o]));
       for (const n of nodesRef.current) {
+        n.opp = oppById.get(n.id) ?? n.opp;
         n.state = computeOpportunityState(
           n.opp,
           dataRef.current.activitiesByOpp.get(n.id) ?? [],
@@ -127,10 +136,11 @@ export default function PressureField({
     };
 
     // Preserve positions for bubbles that already exist; seed new ones centre-out.
+    const opps = oppsRef.current;
     const prev = new Map(nodesRef.current.map((n) => [n.id, n]));
-    nodesRef.current = opportunities.map((opp, i) => {
+    nodesRef.current = opps.map((opp, i) => {
       const existing = prev.get(opp.id);
-      const angle = (i / Math.max(1, opportunities.length)) * Math.PI * 2;
+      const angle = (i / Math.max(1, opps.length)) * Math.PI * 2;
       return {
         id: opp.id,
         opp,
@@ -151,10 +161,15 @@ export default function PressureField({
         // Collision radius re-read from current bubble size on every tick.
         forceCollide<FieldNode>().radius((d) => d.state.haloRadius + 2).iterations(2),
       )
-      .alphaDecay(reducedMotion ? 0.0228 : 0) // reduced motion: settle then stop
-      .velocityDecay(0.35)
+      // Default decay everywhere: the field must come to rest, not buzz forever.
+      .alphaDecay(0.0228)
+      .velocityDecay(0.4)
       .stop();
     simRef.current = sim;
+
+    // Pre-settle off-screen so mount shows a resolved layout, not an explosion.
+    sim.alpha(1);
+    for (let i = 0; i < 150; i++) sim.tick();
 
     const clampNodes = () => {
       for (const n of nodesRef.current) {
@@ -232,9 +247,7 @@ export default function PressureField({
     let stateTimer: ReturnType<typeof setInterval> | null = null;
 
     if (reducedMotion) {
-      // Settle once, synchronously, then hold positions still.
-      sim.alpha(1);
-      for (let i = 0; i < 300; i++) sim.tick();
+      // Already settled above — hold positions still.
       clampNodes();
       draw();
       // Colour and size must stay accurate even while nothing moves.
@@ -243,14 +256,18 @@ export default function PressureField({
         draw();
       }, STATE_REFRESH_MS);
     } else {
-      sim.alpha(0.9);
+      // Ease gently from the pre-settled layout; the sim decays to rest and
+      // ticks stop until something (data change, resize, click) reheats it.
+      sim.alpha(0.15);
       const loop = (t: number) => {
         if (t - lastStateRefresh > STATE_REFRESH_MS) {
           computeStates(Date.now());
           lastStateRefresh = t;
         }
-        sim.tick();
-        clampNodes();
+        if (sim.alpha() > 0.005) {
+          sim.tick();
+          clampNodes();
+        }
         draw();
         raf = requestAnimationFrame(loop);
       };
@@ -308,15 +325,18 @@ export default function PressureField({
       ro.disconnect();
       sim.stop();
     };
-    // Rebuild when the set of opportunities (or their sync state) changes;
-    // activity/task refs update via dataRef without a rebuild.
-  }, [opportunities, onSelect]);
+    // Rebuild only when deals enter/leave the field; row updates and
+    // activity/task refs flow in via oppsRef/dataRef without a rebuild.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membershipKey, onSelect]);
 
   // Nudge state recompute when register data changes (deflation must be prompt).
   useEffect(() => {
     const sim = simRef.current;
     if (!sim) return;
+    const oppById = new Map(opportunities.map((o) => [o.id, o]));
     for (const n of nodesRef.current) {
+      n.opp = oppById.get(n.id) ?? n.opp;
       n.state = computeOpportunityState(
         n.opp,
         activitiesByOpp.get(n.id) ?? [],
@@ -324,8 +344,9 @@ export default function PressureField({
         Date.now(),
       );
     }
-    sim.alpha(Math.max(sim.alpha(), 0.15));
-  }, [activitiesByOpp, tasksByOpp]);
+    // Gentle reheat so radii changes resolve, then the field rests again.
+    sim.alpha(Math.max(sim.alpha(), 0.12));
+  }, [opportunities, activitiesByOpp, tasksByOpp]);
 
   return (
     <div ref={wrapRef} style={{ position: "absolute", inset: 0 }}>
