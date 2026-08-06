@@ -233,8 +233,15 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    // Fail closed: FINANCE_CRON_SECRET must be configured (in Supabase secrets
+    // AND on the Vercel cron caller) — an unset secret refuses all requests
+    // instead of running open.
     const secret = Deno.env.get("FINANCE_CRON_SECRET");
-    if (secret && req.headers.get("x-cron-secret") !== secret) {
+    if (!secret) {
+      console.error("[xero-pl-snapshot] FINANCE_CRON_SECRET not set — refusing request");
+      return new Response(JSON.stringify({ error: "auth not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (req.headers.get("x-cron-secret") !== secret) {
       return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
