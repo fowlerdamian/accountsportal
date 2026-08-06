@@ -499,15 +499,11 @@ export default function RevenueTargets() {
   const mtdActual = curr?.actual ?? null
   const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
   const yearTarget = sumRow(thisYear, 'target', 12)
-  let yearWorkdays = 0
-  let yearWorkdaysElapsed = 0
-  for (let m = 1; m <= 12; m++) {
-    yearWorkdays += countWorkdays(m)
-    if (m < thisMonth) yearWorkdaysElapsed += countWorkdays(m)
-    else if (m === thisMonth) yearWorkdaysElapsed += workdaysElapsed
-  }
-  const yearElapsedFrac = yearWorkdays ? Math.min(yearWorkdaysElapsed / yearWorkdays, 1) : 0
-  const ytdProRataTarget = yearTarget == null ? null : yearTarget * yearElapsedFrac
+  // YTD measures against the seasonal plan, not a uniform spread: completed
+  // months at their full target + the current month's working-day share. Still
+  // ticks forward with the MTD dial each workday via elapsedFrac.
+  const ytdProRataTarget = yearTarget == null ? null
+    : (sumRow(thisYear, 'target', thisMonth - 1) ?? 0) + (curr?.target ?? 0) * elapsedFrac
 
   const selYears = useMemo(() => {
     const sel = selYearsRaw ?? [thisYear]
@@ -597,7 +593,7 @@ export default function RevenueTargets() {
             actual={ytdActual} proRata={ytdProRataTarget} fullTarget={yearTarget}
             right={
               <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-                workday {yearWorkdaysElapsed} of {yearWorkdays} · {pct(yearElapsedFrac)} elapsed
+                {yearTarget ? `${pct(ytdProRataTarget / yearTarget)} of seasonal plan elapsed` : ''}
               </span>
             }
             emptyHint={`No ${thisYear} targets set — enter them in the matrix below to enable pacing.`}
