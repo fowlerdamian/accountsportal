@@ -45,10 +45,11 @@
 param(
     [Parameter(Mandatory)] [string] $FolderPath,
     [Parameter(Mandatory)] [string] $SupabaseUrl,
-    [Parameter(Mandatory)] [string] $ServiceRoleKey,
+    [string] $ServiceRoleKey = $env:SLDPRT_SERVICE_ROLE_KEY,
     [string] $Bucket    = 'contractor-hub-files',
     [int]    $ThumbSize = 512
 )
+if (-not $ServiceRoleKey) { throw 'ServiceRoleKey missing: pass -ServiceRoleKey or set SLDPRT_SERVICE_ROLE_KEY' }
 
 $ErrorActionPreference = 'Stop'
 

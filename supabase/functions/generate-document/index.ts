@@ -1,4 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireStaff } from '../_shared/auth.ts';
+import { resolveModel } from '../_shared/model.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,10 +10,14 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
+
   try {
     const { documentTitle, clause, messages, companyProfile } = await req.json();
 
-    const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+    const apiKey = Deno.env.get('ANTHROPIC_API_KEY')!;
+    const client = new Anthropic({ apiKey });
 
     // Extract only user answers paired with the preceding assistant question
     const pairs: { question: string; answer: string }[] = [];
@@ -92,7 +98,7 @@ Write the full document now. Do not include any preamble or explanation — outp
 
 
     const stream = await client.messages.create({
-      model: 'claude-opus-4-8',
+      model: await resolveModel(apiKey, 'opus'),
       max_tokens: 8000,
       stream: true,
       messages: [{ role: 'user', content: prompt }],

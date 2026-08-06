@@ -28,11 +28,12 @@ serve(async (req) => {
     );
     const { data: { user: caller } } = await callerClient.auth.getUser();
     if (!caller) return json({ error: "Unauthorized" }, 401);
-    const [{ data: tm }, { data: prof }] = await Promise.all([
+    // Roles live in team_members and user_roles (profiles has no role column).
+    const [{ data: tm }, { data: ur }] = await Promise.all([
       supabase.from("team_members").select("role").eq("id", caller.id).maybeSingle(),
-      supabase.from("profiles").select("role").eq("id", caller.id).maybeSingle(),
+      supabase.from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").maybeSingle(),
     ]);
-    if (tm?.role !== "admin" && prof?.role !== "admin") return json({ error: "Forbidden" }, 403);
+    if (tm?.role !== "admin" && !ur) return json({ error: "Forbidden" }, 403);
 
     const body = await req.json();
     const { action } = body;

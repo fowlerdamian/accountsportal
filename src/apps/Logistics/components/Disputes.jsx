@@ -31,11 +31,12 @@ export default function Disputes() {
   const [panelBusy,   setPanelBusy]   = useState(false)
 
   const fetchDisputes = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('disputes')
       .select('*, freight_invoices(id, invoice_ref, invoice_date, carriers(name, claims_email, claims_cc, account_number)), dispute_events(*)')
       .order('created_at', { ascending: false })
-    if (data) setDisputes(data)
+    if (error) flash('err', `Failed to load disputes — ${error.message}`)
+    else if (data) setDisputes(data)
     setLoading(false)
   }
 
@@ -76,7 +77,8 @@ export default function Disputes() {
 
   const openCreditModal = (d) => {
     setCreditFor(d)
-    setCreditAmount(String(Number(d.amount_claimed) - Number(d.amount_recovered) || ''))
+    const outstanding = Number(d.amount_claimed) - Number(d.amount_recovered)
+    setCreditAmount(outstanding ? outstanding.toFixed(2) : '')
   }
 
   const saveCredit = async () => {

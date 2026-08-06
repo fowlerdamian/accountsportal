@@ -1,3 +1,5 @@
+import { requireStaff } from '../_shared/auth.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -81,6 +83,9 @@ function detectBrokenFormatting(content: string): string[] {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
 
   try {
     const { documents, allDocTitles = [] }: { documents: DocumentInput[]; allDocTitles: string[] } = await req.json();

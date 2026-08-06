@@ -357,6 +357,18 @@ async function dispatch(msg: RpcRequest): Promise<unknown | null> {
   }
 }
 
+// Constant-time string comparison so the bearer check doesn't leak match
+// position through response timing.
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  if (ab.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];
+  return diff === 0;
+}
+
 // ─── HTTP entrypoint ─────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -373,16 +385,22 @@ serve(async (req) => {
     return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
   }
 
-  // Bearer-token gate (only enforced when CIN7_MCP_TOKEN is configured).
+  // Bearer-token gate — fail closed: if CIN7_MCP_TOKEN is not configured,
+  // refuse every request rather than running open.
   const expected = Deno.env.get("CIN7_MCP_TOKEN");
-  if (expected) {
-    const auth = req.headers.get("Authorization") ?? "";
-    if (auth !== `Bearer ${expected}`) {
-      return new Response(
-        JSON.stringify(rpcError(null, -32001, "Unauthorized")),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+  if (!expected) {
+    console.error("[cin7-mcp] CIN7_MCP_TOKEN not set — refusing request");
+    return new Response(
+      JSON.stringify(rpcError(null, -32000, "auth not configured")),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+  const auth = req.headers.get("Authorization") ?? "";
+  if (!timingSafeEqual(auth, `Bearer ${expected}`)) {
+    return new Response(
+      JSON.stringify(rpcError(null, -32001, "Unauthorized")),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 
   let payload: unknown;

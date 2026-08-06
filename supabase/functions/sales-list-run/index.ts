@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { requireStaff } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,6 +33,9 @@ async function invoke(name: string, body: object = {}): Promise<boolean> {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
 
   console.log("[sales-list-run] Starting list chain");
 

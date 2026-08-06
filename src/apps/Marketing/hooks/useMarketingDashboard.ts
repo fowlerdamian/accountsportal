@@ -88,9 +88,10 @@ export interface BrandWebsite {
 
 export interface DateRange { startDate: string; endDate: string }
 
-export function useTrailbaitDashboard(range?: DateRange) {
+export function useTrailbaitDashboard(range?: DateRange, enabled = true) {
   return useQuery<TrailbaitDashboard>({
     queryKey: ["trailbait_marketing", range?.startDate ?? null, range?.endDate ?? null],
+    enabled,
     queryFn: async () => {
       const body = { brand: "trailbait", ...(range ?? {}) };
       const { data, error } = await supabase.functions.invoke("marketing-dashboard", { body });

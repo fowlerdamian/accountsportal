@@ -1,9 +1,12 @@
+-- NOTE: seed emails are placeholders — real carrier AP addresses are set
+-- operationally in production, never committed (a replayed seed must not be
+-- able to email real carriers).
 -- 1. Insert Carriers
 INSERT INTO public.carriers (name, email) VALUES
-  ('Toll Group',    'accounts@toll.com.au'),
-  ('StarTrack',     'billing@startrack.com.au'),
-  ('TNT Australia', 'invoices@tnt.com.au'),
-  ('Linfox',        'ap@linfox.com')
+  ('Toll Group',    'toll-ap@example.invalid'),
+  ('StarTrack',     'startrack-ap@example.invalid'),
+  ('TNT Australia', 'tnt-ap@example.invalid'),
+  ('Linfox',        'linfox-ap@example.invalid')
 ON CONFLICT DO NOTHING;
 
 -- 2. Insert Rate Cards

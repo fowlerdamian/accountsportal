@@ -13,12 +13,14 @@ if (-not (Test-Path -LiteralPath $keyFile)) {
 }
 
 $secure = Get-Content -LiteralPath $keyFile -Raw | ConvertTo-SecureString
-$key    = [System.Net.NetworkCredential]::new('', $secure).Password
+# Hand the key to the child via environment, not argv — command-line args are
+# visible to any local process (Get-CimInstance Win32_Process).
+$env:SLDPRT_SERVICE_ROLE_KEY = [System.Net.NetworkCredential]::new('', $secure).Password
 
 & "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" `
     -ExecutionPolicy Bypass `
     -NoProfile `
     -File         (Join-Path $PSScriptRoot 'sldprt-thumbs.ps1') `
     -FolderPath     'H:\Shared drives\MAIN\_OPERATIONS\PROJECTS' `
-    -SupabaseUrl    'https://nvlezbqolzwixquusbfo.supabase.co' `
-    -ServiceRoleKey $key
+    -SupabaseUrl    'https://nvlezbqolzwixquusbfo.supabase.co'
+$env:SLDPRT_SERVICE_ROLE_KEY = $null

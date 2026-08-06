@@ -1,4 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireStaff } from '../_shared/auth.ts';
+import { resolveModel } from '../_shared/model.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,13 +10,17 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
+
   try {
     const { question, answer, documentTitle, clause, companyProfile } = await req.json();
 
-    const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+    const apiKey = Deno.env.get('ANTHROPIC_API_KEY')!;
+    const client = new Anthropic({ apiKey });
 
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: await resolveModel(apiKey, 'haiku'),
       max_tokens: 300,
       messages: [{
         role: 'user',

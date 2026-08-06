@@ -34,8 +34,9 @@ serve(async (req) => {
     const { data: { user: caller } } = await callerClient.auth.getUser();
     if (!caller) return json({ error: "Unauthorized" }, 401);
 
-    const { data: callerProfile } = await sb.from("profiles").select("role").eq("id", caller.id).single();
-    if (callerProfile?.role !== "admin") return json({ error: "Forbidden" }, 403);
+    // Roles live in user_roles (profiles has no role column).
+    const { data: callerRole } = await sb.from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").maybeSingle();
+    if (!callerRole) return json({ error: "Forbidden" }, 403);
 
     const { user_id } = await req.json();
     if (!user_id) return json({ error: "user_id is required" }, 400);

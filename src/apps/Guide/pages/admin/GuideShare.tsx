@@ -47,6 +47,13 @@ export default function GuideShare() {
     a.click();
   };
 
+  const escapeXml = (value: string) => value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+
   const downloadQRPdf = (brandKey: string, brandName: string, guideUrl: string) => {
     const wrapper = qrRefs.current[brandKey];
     const canvas = wrapper?.querySelector('canvas');
@@ -54,18 +61,11 @@ export default function GuideShare() {
     const qrDataUrl = canvas.toDataURL('image/png');
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>QR - ${guide.title}</title>
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>QR - ${escapeXml(guide.title)}</title>
       <style>@page{size:A6 landscape;margin:10mm}body{font-family:Arial;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0}img{width:200px}h2{font-size:14px;margin:12px 0 4px}p{font-size:11px;color:#666;margin:2px 0}</style>
-      </head><body><img src="${qrDataUrl}"/><h2>${guide.title}</h2><p>${guide.product_code}</p><p>${brandName}</p><p style="font-size:9px;color:#999;margin-top:8px">${guideUrl}</p>
+      </head><body><img src="${qrDataUrl}"/><h2>${escapeXml(guide.title)}</h2><p>${escapeXml(guide.product_code)}</p><p>${escapeXml(brandName)}</p><p style="font-size:9px;color:#999;margin-top:8px">${guideUrl}</p>
        <script>setTimeout(()=>{window.print();window.close()},500)</script></body></html>`);
   };
-
-  const escapeXml = (value: string) => value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&apos;");
 
   const fetchImageAsBase64 = async (url: string): Promise<string | null> => {
     try {

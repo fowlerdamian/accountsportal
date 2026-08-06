@@ -9,6 +9,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireStaff } from "../_shared/auth.ts";
+import { resolveModel } from "../_shared/model.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,7 +104,7 @@ async function composeTask(
       },
       signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: await resolveModel(anthropicKey, "haiku"),
         max_tokens: 500,
         system: `You turn an @mention into a staff task. ${args.authorName} mentioned ${args.assigneeName} in: ${args.source.label ?? "the staff portal"}. Write the task FOR ${args.assigneeName} — a short specific title (max 70 chars, no @names) and a description that captures what they need to do plus the concrete context (IDs, customers, products, amounts) from the message and the screen content. Also rate urgency and importance 1-5. Respond ONLY with JSON: {"title": "...", "description": "...", "urgency": n, "importance": n}`,
         messages: [{
@@ -148,6 +150,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
 
   try {
     const { text, source = {}, screen, userEmail } = await req.json() as {

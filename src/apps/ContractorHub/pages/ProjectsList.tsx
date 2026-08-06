@@ -29,6 +29,7 @@ type ContractorBrief = Pick<Contractor, "id" | "name" | "avatar_url" | "role" | 
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import { cn } from "@guide/lib/utils";
+import { localToday } from "@portal/lib/dates";
 import { FilterPill } from "@portal/components/FilterPill";
 import { TrashIcon } from "@portal/components/icons";
 
@@ -66,7 +67,7 @@ function ProjectCard({
   latestFileThumb?: string;
 }) {
   const navigate                   = useNavigate();
-  const today                      = new Date().toISOString().split("T")[0];
+  const today                      = localToday();
   const isOverdue                  = project.due_date && project.due_date < today;
   const isProduct                  = project.type === "new_product";
   const stageIdx                   = activeStage ? NEW_PRODUCT_STAGES.indexOf(activeStage.name as any) : -1;
@@ -194,7 +195,7 @@ function KanbanCard({
   contractors?: ContractorBrief[];
 }) {
   const navigate                   = useNavigate();
-  const today                      = new Date().toISOString().split("T")[0];
+  const today                      = localToday();
   const isOverdue                  = project.due_date && project.due_date < today;
   const isProduct                  = project.type === "new_product";
   const color                      = activeStage ? stageColor(activeStage.name) : STAGE_COLORS[0];

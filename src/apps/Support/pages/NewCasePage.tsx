@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react';
 import { palette } from '@portal/lib/palette';
+import { localDateString } from '@portal/lib/dates';
 import { CaseType, ErrorOrigin } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -160,7 +161,7 @@ export default function NewCasePage() {
   const submitMutation = useMutation({
     mutationFn: async () => {
       const purchaseDate = lookedUpOrder?.OrderDate
-        ? new Date(lookedUpOrder.OrderDate).toISOString().split('T')[0]
+        ? localDateString(new Date(lookedUpOrder.OrderDate))
         : null;
 
       const { data, error } = await supabase

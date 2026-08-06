@@ -33,13 +33,8 @@ export function useIsAdmin() {
       return
     }
 
-    // No Supabase session — check by stored email
-    const guestEmail = localStorage.getItem('portal_guest_email')
-    if (!guestEmail) { setIsAdmin(false); setChecking(false); return }
-
-    supabase
-      .rpc('get_role_by_email', { p_email: guestEmail })
-      .then(({ data }) => { setIsAdmin(data === 'admin'); setChecking(false) })
+    // No Supabase session — not admin
+    setIsAdmin(false); setChecking(false)
   }, [user?.id, user?.email, authLoading])
 
   return { isAdmin, checking }

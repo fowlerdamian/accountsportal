@@ -4,6 +4,8 @@
 //   { action: 'details', place_id, sessiontoken }    -> { address: {...}, formatted }
 // Restricted to Australian addresses (components=country:au, region=au).
 
+import { requireStaff } from '../_shared/auth.ts';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -38,6 +40,9 @@ function parseAddress(components: any[]) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
 
   try {
     const key = Deno.env.get('GOOGLE_PLACES_API_KEY') ?? '';

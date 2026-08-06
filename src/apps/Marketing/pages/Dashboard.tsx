@@ -440,7 +440,7 @@ export default function MarketingDashboard() {
   const options = buildOptions(grain);
   const range = dateRange(grain, anchor);
 
-  const tb = useTrailbaitDashboard(range);
+  const tb = useTrailbaitDashboard(range, brand === "trailbait");
   const pipelineChannel: PipelineChannel = brand === "fleetcraft" ? "fleetcraft" : "aga";
   const pipe = usePipelineMetrics(pipelineChannel, range, brand !== "trailbait");
   const brandWeb = useBrandWebsite(pipelineChannel, range, brand !== "trailbait");

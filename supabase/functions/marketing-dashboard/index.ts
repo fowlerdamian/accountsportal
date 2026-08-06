@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { requireStaff } from "../_shared/auth.ts";
 
 // ── Marketing dashboard — per-brand snapshot ────────────────────────────────
 // One function, three brands. The caller passes { brand, startDate, endDate }.
@@ -325,6 +326,9 @@ async function fetchBrevo(range?: Range): Promise<{
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
 
   let body: any = {};
   try { body = await req.json(); } catch { /* no body */ }

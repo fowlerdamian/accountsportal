@@ -1,10 +1,11 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { palette } from "@portal/lib/palette";
 import { X, ExternalLink, Star, Globe, Phone, MapPin, User, Link, TrendingDown, TrendingUp, Minus, Loader2, PhoneCall, MessageSquare } from "lucide-react";
 import { cn } from "../../../apps/Guide/lib/utils";
 import { LeadScoreBadge } from "./LeadScoreBadge";
 import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, type Channel } from "../lib/constants";
 import { useOrderHistory } from "../hooks/useSalesQueries";
+import { localToday } from "@portal/lib/dates";
 import type { SalesLead } from "../hooks/useSalesQueries";
 import { supabase } from "@portal/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,11 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
   const { data: orderHistory } = useOrderHistory(
     lead?.channel === "trailbait" ? (lead?.cin7_customer_id ?? null) : null
   );
+
+  // Clear the "added to call list" reset timer on unmount
+  useEffect(() => () => {
+    if (addedToCallTimer.current) clearTimeout(addedToCallTimer.current);
+  }, []);
 
   if (!lead) return null;
 
@@ -62,7 +68,7 @@ export function LeadDetailDrawer({ lead, onClose, onLeadUpdated }: Props) {
     setAddingToCall(true);
     setAddCallError(null);
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = localToday();
       const { data: existing } = await supabase
         .from("call_list")
         .select("id")

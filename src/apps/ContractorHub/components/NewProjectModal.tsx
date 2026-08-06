@@ -15,6 +15,7 @@ import {
   NEW_PRODUCT_STAGES,
 } from "@hub/hooks/use-hub-queries";
 import { PriorityScorecardModal } from "@hub/components/PriorityScorecardModal";
+import { localToday } from "@portal/lib/dates";
 
 type ModalProjectType = "web" | "new_product" | "other";
 
@@ -61,7 +62,7 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
 
       // Auto-create stages for new product projects
       if (type === "new_product") {
-        const today = new Date().toISOString().split("T")[0];
+        const today = localToday();
         await createProjectStages({
           projectId: project.id,
           stages: NEW_PRODUCT_STAGES.map((stageName, i) => ({

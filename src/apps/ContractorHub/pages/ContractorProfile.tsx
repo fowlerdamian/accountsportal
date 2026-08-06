@@ -22,6 +22,7 @@ import {
   type ContractorStatus,
 } from "@hub/hooks/use-hub-queries";
 import { cn } from "@guide/lib/utils";
+import { localToday } from "@portal/lib/dates";
 
 export default function ContractorProfile() {
   const { id }     = useParams<{ id: string }>();
@@ -81,7 +82,7 @@ export default function ContractorProfile() {
     }
   }
 
-  const today      = new Date().toISOString().split("T")[0];
+  const today      = localToday();
   const openTasks  = tasks.filter((t) => t.status !== "done");
   const doneTasks  = tasks.filter((t) => t.status === "done");
   const totalHours = timeEntries.reduce((s, e) => s + (e.hours ?? 0), 0);

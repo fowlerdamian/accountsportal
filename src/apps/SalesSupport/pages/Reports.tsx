@@ -9,6 +9,7 @@ import {
 import { cn } from "../../../apps/Guide/lib/utils";
 import { supabase } from "@portal/lib/supabase";
 import { CHANNEL_LABEL, type Channel } from "../lib/constants";
+import { localDateString } from "@portal/lib/dates";
 
 const CHART_COLORS = [palette.accent, palette.blue, palette.pink, palette.aqua, palette.purple, palette.orange];
 
@@ -42,7 +43,7 @@ export default function Reports() {
       const weekAgo  = new Date(now.getTime() - 7 * 86400000).toISOString();
       const fourWeeks = Array.from({ length: 8 }, (_, i) => {
         const d = new Date(now.getTime() - i * 7 * 86400000);
-        return d.toISOString().split("T")[0];
+        return localDateString(d);
       }).reverse();
 
       const [leadsRes, callsRes, winbackRes, jobsRes] = await Promise.all([
@@ -99,7 +100,7 @@ export default function Reports() {
       // Calls per day (last 14 days)
       const callsPerDay = Array.from({ length: 14 }, (_, i) => {
         const d     = new Date(now.getTime() - (13 - i) * 86400000);
-        const key   = d.toISOString().split("T")[0];
+        const key   = localDateString(d);
         const label = d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
         const made  = calls.filter((c) => c.scheduled_date === key && c.is_complete).length;
         const total = calls.filter((c) => c.scheduled_date === key).length;

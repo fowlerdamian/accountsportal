@@ -39,7 +39,7 @@ import {
   type Task, type TaskStatus, type TaskPriority,
 } from "@hub/hooks/use-hub-queries";
 import { notifyBudgetThreshold } from "@hub/lib/notifyHubChat";
-import { localToday } from "@portal/lib/dates";
+import { localToday, localDateString } from "@portal/lib/dates";
 import { palette as brandPalette } from "@portal/lib/palette";
 
 // ── FileThumb ────────────────────────────────────────────────
@@ -186,7 +186,7 @@ function ProjectViewContent() {
     const now = new Date(), day = now.getDay();
     const d = new Date(now);
     d.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));
-    return d.toISOString().split("T")[0];
+    return localDateString(d);
   })();
   const hoursThisWeek = timeEntries.filter(e => e.date >= monday).reduce((s, e) => s + (e.hours ?? 0), 0);
 
@@ -252,7 +252,7 @@ function ProjectViewContent() {
     try {
       await updateProject({ id: project.id, type: newType as any });
       if (newType === "new_product" && existingStages.length === 0) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = localToday();
         await createProjectStages({
           projectId: project.id,
           stages: NEW_PRODUCT_STAGES.map((stageName, i) => ({

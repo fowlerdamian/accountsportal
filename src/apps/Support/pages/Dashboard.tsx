@@ -142,10 +142,12 @@ export default function Dashboard() {
   // (fire-and-forget, a few at a time), then refresh the list.
   const qc = useQueryClient();
   const summarising = useRef(false);
+  const summaryAttempted = useRef(new Set<string>());
   useEffect(() => {
-    const missing = cases.filter(c => !c.ai_summary).slice(0, 5);
+    const missing = cases.filter(c => !c.ai_summary && !summaryAttempted.current.has(c.id)).slice(0, 5);
     if (!missing.length || summarising.current) return;
     summarising.current = true;
+    missing.forEach(c => summaryAttempted.current.add(c.id));
     Promise.allSettled(
       missing.map(c => supabase.functions.invoke('generate-case-summary', { body: { caseId: c.id } }))
     ).then(() => {

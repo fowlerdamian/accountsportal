@@ -101,13 +101,22 @@ export default function InvoiceList() {
 
   const fetchInvoices = () =>
     supabase.from('freight_invoices').select('*, carriers(*), freight_invoice_lines(*)').order('invoice_date', { ascending: false })
-      .then(({ data }) => { if (data) setInvoices(data) })
+      .then(({ data, error }) => {
+        if (error) { flash('err', `Failed to load invoices — ${error.message}`); return }
+        if (data) setInvoices(data)
+      })
 
   useEffect(() => {
     Promise.all([
       fetchInvoices(),
-      supabase.from('carriers').select('*').order('name').then(({ data }) => { if (data) setCarriers(data) }),
-      supabase.from('disputes').select('status, amount_recovered').then(({ data }) => { if (data) setDisputes(data) }),
+      supabase.from('carriers').select('*').order('name').then(({ data, error }) => {
+        if (error) { flash('err', `Failed to load carriers — ${error.message}`); return }
+        if (data) setCarriers(data)
+      }),
+      supabase.from('disputes').select('status, amount_recovered').then(({ data, error }) => {
+        if (error) { flash('err', `Failed to load disputes — ${error.message}`); return }
+        if (data) setDisputes(data)
+      }),
     ]).finally(() => setLoading(false))
 
     // Live updates: new imports appear immediately; "Processing invoice…"

@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import html2canvas from 'html2canvas'
 import {
@@ -315,6 +315,7 @@ export default function FinanceDashboard() {
   // nightly cron hits → xero-pl-snapshot edge fn → finance_snapshot), then refetches
   // so the dashboard shows live figures without waiting for the 01:00 AEST cron.
   const [syncState, setSyncState] = useState('idle') // idle|syncing|done|error
+  const syncTimerRef = useRef(null)
   async function handleSync() {
     if (syncState === 'syncing') return
     setSyncState('syncing')
@@ -327,7 +328,8 @@ export default function FinanceDashboard() {
       console.error('[finance sync]', e)
       setSyncState('error')
     }
-    setTimeout(() => setSyncState((s) => (s === 'syncing' ? s : 'idle')), 3000)
+    clearTimeout(syncTimerRef.current)
+    syncTimerRef.current = setTimeout(() => setSyncState((s) => (s === 'syncing' ? s : 'idle')), 3000)
   }
 
   // ── Share current view as an image ────────────────────────────────────────────
@@ -337,6 +339,7 @@ export default function FinanceDashboard() {
   // one click away to drop into Slack / email.
   const cardRef = useRef(null)
   const [shareState, setShareState] = useState('idle') // idle|working|copied|saved|error
+  const shareTimerRef = useRef(null)
   async function handleShare() {
     if (!cardRef.current || shareState === 'working') return
     setShareState('working')
@@ -345,6 +348,7 @@ export default function FinanceDashboard() {
         backgroundColor: null, scale: 3, useCORS: true, logging: false,
       })
       const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'))
+      if (!blob) throw new Error('canvas.toBlob returned null')
       const fname = `finance-${String(periodLabel).replace(/\s+/g, '-').toLowerCase()}.png`
       const file = new File([blob], fname, { type: 'image/png' })
       if (navigator.canShare?.({ files: [file] })) {
@@ -364,8 +368,15 @@ export default function FinanceDashboard() {
       console.error('[finance share]', e)
       setShareState('error')
     }
-    setTimeout(() => setShareState((s) => (s === 'working' ? s : 'idle')), 2500)
+    clearTimeout(shareTimerRef.current)
+    shareTimerRef.current = setTimeout(() => setShareState((s) => (s === 'working' ? s : 'idle')), 2500)
   }
+
+  // Clear any pending state-reset timers on unmount
+  useEffect(() => () => {
+    clearTimeout(syncTimerRef.current)
+    clearTimeout(shareTimerRef.current)
+  }, [])
 
   // ── States ──────────────────────────────────────────────────────────────────
   if (isLoading) return <Centered>Loading finance snapshots…</Centered>

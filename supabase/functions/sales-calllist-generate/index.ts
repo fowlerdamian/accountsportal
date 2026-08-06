@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveModel } from "../_shared/model.ts";
+import { requireStaff } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -301,7 +302,7 @@ async function findContactViaWebsitePages(
         headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
         signal:  AbortSignal.timeout(10000),
         body: JSON.stringify({
-          model:      "claude-haiku-4-5-20251001",
+          model:      await resolveModel(anthropicKey, "haiku"),
           max_tokens: 120,
           messages:   [{ role: "user", content: `Find the most senior decision-maker's name and title on this ${channel === "trailbait" ? "retail/wholesale" : channel === "fleetcraft" ? "fleet fitout" : "automotive brand"} company page. Return ONLY valid JSON: {"name":"Full Name","position":"Title"} or null if no person found.\n\nPage text:\n${text}` }],
         }),
@@ -502,6 +503,9 @@ function buildContextBrief(
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,

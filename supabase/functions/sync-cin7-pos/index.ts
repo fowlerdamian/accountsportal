@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireStaff } from "../_shared/auth.ts";
 
 const CIN7_BASE = "https://inventory.dearsystems.com/ExternalApi/v2";
 
@@ -17,6 +18,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
 
   // Diagnostic route — ?debug=1 for status overview, ?po_id=xxx for a single PO's raw Cin7 data
   const url = new URL(req.url);

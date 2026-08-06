@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireStaff } from "../_shared/auth.ts";
+import { resolveModel } from "../_shared/model.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin":  "*",
@@ -22,6 +24,9 @@ const CHANNEL_LABEL: Record<string, string> = {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
 
   let body: { lead_id?: string; force?: boolean } = {};
   try { body = await req.json(); } catch { /* ignore */ }
@@ -125,7 +130,7 @@ ${sections.join("\n")}`;
       "content-type":      "application/json",
     },
     body: JSON.stringify({
-      model:      "claude-haiku-4-5-20251001",
+      model:      await resolveModel(apiKey, "haiku"),
       max_tokens: 350,
       messages:   [{ role: "user", content: prompt }],
     }),
