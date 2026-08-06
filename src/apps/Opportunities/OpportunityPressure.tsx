@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import PressureField from "./components/PressureField";
 import DetailPanel from "./components/DetailPanel";
 import {
@@ -69,6 +70,33 @@ export default function OpportunityPressure() {
           <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
             Keep the field flat
           </div>
+        </div>
+
+        <div style={{ position: "absolute", top: 14, right: 18, zIndex: 1, textAlign: "right" }}>
+          <button
+            onClick={() => manualSync.mutate()}
+            disabled={manualSync.isPending}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--text-secondary)",
+              fontSize: 12,
+              padding: "6px 10px",
+              cursor: manualSync.isPending ? "default" : "pointer",
+            }}
+          >
+            <RefreshCw size={12} className={manualSync.isPending ? "animate-spin" : undefined} />
+            {manualSync.isPending ? "Syncing…" : "Sync from HubSpot"}
+          </button>
+          {manualSync.isError && (
+            <div style={{ fontSize: 11, color: "var(--brand-pink)", marginTop: 4, maxWidth: 260 }}>
+              {manualSync.error instanceof Error ? manualSync.error.message : "Sync failed."}
+            </div>
+          )}
         </div>
 
         {!isLoading && opportunities.length === 0 ? (
