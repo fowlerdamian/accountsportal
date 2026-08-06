@@ -19,7 +19,7 @@
     { "path": "/api/task-score-report",    "schedule": "0 7 * * 1-5" },
     { "path": "/api/finance-snapshot",     "schedule": "0 15 * * *" },
     { "path": "/api/finance-mtd-digest",   "schedule": "0 8 * * *" },
-    { "path": "/api/opportunity-sync",     "schedule": "15 * * * *" }
+    { "path": "/api/opportunity-sync",     "schedule": "45 21 * * *" }
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
