@@ -489,11 +489,11 @@ export default function DetailPanel({ opportunity, activities, tasks, onClose }:
         <span>
           {opportunity.last_synced_at ? `Synced ${fmtDateTime(opportunity.last_synced_at)}` : "Not yet synced"}
         </span>
-        {/* Quiet escape hatch to the deal record in HubSpot — same deep-link
-            format the Sales Support pipeline uses. Icons stay left of centre:
+        {/* Quiet escape hatch to the deal record in HubSpot (canonical
+            record/0-3 deal URL, verified live). Icons stay left of centre:
             the floating Ask AI button owns the bottom-right corner. */}
         <a
-          href={`https://app-ap1.hubspot.com/deals/22572063/${opportunity.hubspot_deal_id}`}
+          href={`https://app-ap1.hubspot.com/contacts/22572063/record/0-3/${opportunity.hubspot_deal_id}`}
           target="_blank"
           rel="noreferrer"
           title="Open in HubSpot"
