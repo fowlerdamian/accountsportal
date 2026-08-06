@@ -64,7 +64,7 @@ export default function OpportunityPressure() {
           }}
         >
           <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
-            Opportunity Pressure
+            Opportunities
           </div>
           <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
             Keep the field flat

@@ -70,7 +70,7 @@ export const APPS = [
     external:    false,
   },
   {
-    name:        'Opportunity Pressure',
+    name:        'Opportunities',
     description: 'Pipeline hygiene — every open deal is a bubble that grows until someone touches it',
     route:       '/opportunities',
     icon:        'DollarSign',

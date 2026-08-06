@@ -114,7 +114,7 @@ const PATH_TITLES = [
   ['/logistics',             'Logistics'],
   ['/purchase-orders',       'Purchasing'],
   ['/sales-support',         'Sales Support'],
-  ['/opportunities',         'Opportunity Pressure'],
+  ['/opportunities',         'Opportunities'],
   ['/marketing',             'Marketing'],
   ['/compliance',            'Compliance'],
   ['/support',               'Customer Service'],
