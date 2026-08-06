@@ -136,76 +136,96 @@ function normCdf(z) {
 }
 
 /**
- * Rear-view year-end forecast: extrapolate the target year's completed months
- * using the ratio (full year ÷ same months) observed in each complete
- * historical year — i.e. cross-reference YTD with historical seasonality —
- * then estimate the chance of reaching `planTotal` from the spread of the
- * implied outcomes (normal approximation, sample std, n−1).
+ * Rear-view year-end forecast via trend × seasonality decomposition.
+ *
+ * Raw (full-year ÷ same-months) ratios conflate growth with seasonality — in
+ * a growing business H2 beats H1 partly because the business grew, and using
+ * those ratios as estimates double-counts the trend. Instead:
+ *   1. Fit a log-linear growth trend (OLS) across ALL monthly history.
+ *   2. Seasonality = median deviation from that trend per calendar month —
+ *      seasonality describes the SHAPE of the year, never the level.
+ *   3. Forecast each remaining month = trend level × seasonal shape.
+ *   4. Chance of reaching `planTotal` from the fit's residual noise (delta
+ *      method on the log scale, months assumed independent).
  *
  * @param {Array<{year:number, month:number, revenue:number}>} actuals
  * @param {{year:number, planTotal?:number, now?:Date}} opts
  * @returns {{
  *   forecast:number|null, probability:number|null, sigma:number|null,
- *   ytd:number, medianFactor:number|null, monthsUsed:number,
- *   factors:Array<{year:number, factor:number}>, logs:string[], warnings:string[],
+ *   ytd:number, monthsUsed:number, growthAnnual:number|null,
+ *   remainderForecast:number|null, logs:string[], warnings:string[],
  * }}
  */
 export function computeRearViewForecast(actuals, opts) {
   const { year, planTotal = 2_000_000, now = new Date() } = opts
   const logs = []
   const warnings = []
-  const empty = { forecast: null, probability: null, sigma: null, ytd: 0, medianFactor: null, monthsUsed: 0, factors: [], logs, warnings }
+  const empty = { forecast: null, probability: null, sigma: null, ytd: 0, monthsUsed: 0, growthAnnual: null, remainderForecast: null, logs, warnings }
 
   const curYear = now.getFullYear()
   const curMonth = now.getMonth() + 1
-  // Completed months of the target year only — the partial current month is
-  // excluded from both sides of the ratio.
+  // Completed months of the target year; the partial current month is never
+  // fitted or counted — it gets forecast like the rest of the remainder.
   const uptoMonth = year < curYear ? 13 : year > curYear ? 1 : curMonth
-  const window = []
-  for (let m = 1; m < uptoMonth; m++) window.push(m)
-  if (!window.length) {
+  if (uptoMonth <= 1) {
     warnings.push('No completed months in the target year yet — rear-view forecast unavailable')
     return empty
   }
 
-  const byYear = new Map()
-  for (const a of actuals) {
-    if (!byYear.has(a.year)) byYear.set(a.year, new Map())
-    byYear.get(a.year).set(a.month, a.revenue)
+  const series = actuals
+    .filter((a) => a.year < year || (a.year === year && a.month < uptoMonth))
+    .sort((x, y) => x.year - y.year || x.month - y.month)
+  const usable = series.filter((a) => a.revenue > 0)
+  if (usable.length < series.length) {
+    logs.push(`${series.length - usable.length} non-positive month(s) excluded from the trend fit`)
   }
-
-  const ytd = window.reduce((s, m) => s + (byYear.get(year)?.get(m) ?? 0), 0)
-  if (ytd <= 0) {
-    warnings.push(`No actuals recorded for ${year}'s completed months — rear-view forecast unavailable`)
+  if (usable.length < 24) {
+    warnings.push(`Only ${usable.length} usable month(s) of history — need 24+ to separate trend from seasonality`)
     return empty
   }
 
-  const factors = []
-  for (const y of [...byYear.keys()].sort()) {
-    if (y >= year) continue
-    const months = byYear.get(y)
-    const complete = months.size >= 12 && window.every((m) => months.get(m) != null)
-    if (!complete) { logs.push(`${y} skipped for rear-view factor (incomplete year)`); continue }
-    const portion = window.reduce((s, m) => s + months.get(m), 0)
-    if (portion <= 0) { logs.push(`${y} skipped for rear-view factor (zero revenue in window)`); continue }
-    let total = 0
-    for (let m = 1; m <= 12; m++) total += months.get(m) ?? 0
-    factors.push({ year: y, factor: total / portion })
-  }
-  if (factors.length < 2) {
-    warnings.push(`Only ${factors.length} complete historical year(s) — not enough to calibrate a rear-view forecast`)
-    return { ...empty, ytd, factors, monthsUsed: window.length }
-  }
+  // 1. Log-linear trend: log(revenue) ~ a + b·t, t = months since first point.
+  const t0 = usable[0].year * 12 + usable[0].month
+  const pts = usable.map((p) => ({ t: p.year * 12 + p.month - t0, m: p.month, y: Math.log(p.revenue) }))
+  const n = pts.length
+  let sumT = 0; let sumY = 0; let sumTT = 0; let sumTY = 0
+  for (const p of pts) { sumT += p.t; sumY += p.y; sumTT += p.t * p.t; sumTY += p.t * p.y }
+  const b = (n * sumTY - sumT * sumY) / (n * sumTT - sumT * sumT)
+  const a0 = (sumY - b * sumT) / n
+  const growthAnnual = Math.exp(b * 12) - 1
 
-  const fs = factors.map((f) => f.factor)
-  const medianFactor = median(fs)
-  const forecast = ytd * medianFactor
-  const implied = fs.map((f) => ytd * f)
-  const mean = implied.reduce((a, b) => a + b, 0) / implied.length
-  const sigma = Math.sqrt(implied.reduce((a, v) => a + (v - mean) ** 2, 0) / (implied.length - 1))
+  // 2. Seasonal shape: median residual from the trend per calendar month.
+  const resByMonth = Array.from({ length: 12 }, () => [])
+  for (const p of pts) resByMonth[p.m - 1].push(p.y - (a0 + b * p.t))
+  const seasonal = resByMonth.map((rs, i) => {
+    if (!rs.length) {
+      warnings.push(`${MONTH_NAMES[i]}: no history for a seasonal index — assuming trend level`)
+      return 0
+    }
+    return median(rs)
+  })
+
+  // Residual noise after trend + seasonality. Dof charge: 2 trend + 12 seasonal.
+  const resid = pts.map((p) => p.y - (a0 + b * p.t) - seasonal[p.m - 1])
+  const sdLog = Math.sqrt(resid.reduce((s, r) => s + r * r, 0) / Math.max(1, n - 14))
+
+  let ytd = 0
+  for (const a of series) if (a.year === year) ytd += a.revenue
+
+  // 3–4. Forecast the remaining months and propagate the noise (delta method:
+  // sd of exp(x) ≈ forecast × sd_log for small sd).
+  let remainder = 0
+  let varSum = 0
+  for (let m = uptoMonth; m <= 12; m++) {
+    const f = Math.exp(a0 + b * (year * 12 + m - t0) + seasonal[m - 1])
+    remainder += f
+    varSum += (f * sdLog) ** 2
+  }
+  const forecast = ytd + remainder
+  const sigma = Math.sqrt(varSum)
   const probability = sigma > 0 ? 1 - normCdf((planTotal - forecast) / sigma) : (forecast >= planTotal ? 1 : 0)
-  logs.push(`Rear-view: ${window.length} completed month(s) × factors [${fs.map((f) => f.toFixed(3)).join(', ')}] → median ×${medianFactor.toFixed(3)}, σ $${Math.round(sigma).toLocaleString()}`)
-  return { forecast, probability, sigma, ytd, medianFactor, monthsUsed: window.length, factors, logs, warnings }
+  logs.push(`Rear-view: trend ${(growthAnnual * 100).toFixed(1)}%/yr over ${n} months, residual sd(log) ${sdLog.toFixed(3)} → remainder $${Math.round(remainder).toLocaleString()}, σ $${Math.round(sigma).toLocaleString()}`)
+  return { forecast, probability, sigma, ytd, monthsUsed: uptoMonth - 1, growthAnnual, remainderForecast: remainder, logs, warnings }
 }
 
 // Round `total` across the given index weights, residual to the largest slot.

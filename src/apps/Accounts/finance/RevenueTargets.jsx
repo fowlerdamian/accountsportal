@@ -654,12 +654,17 @@ export default function RevenueTargets() {
             gauge={<ChanceGauge probability={rearView?.probability} planLabel={`$${(BASE_TOTAL / 1e6).toFixed(1)}M`} />}
             right={
               <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-                {rearView?.forecast != null ? `calibrated on ${rearView.factors.length} yrs of seasonality` : ''}
+                growth trend × seasonal shape
               </span>
             }
             rows={rearView?.forecast == null ? null : [
               { label: `Completed months (${rearView.monthsUsed}) actual`, value: money(rearView.ytd), color: C.accent },
-              { label: 'Historical multiplier (median)', value: `×${rearView.medianFactor.toFixed(2)}`, color: C.target },
+              {
+                label: 'Growth trend (annualised)',
+                value: `${rearView.growthAnnual >= 0 ? '+' : ''}${(rearView.growthAnnual * 100).toFixed(0)}%/yr`,
+                color: rearView.growthAnnual >= 0 ? C.green : C.red,
+              },
+              { label: `Forecast ${MONTHS[thisMonth - 1]}–Dec`, value: money(rearView.remainderForecast), color: C.target },
               {
                 label: 'Forecast year-end',
                 value: money(rearView.forecast),
