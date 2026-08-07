@@ -7,6 +7,7 @@ import {
 import { CurrencyDollarIcon, TargetIcon, ChartLineIcon, GaugeIcon, TriangleAlertIcon } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
+import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import { computeSeasonalityTargets, applyRollingReallocation, computeRearViewForecast } from './seasonalityTargets.js'
 
 // Theme mirrors FinanceDashboard.jsx (concrete hex so recharts SVG resolves).
@@ -55,25 +56,27 @@ function useTargetsData() {
   })
 }
 
-function Tile({ icon: Icon, label, value, sub, hue = C.accent, valueColor = C.text }) {
+function Tile({ icon: Icon, label, value, sub, hue = C.accent, valueColor = C.text, compact = false }) {
   return (
     <div style={{
       background: C.panel, border: `1px solid ${C.border}`, borderTop: `2px solid ${hue}`,
-      borderRadius: 8, padding: '14px 18px 16px', display: 'flex', flexDirection: 'column', gap: 8,
+      borderRadius: 8, padding: compact ? '10px 12px 12px' : '14px 18px 16px', display: 'flex', flexDirection: 'column', gap: compact ? 6 : 8,
+      minWidth: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {Icon && <Icon size={14} strokeWidth={1.5} style={{ color: hue }} />}
-        <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 500 }}>{label}</span>
+        {Icon && <Icon size={14} strokeWidth={1.5} style={{ color: hue, flexShrink: 0 }} />}
+        <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
       </div>
-      <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '1.55rem', lineHeight: 1, fontWeight: 500, color: valueColor }}>{value}</span>
-      <span style={{ fontSize: 11, color: C.muted, fontFamily: '"JetBrains Mono", monospace', minHeight: 14 }}>{sub || ''}</span>
+      <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: compact ? '1.15rem' : '1.55rem', lineHeight: 1, fontWeight: 500, color: valueColor }}>{value}</span>
+      <span style={{ fontSize: compact ? 10 : 11, color: C.muted, fontFamily: '"JetBrains Mono", monospace', minHeight: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || ''}</span>
     </div>
   )
 }
 
 function Panel({ title, icon: Icon, right, children }) {
+  const isMobile = useIsMobile()
   return (
-    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: isMobile ? 12 : 18, display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           {Icon && <Icon size={15} strokeWidth={1.5} style={{ color: C.accent }} />}
@@ -296,23 +299,59 @@ function ForecastGauge({ value, plan, min = 1_000_000, max = 2_500_000 }) {
 // `rows` is the breakdown that slides out from behind the dial on click.
 function PacingPanel({ title, right, gaugeLabel, ratio, gauge, rows, emptyHint }) {
   const [open, setOpen] = useState(false)
+  const isMobile = useIsMobile()
+  const dial = (
+    <button
+      onClick={() => setOpen((o) => !o)}
+      title={open ? 'Hide breakdown' : 'Show breakdown'}
+      aria-expanded={open}
+      style={{
+        background: C.panel, border: 'none', padding: 0, cursor: 'pointer',
+        position: 'relative', zIndex: 1, flexShrink: 0, lineHeight: 0,
+      }}
+    >
+      {gauge ?? <PacingGauge ratio={ratio} label={gaugeLabel} />}
+    </button>
+  )
+  const rowGrid = (
+    <div style={{
+      display: 'grid', gridTemplateColumns: isMobile ? '1fr auto' : 'auto auto',
+      columnGap: 20, rowGap: 8, fontFamily: '"JetBrains Mono", monospace', fontSize: 12,
+      whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined,
+    }}>
+      {rows?.map((row) => (
+        <div key={row.label} style={{ display: 'contents' }}>
+          <span style={{ color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.label}</span>
+          <span style={{ color: row.color, textAlign: 'right', fontWeight: 500 }}>{row.value}</span>
+        </div>
+      ))}
+    </div>
+  )
   return (
     <Panel title={title} icon={GaugeIcon} right={right}>
       {!rows ? (
         <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>{emptyHint}</span>
+      ) : isMobile ? (
+        // Stacked: dial centred, breakdown expands downward on tap.
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {dial}
+          {!open && (
+            <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
+              tap dial for breakdown
+            </span>
+          )}
+          <div style={{
+            display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', width: '100%',
+            transition: 'grid-template-rows 340ms cubic-bezier(0.22, 0.9, 0.3, 1)',
+          }}>
+            <div style={{ overflow: 'hidden', minHeight: 0, opacity: open ? 1 : 0, transition: 'opacity 260ms ease' }}>
+              <div style={{ paddingTop: 12 }}>{rowGrid}</div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', minHeight: 150, position: 'relative' }}>
-          <button
-            onClick={() => setOpen((o) => !o)}
-            title={open ? 'Hide breakdown' : 'Show breakdown'}
-            aria-expanded={open}
-            style={{
-              background: C.panel, border: 'none', padding: 0, cursor: 'pointer',
-              position: 'relative', zIndex: 1, flexShrink: 0, lineHeight: 0,
-            }}
-          >
-            {gauge ?? <PacingGauge ratio={ratio} label={gaugeLabel} />}
-          </button>
+          {dial}
           <div style={{ overflow: 'hidden', flex: 1 }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 16, paddingLeft: 20,
@@ -320,14 +359,7 @@ function PacingPanel({ title, right, gaugeLabel, ratio, gauge, rows, emptyHint }
               opacity: open ? 1 : 0,
               transition: 'transform 340ms cubic-bezier(0.22, 0.9, 0.3, 1), opacity 260ms ease',
             }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', columnGap: 20, rowGap: 8, fontFamily: '"JetBrains Mono", monospace', fontSize: 12, whiteSpace: 'nowrap' }}>
-                {rows.map((row) => (
-                  <div key={row.label} style={{ display: 'contents' }}>
-                    <span style={{ color: C.muted }}>{row.label}</span>
-                    <span style={{ color: row.color, textAlign: 'right', fontWeight: 500 }}>{row.value}</span>
-                  </div>
-                ))}
-              </div>
+              {rowGrid}
             </div>
           </div>
           {!open && (
@@ -369,6 +401,7 @@ function SyncButton({ state, onClick, detail }) {
 export default function RevenueTargets() {
   const { data, isLoading, error } = useTargetsData()
   const qc = useQueryClient()
+  const isMobile = useIsMobile()
   const now = new Date()
   const thisYear = now.getFullYear()
   const thisMonth = now.getMonth() + 1
@@ -599,7 +632,7 @@ export default function RevenueTargets() {
   const td = { padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, textAlign: 'right', whiteSpace: 'nowrap', borderBottom: `1px solid ${C.borderSoft}` }
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', background: C.bg, padding: 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div style={{ height: '100%', overflow: 'auto', background: C.bg, padding: isMobile ? 12 : 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
       <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -612,21 +645,21 @@ export default function RevenueTargets() {
           <SyncButton state={syncState} detail={syncDetail} onClick={handleSync} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          <Tile icon={CurrencyDollarIcon} label={`${MONTHS[thisMonth - 1]} ${thisYear} Actual`} value={money(curr?.actual)} hue={C.accent} valueColor={C.accent}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: isMobile ? 8 : 12 }}>
+          <Tile compact={isMobile} icon={CurrencyDollarIcon} label={`${MONTHS[thisMonth - 1]} ${thisYear} Actual`} value={money(curr?.actual)} hue={C.accent} valueColor={C.accent}
             sub={curr?.target != null ? `target ${money(curr.target)}` : 'no target set'} />
-          <Tile icon={GaugeIcon} label="Month vs Target"
+          <Tile compact={isMobile} icon={GaugeIcon} label="Month vs Target"
             value={curr?.target ? pct(curr.actual != null ? curr.actual / curr.target : null) : '—'}
             hue={C.target}
             valueColor={curr?.target && curr?.actual >= curr.target ? C.green : C.text} />
-          <Tile icon={ChartLineIcon} label={`YTD ${thisYear}`} value={money(ytdActual)} hue={C.green}
+          <Tile compact={isMobile} icon={ChartLineIcon} label={`YTD ${thisYear}`} value={money(ytdActual)} hue={C.green}
             sub={prevYtd != null ? `prev yr YTD ${money(prevYtd)}` : ''} />
-          <Tile icon={TargetIcon} label="YTD vs Target" value={pct(ytdRatio)} hue={C.accent}
+          <Tile compact={isMobile} icon={TargetIcon} label="YTD vs Target" value={pct(ytdRatio)} hue={C.accent}
             valueColor={ytdRatio == null ? C.text : ytdRatio >= 1 ? C.green : C.red}
             sub={ytdTarget != null ? `target ${money(ytdTarget)}` : 'no targets set'} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(460px, 100%), 1fr))', gap: 16 }}>
           <PacingPanel
             title={`MTD Pacing — ${MONTHS[thisMonth - 1]} ${thisYear}`}
             gaugeLabel="MTD PACE"
@@ -690,11 +723,11 @@ export default function RevenueTargets() {
           icon={TargetIcon}
           right={<LegendRow years={selYears} hueForYear={hueForYear} single={single} />}
         >
-          <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 8, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={isMobile ? 220 : 260}>
+            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: isMobile ? 0 : 8, bottom: 0 }}>
               <CartesianGrid stroke={C.borderSoft} vertical={false} />
               <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
-              <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
+              <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={isMobile ? 40 : 48} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
               {selYears.map((y) => {
                 const hue = hueForYear(y)
@@ -724,7 +757,10 @@ export default function RevenueTargets() {
                 <span style={{ fontSize: 12, color: C.muted }}>{w}</span>
               </div>
             ))}
-            <div style={{ overflowX: 'auto' }}>
+            {isMobile && (
+              <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>swipe table sideways ›</span>
+            )}
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 980 }}>
                 <thead>
                   <tr>
@@ -777,8 +813,8 @@ export default function RevenueTargets() {
         )}
 
         <Panel title="Sales Targets Matrix" icon={CurrencyDollarIcon}
-          right={<span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>click a target/stretch cell to edit</span>}>
-          <div style={{ overflowX: 'auto' }}>
+          right={<span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>{isMobile ? 'tap a target/stretch cell to edit · swipe sideways ›' : 'click a target/stretch cell to edit'}</span>}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 980 }}>
               <thead>
                 <tr>
