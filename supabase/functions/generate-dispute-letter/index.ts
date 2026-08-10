@@ -57,8 +57,9 @@ ${termsBlock}
 - PLAIN TEXT ONLY — this is pasted into an email client. Absolutely NO markdown: no asterisks, no pipe tables, no headings, no blockquotes. Use plain sentences and simple bullet lines starting with "- "
 - Reference the invoice number and date. Do NOT name or describe the recipient company (never write "issued to ..." or similar)
 - Structure, in this exact order:
-  1. Opening: one or two sentences disputing the charges on the invoice (number + date), stating the total disputed and requesting a credit note for the full amount within 5 business days
-  2. Itemised list, ONE plain line per disputed item, e.g.: - DHI123456789 - 840 x 180 x 170 mm, 8,500 g - $9.93   (end with a "- Total - $X" line)
+  1. Opening: one or two sentences disputing the charges on the invoice (number + date), stating the total disputed dollar figure ($${total_overcharge_aud.toFixed(2)}) and requesting a credit note for the full amount within 5 business days
+  2. Itemised list, ONE plain line per disputed item, ALWAYS ending with its disputed dollar amount, e.g.: - DHI123456789 - 840 x 180 x 170 mm, 8,500 g - $9.93   (end with a "- Total - $${total_overcharge_aud.toFixed(2)}" line)
+- MANDATORY: the total disputed figure $${total_overcharge_aud.toFixed(2)} must appear in the email, and every itemised line must show its own dollar amount — never omit these
   3. LAST: the explanation — quote the carrier's relevant published criteria verbatim (in quotation marks) and state plainly that the items above fall outside those criteria (or, for overcharges, that the booked/quoted figure is the agreed price)
 - No per-item paragraphs and no sentences about calibrated equipment / contractual records
 - Under 180 words. BODY TEXT ONLY: no subject line, no letterhead, no address blocks, and NO signature block or sign-off`;
@@ -83,7 +84,13 @@ ${termsBlock}
     }
 
     const result = await response.json();
-    const letter = result.content?.[0]?.text ?? "";
+    let letter = result.content?.[0]?.text ?? "";
+
+    // Guarantee the disputed total appears even if the model omits it
+    const totalStr = `$${total_overcharge_aud.toFixed(2)}`;
+    if (letter && !letter.replace(/,/g, "").includes(totalStr)) {
+      letter = `${letter.trimEnd()}\n\nTotal disputed: ${totalStr}`;
+    }
 
     return new Response(JSON.stringify({ letter }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
