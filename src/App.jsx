@@ -18,6 +18,7 @@ import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
 import Carriers from './apps/Logistics/components/Carriers.jsx'
 import Disputes from './apps/Logistics/components/Disputes.jsx'
 import ManualLabel from './apps/Logistics/components/ManualLabel.jsx'
+import TrackingLookup from './apps/Logistics/components/TrackingLookup.jsx'
 import SupportApp from './apps/Support/SupportApp'
 import SalesSupport from './apps/SalesSupport/index.jsx'
 import OpportunityPressure from './apps/Opportunities/OpportunityPressure'
@@ -111,6 +112,7 @@ const PATH_TITLES = [
   ['/logistics/settings',    'Settings'],
   ['/logistics/disputes',    'Disputes'],
   ['/logistics/manual-label','Manual Label'],
+  ['/logistics/tracking',    'Tracking Lookup'],
   ['/logistics',             'Logistics'],
   ['/purchase-orders',       'Purchasing'],
   ['/sales-support',         'Sales Support'],
@@ -247,6 +249,7 @@ export default function App() {
               <Route path="logistics/carriers" element={<Navigate to="/logistics/settings" replace />} />
               <Route path="logistics/disputes" element={<Disputes />} />
               <Route path="logistics/manual-label" element={<ManualLabel />} />
+              <Route path="logistics/tracking" element={<TrackingLookup />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
               <Route path="opportunities" element={<OpportunityPressure />} />
