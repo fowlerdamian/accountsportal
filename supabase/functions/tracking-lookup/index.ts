@@ -35,7 +35,7 @@ function carrierFor(tracking: string, shipCarrier: string | null) {
 function trackingUrl(carrier: string, tracking: string) {
   const t = encodeURIComponent(tracking.replace(/\s/g, ""));
   return carrier === "TNT"
-    ? `https://www.tnt.com/express/en_au/site/shipping-tools/tracking.html?searchType=con&cons=${t}`
+    ? `https://tntexpress.com.au/InterAction/ASPs/CnmHxAS.asp?${t}`
     : `https://auspost.com.au/mypost/track/details/${t}`;
 }
 
