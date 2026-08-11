@@ -401,6 +401,8 @@ export default function GuideEditor() {
     steps: StepDraft[];
   }
   const [variants, setVariants] = useState<VariantDraft[]>([]);
+  // Name for the base (variant_id IS NULL) step sequence — only editable/shown once other variants exist
+  const [defaultVariantLabel, setDefaultVariantLabel] = useState("");
   const [editingVariantIdx, setEditingVariantIdx] = useState<number | null>(null);
   const [newVariantLabel, setNewVariantLabel] = useState("");
   const [showAddVariant, setShowAddVariant] = useState(false);
@@ -510,6 +512,7 @@ export default function GuideEditor() {
     setDescription(existingGuide.short_description ?? "");
     setProductImageUrl(existingGuide.product_image_url ?? null);
     setTools(existingGuide.tools_required ?? []);
+    setDefaultVariantLabel(existingGuide.default_variant_label ?? "");
 
     if (existingSteps.length > 0) {
       setGuideSteps(existingSteps.map(s => ({
@@ -613,6 +616,8 @@ export default function GuideEditor() {
         short_description: description || null,
         tools_required: tools,
         product_image_url: productImageUrl,
+        // The base steps only need a customer-facing name when other variants exist
+        default_variant_label: variants.length > 0 ? (defaultVariantLabel.trim() || 'Standard') : null,
       };
 
       let guideId = id;
@@ -1052,15 +1057,28 @@ export default function GuideEditor() {
               Variants allow you to create alternative step sequences for different product configurations (e.g. different vehicle models).
             </p>
 
-            {/* Standard variant (always present) */}
+            {/* Base variant (always present) — namable only once another variant exists */}
             <div className="border rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-sm">Standard</p>
-                  <p className="text-xs text-muted-foreground">Default — uses the {guideSteps.length} step{guideSteps.length !== 1 ? 's' : ''} from the Installation Steps tab</p>
+              {variants.length > 0 ? (
+                <div className="space-y-2">
+                  <Label className="text-sm">Base Variant Name</Label>
+                  <Input
+                    placeholder="e.g. Standard, Sedan, Manual Transmission…"
+                    value={defaultVariantLabel}
+                    onChange={(e) => setDefaultVariantLabel(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Customers pick between this and the variant{variants.length !== 1 ? 's' : ''} below — name it after what makes these {guideSteps.length} step{guideSteps.length !== 1 ? 's' : ''} (from the Installation Steps tab) different.
+                  </p>
                 </div>
-                <Badge>Default</Badge>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-sm">Installation Steps</p>
+                    <p className="text-xs text-muted-foreground">Uses the {guideSteps.length} step{guideSteps.length !== 1 ? 's' : ''} from the Installation Steps tab. Add a variant to offer alternative versions — you'll be able to name this one too.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Existing variants */}
@@ -1227,7 +1245,7 @@ export default function GuideEditor() {
                       }]);
                       setNewVariantLabel("");
                       setShowAddVariant(false);
-                      toast.success("Variant added — steps copied from Standard");
+                      toast.success("Variant added — steps copied from the base variant");
                     }}
                   >
                     Create (copy steps)

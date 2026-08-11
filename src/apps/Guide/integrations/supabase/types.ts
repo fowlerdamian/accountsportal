@@ -291,6 +291,7 @@ export type Database = {
           category_id: string | null
           created_at: string
           created_by: string | null
+          default_variant_label: string | null
           estimated_time: string | null
           id: string
           notice_text: string | null
@@ -306,6 +307,7 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
+          default_variant_label?: string | null
           estimated_time?: string | null
           id?: string
           notice_text?: string | null
@@ -321,6 +323,7 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
+          default_variant_label?: string | null
           estimated_time?: string | null
           id?: string
           notice_text?: string | null

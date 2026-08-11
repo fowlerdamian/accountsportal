@@ -28,6 +28,8 @@ export interface InstructionSet {
   estimated_time: string;
   slug: string;
   notice_text?: string;
+  /** Customer-facing name for the base (variant_id IS NULL) step sequence; only shown when other variants exist. */
+  default_variant_label?: string | null;
   created_at: string;
   updated_at: string;
   created_by?: string;

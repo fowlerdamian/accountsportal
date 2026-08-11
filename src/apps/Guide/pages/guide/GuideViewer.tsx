@@ -100,7 +100,7 @@ export default function GuideViewer() {
   const needsVariantChoice = variants.length > 0 && selectedVariantId === undefined;
   const selectedVariantLabel = selectedVariantId
     ? variants.find(v => v.id === selectedVariantId)?.variant_label
-    : 'Standard';
+    : (guide?.default_variant_label || 'Standard');
 
   const markDone = (stepIndex: number) => {
     const newCompleted = new Set(completedSteps);
@@ -260,15 +260,12 @@ export default function GuideViewer() {
             </div>
 
             <div className="space-y-2.5">
-              {/* Standard is always available — it uses the guide's default steps */}
+              {/* Base variant is always available — it uses the guide's base steps */}
               <button
                 onClick={() => setSelectedVariantId(null)}
                 className="w-full flex items-center justify-between gap-3 rounded-xl border p-4 text-left hover:border-primary hover:bg-muted/40 transition-colors"
               >
-                <div>
-                  <p className="font-semibold text-sm">Standard</p>
-                  <p className="text-xs text-muted-foreground">Default installation</p>
-                </div>
+                <p className="font-semibold text-sm">{guide.default_variant_label || 'Standard'}</p>
                 <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
               </button>
 
