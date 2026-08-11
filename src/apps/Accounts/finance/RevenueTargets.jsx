@@ -373,8 +373,8 @@ function PacingPanel({ title, right, gaugeLabel, ratio, gauge, rows, emptyHint }
   )
 }
 
-const SYNC_LABEL = { idle: 'Sync Xero', syncing: 'Requesting…', waiting: 'Syncing… ~1 min', done: 'Synced ✓', cooldown: 'On cooldown', error: 'Failed' }
-function SyncButton({ state, onClick, detail }) {
+const SYNC_LABEL = { idle: 'Sync Xero', syncing: 'Requesting…', waiting: 'Syncing… ~1 min', done: 'Synced ✓', error: 'Failed' }
+function SyncButton({ state, onClick }) {
   const busy = state === 'syncing' || state === 'waiting'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
@@ -389,10 +389,10 @@ function SyncButton({ state, onClick, detail }) {
           fontFamily: '"JetBrains Mono", monospace', opacity: busy ? 0.7 : 1,
         }}
       >
-        {SYNC_LABEL[state]}{state === 'cooldown' && detail ? ` (${detail})` : ''}
+        {SYNC_LABEL[state]}
       </button>
       <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-        ⚠ uses Xero API quota — sparingly, max 1 per 10 min
+        ⚠ uses Xero API quota — use sparingly
       </span>
     </div>
   )
@@ -407,7 +407,6 @@ export default function RevenueTargets() {
   const thisMonth = now.getMonth() + 1
   const [selYearsRaw, setSelYears] = useState(null) // null → default to current year
   const [syncState, setSyncState] = useState('idle')
-  const [syncDetail, setSyncDetail] = useState(null)
 
   async function handleSync() {
     if (syncState === 'syncing' || syncState === 'waiting') return
@@ -416,10 +415,7 @@ export default function RevenueTargets() {
       const { data: res, error: e } = await supabase.rpc('request_xero_invoice_sync')
       if (e) throw e
       if (!res?.ok) {
-        if (res?.retry_in_seconds) {
-          setSyncDetail(`${Math.ceil(res.retry_in_seconds / 60)}m left`)
-          setSyncState('cooldown')
-        } else throw new Error(res?.error || 'sync refused')
+        throw new Error(res?.error || 'sync refused')
       } else {
         // pg_net fires the edge fn async — give it a minute, then refetch.
         setSyncState('waiting')
@@ -642,7 +638,7 @@ export default function RevenueTargets() {
               Actuals: Xero sales invoices (GST-exclusive) · targets editable inline
             </span>
           </div>
-          <SyncButton state={syncState} detail={syncDetail} onClick={handleSync} />
+          <SyncButton state={syncState} onClick={handleSync} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: isMobile ? 8 : 12 }}>
