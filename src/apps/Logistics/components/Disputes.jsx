@@ -20,8 +20,10 @@ export default function Disputes() {
   const [msg,      flash]       = useFlash()
   const navigate = useNavigate()
 
-  // Log-credit modal
+  // Credits / close-out modal
   const [creditFor,    setCreditFor]    = useState(null)   // dispute row
+  const [credits,      setCredits]      = useState([])     // dispute_credits for the open modal
+  const [creditUrn,    setCreditUrn]    = useState('')
   const [creditAmount, setCreditAmount] = useState('')
   const [creditSaving, setCreditSaving] = useState(false)
 
@@ -33,7 +35,7 @@ export default function Disputes() {
   const fetchDisputes = async () => {
     const { data, error } = await supabase
       .from('disputes')
-      .select('*, freight_invoices(id, invoice_ref, invoice_date, carriers(name, claims_email, claims_cc, account_number)), dispute_events(*)')
+      .select('*, freight_invoices(id, invoice_ref, invoice_date, carriers(name, claims_email, claims_cc, account_number)), dispute_events(*), dispute_credits(*)')
       .order('created_at', { ascending: false })
     if (error) flash('err', `Failed to load disputes — ${error.message}`)
     else if (data) setDisputes(data)
@@ -77,28 +79,72 @@ export default function Disputes() {
 
   const openCreditModal = (d) => {
     setCreditFor(d)
+    setCredits([...(d.dispute_credits ?? [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)))
+    setCreditUrn('')
     const outstanding = Number(d.amount_claimed) - Number(d.amount_recovered)
-    setCreditAmount(outstanding ? outstanding.toFixed(2) : '')
+    setCreditAmount(outstanding > 0 ? outstanding.toFixed(2) : '')
   }
 
-  const saveCredit = async () => {
+  // Phase 2 — record a carrier-approved credit against its URN. The dispute
+  // stays open (credits accumulate) until explicitly closed out below.
+  const addCredit = async () => {
+    const urn = creditUrn.trim()
     const amount = parseFloat(creditAmount)
+    if (!urn) { flash('err', 'Enter the carrier URN'); return }
     if (isNaN(amount) || amount <= 0) { flash('err', 'Enter a valid credit amount'); return }
     setCreditSaving(true)
     const d = creditFor
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: row, error } = await supabase.from('dispute_credits')
+      .insert({ dispute_id: d.id, urn, amount, created_by: user?.id ?? null })
+      .select().single()
+    if (error) {
+      setCreditSaving(false)
+      flash('err', error.code === '23505' ? `URN ${urn} is already logged on this claim` : error.message)
+      return
+    }
     const newRecovered = Number(d.amount_recovered) + amount
+    await supabase.from('disputes').update({ amount_recovered: newRecovered }).eq('id', d.id)
+    await logEvent(d.id, 'credit_logged', `Credit received — ${aud(amount)} (URN ${urn})`, amount, user?.id ?? null)
+    setCreditSaving(false)
+    setCredits(prev => [...prev, row])
+    setCreditFor({ ...d, amount_recovered: newRecovered })
+    setCreditUrn('')
+    const outstanding = Number(d.amount_claimed) - newRecovered
+    setCreditAmount(outstanding > 0 ? outstanding.toFixed(2) : '')
+    flash('ok', `${aud(amount)} credit logged — URN ${urn}`)
+    fetchDisputes()
+  }
+
+  const removeCredit = async (c) => {
+    setCreditSaving(true)
+    const d = creditFor
+    const { error } = await supabase.from('dispute_credits').delete().eq('id', c.id)
+    if (error) { setCreditSaving(false); flash('err', error.message); return }
+    const newRecovered = Math.max(0, Number(d.amount_recovered) - Number(c.amount))
+    await supabase.from('disputes').update({ amount_recovered: newRecovered }).eq('id', d.id)
+    const { data: { user } } = await supabase.auth.getUser()
+    await logEvent(d.id, 'note', `Credit removed — ${aud(Number(c.amount))} (URN ${c.urn})`, null, user?.id ?? null)
+    setCreditSaving(false)
+    setCredits(prev => prev.filter(x => x.id !== c.id))
+    setCreditFor({ ...d, amount_recovered: newRecovered })
+    fetchDisputes()
+  }
+
+  const closeOutClaim = async () => {
+    setCreditSaving(true)
+    const d = creditFor
     const { error } = await supabase.from('disputes').update({
-      amount_recovered: newRecovered,
       status: 'credited',
       resolved_at: new Date().toISOString(),
     }).eq('id', d.id)
     setCreditSaving(false)
     if (error) { flash('err', error.message); return }
     const { data: { user } } = await supabase.auth.getUser()
-    await logEvent(d.id, 'credit_logged', `Credit received — ${aud(amount)}`, amount, user?.id ?? null)
+    await logEvent(d.id, 'status_changed', `Claim closed out — ${aud(Number(d.amount_recovered))} credited across ${credits.length} URN${credits.length === 1 ? '' : 's'}`, null, user?.id ?? null)
     await supabase.from('freight_invoices').update({ status: 'resolved' }).eq('id', d.invoice_id)
     setCreditFor(null)
-    flash('ok', `${aud(amount)} credit logged`)
+    flash('ok', `Claim closed out — ${aud(Number(d.amount_recovered))} credited`)
     fetchDisputes()
   }
 
@@ -230,7 +276,7 @@ export default function Disputes() {
                           <button onClick={() => isTntDispute(d) ? openTntPanel(d) : openPanel(d)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>
                             {isTntDispute(d) ? 'Queries' : d.status === 'draft' ? 'Edit & send' : 'Letter'}
                           </button>
-                          <button onClick={() => openCreditModal(d)} style={{ background: 'none', border: 'none', color: 'var(--brand-aqua)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Log credit</button>
+                          <button onClick={() => openCreditModal(d)} style={{ background: 'none', border: 'none', color: 'var(--brand-aqua)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Credits</button>
                           {d.status === 'sent' && (
                             <button onClick={() => setStatus(d, 'acknowledged')} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Ack'd</button>
                           )}
@@ -252,6 +298,17 @@ export default function Disputes() {
                               <span style={{ color: 'var(--text-secondary)' }}>{ev.detail ?? ev.event_type.replace('_', ' ')}</span>
                             </div>
                           ))}
+                          {(d.dispute_credits?.length ?? 0) > 0 && (
+                            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', fontFamily: mono }}>
+                              {d.dispute_credits.map(c => (
+                                <div key={c.id} style={{ display: 'flex', gap: '12px', padding: '3px 0' }}>
+                                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>URN {c.urn}</span>
+                                  <span style={{ color: 'var(--brand-aqua)' }}>{aud(Number(c.amount))}</span>
+                                  <span style={{ color: 'var(--text-disabled)' }}>{fmtDate(c.created_at)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {d.letter_text && (
                             <details style={{ marginTop: '8px' }}>
                               <summary style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-accent)', cursor: 'pointer' }}>View letter</summary>
@@ -298,28 +355,70 @@ export default function Disputes() {
         onSaveDraft={saveDraft}
       />
 
-      {/* ── Log credit modal ───────────────────────────────────────────────────── */}
-      <Modal open={!!creditFor} onClose={() => { if (!creditSaving) setCreditFor(null) }} width={420}>
-        {creditFor && (
-          <>
-            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>Log credit received</p>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, margin: '0 0 20px' }}>
-              {creditFor.freight_invoices?.invoice_ref} · {aud(Number(creditFor.amount_claimed))} claimed
-            </p>
-            <FieldLabel>Credit amount (AUD)</FieldLabel>
-            <input
-              value={creditAmount}
-              onChange={e => setCreditAmount(e.target.value)}
-              placeholder="0.00"
-              autoFocus
-              style={{ ...inputStyle, marginBottom: '20px' }}
-            />
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <HoverBtn onClick={saveCredit} disabled={creditSaving}>{creditSaving ? 'Saving…' : 'Log credit & close dispute'}</HoverBtn>
-              <button onClick={() => setCreditFor(null)} disabled={creditSaving} style={btnGhost}>Cancel</button>
-            </div>
-          </>
-        )}
+      {/* ── Credits & close-out modal (phase 2) ────────────────────────────────── */}
+      <Modal open={!!creditFor} onClose={() => { if (!creditSaving) setCreditFor(null) }} width={460}>
+        {creditFor && (() => {
+          const claimed   = Number(creditFor.amount_claimed)
+          const recovered = Number(creditFor.amount_recovered)
+          const outstanding = claimed - recovered
+          return (
+            <>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>Credits & close-out</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, margin: '0 0 16px' }}>
+                {creditFor.freight_invoices?.invoice_ref} · {aud(claimed)} claimed · <span style={{ color: 'var(--brand-aqua)' }}>{aud(recovered)} credited</span>
+                {outstanding > 0.005 && <> · <span style={{ color: 'var(--brand-pink)' }}>{aud(outstanding)} outstanding</span></>}
+              </p>
+
+              {credits.length > 0 && (
+                <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '8px 12px', marginBottom: '16px' }}>
+                  {credits.map(c => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0', fontSize: '12px', fontFamily: mono }}>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>URN {c.urn}</span>
+                      <span style={{ color: 'var(--brand-aqua)', marginLeft: 'auto' }}>{aud(Number(c.amount))}</span>
+                      <button onClick={() => removeCredit(c)} disabled={creditSaving} title="Remove credit" style={{ background: 'none', border: 'none', color: 'var(--text-disabled)', cursor: 'pointer', fontSize: '13px', lineHeight: 1, padding: 0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: '10px', marginBottom: '16px' }}>
+                <div>
+                  <FieldLabel>Carrier URN</FieldLabel>
+                  <input
+                    value={creditUrn}
+                    onChange={e => setCreditUrn(e.target.value)}
+                    placeholder="Approval reference"
+                    autoFocus
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Amount (AUD)</FieldLabel>
+                  <input
+                    value={creditAmount}
+                    onChange={e => setCreditAmount(e.target.value)}
+                    placeholder="0.00"
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <HoverBtn onClick={addCredit} disabled={creditSaving}>{creditSaving ? 'Saving…' : 'Add credit'}</HoverBtn>
+                {credits.length > 0 && (
+                  <button
+                    onClick={closeOutClaim}
+                    disabled={creditSaving}
+                    style={{ ...btnGhost, color: 'var(--brand-aqua)', borderColor: 'rgba(var(--brand-aqua-rgb),0.4)' }}
+                  >
+                    Close out claim ({aud(recovered)})
+                  </button>
+                )}
+                <button onClick={() => setCreditFor(null)} disabled={creditSaving} style={btnGhost}>Cancel</button>
+              </div>
+            </>
+          )
+        })()}
       </Modal>
     </div>
   )
