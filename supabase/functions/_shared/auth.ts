@@ -11,6 +11,25 @@ export type RequireStaffResult =
   | { ok: true; userId?: string; email?: string }
   | { ok: false; response: Response };
 
+function isServiceRoleJwt(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload?.role === "service_role" && payload?.iss === "supabase";
+  } catch { return false; }
+}
+
+async function postgrestAccepts(token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/`, {
+      method: "HEAD",
+      headers: { apikey: token, Authorization: `Bearer ${token}` },
+    });
+    return res.ok; // 401 on a bad/forged signature
+  } catch { return false; }
+}
+
 export async function requireStaff(
   req: Request,
   corsHeaders: Record<string, string>,
@@ -30,6 +49,11 @@ export async function requireStaff(
   // Service-role key → trusted service/cron caller.
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (serviceKey && token === serviceKey) return { ok: true };
+
+  // Legacy service-role JWT (what pg_cron jobs send). The runtime may inject the
+  // new sb_secret_* key instead, so equality fails — validate the JWT's signature
+  // by presenting it to PostgREST and trust it only if the role claim is service_role.
+  if (isServiceRoleJwt(token) && (await postgrestAccepts(token))) return { ok: true };
 
   // Otherwise the token must be a valid user JWT.
   const supabase = createClient(

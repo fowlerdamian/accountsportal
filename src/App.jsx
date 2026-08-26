@@ -58,6 +58,7 @@ import GuideSettings from './apps/Guide/pages/admin/Settings'
 import GuideCategories from './apps/Guide/pages/admin/Categories'
 import GuideBrands from './apps/Guide/pages/admin/Brands'
 import GuideUsers from './apps/Guide/pages/admin/Users'
+import GuideDeliveries from './apps/Guide/pages/admin/Deliveries'
 import GuideViewer from './apps/Guide/pages/guide/GuideViewer'
 
 // Redirect old viewer URL formats to the current /:slug public route
@@ -93,6 +94,7 @@ function GuideAppRouter() {
             <Route path="categories" element={<GuideCategories />} />
             <Route path="brands" element={<GuideBrands />} />
             <Route path="users" element={<GuideUsers />} />
+            <Route path="deliveries" element={<GuideDeliveries />} />
           </Route>
         </Routes>
       </GuideAuthProvider>
