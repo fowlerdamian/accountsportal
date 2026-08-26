@@ -55,6 +55,36 @@ async function shopifyGet(path: string) {
   return res.json();
 }
 
+// ── Team chat alerts ─────────────────────────────────────────────────────────
+// Every failure is posted to the support Google Chat space via the shared
+// `notify-google-chat` edge fn — the same delivery path as Guide feedback/flags.
+const PORTAL_URL = "https://app.automotivegroup.com.au";
+async function notifyChat(text: string) {
+  try {
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/notify-google-chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+        Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY") ?? ""}`,
+      },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) console.error("notify-google-chat →", res.status, await res.text());
+  } catch (e) {
+    console.error("notify-google-chat failed:", e);
+  }
+}
+function failAlert(row: any, reason: string, detail?: string) {
+  const who = [row?.customer_name, row?.customer_email].filter(Boolean).join(" · ") || "no customer details";
+  const skus = (row?.line_items ?? []).map((li: LineItem) => li.sku).filter(Boolean).join(", ") || "no SKUs";
+  return notifyChat(
+    `⚠️ *Guide auto-delivery failed* — order *${row?.order_name ?? row?.shopify_order_id ?? "?"}*\n` +
+    `${reason}${detail ? `\n\`${detail.slice(0, 300)}\`` : ""}\n` +
+    `${who}\nSKUs: ${skus}\n<${PORTAL_URL}/guide/deliveries|Open auto-delivery>`,
+  );
+}
+
 async function loadSettings(db: SupabaseClient): Promise<Settings> {
   const { data, error } = await db.from("guide_delivery_settings").select("*").eq("id", 1).single();
   if (error || !data) throw new Error("guide_delivery_settings row missing");
@@ -239,7 +269,10 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
     const { order } = await shopifyGet(`orders/${row.shopify_order_id}.json`);
     if (order) fresh = normaliseOrder(order);
   } catch (e) {
-    await db.from("guide_deliveries").update({ attempts: (row.attempts ?? 0) + 1, error: `Refresh failed: ${String((e as any)?.message ?? e)}` }).eq("id", row.id);
+    const attempts = (row.attempts ?? 0) + 1;
+    const detail = String((e as any)?.message ?? e);
+    await db.from("guide_deliveries").update({ attempts, error: `Refresh failed: ${detail}` }).eq("id", row.id);
+    await failAlert(row, attempts >= 5 ? "Could not re-fetch the order from Shopify — giving up after 5 attempts" : `Could not re-fetch the order from Shopify (attempt ${attempts}/5, will retry)`, detail);
     return { id: row.id, status: "scheduled", error: "refresh failed — will retry" };
   }
   if (fresh) {
@@ -261,10 +294,12 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
   const base = { matched_guides: matched, unmatched_skus: unmatched, attempts: (row.attempts ?? 0) + 1 };
   if (!row.customer_email) {
     await db.from("guide_deliveries").update({ ...base, status: "skipped", error: "No customer email on order" }).eq("id", row.id);
+    await failAlert(row, "No customer email on the order — guide not sent");
     return { id: row.id, status: "skipped" };
   }
   if (matched.length === 0) {
     await db.from("guide_deliveries").update({ ...base, status: "skipped", error: "No guides matched any SKU" }).eq("id", row.id);
+    await failAlert(row, unmatched.length ? `No guide matched: ${unmatched.join(", ")} — map them in SKU mapping` : "Order has no SKUs to match");
     return { id: row.id, status: "skipped" };
   }
   if (!settings.enabled && !force) {
@@ -278,8 +313,10 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
     await db.from("guide_deliveries").update({ ...base, status: "sent", error: null, resend_id: resendId, sent_at: new Date().toISOString() }).eq("id", row.id);
     return { id: row.id, status: "sent" };
   } catch (e) {
-    await db.from("guide_deliveries").update({ ...base, status: "failed", error: String(e?.message ?? e) }).eq("id", row.id);
-    return { id: row.id, status: "failed", error: String(e?.message ?? e) };
+    const detail = String((e as any)?.message ?? e);
+    await db.from("guide_deliveries").update({ ...base, status: "failed", error: detail }).eq("id", row.id);
+    await failAlert(row, `Email send failed (${matched.length} guide${matched.length === 1 ? "" : "s"} matched)`, detail);
+    return { id: row.id, status: "failed", error: detail };
   }
 }
 
@@ -425,6 +462,8 @@ Deno.serve(async (req) => {
     }
   } catch (err) {
     console.error("guide-delivery error:", err);
-    return json({ error: String((err as any)?.message ?? err) }, 500);
+    const detail = String((err as any)?.message ?? err);
+    await notifyChat(`⚠️ *Guide auto-delivery error* (${topic ? `webhook ${topic}` : "action"})\n\`${detail.slice(0, 300)}\`\n<${PORTAL_URL}/guide/deliveries|Open auto-delivery>`);
+    return json({ error: detail }, 500);
   }
 });
