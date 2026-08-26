@@ -80,10 +80,20 @@ serve(async (req) => {
       return data?.SaleList ?? [];
     }
 
+    let match: any = null;
+
+    // Phase 0 — a bare number (or "#1234") is most likely a Shopify order number, which Cin7
+    // stores as CustomerReference "#1234". Check that before treating it as an SO number.
+    const shopifyRef = /^#?\d{3,7}$/.test(orderNumber) ? "#" + orderNumber.replace(/^#/, "") : null;
+    if (shopifyRef) {
+      const refSales = await searchCin7("Search", shopifyRef);
+      match = refSales.find((s: any) => (s.CustomerReference ?? "").trim().toLowerCase() === shopifyRef.toLowerCase());
+      console.log("Shopify-ref results:", refSales.length, match ? "matched" : "no match");
+    }
+
     // Phase 1 — broad text search
-    const searchSales = await searchCin7("Search", orderNumber);
-    console.log("Search results:", searchSales.length);
-    let match = findMatch(searchSales);
+    const searchSales = match ? [] : await searchCin7("Search", orderNumber);
+    if (!match) { console.log("Search results:", searchSales.length); match = findMatch(searchSales); }
 
     // Phase 2 — if no match, try direct OrderNumber filter
     if (!match) {

@@ -26,6 +26,9 @@ interface Cin7Order {
   CustomerReference: string | null;
   Total: number | null;
   LineCount: number | null;
+  /** 'shopify' when the order exists in Shopify but has no Cin7 sale (yet). */
+  source?: 'cin7' | 'shopify';
+  shopifyOrderUrl?: string | null;
 }
 
 interface TileConfig {
@@ -138,9 +141,29 @@ export default function NewCasePage() {
       if (error) throw error;
       if (data.error) throw new Error('API error');
       if (!data.found) {
-        setLookupError(trimmed);
+        // Not in Cin7 — fall back to Shopify (order number with or without '#').
+        const ref = /^#?\d{3,7}$/.test(trimmed) ? '#' + trimmed.replace(/^#/, '') : trimmed;
+        const { data: shop, error: shopErr } = await supabase.functions.invoke('shopify-get-order', {
+          body: { customerReference: ref },
+        });
+        if (!shopErr && shop?.found) {
+          setLookedUpOrder({
+            found: true,
+            source: 'shopify',
+            SaleID: '',
+            SaleOrderNumber: null,
+            Customer: shop.customer?.name ?? shop.shipping_address?.name ?? null,
+            OrderDate: shop.created_at ?? null,
+            CustomerReference: shop.order_name ?? ref,
+            Total: shop.total_price ?? null,
+            LineCount: Array.isArray(shop.line_items) ? shop.line_items.length : null,
+            shopifyOrderUrl: shop.shopify_order_url ?? null,
+          });
+        } else {
+          setLookupError(trimmed);
+        }
       } else {
-        setLookedUpOrder(data as Cin7Order);
+        setLookedUpOrder({ ...(data as Cin7Order), source: 'cin7' });
       }
     } catch (err) {
       console.error('Order lookup failed:', err);
@@ -172,7 +195,7 @@ export default function NewCasePage() {
           error_origin: issueType === 'order_error' ? errorOrigin : null,
           title: getTitle(),
           description: description || null,
-          order_number: lookedUpOrder?.SaleOrderNumber || manualOrderNumber || null,
+          order_number: lookedUpOrder?.SaleOrderNumber || lookedUpOrder?.CustomerReference || manualOrderNumber || null,
           cin7_order_number: lookedUpOrder?.SaleOrderNumber || null,
           cin7_sale_id: lookedUpOrder?.SaleID || null,
           customer_reference: lookedUpOrder?.CustomerReference || null,
@@ -192,7 +215,7 @@ export default function NewCasePage() {
           caseTitle: getTitle(),
           caseType: CASE_TYPE_LABELS[getDbType()] || getDbType(),
           errorOrigin: issueType === 'order_error' ? errorOrigin : null,
-          orderNumber: lookedUpOrder?.SaleOrderNumber || manualOrderNumber || null,
+          orderNumber: lookedUpOrder?.SaleOrderNumber || lookedUpOrder?.CustomerReference || manualOrderNumber || null,
           customerName: lookedUpOrder?.Customer || null,
         });
       }
@@ -338,7 +361,7 @@ export default function NewCasePage() {
                   value={orderInput}
                   onChange={e => { setOrderInput(e.target.value); setLookupError(null); }}
                   onKeyDown={e => { if (e.key === 'Enter') handleStep2Next(); }}
-                  placeholder="e.g. SO-00123"
+                  placeholder="e.g. SO-00123 or Shopify #8991"
                   disabled={isLookingUp}
                   className="w-full bg-background border border-input text-sm px-3 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors mb-2"
                 />
@@ -364,7 +387,10 @@ export default function NewCasePage() {
                 <div className="border-l-2 border-foreground bg-card p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <Check className="h-4 w-4 text-status-resolved shrink-0" />
-                    <span className="text-sm font-medium text-foreground">{lookedUpOrder.SaleOrderNumber ?? '—'}</span>
+                    <span className="text-sm font-medium text-foreground">{lookedUpOrder.SaleOrderNumber ?? lookedUpOrder.CustomerReference ?? '—'}</span>
+                    {lookedUpOrder.source === 'shopify' && (
+                      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-border text-muted-foreground">Shopify · no Cin7 sale yet</span>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground ml-6">{lookedUpOrder.Customer ?? '—'}</p>
                   <div className="flex items-center gap-2 ml-6 mt-1 flex-wrap">
