@@ -262,14 +262,25 @@ function normaliseOrder(o: any) {
 }
 
 /** Schedule a delivery for fulfilled_at + delay if this order hasn't been seen. Returns the row id, or null if already present / not shipped. */
-async function enqueue(db: SupabaseClient, o: any, source: string, delayHours: number, forceNow = false): Promise<string | null> {
+// Provisional verdict shown in the log while a row waits — re-checked for real at send time.
+function provisionalNote(n: { customer_tags: string[]; line_items: LineItem[] }, settings: Settings): string | null {
+  const excluded = (settings.exclude_customer_tags ?? []).map((t) => t.trim().toUpperCase()).filter(Boolean);
+  const tag = (n.customer_tags ?? []).find((t) => excluded.includes(t.toUpperCase()));
+  if (tag) return `Will skip: customer tagged ${tag} (re-checked at send time)`;
+  const eligible = (n.line_items ?? []).some((li) => li.sku && eligibleSku(li.sku.trim(), settings.sku_patterns));
+  if (!eligible) return "Will skip: no guide-eligible products (re-checked at send time)";
+  return null;
+}
+
+async function enqueue(db: SupabaseClient, o: any, source: string, settings: Settings, forceNow = false): Promise<string | null> {
+  const delayHours = settings.delay_hours;
   const { financial_status: _fs, fulfillment_status: _ff, cancelled, ...n } = normaliseOrder(o);
   if (cancelled) return null;
   if (!n.fulfilled_at && !forceNow) return null; // not shipped yet — the fulfilled webhook/poll picks it up later
   const base = n.fulfilled_at ? new Date(n.fulfilled_at).getTime() : Date.now();
   const send_after = new Date(forceNow ? Date.now() : base + delayHours * 3600_000).toISOString();
   const { data, error } = await db.from("guide_deliveries")
-    .insert({ ...n, source, status: "scheduled", send_after })
+    .insert({ ...n, source, status: "scheduled", send_after, error: provisionalNote(n, settings) })
     .select("id").single();
   if (error) {
     if ((error as any).code === "23505") return null; // duplicate order — idempotent
@@ -368,7 +379,7 @@ async function poll(db: SupabaseClient) {
   let enqueued = 0;
   for (const o of orders) {
     if (o.cancelled_at) continue;
-    if (await enqueue(db, o, "poll", settings.delay_hours)) enqueued++;
+    if (await enqueue(db, o, "poll", settings)) enqueued++;
   }
   return { scanned: orders.length, enqueued };
 }
@@ -405,7 +416,7 @@ Deno.serve(async (req) => {
       if (!order) return json({ ok: true, ignored: "order not found" });
       if (order.cancelled_at) return json({ ok: true, ignored: "cancelled" });
       const settings = await loadSettings(db);
-      const rowId = await enqueue(db, order, "webhook", settings.delay_hours);
+      const rowId = await enqueue(db, order, "webhook", settings);
       if (!rowId) return json({ ok: true, duplicate_or_unshipped: true });
       return json({ ok: true, scheduled: rowId });
     }
@@ -447,7 +458,7 @@ Deno.serve(async (req) => {
             summary.unshipped++; continue;
           }
           const send_after = new Date(new Date(n.fulfilled_at).getTime() + settings.delay_hours * 3600_000).toISOString();
-          await db.from("guide_deliveries").update({ ...cols, status: "scheduled", send_after, error: null, attempts: 0 }).eq("id", row.id);
+          await db.from("guide_deliveries").update({ ...cols, status: "scheduled", send_after, error: provisionalNote(n, settings), attempts: 0 }).eq("id", row.id);
           if (send_after <= new Date().toISOString()) { due.push(row.id); summary.due++; } else summary.rescheduled++;
         }
         const processed = due.length ? await processPending(db, due) : [];
@@ -463,7 +474,7 @@ Deno.serve(async (req) => {
         if (!id) return json({ error: "order_id required" }, 400);
         const { order } = await shopifyGet(`orders/${id}.json`);
         const settings = await loadSettings(db);
-        const rowId = await enqueue(db, order, "manual", settings.delay_hours, !!body.force);
+        const rowId = await enqueue(db, order, "manual", settings, !!body.force);
         if (!rowId) return json({ ok: true, duplicate_or_unshipped: true });
         if (!body.force) return json({ ok: true, scheduled: rowId });
         const [r] = await processPending(db, [rowId], true);
