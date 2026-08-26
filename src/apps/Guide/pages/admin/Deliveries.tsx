@@ -24,10 +24,11 @@ type Delivery = {
   line_items: { sku: string | null; title: string; quantity: number }[];
   matched_guides: { sku: string; title: string; url: string; match: string }[];
   unmatched_skus: string[]; error: string | null; sent_at: string | null; created_at: string; attempts: number;
+  fulfilled_at: string | null; send_after: string | null; refreshed_at: string | null;
 };
 type Settings = {
   id: number; enabled: boolean; brand_id: string | null; from_email: string; reply_to: string | null; bcc_email: string | null;
-  subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number;
+  subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number; delay_hours: number;
 };
 type Link = { id: string; sku: string; instruction_set_id: string | null; note: string | null };
 
@@ -41,7 +42,7 @@ async function callFn(body: Record<string, unknown>) {
 }
 
 const statusVariant = (s: string) =>
-  s === "sent" ? "default" : s === "failed" ? "destructive" : s === "pending" ? "secondary" : "outline";
+  s === "sent" ? "default" : s === "failed" ? "destructive" : s === "scheduled" || s === "pending" ? "secondary" : "outline";
 
 export default function Deliveries() {
   const qc = useQueryClient();
@@ -78,7 +79,7 @@ export default function Deliveries() {
   const deliveries = deliveriesQ.data ?? [];
   const stats = useMemo(() => ({
     sent: deliveries.filter((d) => d.status === "sent").length,
-    pending: deliveries.filter((d) => d.status === "pending").length,
+    pending: deliveries.filter((d) => d.status === "scheduled" || d.status === "pending").length,
     failed: deliveries.filter((d) => d.status === "failed").length,
     skipped: deliveries.filter((d) => d.status === "skipped").length,
   }), [deliveries]);
@@ -107,7 +108,7 @@ export default function Deliveries() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Auto-delivery</h1>
-          <p className="text-muted-foreground text-sm">Emails installation guides to Shopify customers as soon as an order is paid.</p>
+          <p className="text-muted-foreground text-sm">Emails installation guides to Shopify customers {settingsQ.data?.delay_hours ?? 24}h after their order ships. The order is re-checked in Shopify at send time.</p>
         </div>
         <div className="flex items-center gap-2">
           {settingsQ.data && (
@@ -128,7 +129,7 @@ export default function Deliveries() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[["Sent", stats.sent], ["Pending", stats.pending], ["Failed", stats.failed], ["Skipped", stats.skipped]].map(([k, v]) => (
+        {[["Sent", stats.sent], ["Scheduled", stats.pending], ["Failed", stats.failed], ["Skipped", stats.skipped]].map(([k, v]) => (
           <div key={k as string} className="rounded-lg border bg-card p-4">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">{k}</div>
             <div className="text-2xl font-semibold mt-1">{v}</div>
@@ -184,7 +185,7 @@ function DeliveryLog({ deliveries, loading, busy, onResend }: {
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {["all", "sent", "pending", "failed", "skipped"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            {["all", "sent", "scheduled", "failed", "skipped"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -201,7 +202,7 @@ function DeliveryLog({ deliveries, loading, busy, onResend }: {
               <TableRow key={d.id}>
                 <TableCell className="whitespace-nowrap">
                   <div className="font-medium">{d.order_name ?? d.shopify_order_id}</div>
-                  <div className="text-xs text-muted-foreground">{d.order_created_at ? formatDistanceToNow(new Date(d.order_created_at), { addSuffix: true }) : ""} · {d.source}</div>
+                  <div className="text-xs text-muted-foreground">{d.fulfilled_at ? `shipped ${formatDistanceToNow(new Date(d.fulfilled_at), { addSuffix: true })}` : d.order_created_at ? `ordered ${formatDistanceToNow(new Date(d.order_created_at), { addSuffix: true })}` : ""} · {d.source}</div>
                 </TableCell>
                 <TableCell>
                   <div>{d.customer_name ?? "—"}</div>
@@ -221,11 +222,12 @@ function DeliveryLog({ deliveries, loading, busy, onResend }: {
                 </TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(d.status)}>{d.status}</Badge>
+                  {d.status === "scheduled" && d.send_after && <div className="text-xs text-muted-foreground mt-1">sends {formatDistanceToNow(new Date(d.send_after), { addSuffix: true })}</div>}
                   {d.error && <div className="text-xs text-muted-foreground mt-1 max-w-[220px]">{d.error}</div>}
                   {d.sent_at && <div className="text-xs text-muted-foreground mt-1">{formatDistanceToNow(new Date(d.sent_at), { addSuffix: true })}</div>}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button size="sm" variant="ghost" disabled={busy !== null || !d.customer_email} title="Re-match and send now"
+                  <Button size="sm" variant="ghost" disabled={busy !== null || !d.customer_email} title="Re-fetch order, re-match and send now"
                     onClick={() => onResend(d.id)}>
                     {busy === `resend:${d.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   </Button>
@@ -359,7 +361,7 @@ function SettingsForm({ settings, brands, busy, run, onSaved }: {
       <div className="rounded-lg border p-5 space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <div className="font-medium">Auto-send on paid orders</div>
+            <div className="font-medium">Auto-send after shipment</div>
             <div className="text-xs text-muted-foreground">Off = orders are still logged and matched, nothing is emailed.</div>
           </div>
           <Switch checked={s.enabled} onCheckedChange={(v) => set("enabled", v)} />
@@ -397,6 +399,11 @@ function SettingsForm({ settings, brands, busy, run, onSaved }: {
           <Textarea value={s.intro_text} onChange={(e) => set("intro_text", e.target.value)} rows={3} className="mt-1" />
         </div>
         <div>
+          <Label>Delay after shipment (hours)</Label>
+          <Input type="number" min={0} max={720} value={s.delay_hours} onChange={(e) => set("delay_hours", Number(e.target.value))} className="mt-1 w-32" />
+          <div className="text-xs text-muted-foreground mt-1">Email goes out this many hours after the order is marked fulfilled in Shopify. The order is re-fetched at that moment so cancellations, refunds and email changes are respected.</div>
+        </div>
+        <div>
           <Label>Backup poll look-back (hours)</Label>
           <Input type="number" min={1} max={720} value={s.poll_lookback_hours} onChange={(e) => set("poll_lookback_hours", Number(e.target.value))} className="mt-1 w-32" />
           <div className="text-xs text-muted-foreground mt-1">The webhook is instant; a 15-minute poll also catches anything the webhook missed.</div>
@@ -415,7 +422,7 @@ function SettingsForm({ settings, brands, busy, run, onSaved }: {
           })}>{busy === "test" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send test"}</Button>
         </div>
         <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
-          <div><strong>How it works:</strong> Shopify fires <code>orders/paid</code> → the portal re-fetches the order from Shopify, matches each SKU to a published guide, and emails the customer links to their guides. Every order is logged once (never double-sent).</div>
+          <div><strong>How it works:</strong> Shopify fires <code>orders/fulfilled</code> → the order is scheduled for shipment + delay → when due, the portal re-fetches the order from Shopify, matches each remaining SKU to a published guide, and emails the customer. Every order is logged once (never double-sent).</div>
         </div>
       </div>
     </div>

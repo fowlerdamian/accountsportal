@@ -1,12 +1,16 @@
-// guide-delivery — auto-email installation guides to Shopify customers after purchase.
+// guide-delivery — auto-email installation guides to Shopify customers after SHIPMENT.
+//
+// Flow: order fulfilled (orders/fulfilled webhook, or the 15-min poll) → row scheduled for
+// fulfilled_at + delay_hours → when due, the order is RE-FETCHED from Shopify (fresh email,
+// name, line items minus refunds, cancellation state) → SKUs matched → email sent.
 //
 // Entry points (POST JSON body, or Shopify webhook):
-//   Shopify webhook (orders/paid, orders/create)  — header X-Shopify-Topic present.
-//     Verified by re-fetching the order from the Shopify Admin API (source of truth);
-//     if SHOPIFY_WEBHOOK_SECRET is set the HMAC is also checked.
-//   { action: "poll" }              — pull recent paid orders from Shopify, enqueue unseen ones
-//   { action: "process" }           — send every pending delivery (cron + UI)
-//   { action: "resend", id }        — re-send one delivery (re-matches guides first)
+//   Shopify webhook (orders/fulfilled) — header X-Shopify-Topic present. The payload is only
+//     used for its id; the order is re-fetched from the Admin API (source of truth), and if
+//     SHOPIFY_WEBHOOK_SECRET is set the HMAC is also checked.
+//   { action: "poll" }              — scan recently-shipped orders, schedule unseen ones, then send due ones
+//   { action: "process" }           — send every due (scheduled, send_after <= now) delivery
+//   { action: "resend", id }        — re-fetch + re-match + send one delivery now
 //   { action: "ingest", order_id }  — manually enqueue a Shopify order by numeric id
 //   { action: "preview", skus[] }   — dry-run matching for a list of SKUs
 //   { action: "test", to }          — send a sample email to an address
@@ -30,7 +34,7 @@ type LineItem = { sku: string | null; title: string; quantity: number; variant_t
 type Matched = { sku: string; instruction_set_id: string; title: string; url: string; match: "link" | "exact" | "prefix" };
 type Settings = {
   enabled: boolean; brand_id: string | null; from_email: string; reply_to: string | null; bcc_email: string | null;
-  subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number;
+  subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number; delay_hours: number;
 };
 
 function admin(): SupabaseClient {
@@ -181,9 +185,20 @@ async function sendResend(settings: Settings, brand: any, to: string, msg: { sub
 
 // ── Order ingestion ──────────────────────────────────────────────────────────
 function normaliseOrder(o: any) {
-  const items: LineItem[] = (o.line_items ?? []).map((li: any) => ({
-    sku: li.sku ?? null, title: li.title ?? "", quantity: li.quantity ?? 0, variant_title: li.variant_title ?? null,
-  }));
+  // Net out refunded quantities so a removed/refunded product doesn't get a guide.
+  const refunded = new Map<number, number>();
+  for (const r of o.refunds ?? []) for (const rl of r.refund_line_items ?? [])
+    refunded.set(rl.line_item_id, (refunded.get(rl.line_item_id) ?? 0) + (rl.quantity ?? 0));
+  const items: LineItem[] = (o.line_items ?? [])
+    .map((li: any) => ({
+      sku: li.sku ?? null, title: li.title ?? "", variant_title: li.variant_title ?? null,
+      quantity: (li.quantity ?? 0) - (refunded.get(li.id) ?? 0),
+    }))
+    .filter((li: LineItem) => li.quantity > 0);
+  const fulfilments = (o.fulfillments ?? []).filter((f: any) => f.status === "success");
+  const fulfilled_at: string | null = fulfilments.length
+    ? (fulfilments.map((f: any) => f.created_at as string).sort().at(-1) ?? null)
+    : null;
   const first = o.customer?.first_name ?? o.shipping_address?.first_name ?? o.billing_address?.first_name ?? "";
   const last = o.customer?.last_name ?? o.shipping_address?.last_name ?? o.billing_address?.last_name ?? "";
   return {
@@ -193,16 +208,22 @@ function normaliseOrder(o: any) {
     customer_name: `${first} ${last}`.trim() || null,
     customer_email: (o.email ?? o.contact_email ?? o.customer?.email ?? null)?.toLowerCase() ?? null,
     line_items: items,
+    fulfilled_at,
     financial_status: o.financial_status as string | null,
+    fulfillment_status: o.fulfillment_status as string | null,
     cancelled: !!o.cancelled_at,
   };
 }
 
-/** Insert a pending delivery if this order hasn't been seen. Returns the row id or null if already present. */
-async function enqueue(db: SupabaseClient, o: any, source: string): Promise<string | null> {
-  const { financial_status: _fs, cancelled: _c, ...n } = normaliseOrder(o);
+/** Schedule a delivery for fulfilled_at + delay if this order hasn't been seen. Returns the row id, or null if already present / not shipped. */
+async function enqueue(db: SupabaseClient, o: any, source: string, delayHours: number, forceNow = false): Promise<string | null> {
+  const { financial_status: _fs, fulfillment_status: _ff, cancelled, ...n } = normaliseOrder(o);
+  if (cancelled) return null;
+  if (!n.fulfilled_at && !forceNow) return null; // not shipped yet — the fulfilled webhook/poll picks it up later
+  const base = n.fulfilled_at ? new Date(n.fulfilled_at).getTime() : Date.now();
+  const send_after = new Date(forceNow ? Date.now() : base + delayHours * 3600_000).toISOString();
   const { data, error } = await db.from("guide_deliveries")
-    .insert({ ...n, source, status: "pending" })
+    .insert({ ...n, source, status: "scheduled", send_after })
     .select("id").single();
   if (error) {
     if ((error as any).code === "23505") return null; // duplicate order — idempotent
@@ -212,6 +233,29 @@ async function enqueue(db: SupabaseClient, o: any, source: string): Promise<stri
 }
 
 async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<ReturnType<typeof loadCatalog>>, row: any, force = false) {
+  // Re-fetch the order NOW — items, email, name and refund/cancel state may have changed since scheduling.
+  let fresh: ReturnType<typeof normaliseOrder> | null = null;
+  try {
+    const { order } = await shopifyGet(`orders/${row.shopify_order_id}.json`);
+    if (order) fresh = normaliseOrder(order);
+  } catch (e) {
+    await db.from("guide_deliveries").update({ attempts: (row.attempts ?? 0) + 1, error: `Refresh failed: ${String((e as any)?.message ?? e)}` }).eq("id", row.id);
+    return { id: row.id, status: "scheduled", error: "refresh failed — will retry" };
+  }
+  if (fresh) {
+    const { financial_status, fulfillment_status: _ff, cancelled, ...cols } = fresh;
+    const refreshed_at = new Date().toISOString();
+    row = { ...row, ...cols, refreshed_at };
+    await db.from("guide_deliveries").update({ ...cols, refreshed_at }).eq("id", row.id);
+    if (cancelled) {
+      await db.from("guide_deliveries").update({ status: "skipped", error: "Order cancelled before send" }).eq("id", row.id);
+      return { id: row.id, status: "skipped" };
+    }
+    if (["refunded", "voided"].includes(financial_status ?? "")) {
+      await db.from("guide_deliveries").update({ status: "skipped", error: `Order ${financial_status}` }).eq("id", row.id);
+      return { id: row.id, status: "skipped" };
+    }
+  }
   const items = row.line_items as LineItem[];
   const { matched, unmatched } = matchLineItems(items, cat, settings.auto_match);
   const base = { matched_guides: matched, unmatched_skus: unmatched, attempts: (row.attempts ?? 0) + 1 };
@@ -243,7 +287,7 @@ async function processPending(db: SupabaseClient, ids?: string[], force = false)
   const settings = await loadSettings(db);
   const cat = await loadCatalog(db, settings.brand_id);
   let q = db.from("guide_deliveries").select("*").order("created_at");
-  q = ids?.length ? q.in("id", ids) : q.eq("status", "pending").lt("attempts", 5);
+  q = ids?.length ? q.in("id", ids) : q.eq("status", "scheduled").lte("send_after", new Date().toISOString()).lt("attempts", 5);
   const { data: rows, error } = await q;
   if (error) throw error;
   const results = [];
@@ -254,12 +298,12 @@ async function processPending(db: SupabaseClient, ids?: string[], force = false)
 async function poll(db: SupabaseClient) {
   const settings = await loadSettings(db);
   const since = new Date(Date.now() - settings.poll_lookback_hours * 3600_000).toISOString();
-  const data = await shopifyGet(`orders.json?status=any&financial_status=paid&created_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,email,contact_email,created_at,customer,line_items,financial_status,cancelled_at,shipping_address,billing_address`);
+  const data = await shopifyGet(`orders.json?status=any&fulfillment_status=shipped&updated_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,email,contact_email,created_at,customer,line_items,refunds,fulfillments,financial_status,fulfillment_status,cancelled_at,shipping_address,billing_address`);
   const orders: any[] = data.orders ?? [];
   let enqueued = 0;
   for (const o of orders) {
     if (o.cancelled_at) continue;
-    if (await enqueue(db, o, "poll")) enqueued++;
+    if (await enqueue(db, o, "poll", settings.delay_hours)) enqueued++;
   }
   return { scanned: orders.length, enqueued };
 }
@@ -295,11 +339,10 @@ Deno.serve(async (req) => {
       const { order } = await shopifyGet(`orders/${id}.json`);
       if (!order) return json({ ok: true, ignored: "order not found" });
       if (order.cancelled_at) return json({ ok: true, ignored: "cancelled" });
-      if (!["paid", "partially_paid", "authorized"].includes(order.financial_status)) return json({ ok: true, ignored: order.financial_status });
-      const rowId = await enqueue(db, order, "webhook");
-      if (!rowId) return json({ ok: true, duplicate: true });
-      const [r] = await processPending(db, [rowId]);
-      return json({ ok: true, result: r });
+      const settings = await loadSettings(db);
+      const rowId = await enqueue(db, order, "webhook", settings.delay_hours);
+      if (!rowId) return json({ ok: true, duplicate_or_unshipped: true });
+      return json({ ok: true, scheduled: rowId });
     }
 
     // ── Staff / cron actions ──
@@ -325,9 +368,11 @@ Deno.serve(async (req) => {
         const id = Number(body.order_id);
         if (!id) return json({ error: "order_id required" }, 400);
         const { order } = await shopifyGet(`orders/${id}.json`);
-        const rowId = await enqueue(db, order, "manual");
-        if (!rowId) return json({ ok: true, duplicate: true });
-        const [r] = await processPending(db, [rowId], !!body.force);
+        const settings = await loadSettings(db);
+        const rowId = await enqueue(db, order, "manual", settings.delay_hours, !!body.force);
+        if (!rowId) return json({ ok: true, duplicate_or_unshipped: true });
+        if (!body.force) return json({ ok: true, scheduled: rowId });
+        const [r] = await processPending(db, [rowId], true);
         return json({ ok: true, result: r });
       }
       case "preview": {
@@ -351,16 +396,23 @@ Deno.serve(async (req) => {
         // Idempotently register the Shopify orders/paid webhook pointing at this function.
         const { token, store } = shopifyEnv();
         const address = `${Deno.env.get("SUPABASE_URL")}/functions/v1/guide-delivery`;
-        const existing = await shopifyGet(`webhooks.json?topic=orders/paid&limit=50`);
-        const hit = (existing.webhooks ?? []).find((w: any) => w.address === address);
-        if (hit) return json({ ok: true, existing: true, webhook: hit });
+        const TOPIC = "orders/fulfilled";
+        const existing = await shopifyGet(`webhooks.json?limit=250`);
+        const ours = (existing.webhooks ?? []).filter((w: any) => w.address === address);
+        const removed: string[] = [];
+        for (const w of ours.filter((w: any) => w.topic !== TOPIC)) {
+          await fetch(`https://${store}/admin/api/${SHOPIFY_API}/webhooks/${w.id}.json`, { method: "DELETE", headers: { "X-Shopify-Access-Token": token } });
+          removed.push(w.topic);
+        }
+        const hit = ours.find((w: any) => w.topic === TOPIC);
+        if (hit) return json({ ok: true, existing: true, removed, webhook: hit });
         const res = await fetch(`https://${store}/admin/api/${SHOPIFY_API}/webhooks.json`, {
           method: "POST",
           headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
-          body: JSON.stringify({ webhook: { topic: "orders/paid", address, format: "json" } }),
+          body: JSON.stringify({ webhook: { topic: TOPIC, address, format: "json" } }),
         });
         const out = await res.json();
-        return json({ ok: res.ok, webhook: out.webhook ?? out }, res.ok ? 200 : 500);
+        return json({ ok: res.ok, removed, webhook: out.webhook ?? out }, res.ok ? 200 : 500);
       }
       case "domains": {
         // Diagnostic: which sender domains are verified on the Resend account.

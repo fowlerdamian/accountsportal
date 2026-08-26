@@ -74,3 +74,11 @@ begin new.updated_at = now(); return new; end $$;
 drop trigger if exists guide_deliveries_touch on public.guide_deliveries;
 create trigger guide_deliveries_touch before update on public.guide_deliveries
   for each row execute function public.touch_updated_at();
+
+-- 2026-08-26 (later): trigger moved from payment to shipment + delay; order is re-fetched at send time.
+alter table public.guide_delivery_settings add column if not exists delay_hours int not null default 24;
+alter table public.guide_deliveries
+  add column if not exists fulfilled_at timestamptz,
+  add column if not exists send_after timestamptz,
+  add column if not exists refreshed_at timestamptz;
+create index if not exists guide_deliveries_due_idx on public.guide_deliveries (send_after) where status = 'scheduled';
