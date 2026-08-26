@@ -186,7 +186,6 @@ function renderEmail(opts: {
   const subject = settings.subject.replace(/\{\{s\}\}/g, s).replace(/\{\{order\}\}/g, orderName).replace(/\{\{name\}\}/g, firstName);
   const rows = guides.map((g) => `
     <tr><td style="padding:14px 16px;border:1px solid #e5e7eb;border-radius:8px;">
-      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;margin-bottom:4px;">${esc(g.sku)}</div>
       <div style="font-size:16px;font-weight:600;color:#111827;margin-bottom:10px;">${esc(g.title)}</div>
       <a href="${g.url}" style="display:inline-block;background:${colour};color:#111;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:6px;font-size:14px;">Open installation guide →</a>
       <div style="font-size:12px;color:#9ca3af;margin-top:8px;">${esc(g.url)}</div>
@@ -206,7 +205,7 @@ function renderEmail(opts: {
     </td></tr>
   </table></td></tr></table></body></html>`;
   const text = `Hi ${firstName},\n\n${settings.intro_text}\n\n` +
-    guides.map((g) => `${g.title} (${g.sku})\n${g.url}`).join("\n\n") +
+    guides.map((g) => `${g.title}\n${g.url}`).join("\n\n") +
     `\n\nOrder ${orderName}.${brand.support_email ? ` Questions? ${brand.support_email}` : ""}`;
   return { subject, html, text };
 }

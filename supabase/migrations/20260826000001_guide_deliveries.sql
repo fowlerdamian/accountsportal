@@ -12,7 +12,7 @@ create table if not exists public.guide_delivery_settings (
   reply_to        text,
   bcc_email       text,
   subject         text not null default 'Your installation guide{{s}} for order {{order}}',
-  intro_text      text not null default 'Thanks for your order! Here are the step-by-step installation guides for the products you purchased. Each guide opens on your phone or computer — no download needed.',
+  intro_text      text not null default 'Thanks for your order! Here are the step-by-step installation guides for the products you purchased.',
   auto_match      boolean not null default true,
   poll_lookback_hours int not null default 48,
   updated_at      timestamptz not null default now()
