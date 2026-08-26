@@ -36,6 +36,7 @@ type Settings = {
   enabled: boolean; brand_id: string | null; from_email: string; reply_to: string | null; bcc_email: string | null;
   subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number; delay_hours: number;
   sku_patterns: string[];
+  exclude_customer_tags: string[];
 };
 
 function admin(): SupabaseClient {
@@ -252,6 +253,7 @@ function normaliseOrder(o: any) {
     customer_name: `${first} ${last}`.trim() || null,
     customer_email: (o.email ?? o.contact_email ?? o.customer?.email ?? null)?.toLowerCase() ?? null,
     line_items: items,
+    customer_tags: String(o.customer?.tags ?? "").split(",").map((t: string) => t.trim().toUpperCase()).filter(Boolean),
     fulfilled_at,
     financial_status: o.financial_status as string | null,
     fulfillment_status: o.fulfillment_status as string | null,
@@ -302,6 +304,13 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
       await db.from("guide_deliveries").update({ status: "skipped", error: `Order ${financial_status}` }).eq("id", row.id);
       return { id: row.id, status: "skipped" };
     }
+  }
+  // Excluded customers (e.g. trade tiers TIER20/TIER25) — silent skip, no alert.
+  const excluded = (settings.exclude_customer_tags ?? []).map((t) => t.trim().toUpperCase()).filter(Boolean);
+  const tagHit = (row.customer_tags as string[] ?? []).find((t) => excluded.includes(t.toUpperCase()));
+  if (tagHit) {
+    await db.from("guide_deliveries").update({ status: "skipped", error: `Customer tagged ${tagHit} — excluded` }).eq("id", row.id);
+    return { id: row.id, status: "skipped" };
   }
   const items = row.line_items as LineItem[];
   const { matched, unmatched, ignored } = matchLineItems(items, cat, settings.auto_match, settings.sku_patterns);

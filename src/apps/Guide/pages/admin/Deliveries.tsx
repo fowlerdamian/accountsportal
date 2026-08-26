@@ -30,6 +30,7 @@ type Settings = {
   id: number; enabled: boolean; brand_id: string | null; from_email: string; reply_to: string | null; bcc_email: string | null;
   subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number; delay_hours: number;
   sku_patterns: string[];
+  exclude_customer_tags: string[];
 };
 type Link = { id: string; sku: string; instruction_set_id: string | null; note: string | null };
 
@@ -404,6 +405,12 @@ function SettingsForm({ settings, brands, busy, run, onSaved }: {
           <Textarea rows={4} className="mt-1 font-mono text-sm" value={(s.sku_patterns ?? []).join("\n")}
             onChange={(e) => set("sku_patterns", e.target.value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean))} />
           <div className="text-xs text-muted-foreground mt-1">Only products matching one of these get a guide; everything else on the order is ignored (no alert). <code>^BGLB</code> = starts with BGLB, <code>HBC$</code> = ends with HBC.</div>
+        </div>
+        <div>
+          <Label>Exclude customers with Shopify tags</Label>
+          <Input className="mt-1 font-mono" value={(s.exclude_customer_tags ?? []).join(", ")}
+            onChange={(e) => set("exclude_customer_tags", e.target.value.split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean))} placeholder="TIER20, TIER25" />
+          <div className="text-xs text-muted-foreground mt-1">Checked against the customer's tags at send time. Excluded orders are skipped quietly (no alert).</div>
         </div>
         <div>
           <Label>Delay after shipment (hours)</Label>

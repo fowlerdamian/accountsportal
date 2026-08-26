@@ -85,3 +85,7 @@ create index if not exists guide_deliveries_due_idx on public.guide_deliveries (
 
 -- Only products matching these regexes get guides (others are ignored, not 'unmatched').
 alter table public.guide_delivery_settings add column if not exists sku_patterns text[] not null default array['^BGLB','^AMP','^CB','HBC$'];
+
+-- Customers carrying any of these Shopify tags never receive guide emails (trade tiers).
+alter table public.guide_delivery_settings add column if not exists exclude_customer_tags text[] not null default array['TIER20','TIER25'];
+alter table public.guide_deliveries add column if not exists customer_tags text[] not null default '{}';
