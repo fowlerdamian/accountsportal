@@ -347,6 +347,21 @@ Deno.serve(async (req) => {
         const id = await sendResend(settings, cat.brand, to, msg);
         return json({ ok: true, resend_id: id, to });
       }
+      case "setup-webhook": {
+        // Idempotently register the Shopify orders/paid webhook pointing at this function.
+        const { token, store } = shopifyEnv();
+        const address = `${Deno.env.get("SUPABASE_URL")}/functions/v1/guide-delivery`;
+        const existing = await shopifyGet(`webhooks.json?topic=orders/paid&limit=50`);
+        const hit = (existing.webhooks ?? []).find((w: any) => w.address === address);
+        if (hit) return json({ ok: true, existing: true, webhook: hit });
+        const res = await fetch(`https://${store}/admin/api/${SHOPIFY_API}/webhooks.json`, {
+          method: "POST",
+          headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+          body: JSON.stringify({ webhook: { topic: "orders/paid", address, format: "json" } }),
+        });
+        const out = await res.json();
+        return json({ ok: res.ok, webhook: out.webhook ?? out }, res.ok ? 200 : 500);
+      }
       case "domains": {
         // Diagnostic: which sender domains are verified on the Resend account.
         const res = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}` } });
