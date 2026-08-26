@@ -424,6 +424,35 @@ Deno.serve(async (req) => {
       }
       case "process":
         return json({ ok: true, processed: await processPending(db) });
+      case "rerun": {
+        // Re-evaluate every unsent delivery against the CURRENT rules. Each order is re-fetched;
+        // its due time is recomputed from fulfilled_at + delay. Due → processed now; not yet
+        // shipped/due → (re)scheduled; cancelled/refunded → skipped.
+        const settings = await loadSettings(db);
+        const { data: rows, error } = await db.from("guide_deliveries").select("*")
+          .in("status", ["scheduled", "skipped", "failed", "pending"]).order("order_created_at");
+        if (error) throw error;
+        const due: string[] = [];
+        const summary = { rescheduled: 0, due: 0, cancelled: 0, unshipped: 0 };
+        for (const row of rows ?? []) {
+          const { order } = await shopifyGet(`orders/${row.shopify_order_id}.json`);
+          const n = normaliseOrder(order);
+          const { financial_status, fulfillment_status: _f, cancelled, ...cols } = n;
+          if (cancelled || ["refunded", "voided"].includes(financial_status ?? "")) {
+            await db.from("guide_deliveries").update({ ...cols, status: "skipped", error: cancelled ? "Order cancelled" : `Order ${financial_status}` }).eq("id", row.id);
+            summary.cancelled++; continue;
+          }
+          if (!n.fulfilled_at) {
+            await db.from("guide_deliveries").update({ ...cols, status: "skipped", error: "Not shipped yet — will schedule when fulfilled" }).eq("id", row.id);
+            summary.unshipped++; continue;
+          }
+          const send_after = new Date(new Date(n.fulfilled_at).getTime() + settings.delay_hours * 3600_000).toISOString();
+          await db.from("guide_deliveries").update({ ...cols, status: "scheduled", send_after, error: null, attempts: 0 }).eq("id", row.id);
+          if (send_after <= new Date().toISOString()) { due.push(row.id); summary.due++; } else summary.rescheduled++;
+        }
+        const processed = due.length ? await processPending(db, due) : [];
+        return json({ ok: true, ...summary, processed });
+      }
       case "resend": {
         if (!body.id) return json({ error: "id required" }, 400);
         const [r] = await processPending(db, [body.id], true);
