@@ -378,6 +378,25 @@ export default function GuideEditor() {
   const [currentStep, setCurrentStep] = useState(0);
   const [title, setTitle] = useState("");
   const [productCode, setProductCode] = useState("");
+  // SKU rules: mandatory, one or more SKUs separated by commas, each unique across all guides.
+  const parseSkus = (code: string) => [...new Set(code.toUpperCase().split(/[,;\s]+/).map((t) => t.trim()).filter(Boolean))];
+  const [skuClash, setSkuClash] = useState<string | null>(null);
+  useEffect(() => {
+    const toks = parseSkus(productCode);
+    if (toks.length === 0) { setSkuClash(null); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from("instruction_sets").select("id,title,product_code");
+      if (cancelled) return;
+      for (const g of data ?? []) {
+        if (g.id === id) continue;
+        const hit = parseSkus(g.product_code ?? "").find((c) => toks.includes(c));
+        if (hit) { setSkuClash(`${hit} is already used by "${g.title}"`); return; }
+      }
+      setSkuClash(null);
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [productCode, id]);
   const [categoryId, setCategoryId] = useState("");
   const [estimatedTime, setEstimatedTime] = useState("");
   const [description, setDescription] = useState("");
@@ -573,7 +592,7 @@ export default function GuideEditor() {
 
   const saveDraft = async (): Promise<boolean> => {
     if (!title || !productCode) {
-      toast.error("Title and product code are required");
+      toast.error("Title and SKU are required");
       return false;
     }
 
@@ -604,12 +623,15 @@ export default function GuideEditor() {
       return false;
     }
 
+    if (parseSkus(productCode).length === 0) { toast.error("At least one SKU is required"); return false; }
+    if (skuClash) { toast.error(`SKU clash: ${skuClash}`); return false; }
+
     setSaving(true);
     try {
       const slug = id ? (existingGuide as any)?.slug || generateSlug() : generateSlug();
       const guideData = {
         title,
-        product_code: productCode,
+        product_code: parseSkus(productCode).join(", "),
         slug,
         category_id: categoryId || null,
         estimated_time: estimatedTime || null,
@@ -908,8 +930,11 @@ export default function GuideEditor() {
                 <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Heavy Duty Bull Bar — Toyota Hilux 2021+" className="mt-1.5" />
               </div>
               <div>
-                <Label>Product Code *</Label>
-                <Input value={productCode} onChange={e => setProductCode(e.target.value)} placeholder="e.g. BB-TH21" className="mt-1.5" />
+                <Label>SKU{parseSkus(productCode).length > 1 ? "s" : ""} *</Label>
+                <Input value={productCode} onChange={e => setProductCode(e.target.value)} placeholder="e.g. BGLBHX21, BGLBHX21-R" className={`mt-1.5 font-mono ${skuClash ? "border-destructive" : ""}`} />
+                <p className={`text-xs mt-1 ${skuClash ? "text-destructive" : "text-muted-foreground"}`}>
+                  {skuClash ?? "Shopify SKU(s) this guide covers — comma-separate products that share these instructions. Each SKU can only belong to one guide."}
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -93,7 +93,10 @@ async function loadSettings(db: SupabaseClient): Promise<Settings> {
 }
 
 // ── Matching ─────────────────────────────────────────────────────────────────
-type GuideRow = { id: string; title: string; product_code: string; slug: string; published_at: string | null };
+type GuideRow = { id: string; title: string; product_code: string; codes: string[]; slug: string; published_at: string | null };
+// product_code may hold several SKUs ("BGLBHX21, BGLBHX21-R") — same split as public.parse_skus().
+const parseSkus = (code: string | null | undefined) =>
+  [...new Set((code ?? "").toUpperCase().split(/[,;\s]+/).map((t) => t.trim()).filter(Boolean))];
 
 async function loadCatalog(db: SupabaseClient, brandId: string | null) {
   const [{ data: brand }, { data: links }, { data: pubs }] = await Promise.all([
@@ -107,7 +110,7 @@ async function loadCatalog(db: SupabaseClient, brandId: string | null) {
       .eq("brand_id", brandId ?? ""),
   ]);
   if (!brand) throw new Error("Delivery brand not found");
-  const guides: GuideRow[] = (pubs ?? []).map((p: any) => ({ ...p.instruction_sets, published_at: p.published_at }));
+  const guides: GuideRow[] = (pubs ?? []).map((p: any) => ({ ...p.instruction_sets, codes: parseSkus(p.instruction_sets?.product_code), published_at: p.published_at }));
   const byId = new Map(guides.map((g) => [g.id, g]));
   const linkMap = new Map<string, string | null>();
   for (const l of links ?? []) linkMap.set(String(l.sku).trim().toUpperCase(), l.instruction_set_id);
@@ -118,16 +121,18 @@ function guideUrl(domain: string, slug: string) {
   return `https://${domain}/${slug}`;
 }
 
-// Rank auto-match candidates: exact code > longest prefix; never a title flagged OLD/DELETE/COPY; newest publish wins ties.
+// Rank auto-match candidates: any of the guide's SKUs equal > longest SKU that is a prefix;
+// never a title flagged OLD/DELETE/COPY; newest publish wins ties.
 function autoMatch(sku: string, guides: GuideRow[]): { g: GuideRow; match: "exact" | "prefix" } | null {
   const S = sku.toUpperCase();
-  const usable = guides.filter((g) => g.product_code && !/\b(OLD|DELETE|COPY|N\/A)\b/i.test(g.title + " " + g.product_code));
+  const usable = guides.filter((g) => g.codes.length && !/\b(OLD|DELETE|COPY|N\/A)\b/i.test(g.title + " " + g.product_code));
   const score = (g: GuideRow) => (g.published_at ?? "");
-  const exact = usable.filter((g) => g.product_code.trim().toUpperCase() === S).sort((a, b) => score(b).localeCompare(score(a)));
+  const exact = usable.filter((g) => g.codes.includes(S)).sort((a, b) => score(b).localeCompare(score(a)));
   if (exact[0]) return { g: exact[0], match: "exact" };
+  const longestPrefix = (g: GuideRow) => Math.max(0, ...g.codes.filter((c) => c.length >= 4 && S.startsWith(c)).map((c) => c.length));
   const prefix = usable
-    .filter((g) => { const c = g.product_code.trim().toUpperCase(); return c.length >= 4 && S.startsWith(c); })
-    .sort((a, b) => b.product_code.length - a.product_code.length || score(b).localeCompare(score(a)));
+    .filter((g) => longestPrefix(g) > 0)
+    .sort((a, b) => longestPrefix(b) - longestPrefix(a) || score(b).localeCompare(score(a)));
   if (prefix[0]) return { g: prefix[0], match: "prefix" };
   return null;
 }
@@ -439,7 +444,7 @@ Deno.serve(async (req) => {
         if (!to) return json({ error: "to required" }, 400);
         const settings = await loadSettings(db);
         const cat = await loadCatalog(db, settings.brand_id);
-        const sample = cat.guides.slice(0, 2).map((g) => ({ sku: g.product_code, instruction_set_id: g.id, title: g.title, url: guideUrl(cat.brand.domain, g.slug), match: "exact" as const }));
+        const sample = cat.guides.slice(0, 2).map((g) => ({ sku: g.codes[0] ?? g.product_code, instruction_set_id: g.id, title: g.title, url: guideUrl(cat.brand.domain, g.slug), match: "exact" as const }));
         const msg = renderEmail({ brand: cat.brand, settings, firstName: "Test", orderName: "#TEST", guides: sample });
         const id = await sendResend(settings, cat.brand, to, msg);
         return json({ ok: true, resend_id: id, to });
