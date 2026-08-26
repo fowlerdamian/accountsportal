@@ -115,7 +115,9 @@ serve(async (req) => {
     ? externalNumber
     : (payload.internal_number ?? payload.called_number ?? null);
 
-  const durationSeconds = payload.duration ?? 0;
+  // Dialpad reports `duration` in milliseconds as a float (e.g. "323902.389");
+  // the column is integer seconds.
+  const durationSeconds = Math.max(0, Math.round(Number(payload.duration ?? 0) / 1000)) || 0;
   const status = deriveStatus(payload);
 
   const startedAt = payload.date_started
