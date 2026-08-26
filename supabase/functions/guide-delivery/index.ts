@@ -35,6 +35,7 @@ type Matched = { sku: string; instruction_set_id: string; title: string; url: st
 type Settings = {
   enabled: boolean; brand_id: string | null; from_email: string; reply_to: string | null; bcc_email: string | null;
   subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number; delay_hours: number;
+  sku_patterns: string[];
 };
 
 function admin(): SupabaseClient {
@@ -131,13 +132,22 @@ function autoMatch(sku: string, guides: GuideRow[]): { g: GuideRow; match: "exac
   return null;
 }
 
-function matchLineItems(items: LineItem[], cat: Awaited<ReturnType<typeof loadCatalog>>, auto: boolean) {
+// Only SKUs matching one of the configured regexes (case-insensitive) are guide-eligible.
+// Everything else (lights, recovery gear, switches…) is ignored — not "unmatched".
+function eligibleSku(sku: string, patterns: string[]): boolean {
+  if (!patterns?.length) return true;
+  return patterns.some((p) => { try { return new RegExp(p, "i").test(sku); } catch { return false; } });
+}
+
+function matchLineItems(items: LineItem[], cat: Awaited<ReturnType<typeof loadCatalog>>, auto: boolean, patterns: string[] = []) {
   const matched: Matched[] = [];
   const unmatched: string[] = [];
+  const ignored: string[] = [];
   const seen = new Set<string>();
   for (const li of items) {
     const sku = (li.sku ?? "").trim();
     if (!sku) continue;
+    if (!eligibleSku(sku, patterns)) { ignored.push(sku); continue; }
     const key = sku.toUpperCase();
     let g: GuideRow | undefined;
     let match: Matched["match"] | undefined;
@@ -156,7 +166,7 @@ function matchLineItems(items: LineItem[], cat: Awaited<ReturnType<typeof loadCa
     seen.add(g.id);
     matched.push({ sku, instruction_set_id: g.id, title: g.title, url: guideUrl(cat.brand.domain, g.slug), match });
   }
-  return { matched, unmatched: [...new Set(unmatched)] };
+  return { matched, unmatched: [...new Set(unmatched)], ignored: [...new Set(ignored)] };
 }
 
 // ── Email ────────────────────────────────────────────────────────────────────
@@ -290,8 +300,13 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
     }
   }
   const items = row.line_items as LineItem[];
-  const { matched, unmatched } = matchLineItems(items, cat, settings.auto_match);
+  const { matched, unmatched, ignored } = matchLineItems(items, cat, settings.auto_match, settings.sku_patterns);
   const base = { matched_guides: matched, unmatched_skus: unmatched, attempts: (row.attempts ?? 0) + 1 };
+  if (matched.length === 0 && unmatched.length === 0) {
+    // Nothing on this order needs a guide — silent skip, no alert.
+    await db.from("guide_deliveries").update({ ...base, status: "skipped", error: `No guide-eligible products (${ignored.length} ignored)` }).eq("id", row.id);
+    return { id: row.id, status: "skipped" };
+  }
   if (!row.customer_email) {
     await db.from("guide_deliveries").update({ ...base, status: "skipped", error: "No customer email on order" }).eq("id", row.id);
     await failAlert(row, "No customer email on the order — guide not sent");
@@ -417,7 +432,7 @@ Deno.serve(async (req) => {
         const cat = await loadCatalog(db, settings.brand_id);
         const skus: string[] = body.skus ?? [];
         const items: LineItem[] = skus.map((s) => ({ sku: s, title: s, quantity: 1, variant_title: null }));
-        return json({ ok: true, ...matchLineItems(items, cat, settings.auto_match), guides_published: cat.guides.length });
+        return json({ ok: true, ...matchLineItems(items, cat, settings.auto_match, settings.sku_patterns), patterns: settings.sku_patterns, guides_published: cat.guides.length });
       }
       case "test": {
         const to = body.to ?? auth.email;

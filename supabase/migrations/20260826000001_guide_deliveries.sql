@@ -82,3 +82,6 @@ alter table public.guide_deliveries
   add column if not exists send_after timestamptz,
   add column if not exists refreshed_at timestamptz;
 create index if not exists guide_deliveries_due_idx on public.guide_deliveries (send_after) where status = 'scheduled';
+
+-- Only products matching these regexes get guides (others are ignored, not 'unmatched').
+alter table public.guide_delivery_settings add column if not exists sku_patterns text[] not null default array['^BGLB','^AMP','^CB','HBC$'];
