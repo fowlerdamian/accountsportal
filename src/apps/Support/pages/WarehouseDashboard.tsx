@@ -89,40 +89,20 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
             country: pick?.country || 'AU',
           },
           items: pickItems,
+          notes: pick?.notes || '',
           originalOrderNumber: item.cases?.case_number || '',
         },
       });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) throw new Error(data.detail ? `${data.error}: ${data.detail}` : data.error);
       return data;
     },
     onSuccess: async (data) => {
-      // Auto-mark as dispatched after successful ShipStation order
-      const now = new Date().toISOString();
-      const { error: updateError } = await supabase.from('action_items').update({
-        status: 'done' as any,
-        completed_at: now,
-        dispatched_at: now,
-      }).eq('id', item.id);
-      if (updateError) {
-        toast.error(`ShipStation order ${data.orderNumber} created, but failed to mark task as dispatched`);
-        queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
-        return;
-      }
-
-      // Log activity
-      const msg = `Order dispatched — SS ${data.orderNumber}\nBy: ${teamMember?.name || 'Warehouse'}`;
-      await supabase.from('case_updates').insert({
-        case_id: item.case_id,
-        author_type: 'system',
-        author_name: teamMember?.name || 'Warehouse',
-        message: msg,
-      });
-
-      // Chat notification deferred — sent by shipstation-webhook once tracking is received
-
+      // The pick stays open here. It is marked dispatched (and the case moves to In hand)
+      // automatically when ShipStation reports the label/tracking via shipstation-webhook,
+      // or manually with "Mark as dispatched" below.
       queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
-      toast.success(`ShipStation order created: ${data.orderNumber} — marked as dispatched`);
+      toast.success(`ShipStation order ${data.orderNumber} created — print the label in ShipStation; tracking syncs back automatically`);
     },
     onError: (err: any) => {
       console.error('ShipStation error:', err?.context ?? err);
@@ -144,8 +124,8 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
       // Log activity
       const ssNum = item.shipstation_order_number;
       const msg = ssNum
-        ? `Order dispatched — SS ${ssNum}\nBy: ${teamMember?.name || 'Warehouse'}`
-        : `Order dispatched (no SS order)\nBy: ${teamMember?.name || 'Warehouse'}`;
+        ? `Order dispatched manually — SS ${ssNum} (tracking will sync from ShipStation)\nBy: ${teamMember?.name || 'Warehouse'}`
+        : `Order dispatched (no ShipStation order)\nBy: ${teamMember?.name || 'Warehouse'}`;
       await supabase.from('case_updates').insert({
         case_id: item.case_id,
         author_type: 'system',
@@ -267,6 +247,7 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">SS Order:</span>
             <span className="text-foreground font-medium">{item.shipstation_order_number}</span>
+            <span className="text-[11px] text-muted-foreground">· awaiting label — auto-dispatches when shipped</span>
             <a
               href={`https://ship14.shipstation.com/orders/all?quickSearch=${item.shipstation_order_number}`}
               target="_blank" rel="noopener noreferrer"
