@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { AiField } from "@guide/AiRewrite";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
@@ -279,12 +280,15 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
             </span>
           </div>
           <div className="flex-1 min-w-0 space-y-2">
+            <AiField value={step.subtitle} onRewrite={t => onUpdate(index, 'subtitle', t)} kind="subtitle" align="middle">
             <Input
               value={step.subtitle}
               onChange={e => onUpdate(index, 'subtitle', e.target.value)}
               placeholder={WIRING_BREAK_SUBTITLE}
-              className="font-medium border-[rgba(var(--brand-accent-rgb),0.3)] bg-background"
+              className="font-medium border-[rgba(var(--brand-accent-rgb),0.3)] bg-background pr-8"
             />
+            </AiField>
+            <AiField value={step.description} onRewrite={t => onUpdate(index, 'description', t)} kind="step">
             <Textarea
               value={step.description}
               onChange={e => onUpdate(index, 'description', e.target.value)}
@@ -292,6 +296,7 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
               rows={3}
               className="border-[rgba(var(--brand-accent-rgb),0.3)] bg-background"
             />
+            </AiField>
             <DropZone
               label="Wiring kit image"
               currentUrl={step.image_url}
@@ -326,8 +331,12 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
           <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs sm:text-sm font-bold shrink-0">{index + 1}</span>
         </div>
         <div className="flex-1 min-w-0 space-y-3">
-          <Input value={step.subtitle} onChange={e => onUpdate(index, 'subtitle', e.target.value)} placeholder="Step subtitle" className="font-medium" />
-          <Textarea value={step.description} onChange={e => onUpdate(index, 'description', e.target.value)} placeholder="Describe this step..." rows={3} />
+          <AiField value={step.subtitle} onRewrite={t => onUpdate(index, 'subtitle', t)} kind="subtitle" align="middle">
+            <Input value={step.subtitle} onChange={e => onUpdate(index, 'subtitle', e.target.value)} placeholder="Step subtitle" className="font-medium pr-8" />
+          </AiField>
+          <AiField value={step.description} onRewrite={t => onUpdate(index, 'description', t)} kind="step">
+            <Textarea value={step.description} onChange={e => onUpdate(index, 'description', e.target.value)} placeholder="Describe this step..." rows={3} className="pr-8" />
+          </AiField>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DropZone
               label="Primary image"
@@ -954,7 +963,9 @@ export default function GuideEditor() {
             </div>
             <div>
               <Label>Short Description</Label>
-              <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief customer-facing description (300 chars max)" maxLength={300} className="mt-1.5" rows={3} />
+              <AiField value={description} onRewrite={setDescription} kind="description" context={title}>
+                <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief customer-facing description (300 chars max)" maxLength={300} className="mt-1.5 pr-8" rows={3} />
+              </AiField>
               <p className="text-xs text-muted-foreground mt-1">{description.length}/300</p>
             </div>
             <div>
@@ -1173,6 +1184,11 @@ export default function GuideEditor() {
                             <X className="w-3 h-3" />
                           </Button>
                         </div>
+                        <AiField value={step.subtitle} kind="subtitle" align="middle" onRewrite={(t) => {
+                          const updated = [...variants];
+                          updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], subtitle: t };
+                          setVariants(updated);
+                        }}>
                         <Input
                           placeholder="Step subtitle"
                           value={step.subtitle}
@@ -1181,8 +1197,14 @@ export default function GuideEditor() {
                             updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], subtitle: e.target.value };
                             setVariants(updated);
                           }}
-                          className="h-8 text-sm"
+                          className="h-8 text-sm pr-8"
                         />
+                        </AiField>
+                        <AiField value={step.description} kind="step" onRewrite={(t) => {
+                          const updated = [...variants];
+                          updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], description: t };
+                          setVariants(updated);
+                        }}>
                         <Textarea
                           placeholder="Step description"
                           value={step.description}
@@ -1194,6 +1216,7 @@ export default function GuideEditor() {
                           rows={3}
                           className="text-sm"
                         />
+                        </AiField>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <DropZone
                             label="Primary image"
