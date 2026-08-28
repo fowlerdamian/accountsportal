@@ -1,9 +1,10 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { ChartBarIcon, MessageCircleIcon, FilledBellIcon, LayoutDashboardIcon, TargetIcon } from '@portal/components/icons'
+import { ChartBarIcon, MessageCircleIcon, FilledBellIcon, LayoutDashboardIcon, TargetIcon, WalletIcon } from '@portal/components/icons'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 const NAV = [
   { label: 'Finance Dashboard',       shortLabel: 'Finance', route: '/accounts',                icon: LayoutDashboardIcon, end: true  },
+  { label: 'Cash Flow',               shortLabel: 'Cash',    route: '/accounts/cashflow',       icon: WalletIcon,          end: false },
   { label: 'Revenue & Targets',       shortLabel: 'Targets', route: '/accounts/targets',        icon: TargetIcon,          end: false },
   { label: 'Invoice Profit Analysis', shortLabel: 'P&L',     route: '/accounts/profit',         icon: ChartBarIcon,        end: false },
   { label: 'Xero Chatbot',            shortLabel: 'Xero',    route: '/accounts/xero',           icon: MessageCircleIcon,   end: false },

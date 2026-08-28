@@ -29,6 +29,7 @@ import AccountsLayout from './apps/Accounts/AccountsLayout'
 import ChatFunctions from './apps/Accounts/ChatFunctions.jsx'
 import FinanceDashboard from './apps/Accounts/finance/FinanceDashboard.jsx'
 import RevenueTargets from './apps/Accounts/finance/RevenueTargets.jsx'
+import CashFlow from './apps/Accounts/finance/CashFlow.jsx'
 
 // Contractor Hub
 import ContractorsList from './apps/ContractorHub/pages/ContractorsList'
@@ -237,6 +238,7 @@ export default function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="accounts" element={<AccountsLayout />}>
                 <Route index element={<FinanceDashboard />} />
+                <Route path="cashflow" element={<CashFlow />} />
                 <Route path="targets" element={<RevenueTargets />} />
                 <Route path="profit" element={<ProfitProcessor />} />
                 {/* Old direct link to the dashboard now lives at the index. */}
