@@ -30,6 +30,7 @@ type Settings = {
   id: number; enabled: boolean; brand_id: string | null; from_email: string; reply_to: string | null; bcc_email: string | null;
   subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number; delay_hours: number;
   sku_patterns: string[];
+  sku_exclude_patterns: string[];
   exclude_customer_tags: string[];
 };
 type Link = { id: string; sku: string; instruction_set_id: string | null; note: string | null };
@@ -401,10 +402,16 @@ function SettingsForm({ settings, brands, busy, run, onSaved }: {
           <Textarea value={s.intro_text} onChange={(e) => set("intro_text", e.target.value)} rows={3} className="mt-1" />
         </div>
         <div>
-          <Label>Guide-eligible SKUs (regex, one per line)</Label>
+          <Label>Include these SKUs (regex, one per line)</Label>
           <Textarea rows={4} className="mt-1 font-mono text-sm" value={(s.sku_patterns ?? []).join("\n")}
             onChange={(e) => set("sku_patterns", e.target.value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean))} />
           <div className="text-xs text-muted-foreground mt-1">Only products matching one of these get a guide; everything else on the order is ignored (no alert). <code>^BGLB</code> = starts with BGLB, <code>HBC$</code> = ends with HBC.</div>
+        </div>
+        <div>
+          <Label>Exclude these SKUs (regex, one per line)</Label>
+          <Textarea rows={3} className="mt-1 font-mono text-sm" value={(s.sku_exclude_patterns ?? []).join("\n")}
+            onChange={(e) => set("sku_exclude_patterns", e.target.value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean))} placeholder="^CBHX2" />
+          <div className="text-xs text-muted-foreground mt-1">Checked first — a SKU matching any of these never gets a guide, even if it matches the include list. <code>^CBHX2</code> = starts with CBHX2, <code>-M$</code> = ends with -M.</div>
         </div>
         <div>
           <Label>Exclude customers with Shopify tags</Label>

@@ -36,6 +36,7 @@ type Settings = {
   enabled: boolean; brand_id: string | null; from_email: string; reply_to: string | null; bcc_email: string | null;
   subject: string; intro_text: string; auto_match: boolean; poll_lookback_hours: number; delay_hours: number;
   sku_patterns: string[];
+  sku_exclude_patterns: string[];
   exclude_customer_tags: string[];
 };
 
@@ -138,14 +139,17 @@ function autoMatch(sku: string, guides: GuideRow[]): { g: GuideRow; match: "exac
   return null;
 }
 
-// Only SKUs matching one of the configured regexes (case-insensitive) are guide-eligible.
-// Everything else (lights, recovery gear, switches…) is ignored — not "unmatched".
-function eligibleSku(sku: string, patterns: string[]): boolean {
+// A SKU is guide-eligible when it matches one of the "include" regexes (case-insensitive)
+// and none of the "exclude" regexes. Exclusions win. Everything else (lights, recovery
+// gear, switches…) is ignored — not "unmatched".
+const reHit = (sku: string, p: string) => { try { return new RegExp(p, "i").test(sku); } catch { return false; } };
+function eligibleSku(sku: string, patterns: string[], excludes: string[] = []): boolean {
+  if (excludes?.some((p) => reHit(sku, p))) return false;
   if (!patterns?.length) return true;
-  return patterns.some((p) => { try { return new RegExp(p, "i").test(sku); } catch { return false; } });
+  return patterns.some((p) => reHit(sku, p));
 }
 
-function matchLineItems(items: LineItem[], cat: Awaited<ReturnType<typeof loadCatalog>>, auto: boolean, patterns: string[] = []) {
+function matchLineItems(items: LineItem[], cat: Awaited<ReturnType<typeof loadCatalog>>, auto: boolean, patterns: string[] = [], excludes: string[] = []) {
   const matched: Matched[] = [];
   const unmatched: string[] = [];
   const ignored: string[] = [];
@@ -153,7 +157,7 @@ function matchLineItems(items: LineItem[], cat: Awaited<ReturnType<typeof loadCa
   for (const li of items) {
     const sku = (li.sku ?? "").trim();
     if (!sku) continue;
-    if (!eligibleSku(sku, patterns)) { ignored.push(sku); continue; }
+    if (!eligibleSku(sku, patterns, excludes)) { ignored.push(sku); continue; }
     const key = sku.toUpperCase();
     let g: GuideRow | undefined;
     let match: Matched["match"] | undefined;
@@ -267,7 +271,7 @@ function provisionalNote(n: { customer_tags: string[]; line_items: LineItem[] },
   const excluded = (settings.exclude_customer_tags ?? []).map((t) => t.trim().toUpperCase()).filter(Boolean);
   const tag = (n.customer_tags ?? []).find((t) => excluded.includes(t.toUpperCase()));
   if (tag) return `Will skip: customer tagged ${tag} (re-checked at send time)`;
-  const eligible = (n.line_items ?? []).some((li) => li.sku && eligibleSku(li.sku.trim(), settings.sku_patterns));
+  const eligible = (n.line_items ?? []).some((li) => li.sku && eligibleSku(li.sku.trim(), settings.sku_patterns, settings.sku_exclude_patterns));
   if (!eligible) return "Will skip: no guide-eligible products (re-checked at send time)";
   return null;
 }
@@ -336,7 +340,7 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
     return { id: row.id, status: "skipped" };
   }
   const items = row.line_items as LineItem[];
-  const { matched, unmatched, ignored } = matchLineItems(items, cat, settings.auto_match, settings.sku_patterns);
+  const { matched, unmatched, ignored } = matchLineItems(items, cat, settings.auto_match, settings.sku_patterns, settings.sku_exclude_patterns);
   const base = { matched_guides: matched, unmatched_skus: unmatched, attempts: (row.attempts ?? 0) + 1 };
   if (matched.length === 0 && unmatched.length === 0) {
     // Nothing on this order needs a guide — silent skip, no alert.
@@ -497,7 +501,7 @@ Deno.serve(async (req) => {
         const cat = await loadCatalog(db, settings.brand_id);
         const skus: string[] = body.skus ?? [];
         const items: LineItem[] = skus.map((s) => ({ sku: s, title: s, quantity: 1, variant_title: null }));
-        return json({ ok: true, ...matchLineItems(items, cat, settings.auto_match, settings.sku_patterns), patterns: settings.sku_patterns, guides_published: cat.guides.length });
+        return json({ ok: true, ...matchLineItems(items, cat, settings.auto_match, settings.sku_patterns, settings.sku_exclude_patterns), patterns: settings.sku_patterns, excludes: settings.sku_exclude_patterns, guides_published: cat.guides.length });
       }
       case "test": {
         const to = body.to ?? auth.email;
