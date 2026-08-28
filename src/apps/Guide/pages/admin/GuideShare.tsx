@@ -413,7 +413,7 @@ export default function GuideShare() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/guide/guides')} className="mb-2">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/guide')} className="mb-2">
         <ChevronLeft className="w-4 h-4 mr-1" /> Back to Guides
       </Button>
       <div>

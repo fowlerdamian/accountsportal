@@ -6,7 +6,7 @@ import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@guide/components/ui/sidebar";
-import { LayoutDashboardIcon, BookIcon, ChartBarIcon, MessageCircleIcon, StarIcon, GearIcon, LogoutIcon, SendIcon } from "@portal/components/icons";
+import { BookIcon, ChartBarIcon, MessageCircleIcon, StarIcon, GearIcon, LogoutIcon, SendIcon } from "@portal/components/icons";
 import { Badge } from "@guide/components/ui/badge";
 
 export function AdminSidebar() {
@@ -25,8 +25,7 @@ export function AdminSidebar() {
   };
 
   const mainNav = [
-    { title: "Dashboard", url: "/guide", icon: LayoutDashboardIcon, badge: 0 },
-    { title: "All Guides", url: "/guide/guides", icon: BookIcon, badge: 0 },
+    { title: "Guides", url: "/guide", icon: BookIcon, badge: 0 },
     { title: "Reports", url: "/guide/reports", icon: ChartBarIcon, badge: 0 },
     { title: "Support", url: "/guide/support", icon: MessageCircleIcon, badge: openSupport },
     { title: "Feedback", url: "/guide/feedback", icon: StarIcon, badge: openFlags },

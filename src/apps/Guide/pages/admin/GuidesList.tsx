@@ -1,10 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Filter, Loader2, Trash2, Copy } from "lucide-react";
+import { BookIcon, MessageCircleIcon, FileDescriptionIcon, TriangleAlertIcon } from "@portal/components/icons";
+import { StatsCard } from "@guide/components/admin/StatsCard";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Badge } from "@guide/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
-import { useInstructionSets, useCategories, usePublications, useBrands, useAllGuideVehicles } from "@guide/hooks/use-supabase-query";
+import { useInstructionSets, useCategories, usePublications, useBrands, useAllGuideVehicles, useSupportQuestions, useFeedback } from "@guide/hooks/use-supabase-query";
 import { useState } from "react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,14 +52,25 @@ export default function GuidesList() {
   const { data: publications = [] } = usePublications();
   const { data: brands = [] } = useBrands();
   const { data: allVehicles = [] } = useAllGuideVehicles();
+  const { data: supportQuestions = [] } = useSupportQuestions();
+  const { data: feedbackItems = [] } = useFeedback();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft">("all");
+
+  // Overview figures (formerly the separate Dashboard page)
+  const isPublished = (g: any) => publications.some((p: any) => p.instruction_set_id === g.id && p.status === "published");
+  const publishedCount = guides.filter(isPublished).length;
+  const draftCount = guides.length - publishedCount;
+  const openSupport = supportQuestions.filter((q: any) => !q.resolved).length;
+  const openFeedback = feedbackItems.filter((f: any) => !f.resolved && f.type === "flag").length;
 
   const filtered = guides.filter((g: any) => {
     const matchSearch = g.title.toLowerCase().includes(search.toLowerCase()) || g.product_code.toLowerCase().includes(search.toLowerCase());
     const matchCat = categoryFilter === "all" || g.category_id === categoryFilter;
-    return matchSearch && matchCat;
+    const matchStatus = statusFilter === "all" || (statusFilter === "published" ? isPublished(g) : !isPublished(g));
+    return matchSearch && matchCat && matchStatus;
   });
 
   const deleteGuide = async (id: string) => {
@@ -132,8 +145,8 @@ export default function GuidesList() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">All Guides</h1>
-          <p className="text-muted-foreground text-sm">{guides.length} guides total</p>
+          <h1 className="text-2xl font-bold">Guides</h1>
+          <p className="text-muted-foreground text-sm">{guides.length} guides · {publishedCount} published · {draftCount} drafts</p>
         </div>
         <Button onClick={() => navigate('/guide/guides/new')}>
           <Plus className="w-4 h-4 mr-2" />
@@ -141,7 +154,25 @@ export default function GuidesList() {
         </Button>
       </div>
 
-      <div className="flex gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <button type="button" className="text-left" onClick={() => setStatusFilter("all")}>
+          <StatsCard title="Total Guides" value={guides.length} icon={<BookIcon className="w-5 h-5" />} />
+        </button>
+        <button type="button" className="text-left" onClick={() => setStatusFilter(statusFilter === "published" ? "all" : "published")}>
+          <StatsCard title="Published" value={publishedCount} icon={<FileDescriptionIcon className="w-5 h-5" />} subtitle={statusFilter === "published" ? "Filtering" : "Across all brands"} />
+        </button>
+        <button type="button" className="text-left" onClick={() => setStatusFilter(statusFilter === "draft" ? "all" : "draft")}>
+          <StatsCard title="Drafts" value={draftCount} icon={<FileDescriptionIcon className="w-5 h-5" />} subtitle={statusFilter === "draft" ? "Filtering" : undefined} />
+        </button>
+        <button type="button" className="text-left" onClick={() => navigate("/guide/support")}>
+          <StatsCard title="Open Support" value={openSupport} icon={<MessageCircleIcon className="w-5 h-5" />} />
+        </button>
+        <button type="button" className="text-left" onClick={() => navigate("/guide/feedback")}>
+          <StatsCard title="Feedback Flags" value={openFeedback} icon={<TriangleAlertIcon className="w-5 h-5" />} />
+        </button>
+      </div>
+
+      <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Search by title or product code..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
@@ -154,6 +185,14 @@ export default function GuidesList() {
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
             {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -194,14 +233,14 @@ export default function GuidesList() {
                   <div className="flex gap-1.5">
                     {brands.map(b => {
                       const pub = guidePubs.find((p: any) => p.brand_id === b.id);
-                      return pub?.status === 'published' ? (
-                        <Badge key={b.id} className="bg-success text-success-foreground text-xs">{b.key === 'trailbait' ? 'TB' : 'AGA'} ✓</Badge>
-                      ) : (
-                        <Badge key={b.id} variant="outline" className="text-muted-foreground text-xs">{b.key === 'trailbait' ? 'TB' : 'AGA'}</Badge>
-                      );
+                      const short = b.key === 'trailbait' ? 'TB' : 'AGA';
+                      if (pub?.status === 'published') return <Badge key={b.id} className="bg-success text-success-foreground text-xs" title={`${b.name}: published`}>{short} ✓</Badge>;
+                      if (pub) return <Badge key={b.id} className="bg-warning text-warning-foreground text-xs" title={`${b.name}: draft`}>{short} draft</Badge>;
+                      return <Badge key={b.id} variant="outline" className="text-muted-foreground text-xs" title={`${b.name}: not published`}>{short}</Badge>;
                     })}
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/edit`)}>Edit</Button>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/view/${guide.slug}`)}>Preview</Button>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/share`)}>Share</Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateGuide(guide)} title="Duplicate">
                     <Copy className="w-4 h-4" />

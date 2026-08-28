@@ -882,7 +882,7 @@ export default function GuideEditor() {
     <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/guide/guides')} className="mb-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/guide')} className="mb-2">
             <ChevronLeft className="w-4 h-4 mr-1" /> Back
           </Button>
           <h1 className="text-xl sm:text-2xl font-bold">{isEditing ? 'Edit Guide' : 'Create New Guide'}</h1>

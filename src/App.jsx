@@ -48,7 +48,6 @@ import { DelegatePromptDialog } from './apps/Tasks/components/DelegatePromptDial
 
 // Guide Portal
 import { AdminLayout } from './apps/Guide/admin/AdminLayout'
-import GuideDashboard from './apps/Guide/pages/admin/Dashboard'
 import GuidesList from './apps/Guide/pages/admin/GuidesList'
 import GuideEditor from './apps/Guide/pages/admin/GuideEditor'
 import GuideShare from './apps/Guide/pages/admin/GuideShare'
@@ -83,8 +82,9 @@ function GuideAppRouter() {
       <GuideAuthProvider>
         <Routes>
           <Route element={<AdminLayout />}>
-            <Route index element={<GuideDashboard />} />
-            <Route path="guides" element={<GuidesList />} />
+            <Route index element={<GuidesList />} />
+            {/* Dashboard + All Guides merged into one page at /guide */}
+            <Route path="guides" element={<Navigate to="/guide" replace />} />
             <Route path="guides/:id" element={<GuideEditor />} />
             <Route path="guides/:id/edit" element={<GuideEditor />} />
             <Route path="guides/:id/share" element={<GuideShare />} />
