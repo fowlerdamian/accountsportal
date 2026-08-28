@@ -75,6 +75,7 @@ export default function GuidesList() {
 
   // Share: copy the public link (brand it's published on, else the first brand)
   // to the clipboard. The toast offers the full share page (QR / per-brand links).
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const shareGuide = async (guide: any) => {
     const pubBrand = brands.find(b => publications.some((p: any) => p.instruction_set_id === guide.id && p.brand_id === b.id && p.status === "published"));
     const brand = pubBrand ?? brands[0];
@@ -82,7 +83,9 @@ export default function GuidesList() {
     const action = { label: "Share options", onClick: () => navigate(`/guide/guides/${guide.id}/share`) };
     try {
       await navigator.clipboard.writeText(url);
-      toast.success(`Link copied${pubBrand ? "" : " (not published yet)"}`, { description: url, action });
+      setCopiedId(guide.id);
+      window.setTimeout(() => setCopiedId((c) => (c === guide.id ? null : c)), 1800);
+      if (!pubBrand) toast.message("Link copied — guide is not published yet", { description: url, action });
     } catch {
       toast.error("Couldn't copy link", { description: url, action });
     }
@@ -115,7 +118,8 @@ export default function GuidesList() {
       const slug = Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 10);
       const { data: newGuide, error } = await supabase.from("instruction_sets").insert({
         title: `Copy of ${guide.title}`,
-        product_code: `${guide.product_code}-COPY`,
+        // Multi-SKU codes ("A, B") must stay unique per token — suffix each one.
+        product_code: String(guide.product_code ?? "").split(/[,;\s]+/).filter(Boolean).map((c: string) => `${c}-COPY`).join(", "),
         slug,
         category_id: guide.category_id,
         estimated_time: guide.estimated_time,
@@ -256,7 +260,15 @@ export default function GuidesList() {
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/edit`)}>Edit</Button>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/view/${guide.slug}`)}>Preview</Button>
-                  <Button variant="ghost" size="sm" onClick={() => shareGuide(guide)} title="Copy public link">Share</Button>
+                  <span className="relative inline-flex">
+                    <Button variant="ghost" size="sm" onClick={() => shareGuide(guide)} title="Copy public link">Share</Button>
+                    {copiedId === guide.id && (
+                      <span role="status" className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-8 whitespace-nowrap rounded bg-foreground text-background text-[11px] px-2 py-1 shadow animate-fade-in">
+                        Link copied to clipboard
+                        <span className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-foreground" />
+                      </span>
+                    )}
+                  </span>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateGuide(guide)} title="Duplicate">
                     <Copy className="w-4 h-4" />
                   </Button>
