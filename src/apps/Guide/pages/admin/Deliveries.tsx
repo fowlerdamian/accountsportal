@@ -1,7 +1,7 @@
 // Guide auto-delivery: Shopify order → matched guides → email (Resend).
 // Backed by edge function `guide-delivery` and tables guide_delivery_settings /
 // guide_product_links / guide_deliveries.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useInstructionSets, useBrands } from "@guide/hooks/use-supabase-query";
@@ -342,6 +342,28 @@ function SkuLinks({ links, guides, unmatched, onChange }: {
   );
 }
 
+/** Text box for a list setting. Keeps raw text while typing; splits into items on blur. */
+function ListInput({ value, onChange, sep, upper, multiline, placeholder, rows, className }: {
+  value: string[]; onChange: (v: string[]) => void; sep: "line" | "comma"; upper?: boolean;
+  multiline?: boolean; placeholder?: string; rows?: number; className?: string;
+}) {
+  const joinSep = sep === "line" ? "\n" : ", ";
+  const [text, setText] = useState((value ?? []).join(joinSep));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => { if (!focused) setText((value ?? []).join(joinSep)); }, [value, focused, joinSep]);
+  const commit = () => {
+    const parts = text.split(sep === "line" ? /\r?\n/ : /[,\n]+/).map((x) => (upper ? x.trim().toUpperCase() : x.trim())).filter(Boolean);
+    onChange([...new Set(parts)]);
+    setFocused(false);
+  };
+  const common = {
+    value: text, placeholder, className,
+    onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setText(e.target.value),
+    onFocus: () => setFocused(true), onBlur: commit,
+  };
+  return multiline ? <Textarea rows={rows} {...common} /> : <Input {...common} />;
+}
+
 function SettingsForm({ settings, brands, busy, run, onSaved }: {
   settings: Settings; brands: any[]; busy: string | null;
   run: (k: string, fn: () => Promise<void>) => Promise<void>; onSaved: () => void;
@@ -403,20 +425,18 @@ function SettingsForm({ settings, brands, busy, run, onSaved }: {
         </div>
         <div>
           <Label>Include these SKUs (regex, one per line)</Label>
-          <Textarea rows={4} className="mt-1 font-mono text-sm" value={(s.sku_patterns ?? []).join("\n")}
-            onChange={(e) => set("sku_patterns", e.target.value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean))} />
+          <ListInput multiline rows={4} sep="line" className="mt-1 font-mono text-sm" value={s.sku_patterns ?? []} onChange={(v) => set("sku_patterns", v)} />
           <div className="text-xs text-muted-foreground mt-1">Only products matching one of these get a guide; everything else on the order is ignored (no alert). <code>^BGLB</code> = starts with BGLB, <code>HBC$</code> = ends with HBC.</div>
         </div>
         <div>
           <Label>Exclude these SKUs (regex, one per line)</Label>
-          <Textarea rows={3} className="mt-1 font-mono text-sm" value={(s.sku_exclude_patterns ?? []).join("\n")}
-            onChange={(e) => set("sku_exclude_patterns", e.target.value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean))} placeholder="^CBHX2" />
+          <ListInput multiline rows={3} sep="line" className="mt-1 font-mono text-sm" value={s.sku_exclude_patterns ?? []} onChange={(v) => set("sku_exclude_patterns", v)} placeholder="^CBHX2" />
           <div className="text-xs text-muted-foreground mt-1">Checked first — a SKU matching any of these never gets a guide, even if it matches the include list. <code>^CBHX2</code> = starts with CBHX2, <code>-M$</code> = ends with -M.</div>
         </div>
         <div>
           <Label>Exclude customers with Shopify tags</Label>
-          <Input className="mt-1 font-mono" value={(s.exclude_customer_tags ?? []).join(", ")}
-            onChange={(e) => set("exclude_customer_tags", e.target.value.split(/[,\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean))} placeholder="TIER20, TIER25" />
+          <ListInput sep="comma" upper className="mt-1 font-mono" value={s.exclude_customer_tags ?? []} onChange={(v) => set("exclude_customer_tags", v)} placeholder="TIER20, TIER25" />
+          <div className="text-xs text-muted-foreground mt-1">Comma-separated. Tags with spaces (e.g. <code>Login with Shop</code>) are fine.</div>
           <div className="text-xs text-muted-foreground mt-1">Checked against the customer's tags at send time. Excluded orders are skipped quietly (no alert).</div>
         </div>
         <div>
