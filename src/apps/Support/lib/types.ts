@@ -85,6 +85,7 @@ export interface ActionItem {
   picking_started_at: string | null;
   picked_at: string | null;
   dispatched_at: string | null;
+  manual_pick_request_id?: string | null;
 }
 
 export const STATUS_LABELS: Record<CaseStatus, string> = {

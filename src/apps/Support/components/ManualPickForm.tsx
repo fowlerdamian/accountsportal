@@ -264,6 +264,7 @@ export function ManualPickForm({ caseId, cin7SaleId, caseNumber }: Props) {
           priority: 'normal',
           is_warehouse_task: true,
           is_replacement_pick: true,
+          manual_pick_request_id: inserted.id,
         } as any);
       }
     },

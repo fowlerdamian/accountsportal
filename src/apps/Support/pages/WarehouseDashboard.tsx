@@ -47,10 +47,19 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
   const { teamMember } = useAuth();
   const pick = item.manual_pick_requests?.[0];
   const pickItems: PickItem[] = (pick?.items || []) as PickItem[];
-  const [checkedItems, setCheckedItems] = useState<boolean[]>(pickItems.map(() => false));
+  const [checkedItems, setCheckedItems] = useState<boolean[]>(pickItems.map(() => !!item.picked_at));
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
-  const allChecked = checkedItems.length > 0 && checkedItems.every(Boolean);
+  // Keep local ticks in sync if the pick slip changes size or another device marks it picked.
+  useEffect(() => {
+    setCheckedItems(prev =>
+      prev.length === pickItems.length && !item.picked_at ? prev : pickItems.map((_, i) => item.picked_at ? true : prev[i] ?? false),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickItems.length, item.picked_at]);
+
+  // A slip with no line items (legacy/edited) must still be dispatchable.
+  const allChecked = pickItems.length === 0 || checkedItems.every(Boolean);
   const checkedCount = checkedItems.filter(Boolean).length;
 
   const caseNum = item.cases?.case_number || '—';
@@ -63,10 +72,10 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
     setCheckedItems(next);
 
     // Auto-mark picked when all checked
-    if (next.every(Boolean) && !item.picked_at) {
-      supabase.from('action_items').update({ picked_at: new Date().toISOString() } as any).eq('id', item.id).then();
-    } else if (!next.every(Boolean) && item.picked_at) {
-      supabase.from('action_items').update({ picked_at: null } as any).eq('id', item.id).then();
+    const done = next.every(Boolean);
+    if (done !== !!item.picked_at) {
+      supabase.from('action_items').update({ picked_at: done ? new Date().toISOString() : null } as any).eq('id', item.id)
+        .then(({ error }) => { if (error) toast.error('Could not save pick progress'); });
     }
   };
 
@@ -195,7 +204,7 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1">
           <span className={cn('text-xs', allChecked ? 'text-status-resolved font-medium' : 'text-muted-foreground')}>
-            {allChecked ? 'All items picked — ready to dispatch' : `${checkedCount} of ${pickItems.length} items picked`}
+            {pickItems.length === 0 ? 'No line items on this slip — dispatch when ready' : allChecked ? 'All items picked — ready to dispatch' : `${checkedCount} of ${pickItems.length} items picked`}
           </span>
         </div>
         <div className="flex gap-0.5">
@@ -230,7 +239,7 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
         </div>
       )}
 
-      {showSkipConfirm && !item.dispatched_at && (
+      {showSkipConfirm && !item.dispatched_at && !item.shipstation_order_number && (
         <div className="mt-3">
           <button
             onClick={() => markDispatched.mutate()}
@@ -375,28 +384,38 @@ export default function WarehouseDashboard() {
     return () => window.removeEventListener('keydown', handler);
   }, [isWarehouse, navigate]);
 
-  const { data: tasks = [], isLoading } = useQuery({
+  const { data: tasks = [], isLoading, error: tasksError, refetch } = useQuery({
     queryKey: ['warehouse-tasks'],
+    staleTime: 15_000,
     queryFn: async () => {
+      // Only what the board shows: open tasks plus anything completed today.
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
       const { data, error } = await (supabase
         .from('action_items')
         .select('*, cases(case_number, title, customer_name)') as any)
         .eq('is_warehouse_task', true)
+        .or(`status.neq.done,completed_at.gte.${startOfToday.toISOString()}`)
         .order('created_at', { ascending: true });
       if (error) throw error;
 
-      // Fetch manual pick requests separately for replacement picks
+      // Attach pick slips in a single request (linked by id, falling back to latest on the case).
       const items = (data || []) as WarehouseActionItem[];
-      const pickItems = items.filter(t => t.is_replacement_pick);
-      if (pickItems.length > 0) {
-        for (const pi of pickItems) {
-          const { data: picks } = await supabase
-            .from('manual_pick_requests')
-            .select('*')
-            .eq('case_id', pi.case_id)
-            .order('created_at', { ascending: false })
-            .limit(1);
-          pi.manual_pick_requests = (picks || []) as any;
+      const pickTasks = items.filter(t => t.is_replacement_pick);
+      if (pickTasks.length > 0) {
+        const ids = pickTasks.map(t => t.manual_pick_request_id).filter(Boolean) as string[];
+        const caseIds = [...new Set(pickTasks.map(t => t.case_id))];
+        const { data: picks, error: pickErr } = await supabase
+          .from('manual_pick_requests')
+          .select('*')
+          .or(`id.in.(${ids.length ? ids.join(',') : '00000000-0000-0000-0000-000000000000'}),case_id.in.(${caseIds.join(',')})`)
+          .order('created_at', { ascending: false });
+        if (pickErr) throw pickErr;
+        const all = (picks || []) as any[];
+        for (const t of pickTasks) {
+          const linked = t.manual_pick_request_id ? all.find(p => p.id === t.manual_pick_request_id) : null;
+          const fallback = all.find(p => p.case_id === t.case_id); // newest first
+          t.manual_pick_requests = linked ? [linked] : fallback ? [fallback] : [];
         }
       }
       return items;
@@ -489,7 +508,13 @@ export default function WarehouseDashboard() {
           </div>
         </div>
 
-        {isLoading ? (
+        {tasksError ? (
+          <div className="border border-status-urgent/40 bg-status-urgent/10 p-4 text-sm">
+            <p className="text-foreground">Couldn&rsquo;t load warehouse tasks.</p>
+            <p className="text-xs text-muted-foreground mt-1">{(tasksError as Error).message}</p>
+            <button onClick={() => refetch()} className="mt-3 text-xs underline text-foreground">Retry</button>
+          </div>
+        ) : isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => <div key={i} className="bg-card border border-border h-32 animate-pulse" />)}
           </div>

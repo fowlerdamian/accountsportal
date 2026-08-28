@@ -28,6 +28,7 @@ export type Database = {
           id: string
           is_replacement_pick: boolean
           is_warehouse_task: boolean
+          manual_pick_request_id: string | null
           picked_at: string | null
           picking_started_at: string | null
           priority: Database["public"]["Enums"]["case_priority"]
@@ -49,6 +50,7 @@ export type Database = {
           id?: string
           is_replacement_pick?: boolean
           is_warehouse_task?: boolean
+          manual_pick_request_id?: string | null
           picked_at?: string | null
           picking_started_at?: string | null
           priority?: Database["public"]["Enums"]["case_priority"]
@@ -70,6 +72,7 @@ export type Database = {
           id?: string
           is_replacement_pick?: boolean
           is_warehouse_task?: boolean
+          manual_pick_request_id?: string | null
           picked_at?: string | null
           picking_started_at?: string | null
           priority?: Database["public"]["Enums"]["case_priority"]
