@@ -283,8 +283,20 @@ async function enqueue(db: SupabaseClient, o: any, source: string, settings: Set
     .insert({ ...n, source, status: "scheduled", send_after, error: provisionalNote(n, settings) })
     .select("id").single();
   if (error) {
-    if ((error as any).code === "23505") return null; // duplicate order — idempotent
-    throw error;
+    if ((error as any).code !== "23505") throw error;
+    // Duplicate order. If the existing row was parked before the order shipped
+    // ("Not shipped yet" / pending with no fulfilled_at), revive it now that we
+    // have a fulfilment — otherwise the shipment is silently dropped forever.
+    const { data: ex } = await db.from("guide_deliveries")
+      .select("id, status, fulfilled_at").eq("shopify_order_id", n.shopify_order_id).maybeSingle();
+    if (!ex) return null;
+    const parked = ["skipped", "pending", "failed"].includes(ex.status) && !ex.fulfilled_at;
+    if (!parked || !n.fulfilled_at) return null;
+    const { error: upErr } = await db.from("guide_deliveries")
+      .update({ ...n, source, status: "scheduled", send_after, attempts: 0, error: provisionalNote(n, settings) })
+      .eq("id", ex.id);
+    if (upErr) throw upErr;
+    return ex.id;
   }
   return data.id;
 }
