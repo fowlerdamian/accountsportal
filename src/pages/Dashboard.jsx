@@ -12,10 +12,8 @@ export default function PortalDashboard() {
   const { isAdmin } = useIsAdmin()
   const isMobile = useIsMobile()
 
-  const visibleApps = APPS.filter(app => {
-    if (settings === null) return true
-    return settings[app.route] !== false
-  })
+  // settings === null → still loading: render no tiles rather than flashing all of them.
+  const visibleApps = settings === null ? [] : APPS.filter(app => settings[app.route] !== false)
 
   const liveCount = visibleApps.filter(a => a.status === 'live' || a.status === 'beta').length
 
