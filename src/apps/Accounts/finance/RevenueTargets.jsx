@@ -9,6 +9,7 @@ import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import { computeSeasonalityTargets, applyRollingReallocation, computeRearViewForecast } from './seasonalityTargets.js'
+import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
 
 // Theme mirrors FinanceDashboard.jsx (concrete hex so recharts SVG resolves).
 const C = {
@@ -373,7 +374,6 @@ function PacingPanel({ title, right, gaugeLabel, ratio, gauge, rows, emptyHint }
   )
 }
 
-const SYNC_LABEL = { idle: 'Sync Xero', syncing: 'Requesting…', waiting: 'Syncing… ~1 min', done: 'Synced ✓', error: 'Failed' }
 function SyncButton({ state, onClick }) {
   const busy = state === 'syncing' || state === 'waiting'
   return (
@@ -406,32 +406,9 @@ export default function RevenueTargets() {
   const thisYear = now.getFullYear()
   const thisMonth = now.getMonth() + 1
   const [selYearsRaw, setSelYears] = useState(null) // null → default to current year
-  const [syncState, setSyncState] = useState('idle')
-
-  async function handleSync() {
-    if (syncState === 'syncing' || syncState === 'waiting') return
-    setSyncState('syncing')
-    try {
-      const { data: res, error: e } = await supabase.rpc('request_xero_invoice_sync')
-      if (e) throw e
-      if (!res?.ok) {
-        throw new Error(res?.error || 'sync refused')
-      } else {
-        // pg_net fires the edge fn async — give it a minute, then refetch.
-        setSyncState('waiting')
-        setTimeout(async () => {
-          await qc.invalidateQueries({ queryKey: ['revenue-targets'] })
-          setSyncState('done')
-          setTimeout(() => setSyncState('idle'), 4000)
-        }, 75000)
-        return
-      }
-    } catch (err) {
-      console.error('[targets sync]', err)
-      setSyncState('error')
-    }
-    setTimeout(() => setSyncState('idle'), 5000)
-  }
+  // Shared with every finance app — one press syncs all of them (financeSync.js).
+  const { state: syncState, run: runSync } = useFinanceSync()
+  const handleSync = () => runSync(qc)
 
   const upsert = useMutation({
     mutationFn: async (row) => {

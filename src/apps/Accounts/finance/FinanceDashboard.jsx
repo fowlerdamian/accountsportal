@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import html2canvas from 'html2canvas'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
@@ -15,6 +15,7 @@ import {
   GRAINS, buildOptions, periodKeys, chartKeys, aggregate, toKey,
   prevAnchor, ytdWindow, periodElapsed,
 } from './periods.js'
+import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 // Every value maps to a portal design token (src/index.css). Concrete hex is used
@@ -314,23 +315,10 @@ export default function FinanceDashboard() {
   // Re-runs the Xero P&L snapshot on demand (same /api/finance-snapshot route the
   // nightly cron hits → xero-pl-snapshot edge fn → finance_snapshot), then refetches
   // so the dashboard shows live figures without waiting for the 01:00 AEST cron.
-  const [syncState, setSyncState] = useState('idle') // idle|syncing|done|error
-  const syncTimerRef = useRef(null)
-  async function handleSync() {
-    if (syncState === 'syncing') return
-    setSyncState('syncing')
-    try {
-      const resp = await fetch('/api/finance-snapshot', { method: 'POST' })
-      if (!resp.ok) throw new Error(`finance-snapshot ${resp.status}: ${await resp.text()}`)
-      await refetch()
-      setSyncState('done')
-    } catch (e) {
-      console.error('[finance sync]', e)
-      setSyncState('error')
-    }
-    clearTimeout(syncTimerRef.current)
-    syncTimerRef.current = setTimeout(() => setSyncState((s) => (s === 'syncing' ? s : 'idle')), 3000)
-  }
+  // Shared with every finance app — one press syncs all of them (financeSync.js).
+  const qc = useQueryClient()
+  const { state: syncState, run: runSync } = useFinanceSync()
+  const handleSync = () => runSync(qc)
 
   // ── Share current view as an image ────────────────────────────────────────────
   // Rasterises the dashboard exactly as it's currently filtered/sorted, then —
@@ -653,13 +641,12 @@ function SnapshotCard({ cardRef, periodLabel, curr, currCases, prev, showCmp, as
 }
 
 // Manually re-run the Xero snapshot, then refetch.
-const SYNC_LABEL = { idle: 'Sync Xero', syncing: 'Syncing…', done: 'Synced ✓', error: 'Failed' }
 function SyncButton({ state, onClick }) {
-  const busy = state === 'syncing'
+  const busy = state === 'syncing' || state === 'waiting'
   const done = state === 'done'
   return (
     <button onClick={onClick} disabled={busy}
-      title="Pull live data from Xero now"
+      title="Sync Xero + Cin7 across all finance apps"
       data-html2canvas-ignore="true"
       style={{
         display: 'flex', alignItems: 'center', gap: 6, cursor: busy ? 'default' : 'pointer',
@@ -673,7 +660,7 @@ function SyncButton({ state, onClick }) {
         <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
         <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M21 21v-5h-5" />
       </svg>
-      {SYNC_LABEL[state] ?? 'Sync Xero'}
+      {SYNC_LABEL[state] ?? 'Sync all'}
     </button>
   )
 }
