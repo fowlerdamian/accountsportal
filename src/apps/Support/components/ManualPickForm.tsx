@@ -122,6 +122,7 @@ export function ManualPickForm({ caseId, cin7SaleId, caseNumber }: Props) {
   const [notes, setNotes] = useState('');
   const [editing, setEditing] = useState(false);
   const [existingId, setExistingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const cin7Applied = useRef(false);
 
   // Load existing pick request for this case
@@ -281,6 +282,50 @@ export function ManualPickForm({ caseId, cin7SaleId, caseNumber }: Props) {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!existingId) return;
+      // Remove the open warehouse task for this slip (done ones stay for history).
+      const { error: taskErr } = await supabase
+        .from('action_items')
+        .delete()
+        .eq('manual_pick_request_id', existingId)
+        .neq('status', 'done');
+      if (taskErr) throw taskErr;
+      // Legacy tasks created before the link column existed: open replacement picks on this case.
+      await supabase
+        .from('action_items')
+        .delete()
+        .eq('case_id', caseId)
+        .eq('is_replacement_pick', true)
+        .is('manual_pick_request_id', null)
+        .neq('status', 'done');
+      const { error } = await supabase.from('manual_pick_requests').delete().eq('id', existingId);
+      if (error) throw error;
+      await supabase.from('case_updates').insert({
+        case_id: caseId,
+        author_type: 'system',
+        author_name: teamMember?.name || 'System',
+        message: `Pick slip deleted — warehouse task removed
+By: ${teamMember?.name || 'Staff'}`,
+      });
+    },
+    onSuccess: () => {
+      setConfirmDelete(false);
+      setEditing(false);
+      setExistingId(null);
+      setItems([{ sku: '', name: '', qty: 1 }]);
+      setNotes('');
+      cin7Applied.current = false;
+      queryClient.invalidateQueries({ queryKey: ['manual-pick', caseId] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-tasks-count'] });
+      queryClient.invalidateQueries({ queryKey: ['case-updates', caseId] });
+      toast.success('Pick slip deleted');
+    },
+    onError: () => toast.error('Failed to delete pick slip'),
+  });
+
   if (loadingExisting || loadingOrder) {
     return (
       <div className="flex items-center gap-2 py-4">
@@ -319,6 +364,29 @@ export function ManualPickForm({ caseId, cin7SaleId, caseNumber }: Props) {
           >
             <Pencil className="h-3.5 w-3.5" /> Edit
           </button>
+          {confirmDelete ? (
+            <span className="inline-flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground">Delete this slip and its warehouse task?</span>
+              <button
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-status-urgent/40 text-status-urgent hover:bg-status-urgent/10 transition-colors disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                Confirm delete
+              </button>
+              <button onClick={() => setConfirmDelete(false)} className="px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                Keep
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs border border-border text-muted-foreground hover:text-status-urgent hover:border-status-urgent/40 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete pick slip
+            </button>
+          )}
         </div>
       </div>
     );
