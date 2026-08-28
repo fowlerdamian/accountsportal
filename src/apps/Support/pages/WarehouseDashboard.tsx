@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Clock, ChevronDown, ExternalLink, Loader2, ArrowLeft } from 'lucide-react';
+import { LogOut, Clock, ChevronDown, ExternalLink, Loader2, ArrowLeft, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -462,7 +462,7 @@ export default function WarehouseDashboard() {
       {/* Header */}
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img src="/icons/icon-192.png" alt="Support Hub" className="h-6 w-6" />
+          <Package className="h-5 w-5" style={{ color: 'var(--brand-aqua)' }} aria-hidden />
           <h1 className="text-lg font-heading tracking-wider text-foreground">WAREHOUSE</h1>
           {readOnly && <span className="text-xs text-muted-foreground border border-border px-2 py-0.5">View only</span>}
         </div>
