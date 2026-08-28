@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Filter, Loader2, Trash2, Copy } from "lucide-react";
+import { Plus, Search, Filter, Loader2, Trash2 } from "lucide-react";
 import { BookIcon, MessageCircleIcon, FileDescriptionIcon, TriangleAlertIcon } from "@portal/components/icons";
 import { StatsCard } from "@guide/components/admin/StatsCard";
 import { Button } from "@guide/components/ui/button";
@@ -108,49 +108,6 @@ export default function GuidesList() {
       queryClient.invalidateQueries({ queryKey: ["instruction_sets"] });
       queryClient.invalidateQueries({ queryKey: ["guide_vehicles_all"] });
       toast.success("Guide deleted");
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const duplicateGuide = async (guide: any) => {
-    try {
-      const slug = Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 10);
-      const { data: newGuide, error } = await supabase.from("instruction_sets").insert({
-        title: `Copy of ${guide.title}`,
-        // Multi-SKU codes ("A, B") must stay unique per token — suffix each one.
-        product_code: String(guide.product_code ?? "").split(/[,;\s]+/).filter(Boolean).map((c: string) => `${c}-COPY`).join(", "),
-        slug,
-        category_id: guide.category_id,
-        estimated_time: guide.estimated_time,
-        short_description: guide.short_description,
-        tools_required: guide.tools_required,
-        product_image_url: guide.product_image_url,
-        notice_text: guide.notice_text,
-      }).select().single();
-      if (error) throw error;
-
-      // Copy steps
-      const { data: steps } = await supabase.from("instruction_steps").select("*").eq("instruction_set_id", guide.id).order("order_index");
-      if (steps && steps.length > 0) {
-        await supabase.from("instruction_steps").insert(
-          steps.map(s => ({
-            instruction_set_id: newGuide.id,
-            step_number: s.step_number,
-            subtitle: s.subtitle,
-            description: s.description,
-            order_index: s.order_index,
-            image_url: s.image_url,
-            image_original_url: s.image_original_url,
-            image2_url: s.image2_url,
-            image2_original_url: s.image2_original_url,
-          }))
-        );
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["instruction_sets"] });
-      toast.success("Guide duplicated");
-      navigate(`/guide/guides/${newGuide.id}/edit`);
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -269,9 +226,6 @@ export default function GuidesList() {
                       </span>
                     )}
                   </span>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateGuide(guide)} title="Duplicate">
-                    <Copy className="w-4 h-4" />
-                  </Button>
                   <DeleteGuideDialog guide={guide} onDelete={deleteGuide} />
                 </div>
               </div>

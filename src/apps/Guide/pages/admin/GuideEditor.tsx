@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCategories, useInstructionSet, useInstructionSteps, usePublications, useBrands, useGuideVehicles } from "@guide/hooks/use-supabase-query";
 import type { GuideVehicle } from "@guide/hooks/use-supabase-query";
 import { supabase } from "@guide/integrations/supabase/client";
-import { Check, ChevronLeft, ChevronRight, FileText, GripVertical, ImagePlus, Loader2, Pencil, Plus, Save, Trash2, Upload, X, Car } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, FileText, GripVertical, ImagePlus, Loader2, Pencil, Plus, Save, Trash2, Upload, X, Car } from "lucide-react";
+import { duplicateGuide } from "@guide/lib/duplicateGuide";
 import { DndContext, closestCenter, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -387,6 +388,7 @@ export default function GuideEditor() {
   const [currentStep, setCurrentStep] = useState(0);
   const [title, setTitle] = useState("");
   const [productCode, setProductCode] = useState("");
+  const [duplicating, setDuplicating] = useState(false);
   // SKU rules: mandatory, one or more SKUs separated by commas, each unique across all guides.
   const parseSkus = (code: string) => [...new Set(code.toUpperCase().split(/[,;\s]+/).map((t) => t.trim()).filter(Boolean))];
   const [skuClash, setSkuClash] = useState<string | null>(null);
@@ -887,10 +889,32 @@ export default function GuideEditor() {
           </Button>
           <h1 className="text-xl sm:text-2xl font-bold">{isEditing ? 'Edit Guide' : 'Create New Guide'}</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving} className="self-start sm:self-auto">
-          {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-          Save
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {isEditing && (
+            <Button variant="ghost" size="sm" disabled={saving || duplicating} title="Create a copy of this guide (saves first)"
+              onClick={async () => {
+                setDuplicating(true);
+                try {
+                  const ok = await saveDraft();
+                  if (!ok) return;
+                  const newId = await duplicateGuide(id!);
+                  toast.success("Guide duplicated — you're now editing the copy");
+                  navigate(`/guide/guides/${newId}/edit`);
+                } catch (e: any) {
+                  toast.error(e?.message ?? "Duplicate failed");
+                } finally {
+                  setDuplicating(false);
+                }
+              }}>
+              {duplicating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Copy className="w-4 h-4 mr-2" />}
+              Duplicate
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Save
+          </Button>
+        </div>
       </div>
 
       {/* Publication status */}
