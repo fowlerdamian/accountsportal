@@ -73,6 +73,21 @@ export default function GuidesList() {
     return matchSearch && matchCat && matchStatus;
   });
 
+  // Share: copy the public link (brand it's published on, else the first brand)
+  // to the clipboard, then open the share page for QR / per-brand links.
+  const shareGuide = async (guide: any) => {
+    const pubBrand = brands.find(b => publications.some((p: any) => p.instruction_set_id === guide.id && p.brand_id === b.id && p.status === "published"));
+    const brand = pubBrand ?? brands[0];
+    const url = brand ? `https://${brand.domain}/${guide.slug}` : `${window.location.origin}/guide/view/${guide.slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(`Link copied${pubBrand ? "" : " (not published yet)"}`, { description: url });
+    } catch {
+      toast.error("Couldn't copy link", { description: url });
+    }
+    navigate(`/guide/guides/${guide.id}/share`);
+  };
+
   const deleteGuide = async (id: string) => {
     try {
       // Delete every child table first, checking each result — abort on the
@@ -241,7 +256,7 @@ export default function GuidesList() {
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/edit`)}>Edit</Button>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/view/${guide.slug}`)}>Preview</Button>
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/share`)}>Share</Button>
+                  <Button variant="ghost" size="sm" onClick={() => shareGuide(guide)} title="Copy public link and open share options">Share</Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateGuide(guide)} title="Duplicate">
                     <Copy className="w-4 h-4" />
                   </Button>
