@@ -108,6 +108,12 @@ const CONFIG = {
 
   /** Receivables assumptions. */
   receivables: {
+    /** Cin7 sales orders not yet invoiced: invoice on ShipBy, else order date + this many days. */
+    soLeadDays: 14,
+    /** Sales orders from these Cin7 source channels are prepaid — excluded (Shopify). */
+    prepaidSourceChannels: /shopify/i,
+    /** CustomerReference prefix used by Shopify-imported orders — also excluded. */
+    prepaidReferencePattern: /^#\d+/,
     /** Overdue AR is collected across these forecast weeks (base case). Downside excludes it. */
     overdueCollectWeeks: [2, 3, 4],
     /** Share of overdue AR expected to be collected (base case). */
@@ -135,7 +141,9 @@ const CONFIG = {
   xero: { excludeBankAccounts: [] as string[], observedPaymentDays: 180 },
 
   /** Cin7 Core. */
-  cin7: { cacheMinutes: 120, maxPoDetailCalls: 60, poLookbackDays: 180 },
+  cin7: { cacheMinutes: 120, maxPoDetailCalls: 60, poLookbackDays: 180, maxSoDetailCalls: 60, soLookbackDays: 120 },
+  /** Calendar strip: AP bills due within this many days of month end are grouped as "Month-end creditors". */
+  calendar: { monthEndWindowDays: 5 },
 
   /** Business days for the calendar. */
   publicHolidays: ["2026-10-05", "2026-12-25", "2026-12-28", "2027-01-01", "2027-01-26"],
@@ -325,6 +333,8 @@ async function trailingPL(auth: { token: string; tenantId: string }, today: Date
 interface Cin7Block {
   unbilledPOs: { id: string; number: string; supplier: string; orderDate: string; requiredBy: string | null; total: number; invoiced: number; status: string }[];
   unbilledTotal: number;
+  unbilledSOs: { id: string; number: string; customer: string; orderDate: string; shipBy: string | null; total: number; invoiced: number; status: string }[];
+  unbilledSOTotal: number;
   stockOnHandCost: number;
   stockOnOrderCost: number;
   skus: number;
@@ -363,6 +373,42 @@ async function fetchCin7(): Promise<Cin7Block> {
       total: round(total), invoiced: round(invoiced),
     });
   }
+  // Sales orders authorised but not yet invoiced (Shopify/prepaid excluded)
+  const unbilledSOs: Cin7Block["unbilledSOs"] = [];
+  {
+    const sinceSo = iso(addDays(new Date(), -CONFIG.cin7.soLookbackDays));
+    const sales: any[] = [];
+    for (let page = 1; page <= 4; page++) {
+      const list = await cin7Fetch("/saleList", { query: { Page: page, Limit: 500, UpdatedSince: sinceSo } });
+      if (!list.ok) { warnings.push(`saleList: ${list.error}`); break; }
+      const items = ((list.data as any)?.SaleList ?? []) as any[];
+      sales.push(...items);
+      if (items.length < 500) break;
+    }
+    const cands = sales.filter((o) => {
+      const st = String(o.Status ?? "").toUpperCase(), os = String(o.OrderStatus ?? "").toUpperCase();
+      const inv = String(o.CombinedInvoiceStatus ?? "").toUpperCase();
+      if (["VOIDED", "DRAFT", "CANCELLED", "COMPLETED"].includes(st)) return false;
+      if (os !== "AUTHORISED") return false;
+      if (inv.includes("INVOICED") && !inv.includes("NOT") && !inv.includes("PARTIAL")) return false;
+      if (CONFIG.receivables.prepaidSourceChannels.test(String(o.SourceChannel ?? ""))) return false;
+      if (CONFIG.receivables.prepaidReferencePattern.test(String(o.CustomerReference ?? "").trim())) return false;
+      if (String(o.Type ?? "").toLowerCase().includes("credit")) return false;
+      return true;
+    }).slice(0, CONFIG.cin7.maxSoDetailCalls);
+    for (const o of cands) {
+      const d = await cin7Fetch("/sale/order", { query: { SaleID: o.SaleID } });
+      const total = Number((d.data as any)?.Total ?? 0);
+      if (!d.ok || !total) continue;
+      const invoiced = Number(o.SaleInvoicesTotalAmount ?? o.InvoiceAmount ?? 0);
+      if (total - invoiced <= 0) continue;
+      unbilledSOs.push({
+        id: o.SaleID, number: o.OrderNumber, customer: o.Customer ?? "", status: String(o.OrderStatus ?? ""),
+        orderDate: iso(xeroDate(o.OrderDate) ?? new Date()), shipBy: o.ShipBy ? iso(xeroDate(o.ShipBy)!) : null,
+        total: round(total), invoiced: round(invoiced),
+      });
+    }
+  }
   // Stock at cost
   const cost = new Map<string, number>();
   for (let page = 1; page < 20; page++) {
@@ -385,6 +431,7 @@ async function fetchCin7(): Promise<Cin7Block> {
   }
   return {
     unbilledPOs, unbilledTotal: round(unbilledPOs.reduce((s, p) => s + p.total - p.invoiced, 0)),
+    unbilledSOs, unbilledSOTotal: round(unbilledSOs.reduce((s, o) => s + o.total - o.invoiced, 0)),
     stockOnHandCost: round(onHand), stockOnOrderCost: round(onOrder), skus, fetchedAt: new Date().toISOString(), warnings,
   };
 }
@@ -392,7 +439,8 @@ async function fetchCin7(): Promise<Cin7Block> {
 async function cin7Cached(sc: SC, force: boolean): Promise<Cin7Block> {
   if (!force) {
     const { data } = await sc.from("cashflow_cache").select("payload, fetched_at").eq("key", "cin7").maybeSingle();
-    if (data && Date.now() - new Date(data.fetched_at).getTime() < CONFIG.cin7.cacheMinutes * 60_000) return data.payload as Cin7Block;
+    const cached = data?.payload as Cin7Block | undefined;
+    if (cached && Array.isArray(cached.unbilledSOs) && Date.now() - new Date(data!.fetched_at).getTime() < CONFIG.cin7.cacheMinutes * 60_000) return cached;
   }
   const block = await fetchCin7();
   await sc.from("cashflow_cache").upsert({ key: "cin7", payload: block, fetched_at: block.fetchedAt });
@@ -506,12 +554,31 @@ async function buildForecast(sc: SC, refreshCin7: boolean) {
     }
   }
 
+  // ── Receivables: Cin7 sales orders not yet invoiced (Shopify excluded) ────
+  const soByChannel: Record<Channel, number> = { dtc: 0, stockist: 0, fleet_gov: 0 };
+  for (const so of cin7.unbilledSOs) {
+    const amt = so.total - so.invoiced;
+    const ch = classify({ Name: so.customer }, groups);
+    soByChannel[ch] += amt;
+    const base = parseISO(so.orderDate) < today ? today : parseISO(so.orderDate);
+    const invDate = so.shipBy && parseISO(so.shipBy) >= today ? parseISO(so.shipBy) : addDays(base, CONFIG.receivables.soLeadDays);
+    push({ date: addDays(invDate, profile[ch].days), amount: amt, kind: "in", label: `SO ${so.number} ${so.customer}`, category: "so_unbilled", channel: ch });
+  }
+
   // ── Payables: Xero AP ─────────────────────────────────────────────────────
   let apTotal = 0, apNext4 = 0;
+  const monthEndAp = new Map<string, { amount: number; count: number; date: Date }>();
   for (const inv of apOpen) {
     const due = Number(inv.AmountDue ?? 0); if (due <= 0) continue;
     apTotal += due;
     const dd = xeroDate(inv.DueDate) ?? today;
+    if (dd >= today) {
+      const me = addDays(monthStart(addMonths(monthStart(dd), 1)), -1); // last day of dd's month
+      if ((me.getTime() - dd.getTime()) / DAY <= CONFIG.calendar.monthEndWindowDays) {
+        const k = iso(me); const cur = monthEndAp.get(k) ?? { amount: 0, count: 0, date: me };
+        cur.amount += due; cur.count++; monthEndAp.set(k, cur);
+      }
+    }
     if (dd < today) {
       const wks = CONFIG.payables.overdueApWeeks;
       apNext4 += due;
@@ -590,7 +657,7 @@ async function buildForecast(sc: SC, refreshCin7: boolean) {
       const net = (monthlyGstOnSales - monthlyGstCredits) * basMonths
         + (CONFIG.paygw.cycle === "quarterly" ? paygwPerRun * runsPerMonth * basMonths : 0)
         + CONFIG.bas.paygInstalmentPerQuarter - CONFIG.bas.fuelTaxCreditsPerQuarter;
-      addCal("BAS", net, due, "bas");
+      addCal("BAS / GST", net, due, "bas");
     }
   }
 
@@ -670,7 +737,13 @@ async function buildForecast(sc: SC, refreshCin7: boolean) {
   await sc.from("cashflow_monthly_metrics").upsert({ period_month: thisMonth, ...current, computed_at: new Date().toISOString() });
   const { data: prevM } = await sc.from("cashflow_monthly_metrics").select("*").lt("period_month", thisMonth).order("period_month", { ascending: false }).limit(1).maybeSingle();
 
+  for (const [, m] of monthEndAp) {
+    if (m.date < horizonEnd) calendar.push({ label: `Month-end creditors (${m.count} bills)`, amount: round(m.amount), date: iso(m.date), category: "ap_month_end" });
+  }
+  // Next occurrence per category (so BAS / creditors aren't crowded out by fortnightly payroll), then the six nearest.
   calendar.sort((a, b) => a.date.localeCompare(b.date));
+  const seen = new Set<string>();
+  const calendarNext = calendar.filter((c) => { if (seen.has(c.category)) return false; seen.add(c.category); return true; });
 
   return {
     generatedAt: new Date().toISOString(),
@@ -688,11 +761,16 @@ async function buildForecast(sc: SC, refreshCin7: boolean) {
     },
     weeks,
     drivers: {
-      owedToUs: { total: round(arTotal), overdue: round(arOverdue), byChannel: Object.fromEntries((Object.keys(arByChannel) as Channel[]).map((ch) => [ch, round(arByChannel[ch])])), invoices: arOpen.length },
+      owedToUs: {
+        total: round(arTotal), overdue: round(arOverdue), byChannel: Object.fromEntries((Object.keys(arByChannel) as Channel[]).map((ch) => [ch, round(arByChannel[ch])])), invoices: arOpen.length,
+        soUnbilled: cin7.unbilledSOTotal, soCount: cin7.unbilledSOs.length, soByChannel: Object.fromEntries((Object.keys(soByChannel) as Channel[]).map((ch) => [ch, round(soByChannel[ch])])),
+        sos: cin7.unbilledSOs.slice(0, 12),
+      },
       owedByUs: { apNext4Weeks: round(apNext4), apTotal: round(apTotal), apBills: apOpen.length, poUnbilled: cin7.unbilledTotal, poCount: cin7.unbilledPOs.length, pos: cin7.unbilledPOs.slice(0, 12) },
       stock: { onHandCost: cin7.stockOnHandCost, onOrderCost: cin7.stockOnOrderCost, skus: cin7.skus },
     },
-    calendar: calendar.slice(0, 6),
+    calendar: [...calendarNext, ...calendar.filter((c) => !calendarNext.includes(c))].slice(0, 6).sort((a, b) => a.date.localeCompare(b.date)),
+    calendarAll: calendar,
     trust: {
       variance,
       freshness: { xeroSyncedAt, cin7SyncedAt: cin7.fetchedAt, bankAsAt: bankAsAt ? iso(bankAsAt) : null },

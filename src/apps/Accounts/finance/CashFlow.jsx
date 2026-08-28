@@ -136,6 +136,7 @@ export default function CashFlow() {
   const headroomColor = breach ? C.breach : C.inflow
   const ap4 = drivers.owedByUs.apNext4Weeks, po = drivers.owedByUs.poUnbilled
   const arTotal = drivers.owedToUs.total
+  const so = drivers.owedToUs.soUnbilled ?? 0
   const ch = config.collections
   const prof = (k) => `${ch[k].label} ${Math.round(ch[k].days)}d${ch[k].source === 'observed' ? '' : '*'}`
 
@@ -216,15 +217,20 @@ export default function CashFlow() {
           <div style={{ display: 'grid', gridTemplateRows: 'repeat(3, auto)', gap: 10 }}>
             <Card accent={C.inflow}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <Label>Owed to us</Label><Sub>{drivers.owedToUs.invoices} invoices</Sub>
+                <Label>Owed to us</Label><Sub>{drivers.owedToUs.invoices} invoices · {drivers.owedToUs.soCount ?? 0} SOs</Sub>
               </div>
-              <Big color={C.inflow}>{money(arTotal)}</Big>
-              <StackBar total={arTotal} segments={[
-                { label: 'DTC', value: drivers.owedToUs.byChannel.dtc, color: C.inflow },
-                { label: 'Stockists', value: drivers.owedToUs.byChannel.stockist, color: C.inflow, opacity: 0.65 },
-                { label: 'Fleet & Govt', value: drivers.owedToUs.byChannel.fleet_gov, color: C.inflow, opacity: 0.35 },
+              <Big color={C.inflow}>{money(arTotal + so)}</Big>
+              <StackBar total={arTotal + so} segments={[
+                { label: 'Xero AR · DTC', value: drivers.owedToUs.byChannel.dtc, color: C.inflow },
+                { label: 'Xero AR · Stockists', value: drivers.owedToUs.byChannel.stockist, color: C.inflow, opacity: 0.65 },
+                { label: 'Xero AR · Fleet & Govt', value: drivers.owedToUs.byChannel.fleet_gov, color: C.inflow, opacity: 0.35 },
+                { label: 'Cin7 sales orders not yet invoiced (excl. Shopify)', value: so, color: C.inflow, opacity: 0.18 },
               ]} />
-              <Sub>{prof('dtc')} · {prof('stockist')} · {prof('fleet_gov')}{drivers.owedToUs.overdue > 0 ? ` · ${compact(drivers.owedToUs.overdue)} past profile` : ''}</Sub>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <Sub>Invoiced <span style={{ color: C.text }}>{compact(arTotal)}</span>{drivers.owedToUs.overdue > 0 ? ` · ${compact(drivers.owedToUs.overdue)} past profile` : ''}</Sub>
+                <Sub>SOs not yet invoiced <span style={{ color: C.text }}>{compact(so)}</span></Sub>
+              </div>
+              <Sub color={C.faint}>{prof('dtc')} · {prof('stockist')} · {prof('fleet_gov')}</Sub>
             </Card>
 
             <Card accent={C.outflow}>
@@ -286,25 +292,15 @@ export default function CashFlow() {
           {trust.warnings?.length > 0 && <Sub color={C.outflow}>{trust.warnings.join(' · ')}</Sub>}
         </div>
 
-        {/* Monthly panel — below the fold */}
-        <div style={{ marginTop: 18, borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-            <Label>Working capital · monthly</Label>
-            <Sub color={C.faint}>{monthly.period?.slice(0, 7)} vs {monthly.previous?.period?.slice(0, 7) ?? 'no prior month yet'}</Sub>
+        {/* Monthly panel — below the fold: one number */}
+        <div style={{ marginTop: 18, borderTop: `1px solid ${C.border}`, paddingTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Label>Cash conversion cycle · monthly</Label>
+            <Sub color={C.faint}>days from paying suppliers to collecting from customers · {monthly.period?.slice(0, 7)} vs {monthly.previous?.period?.slice(0, 7) ?? 'no prior month yet'}</Sub>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)', gap: 10 }}>
-            {[
-              ['DSO · DTC', 'dso_dtc'], ['DSO · Stockists', 'dso_stockist'], ['DSO · Fleet & Govt', 'dso_fleet_gov'],
-              ['DIO', 'dio'], ['DPO', 'dpo', false], ['Cash conversion', 'ccc'],
-            ].map(([label, key, lowerBetter = true]) => (
-              <Card key={key} style={{ padding: '10px 12px' }}>
-                <Label>{label}</Label>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                  <Big size="1.2rem">{monthly.current[key] == null ? '—' : `${Math.round(monthly.current[key])}d`}</Big>
-                  <span style={{ fontFamily: MONO, fontSize: 13 }}><Arrow curr={monthly.current[key]} prev={monthly.previous?.[key]} lowerIsBetter={lowerBetter} /></span>
-                </div>
-              </Card>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <Big size="1.8rem">{monthly.current.ccc == null ? '—' : `${Math.round(monthly.current.ccc)}d`}</Big>
+            <span style={{ fontFamily: MONO, fontSize: 16 }}><Arrow curr={monthly.current.ccc} prev={monthly.previous?.ccc} /></span>
           </div>
         </div>
       </div>
