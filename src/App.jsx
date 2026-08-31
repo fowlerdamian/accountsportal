@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { AuthProvider as GuideAuthProvider } from './apps/Guide/contexts/AuthContext'
@@ -11,55 +11,70 @@ import PortalDashboard from './pages/Dashboard.jsx'
 import TileSettings from './pages/TileSettings.jsx'
 import Settings from './pages/Settings.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
-import ProfitProcessor from './apps/ProfitProcessor/index.jsx'
-import PurchaseOrders from './apps/PurchaseOrders/index.jsx'
-import InvoiceList from './apps/Logistics/components/InvoiceList.jsx'
-import InvoiceDetail from './apps/Logistics/components/InvoiceDetail.jsx'
-import Carriers from './apps/Logistics/components/Carriers.jsx'
-import Disputes from './apps/Logistics/components/Disputes.jsx'
-import ManualLabel from './apps/Logistics/components/ManualLabel.jsx'
-import TrackingLookup from './apps/Logistics/components/TrackingLookup.jsx'
-import SupportApp from './apps/Support/SupportApp'
-import SalesSupport from './apps/SalesSupport/index.jsx'
-import OpportunityPressure from './apps/Opportunities/OpportunityPressure'
-import Marketing from './apps/Marketing/index.jsx'
-import ComplianceApp from './apps/Compliance/index'
-import XeroChat from './apps/Xero/index'
-import AccountsLayout from './apps/Accounts/AccountsLayout'
-import ChatFunctions from './apps/Accounts/ChatFunctions.jsx'
-import FinanceDashboard from './apps/Accounts/finance/FinanceDashboard.jsx'
-import RevenueTargets from './apps/Accounts/finance/RevenueTargets.jsx'
-import CashFlow from './apps/Accounts/finance/CashFlow.jsx'
-
-// Contractor Hub
-import ContractorsList from './apps/ContractorHub/pages/ContractorsList'
-import ContractorProfile from './apps/ContractorHub/pages/ContractorProfile'
-import ProjectsList from './apps/ContractorHub/pages/ProjectsList'
-import ProjectView from './apps/ContractorHub/pages/ProjectView'
-import HubSettings from './apps/ContractorHub/pages/HubSettings'
-
-// Tasks (staff_tasks app)
-import TasksApp from './apps/Tasks/TasksApp'
-import TaskWidget from './apps/Tasks/pages/TaskWidget'
 import { TaskDock } from './components/TaskDock'
 import { GlobalShortcuts } from './components/GlobalShortcuts'
 import { GlobalMentions } from './components/GlobalMentions'
 import { DelegatePromptDialog } from './apps/Tasks/components/DelegatePromptDialog'
 
+// App modules are code-split: each route chunk loads on first visit instead of
+// shipping every app (recharts, three.js, jspdf, …) in one bundle on refresh.
+const ProfitProcessor = lazy(() => import('./apps/ProfitProcessor/index.jsx'))
+const PurchaseOrders = lazy(() => import('./apps/PurchaseOrders/index.jsx'))
+const InvoiceList = lazy(() => import('./apps/Logistics/components/InvoiceList.jsx'))
+const InvoiceDetail = lazy(() => import('./apps/Logistics/components/InvoiceDetail.jsx'))
+const Carriers = lazy(() => import('./apps/Logistics/components/Carriers.jsx'))
+const Disputes = lazy(() => import('./apps/Logistics/components/Disputes.jsx'))
+const ManualLabel = lazy(() => import('./apps/Logistics/components/ManualLabel.jsx'))
+const TrackingLookup = lazy(() => import('./apps/Logistics/components/TrackingLookup.jsx'))
+const SupportApp = lazy(() => import('./apps/Support/SupportApp'))
+const SalesSupport = lazy(() => import('./apps/SalesSupport/index.jsx'))
+const OpportunityPressure = lazy(() => import('./apps/Opportunities/OpportunityPressure'))
+const Marketing = lazy(() => import('./apps/Marketing/index.jsx'))
+const ComplianceApp = lazy(() => import('./apps/Compliance/index'))
+const XeroChat = lazy(() => import('./apps/Xero/index'))
+const AccountsLayout = lazy(() => import('./apps/Accounts/AccountsLayout'))
+const ChatFunctions = lazy(() => import('./apps/Accounts/ChatFunctions.jsx'))
+const FinanceDashboard = lazy(() => import('./apps/Accounts/finance/FinanceDashboard.jsx'))
+const RevenueTargets = lazy(() => import('./apps/Accounts/finance/RevenueTargets.jsx'))
+const CashFlow = lazy(() => import('./apps/Accounts/finance/CashFlow.jsx'))
+
+// Contractor Hub
+const ContractorsList = lazy(() => import('./apps/ContractorHub/pages/ContractorsList'))
+const ContractorProfile = lazy(() => import('./apps/ContractorHub/pages/ContractorProfile'))
+const ProjectsList = lazy(() => import('./apps/ContractorHub/pages/ProjectsList'))
+const ProjectView = lazy(() => import('./apps/ContractorHub/pages/ProjectView'))
+const HubSettings = lazy(() => import('./apps/ContractorHub/pages/HubSettings'))
+
+// Tasks (staff_tasks app)
+const TasksApp = lazy(() => import('./apps/Tasks/TasksApp'))
+const TaskWidget = lazy(() => import('./apps/Tasks/pages/TaskWidget'))
+
 // Guide Portal
-import { AdminLayout } from './apps/Guide/admin/AdminLayout'
-import GuidesList from './apps/Guide/pages/admin/GuidesList'
-import GuideEditor from './apps/Guide/pages/admin/GuideEditor'
-import GuideShare from './apps/Guide/pages/admin/GuideShare'
-import GuideReports from './apps/Guide/pages/admin/Reports'
-import GuideSupport from './apps/Guide/pages/admin/Support'
-import GuideFeedback from './apps/Guide/pages/admin/Feedback'
-import GuideSettings from './apps/Guide/pages/admin/Settings'
-import GuideCategories from './apps/Guide/pages/admin/Categories'
-import GuideBrands from './apps/Guide/pages/admin/Brands'
-import GuideUsers from './apps/Guide/pages/admin/Users'
-import GuideDeliveries from './apps/Guide/pages/admin/Deliveries'
-import GuideViewer from './apps/Guide/pages/guide/GuideViewer'
+const AdminLayout = lazy(() => import('./apps/Guide/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })))
+const GuidesList = lazy(() => import('./apps/Guide/pages/admin/GuidesList'))
+const GuideEditor = lazy(() => import('./apps/Guide/pages/admin/GuideEditor'))
+const GuideShare = lazy(() => import('./apps/Guide/pages/admin/GuideShare'))
+const GuideReports = lazy(() => import('./apps/Guide/pages/admin/Reports'))
+const GuideSupport = lazy(() => import('./apps/Guide/pages/admin/Support'))
+const GuideFeedback = lazy(() => import('./apps/Guide/pages/admin/Feedback'))
+const GuideSettings = lazy(() => import('./apps/Guide/pages/admin/Settings'))
+const GuideCategories = lazy(() => import('./apps/Guide/pages/admin/Categories'))
+const GuideBrands = lazy(() => import('./apps/Guide/pages/admin/Brands'))
+const GuideUsers = lazy(() => import('./apps/Guide/pages/admin/Users'))
+const GuideDeliveries = lazy(() => import('./apps/Guide/pages/admin/Deliveries'))
+const GuideViewer = lazy(() => import('./apps/Guide/pages/guide/GuideViewer'))
+
+// Shown while a route chunk downloads (first visit to an app only).
+function RouteFallback() {
+  return (
+    <div style={{
+      height: '100%', minHeight: '40vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: '#0a0a0a', color: '#666', fontFamily: '"JetBrains Mono", monospace', fontSize: 12,
+    }}>
+      Loading…
+    </div>
+  )
+}
 
 // Redirect old viewer URL formats to the current /:slug public route
 function SlugRedirect() {
@@ -165,6 +180,7 @@ export default function App() {
         <AuthProvider>
           <DocumentTitle />
           <PortalChrome />
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
@@ -264,6 +280,7 @@ export default function App() {
             {/* Catch-all */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

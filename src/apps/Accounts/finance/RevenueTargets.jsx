@@ -54,6 +54,10 @@ function useTargetsData() {
       if (tgt.error) throw tgt.error
       return { revenue: rev.data ?? [], targets: tgt.data ?? [] }
     },
+    // Actuals land nightly / on manual Sync (which invalidates); target edits
+    // invalidate explicitly. No need to refetch on tab switch or window focus.
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -706,12 +710,12 @@ export default function RevenueTargets() {
                 const hue = hueForYear(y)
                 return [
                   <Line key={`a${y}`} dataKey={`a${y}`} name={`${y} Actual`} stroke={hue} strokeWidth={2}
-                    dot={{ r: 2.5, fill: hue, strokeWidth: 0 }} activeDot={{ r: 4 }} />,
+                    dot={{ r: 2.5, fill: hue, strokeWidth: 0 }} activeDot={{ r: 4 }} isAnimationActive={false} />,
                   <Line key={`t${y}`} dataKey={`t${y}`} name={`${y} Target`} stroke={hue} strokeWidth={1.5}
-                    strokeDasharray="6 4" strokeOpacity={0.75} dot={false} connectNulls />,
+                    strokeDasharray="6 4" strokeOpacity={0.75} dot={false} connectNulls isAnimationActive={false} />,
                   ...(single ? [
                     <Line key={`s${y}`} dataKey={`s${y}`} name={`${y} Stretch`} stroke={C.faint} strokeWidth={1.5}
-                      strokeDasharray="2 4" dot={false} connectNulls />,
+                      strokeDasharray="2 4" dot={false} connectNulls isAnimationActive={false} />,
                   ] : []),
                 ]
               })}

@@ -52,8 +52,11 @@ function useCashFlow() {
       if (data?.error) throw new Error(data.error)
       return data
     },
-    staleTime: 0,
-    refetchOnMount: 'always',
+    // The edge fn pulls Xero + Cin7 live (~5-20s). Serve the cached forecast on
+    // tab switches and only re-pull after 10 min — or immediately when the Sync
+    // button invalidates ['cashflow-forecast'].
+    staleTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
   })
 }
 

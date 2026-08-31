@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import html2canvas from 'html2canvas'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
   CartesianGrid, Cell, ReferenceLine,
@@ -77,7 +76,11 @@ function useFinanceData() {
     queryFn: async () => {
       const [snap, lines, cases] = await Promise.all([
         supabase.from('finance_snapshot').select('*').order('period_month'),
-        supabase.from('finance_expense_line').select('period_month, account_code, account_name, amount, bucket'),
+        // Only opex lines are rendered; filtering server-side shrinks the payload
+        // and delays hitting PostgREST's 1000-row response cap as history grows.
+        supabase.from('finance_expense_line')
+          .select('period_month, account_code, account_name, amount, bucket')
+          .eq('bucket', 'opex'),
         supabase.from('support_cases_rollup').select('*').order('period_month'),
       ])
       if (snap.error) throw snap.error
@@ -85,6 +88,10 @@ function useFinanceData() {
       if (cases.error) throw cases.error
       return { snapshots: snap.data ?? [], lines: lines.data ?? [], cases: cases.data ?? [] }
     },
+    // Snapshots change nightly (cron) or on a manual Sync (which invalidates) —
+    // don't refetch on every tab switch / window focus.
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -332,6 +339,8 @@ export default function FinanceDashboard() {
     if (!cardRef.current || shareState === 'working') return
     setShareState('working')
     try {
+      // Loaded on demand — html2canvas is ~200KB and only needed for Share.
+      const { default: html2canvas } = await import('html2canvas')
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: null, scale: 3, useCORS: true, logging: false,
       })
@@ -361,10 +370,7 @@ export default function FinanceDashboard() {
   }
 
   // Clear any pending state-reset timers on unmount
-  useEffect(() => () => {
-    clearTimeout(syncTimerRef.current)
-    clearTimeout(shareTimerRef.current)
-  }, [])
+  useEffect(() => () => clearTimeout(shareTimerRef.current), [])
 
   // ── States ──────────────────────────────────────────────────────────────────
   if (isLoading) return <Centered>Loading finance snapshots…</Centered>
@@ -428,8 +434,8 @@ export default function FinanceDashboard() {
                 <XAxis dataKey="name" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} interval={0} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
                 <Tooltip content={<WaterfallTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar dataKey="base" stackId="w" fill="transparent" />
-                <Bar dataKey="value" stackId="w" radius={[2, 2, 0, 0]} name="Amount">
+                <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
+                <Bar dataKey="value" stackId="w" radius={[2, 2, 0, 0]} name="Amount" isAnimationActive={false}>
                   {waterfall.map((s, i) => (
                     <Cell key={i} fill={s.color} />
                   ))}
@@ -446,12 +452,12 @@ export default function FinanceDashboard() {
                 <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
                 <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
                 <Tooltip content={<ChartTooltip formatter={(v) => money(v)} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar dataKey="revenue" name="Revenue" radius={[2, 2, 0, 0]}>
+                <Bar dataKey="revenue" name="Revenue" radius={[2, 2, 0, 0]} isAnimationActive={false}>
                   {chartData.map((d, i) => (
                     <Cell key={i} fill={d.breakeven != null && d.revenue >= d.breakeven ? C.green : C.red} fillOpacity={0.55} />
                   ))}
                 </Bar>
-                <Line dataKey="breakeven" name="Breakeven" stroke={C.accent} strokeWidth={2} dot={false} connectNulls />
+                <Line dataKey="breakeven" name="Breakeven" stroke={C.accent} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </Panel>
@@ -466,8 +472,8 @@ export default function FinanceDashboard() {
               <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
               <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} width={32} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Bar dataKey="casesResolved" name="Resolved" stackId="c" fill={C.green} fillOpacity={0.6} radius={[0, 0, 0, 0]} />
-              <Bar dataKey="casesOpen" name="Open" stackId="c" fill={C.accent} fillOpacity={0.85} radius={[2, 2, 0, 0]} />
+              <Bar dataKey="casesResolved" name="Resolved" stackId="c" fill={C.green} fillOpacity={0.6} radius={[0, 0, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="casesOpen" name="Open" stackId="c" fill={C.accent} fillOpacity={0.85} radius={[2, 2, 0, 0]} isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </Panel>
