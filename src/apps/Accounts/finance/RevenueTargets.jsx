@@ -538,13 +538,6 @@ export default function RevenueTargets() {
     return s
   }
 
-  // Tiles — current month + YTD vs target
-  const curr = grid[thisYear]?.[thisMonth]
-  const ytdActual = sumRow(thisYear, 'actual', thisMonth)
-  const ytdTarget = sumRow(thisYear, 'target', thisMonth)
-  const ytdRatio = ytdTarget ? ytdActual / ytdTarget : null
-  const prevYtd = sumRow(thisYear - 1, 'actual', thisMonth)
-
   // MTD/YTD pacing — actual so far vs the working-day (Mon–Fri) pro-rata share
   // of the target, plus a straight-line projection at current pace. Both dials
   // use the same working-day basis so they tick forward together each workday:
@@ -561,6 +554,18 @@ export default function RevenueTargets() {
   const workdaysInMonth = countWorkdays(thisMonth)
   const workdaysElapsed = countWorkdays(thisMonth, now.getDate())
   const elapsedFrac = workdaysInMonth ? Math.min(workdaysElapsed / workdaysInMonth, 1) : 0
+
+  // Tiles — current month + YTD vs target. The YTD target tracks to today:
+  // completed months in full, the current month pro-rated by elapsed workdays,
+  // so the ratio measures pace against where the year should be right now.
+  const curr = grid[thisYear]?.[thisMonth]
+  const ytdActual = sumRow(thisYear, 'actual', thisMonth)
+  const priorMonthsTarget = sumRow(thisYear, 'target', thisMonth - 1)
+  const ytdTarget = curr?.target != null
+    ? (priorMonthsTarget ?? 0) + curr.target * elapsedFrac
+    : priorMonthsTarget
+  const ytdRatio = ytdTarget ? ytdActual / ytdTarget : null
+  const prevYtd = sumRow(thisYear - 1, 'actual', thisMonth)
   const mtdActual = curr?.actual ?? null
   const mtdTarget = curr?.target != null ? curr.target * elapsedFrac : null
   const mtdPace = mtdTarget ? (mtdActual ?? 0) / mtdTarget : null
@@ -633,7 +638,7 @@ export default function RevenueTargets() {
             sub={prevYtd != null ? `prev yr YTD ${money(prevYtd)}` : ''} />
           <Tile compact={isMobile} icon={TargetIcon} label="YTD vs Target" value={pct(ytdRatio)} hue={C.accent}
             valueColor={ytdRatio == null ? C.text : ytdRatio >= 1 ? C.green : C.red}
-            sub={ytdTarget != null ? `target ${money(ytdTarget)}` : 'no targets set'} />
+            sub={ytdTarget != null ? `target ${money(ytdTarget)} to today` : 'no targets set'} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(460px, 100%), 1fr))', gap: 16 }}>
