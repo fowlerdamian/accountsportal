@@ -29,25 +29,29 @@ const C = {
 const MONO = '"JetBrains Mono", monospace'
 
 // Fixed segment order + hue, so charts and tables never re-shuffle.
+// Hues come from the DISTINCT categorical ramp (--cat-1..8) — the single-hue
+// brand accents alias each other (gold === orange, aqua === blue), which made
+// stacked segments indistinguishable.
+const CAT = palette.cat // [orange, teal, red, deep red, cream, orange 300, teal 400, red 400]
 const CUSTOMER_SEGMENTS = [
-  { key: 'Consumers',    hue: palette.gold },
-  { key: 'Distributors', hue: palette.aqua },
-  { key: 'Fleet',        hue: palette.blue },
-  { key: 'Bespoke',      hue: palette.pink },
+  { key: 'Consumers',    hue: CAT[0] }, // orange
+  { key: 'Distributors', hue: CAT[1] }, // teal
+  { key: 'Fleet',        hue: CAT[4] }, // cream
+  { key: 'Bespoke',      hue: CAT[2] }, // red
 ]
 // Category tree: `children` are the leaf buckets stored in the DB; a segment
 // with children is a parent whose figures are the sum of its leaves. The chart
 // stacks top-level segments; the table indents the children beneath the parent.
 const CATEGORY_SEGMENTS = [
-  { key: 'Electrical', hue: palette.gold, children: [
-    { key: 'Lighting',               hue: palette.gold },
-    { key: 'Behind Grille Lighting', hue: palette.gold },
-    { key: 'Electrical',             hue: palette.gold },
+  { key: 'Electrical', hue: CAT[0], children: [ // orange
+    { key: 'Lighting',               hue: CAT[0] },
+    { key: 'Behind Grille Lighting', hue: CAT[0] },
+    { key: 'Electrical',             hue: CAT[0] },
   ] },
-  { key: 'Communication', hue: palette.aqua },
-  { key: 'Storage',       hue: palette.orange },
-  { key: 'Safety',        hue: palette.pink },
-  { key: 'Other',         hue: palette.purple },
+  { key: 'Communication', hue: CAT[1] }, // teal
+  { key: 'Storage',       hue: CAT[4] }, // cream
+  { key: 'Safety',        hue: CAT[2] }, // red
+  { key: 'Other',         hue: CAT[6] }, // teal 400
 ]
 const METRICS = [
   { key: 'revenue', label: 'Revenue' },
