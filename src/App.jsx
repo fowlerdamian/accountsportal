@@ -37,6 +37,7 @@ const ChatFunctions = lazy(() => import('./apps/Accounts/ChatFunctions.jsx'))
 const FinanceDashboard = lazy(() => import('./apps/Accounts/finance/FinanceDashboard.jsx'))
 const RevenueTargets = lazy(() => import('./apps/Accounts/finance/RevenueTargets.jsx'))
 const CashFlow = lazy(() => import('./apps/Accounts/finance/CashFlow.jsx'))
+const StatBreakdown = lazy(() => import('./apps/Accounts/finance/StatBreakdown.jsx'))
 
 // Contractor Hub
 const ContractorsList = lazy(() => import('./apps/ContractorHub/pages/ContractorsList'))
@@ -256,6 +257,7 @@ export default function App() {
                 <Route index element={<FinanceDashboard />} />
                 <Route path="cashflow" element={<CashFlow />} />
                 <Route path="targets" element={<RevenueTargets />} />
+                <Route path="stats" element={<StatBreakdown />} />
                 <Route path="profit" element={<ProfitProcessor />} />
                 {/* Old direct link to the dashboard now lives at the index. */}
                 <Route path="finance" element={<Navigate to="/accounts" replace />} />

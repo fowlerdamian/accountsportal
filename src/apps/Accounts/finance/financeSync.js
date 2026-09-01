@@ -8,7 +8,7 @@
 import { useSyncExternalStore } from 'react'
 import { supabase } from '@portal/lib/supabase'
 
-export const FINANCE_QUERY_KEYS = [['finance-dashboard'], ['revenue-targets'], ['cashflow-forecast']]
+export const FINANCE_QUERY_KEYS = [['finance-dashboard'], ['revenue-targets'], ['cashflow-forecast'], ['stat-breakdown']]
 
 // Invoice sync is fired async by pg_net; give it this long before refetching targets.
 const INVOICE_SYNC_SETTLE_MS = 75_000
@@ -48,6 +48,11 @@ export function runFinanceSync(qc) {
       }),
       // 3. Cash flow forecast — invalidating forces the edge fn to re-run on refetch
       qc.invalidateQueries({ queryKey: ['cashflow-forecast'] }),
+      // 4. Stat Breakdown — scan Cin7 for new/updated sales and drain the queue
+      supabase.functions.invoke('stat-breakdown-sync', { body: { drainMs: 60_000 } }).then(({ data, error: e }) => {
+        if (e) throw e
+        if (data && data.ok === false) throw new Error(data.error || 'stat-breakdown-sync failed')
+      }),
     ])
     const failed = results.filter((r) => r.status === 'rejected')
     failed.forEach((r) => console.error('[finance sync]', r.reason))
