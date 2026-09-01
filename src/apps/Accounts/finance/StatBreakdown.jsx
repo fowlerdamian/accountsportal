@@ -168,6 +168,19 @@ function segmentPeriodValues(rowsByMonth, monthKeys, seg) {
   return out
 }
 
+// Clickable column header; shows the active sort arrow.
+function SortHeader({ label, colKey, align = 'right', sort, onSort, style }) {
+  const active = sort.key === colKey
+  return (
+    <span
+      onClick={() => onSort(colKey)}
+      title="Click to sort"
+      style={{ ...style, textAlign: align, cursor: 'pointer', userSelect: 'none', color: active ? C.text : style?.color }}>
+      {label}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </span>
+  )
+}
+
 function PieTip({ active, payload }) {
   if (!active || !payload?.length) return null
   const d = payload[0]?.payload
@@ -200,6 +213,35 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
     const total = rows.reduce((t, r) => ({ revenue: t.revenue + r.revenue, cost: t.cost + r.cost, profit: t.profit + r.profit }), { revenue: 0, cost: 0, profit: 0 })
     return { rows, total }
   }, [rowsByMonth, periodMonths, segments])
+
+  // Click a column header to sort; click again to flip. key null = the fixed
+  // segment order. Children sort within their parent by the same column.
+  const [sort, setSort] = useState({ key: null, dir: 'desc' })
+  const toggleSort = (key) =>
+    setSort((s) => (s.key === key
+      ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: key === 'name' ? 'asc' : 'desc' }))
+  const sortedRows = useMemo(() => {
+    if (!sort.key) return tableRows.rows
+    const val = (r) => {
+      if (sort.key === 'name') return r.key
+      if (sort.key === 'margin') return r.revenue ? r.profit / r.revenue : null
+      if (sort.key === 'share') return r.revenue
+      return r[sort.key]
+    }
+    const mul = sort.dir === 'asc' ? 1 : -1
+    const cmp = (a, b) => {
+      const av = val(a), bv = val(b)
+      if (typeof av === 'string') return mul * av.localeCompare(bv)
+      if (av == null && bv == null) return 0
+      if (av == null) return 1 // nulls last, regardless of direction
+      if (bv == null) return -1
+      return mul * (av - bv)
+    }
+    return [...tableRows.rows].sort(cmp).map((r) => (
+      r.children ? { ...r, children: [...r.children].sort(cmp) } : r
+    ))
+  }, [tableRows, sort])
 
   const grid = {
     display: 'grid',
@@ -270,14 +312,14 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...grid, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
-          <span style={{ ...th, textAlign: 'left' }}>{periodLabel ?? '—'}</span>
-          <span style={th}>Revenue</span>
-          <span style={th}>Cost</span>
-          <span style={th}>Profit</span>
-          {!isMobile && <span style={th}>Margin</span>}
-          {!isMobile && <span style={th}>% of Rev</span>}
+          <SortHeader label={periodLabel ?? '—'} colKey="name" align="left" sort={sort} onSort={toggleSort} style={th} />
+          <SortHeader label="Revenue" colKey="revenue" sort={sort} onSort={toggleSort} style={th} />
+          <SortHeader label="Cost" colKey="cost" sort={sort} onSort={toggleSort} style={th} />
+          <SortHeader label="Profit" colKey="profit" sort={sort} onSort={toggleSort} style={th} />
+          {!isMobile && <SortHeader label="Margin" colKey="margin" sort={sort} onSort={toggleSort} style={th} />}
+          {!isMobile && <SortHeader label="% of Rev" colKey="share" sort={sort} onSort={toggleSort} style={th} />}
         </div>
-        {tableRows.rows.map((r) => (
+        {sortedRows.map((r) => (
           <div key={r.key}>
             <div style={{ ...grid, fontSize: 12.5, padding: '8px 0', borderBottom: r.children ? 'none' : `1px solid ${C.borderSoft}`, fontWeight: r.children ? 600 : 400 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.text, minWidth: 0 }}>
