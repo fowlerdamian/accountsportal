@@ -5,9 +5,10 @@
 // Segments:
 //   Customer type — Cin7 customer Tags: A→Bespoke, D→Distributors, F→Fleet,
 //                   anything else (incl. Shopify junk tags / no tag)→Consumers.
-//   Product bucket — Cin7 product Category: Lighting+Behind-Grille Light Bars→
-//                    Lighting; Communication(s)→Communication; Storage; Safety;
-//                    every other category→Electrical & Other.
+//   Product bucket — Cin7 product Category mapped to leaf buckets: Lighting,
+//                    Behind Grille Lighting, Electrical (the UI groups these
+//                    three under an Electrical parent), Communication(s)→
+//                    Communication, Storage, Safety, everything else→Other.
 //
 // Figures: invoice lines only (AdditionalCharges like freight excluded).
 //   revenue = line Total (GST-exclusive, net of discount)
@@ -43,8 +44,11 @@ function customerType(tags: unknown): string {
 function bucketOf(category: string | undefined): string {
   switch ((category ?? "").trim().toLowerCase()) {
     case "lighting":
-    case "behind-grille light bars":
       return "Lighting";
+    case "behind-grille light bars":
+      return "Behind Grille Lighting";
+    case "electrical":
+      return "Electrical";
     case "communication":
     case "communications":
       return "Communication";
@@ -53,7 +57,7 @@ function bucketOf(category: string | undefined): string {
     case "safety":
       return "Safety";
     default:
-      return "Electrical & Other";
+      return "Other";
   }
 }
 
@@ -220,8 +224,11 @@ serve(async (req) => {
         const del = await sc.from("cin7_sale_stat_lines").delete().in("sale_id", doneIds);
         if (del.error) throw new Error(`lines delete: ${del.error.message}`);
         if (rows.length) {
-          const ins = await sc.from("cin7_sale_stat_lines").insert(rows);
-          if (ins.error) throw new Error(`lines insert: ${ins.error.message}`);
+          // Upsert: overlapping runs (hourly cron vs drain cron) may process the
+          // same sale — both compute identical rows, so last-write-wins is safe.
+          const ins = await sc.from("cin7_sale_stat_lines")
+            .upsert(rows, { onConflict: "sale_id,invoice_month,bucket" });
+          if (ins.error) throw new Error(`lines upsert: ${ins.error.message}`);
         }
         const dq = await sc.from("cin7_stat_pending").delete().in("sale_id", doneIds);
         if (dq.error) throw new Error(`dequeue: ${dq.error.message}`);

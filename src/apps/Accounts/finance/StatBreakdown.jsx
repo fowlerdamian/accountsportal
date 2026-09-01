@@ -1,8 +1,9 @@
 // Accounts › Stat Breakdown — monthly Revenue / Cost / Profit split two ways:
 //   1. Customer type — Cin7 customer tags (no tag → Consumers, D → Distributors,
 //      F → Fleet, A → Bespoke)
-//   2. Product category — Lighting (incl. Behind-Grille Light Bars),
-//      Communication, Storage, Safety, Electrical & Other (everything else)
+//   2. Product category — Electrical (parent, broken down into Lighting,
+//      Behind Grille Lighting and Electrical), Communication, Storage, Safety,
+//      Other (every remaining Cin7 category)
 // Figures come from stat_breakdown_monthly (fed by the stat-breakdown-sync edge
 // fn from Cin7 invoice lines; GST-exclusive, cost = Cin7 AverageCost at invoice
 // time, credit notes subtracted). Sync: hourly pg_cron + the shared Sync button.
@@ -33,12 +34,19 @@ const CUSTOMER_SEGMENTS = [
   { key: 'Fleet',        hue: palette.blue },
   { key: 'Bespoke',      hue: palette.pink },
 ]
+// Category tree: `children` are the leaf buckets stored in the DB; a segment
+// with children is a parent whose figures are the sum of its leaves. The chart
+// stacks top-level segments; the table indents the children beneath the parent.
 const CATEGORY_SEGMENTS = [
-  { key: 'Lighting',           hue: palette.gold },
-  { key: 'Communication',      hue: palette.aqua },
-  { key: 'Storage',            hue: palette.orange },
-  { key: 'Safety',             hue: palette.pink },
-  { key: 'Electrical & Other', hue: palette.purple },
+  { key: 'Electrical', hue: palette.gold, children: [
+    { key: 'Lighting',               hue: palette.gold },
+    { key: 'Behind Grille Lighting', hue: palette.gold },
+    { key: 'Electrical',             hue: palette.gold },
+  ] },
+  { key: 'Communication', hue: palette.aqua },
+  { key: 'Storage',       hue: palette.orange },
+  { key: 'Safety',        hue: palette.pink },
+  { key: 'Other',         hue: palette.purple },
 ]
 const METRICS = [
   { key: 'revenue', label: 'Revenue' },
@@ -126,22 +134,38 @@ function Legend({ segments }) {
   )
 }
 
+// A segment's figures for one month: its own leaf bucket, or (for a parent
+// with children) the sum of its leaf buckets.
+function segmentValues(byseg, seg) {
+  const leaves = seg.children ?? [seg]
+  const out = { revenue: 0, cost: 0, profit: 0 }
+  for (const leaf of leaves) {
+    const r = byseg?.get(leaf.key)
+    if (!r) continue
+    out.revenue += r.revenue
+    out.cost += r.cost
+    out.profit += r.profit
+  }
+  return out
+}
+
 // One cross-section: stacked monthly chart + table for the selected month.
 function Breakdown({ title, icon, segments, rowsByMonth, months, month, metric }) {
   const isMobile = useIsMobile()
 
   const chartData = useMemo(() => months.map((m) => {
     const row = { label: m.slice(2, 7) } // 'YY-MM'
-    for (const s of segments) row[s.key] = rowsByMonth.get(m)?.get(s.key)?.[metric] ?? 0
+    const byseg = rowsByMonth.get(m)
+    for (const s of segments) row[s.key] = segmentValues(byseg, s)[metric]
     return row
   }), [months, segments, rowsByMonth, metric])
 
   const tableRows = useMemo(() => {
     const byseg = rowsByMonth.get(month)
-    const rows = segments.map((s) => {
-      const r = byseg?.get(s.key)
-      return { key: s.key, hue: s.hue, revenue: r?.revenue ?? 0, cost: r?.cost ?? 0, profit: r?.profit ?? 0 }
-    })
+    const rows = segments.map((s) => ({
+      key: s.key, hue: s.hue, ...segmentValues(byseg, s),
+      children: s.children?.map((c) => ({ key: c.key, hue: c.hue, ...segmentValues(byseg, c) })),
+    }))
     const total = rows.reduce((t, r) => ({ revenue: t.revenue + r.revenue, cost: t.cost + r.cost, profit: t.profit + r.profit }), { revenue: 0, cost: 0, profit: 0 })
     return { rows, total }
   }, [rowsByMonth, month, segments])
@@ -179,16 +203,31 @@ function Breakdown({ title, icon, segments, rowsByMonth, months, month, metric }
           {!isMobile && <span style={th}>% of Rev</span>}
         </div>
         {tableRows.rows.map((r) => (
-          <div key={r.key} style={{ ...grid, fontSize: 12.5, padding: '8px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.text, minWidth: 0 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: r.hue, flexShrink: 0 }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.key}</span>
-            </span>
-            <span style={{ textAlign: 'right', fontFamily: MONO, color: C.text }}>{money(r.revenue)}</span>
-            <span style={{ textAlign: 'right', fontFamily: MONO, color: C.muted }}>{money(r.cost)}</span>
-            <span style={{ textAlign: 'right', fontFamily: MONO, color: r.profit >= 0 ? C.green : C.red }}>{money(r.profit)}</span>
-            {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.muted }}>{r.revenue ? pct(r.profit / r.revenue) : '—'}</span>}
-            {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{tableRows.total.revenue ? pct(r.revenue / tableRows.total.revenue) : '—'}</span>}
+          <div key={r.key}>
+            <div style={{ ...grid, fontSize: 12.5, padding: '8px 0', borderBottom: r.children ? 'none' : `1px solid ${C.borderSoft}`, fontWeight: r.children ? 600 : 400 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.text, minWidth: 0 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: r.hue, flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.key}</span>
+              </span>
+              <span style={{ textAlign: 'right', fontFamily: MONO, color: C.text }}>{money(r.revenue)}</span>
+              <span style={{ textAlign: 'right', fontFamily: MONO, color: C.muted }}>{money(r.cost)}</span>
+              <span style={{ textAlign: 'right', fontFamily: MONO, color: r.profit >= 0 ? C.green : C.red }}>{money(r.profit)}</span>
+              {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.muted }}>{r.revenue ? pct(r.profit / r.revenue) : '—'}</span>}
+              {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{tableRows.total.revenue ? pct(r.revenue / tableRows.total.revenue) : '—'}</span>}
+            </div>
+            {r.children?.map((c, ci) => (
+              <div key={c.key} style={{ ...grid, fontSize: 12, padding: '6px 0', color: C.muted, borderBottom: ci === r.children.length - 1 ? `1px solid ${C.borderSoft}` : 'none' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7, paddingLeft: 15, minWidth: 0 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 2, background: c.hue, opacity: 0.55, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.key}</span>
+                </span>
+                <span style={{ textAlign: 'right', fontFamily: MONO }}>{money(c.revenue)}</span>
+                <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{money(c.cost)}</span>
+                <span style={{ textAlign: 'right', fontFamily: MONO, color: c.profit >= 0 ? C.green : C.red, opacity: 0.85 }}>{money(c.profit)}</span>
+                {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO }}>{c.revenue ? pct(c.profit / c.revenue) : '—'}</span>}
+                {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{tableRows.total.revenue ? pct(c.revenue / tableRows.total.revenue) : '—'}</span>}
+              </div>
+            ))}
           </div>
         ))}
         <div style={{ ...grid, fontSize: 12.5, padding: '9px 0 2px', fontWeight: 600 }}>
@@ -302,7 +341,7 @@ export default function StatBreakdown() {
               rowsByMonth={categoryByMonth} months={months} month={month} metric={metric} />
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Customer types from Cin7 customer tags (D = Distributors, F = Fleet, A = Bespoke, otherwise Consumers).
-              Categories: Lighting incl. Behind-Grille Light Bars; Electrical & Other = all remaining Cin7 categories.
+              Electrical = Lighting + Behind Grille Lighting + Electrical; Other = all remaining Cin7 categories.
               Product lines only (freight/charges excluded); credit notes subtracted in their month.
             </span>
           </>

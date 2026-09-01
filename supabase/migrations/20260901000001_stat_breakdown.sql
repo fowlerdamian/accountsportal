@@ -10,7 +10,9 @@ create table if not exists cin7_sale_stat_lines (
   sale_id uuid not null,
   invoice_month date not null,
   customer_type text not null,   -- Consumers | Distributors | Fleet | Bespoke
-  bucket text not null,          -- Lighting | Communication | Storage | Safety | Electrical & Other
+  bucket text not null,          -- leaf buckets: Lighting | Behind Grille Lighting | Electrical |
+                                 -- Communication | Storage | Safety | Other
+                                 -- (UI groups the first three under an Electrical parent)
   revenue numeric not null default 0,  -- GST-exclusive, net of discounts + credit notes
   cost numeric not null default 0,     -- line AverageCost x qty
   synced_at timestamptz not null default now(),
