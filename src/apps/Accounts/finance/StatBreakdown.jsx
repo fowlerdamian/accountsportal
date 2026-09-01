@@ -17,6 +17,7 @@ import { LayersIcon, TargetIcon, TriangleAlertIcon, ChartBarIcon } from '@portal
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
+import { GRAINS, buildOptions, periodKeys, chartKeys, toKey } from './periods.js'
 import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
 
 const C = {
@@ -149,26 +150,37 @@ function segmentValues(byseg, seg) {
   return out
 }
 
-// One cross-section: stacked monthly chart + table for the selected month.
-function Breakdown({ title, icon, segments, rowsByMonth, months, month, metric }) {
+// A segment summed over a list of month keys (the selected period).
+function segmentPeriodValues(rowsByMonth, monthKeys, seg) {
+  const out = { revenue: 0, cost: 0, profit: 0 }
+  for (const m of monthKeys) {
+    const v = segmentValues(rowsByMonth.get(m), seg)
+    out.revenue += v.revenue
+    out.cost += v.cost
+    out.profit += v.profit
+  }
+  return out
+}
+
+// One cross-section: stacked monthly chart + table for the selected period.
+function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric }) {
   const isMobile = useIsMobile()
 
-  const chartData = useMemo(() => months.map((m) => {
-    const row = { label: m.slice(2, 7) } // 'YY-MM'
+  const chartData = useMemo(() => chartMonths.map((m) => {
+    const row = { label: m.slice(2) } // 'YY-MM'
     const byseg = rowsByMonth.get(m)
     for (const s of segments) row[s.key] = segmentValues(byseg, s)[metric]
     return row
-  }), [months, segments, rowsByMonth, metric])
+  }), [chartMonths, segments, rowsByMonth, metric])
 
   const tableRows = useMemo(() => {
-    const byseg = rowsByMonth.get(month)
     const rows = segments.map((s) => ({
-      key: s.key, hue: s.hue, ...segmentValues(byseg, s),
-      children: s.children?.map((c) => ({ key: c.key, hue: c.hue, ...segmentValues(byseg, c) })),
+      key: s.key, hue: s.hue, ...segmentPeriodValues(rowsByMonth, periodMonths, s),
+      children: s.children?.map((c) => ({ key: c.key, hue: c.hue, ...segmentPeriodValues(rowsByMonth, periodMonths, c) })),
     }))
     const total = rows.reduce((t, r) => ({ revenue: t.revenue + r.revenue, cost: t.cost + r.cost, profit: t.profit + r.profit }), { revenue: 0, cost: 0, profit: 0 })
     return { rows, total }
-  }, [rowsByMonth, month, segments])
+  }, [rowsByMonth, periodMonths, segments])
 
   const grid = {
     display: 'grid',
@@ -195,7 +207,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, months, month, metric }
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...grid, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
-          <span style={{ ...th, textAlign: 'left' }}>{month?.slice(0, 7) ?? '—'}</span>
+          <span style={{ ...th, textAlign: 'left' }}>{periodLabel ?? '—'}</span>
           <span style={th}>Revenue</span>
           <span style={th}>Cost</span>
           <span style={th}>Profit</span>
@@ -249,23 +261,30 @@ export default function StatBreakdown() {
   const isMobile = useIsMobile()
   const { state: syncState, busy: syncBusy, run: runSync } = useFinanceSync()
   const [metric, setMetric] = useState('revenue')
-  const [monthRaw, setMonth] = useState(null)
+  // Same period filter as the Finance Dashboard: grain + anchor (periods.js).
+  const [grain, setGrain] = useState('month')
+  const [anchor, setAnchor] = useState(null)
 
-  // month → segment → {revenue, cost, profit}, per dimension
-  const { customerByMonth, categoryByMonth, months } = useMemo(() => {
+  // 'YYYY-MM' → segment → {revenue, cost, profit}, per dimension
+  const { customerByMonth, categoryByMonth, availableKeys } = useMemo(() => {
     const cust = new Map(), cat = new Map()
-    const monthSet = new Set()
+    const keySet = new Set()
     for (const r of data?.rows ?? []) {
-      const m = String(r.period_month).slice(0, 10)
-      monthSet.add(m)
+      const m = toKey(String(r.period_month))
+      keySet.add(m)
       const target = r.dimension === 'customer' ? cust : cat
       if (!target.has(m)) target.set(m, new Map())
       target.get(m).set(r.segment, { revenue: Number(r.revenue), cost: Number(r.cost), profit: Number(r.profit) })
     }
-    return { customerByMonth: cust, categoryByMonth: cat, months: [...monthSet].sort() }
+    return { customerByMonth: cust, categoryByMonth: cat, availableKeys: [...keySet].sort() }
   }, [data])
 
-  const month = monthRaw && months.includes(monthRaw) ? monthRaw : months[months.length - 1] ?? null
+  const options = useMemo(() => buildOptions(grain, availableKeys), [grain, availableKeys])
+  const effAnchor = (anchor && options.some((o) => o.value === anchor) ? anchor : null)
+    ?? options[options.length - 1]?.value ?? null
+  const periodLabel = options.find((o) => o.value === effAnchor)?.label ?? '—'
+  const periodMonths = useMemo(() => effAnchor ? periodKeys(grain, effAnchor) : [], [grain, effAnchor])
+  const chartMonths = useMemo(() => effAnchor ? chartKeys(grain, effAnchor) : [], [grain, effAnchor])
 
   if (isLoading) return <Centered>Loading stat breakdown…</Centered>
   if (error) return <Centered tone={C.red}>Failed to load: {error.message}</Centered>
@@ -297,12 +316,27 @@ export default function StatBreakdown() {
                 </button>
               ))}
             </div>
-            <select value={month ?? ''} onChange={(e) => setMonth(e.target.value)}
+            {/* Same period filter as the Finance Dashboard */}
+            <div style={{ display: 'flex', background: C.panel, border: `1px solid ${C.border}`, borderRadius: 7, padding: 2 }}>
+              {GRAINS.map((g) => (
+                <button key={g.key} onClick={() => { setGrain(g.key); setAnchor(null) }}
+                  style={{
+                    border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: 5, fontSize: 11.5,
+                    fontFamily: MONO,
+                    background: grain === g.key ? C.accent : 'transparent',
+                    color: grain === g.key ? C.bg : C.muted, fontWeight: grain === g.key ? 600 : 400,
+                    transition: 'background 120ms, color 120ms',
+                  }}>
+                  {g.label}
+                </button>
+              ))}
+            </div>
+            <select value={effAnchor ?? ''} onChange={(e) => setAnchor(e.target.value)}
               style={{
                 background: C.panel, color: C.text, border: `1px solid ${C.border}`, borderRadius: 7,
                 padding: '7px 10px', fontSize: 12, fontFamily: MONO, cursor: 'pointer',
               }}>
-              {months.map((m) => <option key={m} value={m}>{m.slice(0, 7)}</option>)}
+              {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
             <button onClick={() => runSync(qc)} disabled={syncBusy}
               title="Sync Xero + Cin7 across all finance apps"
@@ -331,14 +365,16 @@ export default function StatBreakdown() {
           <div style={{ fontSize: 11.5, color: C.red, fontFamily: MONO }}>Last sync error: {data.state.last_error}</div>
         )}
 
-        {months.length === 0 ? (
+        {availableKeys.length === 0 ? (
           <Centered>No data yet — press Sync all to pull Cin7 sales.</Centered>
         ) : (
           <>
             <Breakdown title="By Customer Type" icon={TargetIcon} segments={CUSTOMER_SEGMENTS}
-              rowsByMonth={customerByMonth} months={months} month={month} metric={metric} />
+              rowsByMonth={customerByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
+              periodLabel={periodLabel} metric={metric} />
             <Breakdown title="By Product Category" icon={ChartBarIcon} segments={CATEGORY_SEGMENTS}
-              rowsByMonth={categoryByMonth} months={months} month={month} metric={metric} />
+              rowsByMonth={categoryByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
+              periodLabel={periodLabel} metric={metric} />
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Customer types from Cin7 customer tags (D = Distributors, F = Fleet, A = Bespoke, otherwise Consumers).
               Electrical = Lighting + Behind Grille Lighting + Electrical; Other = all remaining Cin7 categories.

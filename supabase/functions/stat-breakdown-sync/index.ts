@@ -91,6 +91,23 @@ async function loadCustomerTypes(): Promise<Map<string, string>> {
   return map;
 }
 
+const MAP_TTL_MS = 12 * 60 * 60_000;
+
+// Lookup maps cached in cin7_stat_maps for 12h — new/unknown ids fall back to
+// sensible defaults (Consumers / Other) so a stale cache never blocks a sale.
+// deno-lint-ignore no-explicit-any
+async function cachedMap(sc: any, key: string, load: () => Promise<Map<string, string>>): Promise<Map<string, string>> {
+  const { data } = await sc.from("cin7_stat_maps").select("payload, fetched_at").eq("key", key).maybeSingle();
+  if (data && Date.now() - new Date(data.fetched_at).getTime() < MAP_TTL_MS) {
+    return new Map(Object.entries(data.payload as Record<string, string>));
+  }
+  const map = await load();
+  await sc.from("cin7_stat_maps").upsert({
+    key, payload: Object.fromEntries(map), fetched_at: new Date().toISOString(),
+  });
+  return map;
+}
+
 interface StatRow {
   sale_id: string;
   invoice_month: string;
@@ -127,7 +144,7 @@ function saleToRows(sale: Json, ctype: string, buckets: Map<string, string>): St
     const month = monthOf(inv.InvoiceDate);
     if (!month) continue;
     for (const l of (inv.Lines as Json[]) ?? []) {
-      const bucket = buckets.get(String(l.ProductID)) ?? "Electrical & Other";
+      const bucket = buckets.get(String(l.ProductID)) ?? "Other";
       add(month, bucket, Number(l.Total) || 0, (Number(l.Quantity) || 0) * (Number(l.AverageCost) || 0));
     }
   }
@@ -137,7 +154,7 @@ function saleToRows(sale: Json, ctype: string, buckets: Map<string, string>): St
     const month = monthOf(cn.CreditNoteDate ?? cn.CreditNoteInvoiceDate ?? cn.InvoiceDate);
     if (!month) continue;
     for (const l of (cn.Lines as Json[]) ?? []) {
-      const bucket = buckets.get(String(l.ProductID)) ?? "Electrical & Other";
+      const bucket = buckets.get(String(l.ProductID)) ?? "Other";
       add(month, bucket, -(Number(l.Total) || 0), -((Number(l.Quantity) || 0) * (Number(l.AverageCost) || 0)));
     }
   }
@@ -163,6 +180,21 @@ serve(async (req) => {
       status: 500, headers: { "Content-Type": "application/json" },
     });
   };
+
+  // Run lease: only one sync at a time. Overlapping invocations (cron vs the
+  // manual Sync button) otherwise fight over Cin7's 60/min quota. A crashed
+  // run's lease simply expires.
+  const { data: leased } = await sc.from("cin7_stat_sync_state")
+    .update({ running_until: new Date(deadline + 90_000).toISOString() })
+    .eq("id", 1)
+    .or(`running_until.is.null,running_until.lt.${new Date().toISOString()}`)
+    .select("id");
+  if (!leased?.length) {
+    return new Response(JSON.stringify({ ok: true, skipped: "another sync run is active" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const releaseLease = () => sc.from("cin7_stat_sync_state").update({ running_until: null }).eq("id", 1);
 
   try {
     const { data: state } = await sc.from("cin7_stat_sync_state").select("*").eq("id", 1).single();
@@ -199,7 +231,8 @@ serve(async (req) => {
     const { count: pendingBefore } = await sc.from("cin7_stat_pending").select("*", { count: "exact", head: true });
     let processed = 0;
     if ((pendingBefore ?? 0) > 0) {
-      const [buckets, ctypes] = [await loadProductBuckets(), await loadCustomerTypes()];
+      const buckets = await cachedMap(sc, "products", loadProductBuckets);
+      const ctypes = await cachedMap(sc, "customers", loadCustomerTypes);
 
       // ── Drain until the time budget runs out ───────────────────────────────
       // Details fetched 3-at-a-time (DEAR's concurrency cap); DB writes batched
@@ -242,12 +275,14 @@ serve(async (req) => {
       backfill_seeded: true,
       last_run: new Date().toISOString(),
       last_error: null,
+      running_until: null,
     }).eq("id", 1);
 
     return new Response(JSON.stringify({
       ok: true, queued, processed, pending: pending ?? 0, ms: Date.now() - started,
     }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
+    await releaseLease();
     return await fail(String(e));
   }
 });
