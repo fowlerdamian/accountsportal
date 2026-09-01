@@ -5,36 +5,43 @@ import { readExcelFile, parseSheet } from './utils/excelParser.js'
 import { processOrders } from './utils/processor.js'
 
 // ─── Cin7 link lookup ─────────────────────────────────────────────────────────
-// Sends SO numbers in small batches with a pause between each to stay within
-// Cin7's rate limit. Links are merged into state as each batch resolves so
-// the table updates incrementally rather than all-at-once.
-const BATCH_SIZE  = 5
-const BATCH_DELAY = 1200 // ms between batches — keeps well under 60 req/min
+// Pages through Cin7's sale list in bulk (1000 sales per API call) and matches
+// the report's SO numbers against each page — a whole report resolves in a few
+// calls instead of one rate-limited Search per order. Links merge into state as
+// each page lands so the table fills in progressively.
+const MAX_PAGES = 10 // 10,000 most recent sales — well past any report's reach
 
 async function fetchOrderLinks(soNumbers, setOrderLinks, setLinksLoading, genRef, gen) {
   setLinksLoading(true)
+  const wanted = new Set(soNumbers)
   try {
-    for (let i = 0; i < soNumbers.length; i += BATCH_SIZE) {
-      // A newer file was loaded — stop fetching and never merge stale batches
+    for (let page = 1; page <= MAX_PAGES && wanted.size > 0; page++) {
+      // A newer file was loaded — stop fetching and never merge stale pages
       if (genRef.current !== gen) return
-      const batch = soNumbers.slice(i, i + BATCH_SIZE)
       try {
         const resp = await fetch('/api/cin7-lookup', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ orders: batch }),
+          body:    JSON.stringify({ page }),
         })
-        if (resp.ok) {
-          const links = await resp.json()
-          if (genRef.current !== gen) return
-          setOrderLinks((prev) => ({ ...prev, ...links }))
-        }
-      } catch {
-        // batch failed — continue to next batch
-      }
+        if (!resp.ok) break
+        const { links = {}, count = 0, limit = 0 } = await resp.json()
+        if (genRef.current !== gen) return
 
-      if (i + BATCH_SIZE < soNumbers.length) {
-        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY))
+        const matched = {}
+        for (const so of Object.keys(links)) {
+          if (wanted.has(so)) {
+            matched[so] = links[so]
+            wanted.delete(so)
+          }
+        }
+        if (Object.keys(matched).length > 0) {
+          setOrderLinks((prev) => ({ ...prev, ...matched }))
+        }
+
+        if (count < limit) break // last page — remaining SOs don't exist in Cin7
+      } catch {
+        break // network hiccup — leave whatever links already resolved
       }
     }
   } finally {
