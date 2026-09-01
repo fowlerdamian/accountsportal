@@ -38,6 +38,10 @@ function allocate(total, indices) {
  * @param {number} [opts.baseTotal=2_000_000]
  * @param {number} [opts.stretchTotal=2_500_000]
  * @param {Date}   [opts.now=new Date()] Clock used to exclude the in-progress month.
+ * @param {Object<number, number>} [opts.committed={}] Known/committed revenue by
+ *   calendar month (1–12), e.g. a signed order landing in October. Carved out of
+ *   the annual totals BEFORE the seasonal spread and added back onto its month,
+ *   so the year still sums to exactly baseTotal / stretchTotal.
  * @returns {{
  *   months: Array<{month:number, name:string, samples:Array<{year:number, revenue:number}>,
  *                  median:number, index:number, base:number, stretch:number}>,
@@ -46,9 +50,19 @@ function allocate(total, indices) {
  * }}
  */
 export function computeSeasonalityTargets(actuals, opts = {}) {
-  const { baseTotal = 2_000_000, stretchTotal = 2_500_000, now = new Date() } = opts
+  const { baseTotal = 2_000_000, stretchTotal = 2_500_000, now = new Date(), committed = {} } = opts
   const logs = []
   const warnings = []
+
+  const committedTotal = Object.values(committed).reduce((a, b) => a + (Number(b) || 0), 0)
+  if (committedTotal > 0) {
+    const detail = Object.entries(committed)
+      .map(([m, v]) => `${MONTH_NAMES[m - 1]} +$${Math.round(v).toLocaleString()}`).join(', ')
+    logs.push(`Committed revenue carved out before the seasonal spread: ${detail} — annual totals unchanged`)
+    if (committedTotal >= baseTotal) {
+      warnings.push(`Committed revenue ($${committedTotal.toLocaleString()}) meets or exceeds the base total — organic targets collapse to $0. Check the numbers.`)
+    }
+  }
 
   const curYear = now.getFullYear()
   const curMonth = now.getMonth() + 1
@@ -96,8 +110,12 @@ export function computeSeasonalityTargets(actuals, opts = {}) {
   }
   const indices = medians.map((m) => m / medianSum)
 
-  const base = allocate(baseTotal, indices)
-  const stretch = allocate(stretchTotal, indices)
+  // Organic spread over what's left after committed carve-outs; each committed
+  // amount is then added back onto its month, keeping the annual sums exact.
+  const base = allocate(Math.max(0, baseTotal - committedTotal), indices)
+    .map((v, i) => v + (Number(committed[i + 1]) || 0))
+  const stretch = allocate(Math.max(0, stretchTotal - committedTotal), indices)
+    .map((v, i) => v + (Number(committed[i + 1]) || 0))
 
   // Flat-spread guardrail: coefficient of variation of the monthly base targets.
   const mean = baseTotal / 12
@@ -255,6 +273,10 @@ function allocateOver(total, weights) {
  * @param {number} [opts.baseTotal=2_000_000]
  * @param {number} [opts.stretchTotal=2_500_000]
  * @param {Date}   [opts.now=new Date()]
+ * @param {Object<number, number>} [opts.committed={}] Committed revenue by month
+ *   (1–12). Still-open committed months keep their committed amount on top of
+ *   the organic re-spread (which shrinks so the year total is unchanged);
+ *   committed amounts in completed months are ignored — actuals speak there.
  * @returns {{
  *   months: Array<{month:number, name:string, completed:boolean, actual:number|null,
  *                  index:number, base:number|null, stretch:number|null,
@@ -264,7 +286,7 @@ function allocateOver(total, weights) {
  * }}
  */
 export function applyRollingReallocation(model, actuals, opts) {
-  const { year, baseTotal = 2_000_000, stretchTotal = 2_500_000, now = new Date() } = opts
+  const { year, baseTotal = 2_000_000, stretchTotal = 2_500_000, now = new Date(), committed = {} } = opts
   const logs = []
   const warnings = []
 
@@ -306,15 +328,24 @@ export function applyRollingReallocation(model, actuals, opts) {
     warnings.push('All remaining months have a zero seasonality index — remainder cannot be allocated')
   }
 
+  // Committed revenue in months still open is honoured on top of the organic
+  // re-spread; the organic pool shrinks by the same amount so the year total
+  // is unchanged. Committed amounts in completed months are ignored.
+  const committedFor = (m) => Number(committed[m]) || 0
+  const committedRemaining = remaining.reduce((s, m) => s + committedFor(m), 0)
+  if (committedRemaining > 0) {
+    logs.push(`Committed revenue in open months: $${committedRemaining.toLocaleString()} carved out of the remainder before the seasonal re-spread`)
+  }
+
   const spread = (total) => {
-    const left = total - ytdActual
+    const left = total - ytdActual - committedRemaining
     if (left <= 0) {
       if (remaining.length) {
-        warnings.push(`Annual total $${total.toLocaleString()} already met by actuals ($${ytdActual.toLocaleString()}) — remaining months set to $0`)
+        warnings.push(`Annual total $${total.toLocaleString()} already met by actuals ($${ytdActual.toLocaleString()})${committedRemaining > 0 ? ' plus committed revenue' : ''} — organic targets for remaining months set to $0`)
       }
-      return remaining.map(() => 0)
+      return remaining.map((m) => committedFor(m))
     }
-    return allocateOver(left, remainingWeights)
+    return allocateOver(left, remainingWeights).map((v, i) => v + committedFor(remaining[i]))
   }
 
   const baseRemaining = spread(baseTotal)

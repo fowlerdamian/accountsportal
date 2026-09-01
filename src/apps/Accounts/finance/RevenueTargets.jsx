@@ -24,6 +24,10 @@ const C = {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+// Committed revenue by year → calendar month → $ (see seasonalityTargets.js).
+const COMMITTED_REVENUE = { 2026: { 10: 170_000 } }
+const EMPTY_COMMITTED = {}
+
 // Fixed year→hue assignment (stable by position in the full years list, so
 // toggling selections never repaints a year). Brighter portal steps only —
 // the dark --cat tokens fail 3:1 on the panel surface.
@@ -47,7 +51,10 @@ function useTargetsData() {
     queryKey: ['revenue-targets'],
     queryFn: async () => {
       const [rev, tgt] = await Promise.all([
-        supabase.from('xero_monthly_revenue').select('*').order('period_month'),
+        // Same source as the Finance Dashboard: Xero P&L revenue snapshots
+        // (accrual, revenue accounts only, net of credit notes) — NOT raw
+        // invoice subtotals, which count non-revenue lines. Backfilled to 2022.
+        supabase.from('finance_snapshot').select('period_month, revenue').order('period_month'),
         supabase.from('finance_revenue_targets').select('*'),
       ])
       if (rev.error) throw rev.error
@@ -429,6 +436,10 @@ export default function RevenueTargets() {
   // model is only used for completed/actual/YTD metadata in the table.
   const BASE_TOTAL = 2_000_000
   const STRETCH_TOTAL = 2_500_000
+  // Owner-supplied revenue committed on top of organic seasonality (per Damian
+  // 2026-09-01: ~$170k extra expected in October). Carved out of the annual
+  // totals before the seasonal spread — the $2.0m year plan is unchanged.
+  const committed = COMMITTED_REVENUE[thisYear] ?? EMPTY_COMMITTED
   const seasonality = useMemo(() => {
     if (!data?.revenue?.length) return null
     const actuals = data.revenue.map((r) => {
@@ -436,8 +447,8 @@ export default function RevenueTargets() {
       return { year: d.getFullYear(), month: d.getMonth() + 1, revenue: Number(r.revenue) }
     })
     try {
-      const model = computeSeasonalityTargets(actuals, { baseTotal: BASE_TOTAL, stretchTotal: STRETCH_TOTAL, now })
-      const rolling = applyRollingReallocation(model, actuals, { year: thisYear, baseTotal: BASE_TOTAL, stretchTotal: STRETCH_TOTAL, now })
+      const model = computeSeasonalityTargets(actuals, { baseTotal: BASE_TOTAL, stretchTotal: STRETCH_TOTAL, now, committed })
+      const rolling = applyRollingReallocation(model, actuals, { year: thisYear, baseTotal: BASE_TOTAL, stretchTotal: STRETCH_TOTAL, now, committed })
       for (const w of [...model.warnings, ...rolling.warnings]) console.warn('[seasonality]', w)
       for (const l of [...model.logs, ...rolling.logs]) console.info('[seasonality]', l)
       return { model, rolling }
@@ -621,7 +632,7 @@ export default function RevenueTargets() {
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Revenue &amp; Targets</h1>
             <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
-              Actuals: Xero sales invoices (GST-exclusive) · targets editable inline
+              Actuals: Xero P&amp;L revenue (GST-exclusive) — same source as the Finance Dashboard · targets editable inline
             </span>
           </div>
           <SyncButton state={syncState} onClick={handleSync} />
@@ -739,6 +750,11 @@ export default function RevenueTargets() {
                 <span style={{ fontSize: 12, color: C.muted }}>{w}</span>
               </div>
             ))}
+            {Object.keys(committed).length > 0 && (
+              <span style={{ fontSize: 11, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
+                Committed revenue folded into targets: {Object.entries(committed).map(([m, v]) => `${MONTHS[m - 1]} +$${fmt0.format(v)}`).join(' · ')} — organic spread carved down so the year still totals ${(BASE_TOTAL / 1e6).toFixed(1)}m
+              </span>
+            )}
             {isMobile && (
               <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>swipe table sideways ›</span>
             )}

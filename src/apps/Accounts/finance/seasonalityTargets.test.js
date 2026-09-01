@@ -126,6 +126,51 @@ test('rolling reallocation: completed month missing its actual is warned, not fa
   assert.ok(r.warnings.some((w) => w.startsWith('Jun 2026 is completed but has no actual')))
 })
 
+test('committed revenue: month gets organic share of the reduced pool + its committed amount; totals unchanged', () => {
+  const plain = computeSeasonalityTargets(seasonalActuals(), { now: NOW })
+  const r = computeSeasonalityTargets(seasonalActuals(), { now: NOW, committed: { 10: 170_000 } })
+  assert.equal(r.sums.base, 2_000_000)
+  assert.equal(r.sums.stretch, 2_500_000)
+  // October = organic allocation of (total − 170k) + 170k.
+  const octIndex = plain.months[9].index
+  const expectedOct = Math.round((2_000_000 - 170_000) * octIndex) + 170_000
+  assert.ok(Math.abs(r.months[9].base - expectedOct) <= 1, `Oct base ${r.months[9].base} vs ${expectedOct}`)
+  assert.ok(r.months[9].base > plain.months[9].base, 'Oct must rise')
+  // Every other month shrinks (it funds the carve-out).
+  for (let i = 0; i < 12; i++) {
+    if (i !== 9) assert.ok(r.months[i].base <= plain.months[i].base, `${r.months[i].name} should not rise`)
+  }
+  assert.ok(r.logs.some((l) => l.includes('Committed revenue carved out')))
+})
+
+test('committed revenue: rolling reallocation honours open-month commitments, year total unchanged', () => {
+  const actuals = seasonalActuals()
+  const cur = [111111, 122222, 93333, 144444, 105555, 136666]
+  cur.forEach((v, i) => actuals.push({ year: 2026, month: i + 1, revenue: v }))
+  const committed = { 10: 170_000 }
+  const model = computeSeasonalityTargets(actuals, { now: NOW, committed })
+  const plainModel = computeSeasonalityTargets(actuals, { now: NOW })
+  const r = applyRollingReallocation(model, actuals, { year: 2026, now: NOW, committed })
+  const plain = applyRollingReallocation(plainModel, actuals, { year: 2026, now: NOW })
+  assert.equal(r.sums.base, 2_000_000)
+  assert.equal(r.sums.stretch, 2_500_000)
+  const oct = r.months[9]
+  assert.ok(oct.base > plain.months[9].base, 'open Oct target must rise with committed revenue')
+  assert.ok(oct.base >= 170_000, 'Oct target must at least cover the committed amount')
+  assert.ok(r.logs.some((l) => l.includes('Committed revenue in open months')))
+})
+
+test('committed revenue in a completed month is ignored by the rolling spread', () => {
+  const actuals = seasonalActuals()
+  const cur = [111111, 122222, 93333, 144444, 105555, 136666]
+  cur.forEach((v, i) => actuals.push({ year: 2026, month: i + 1, revenue: v }))
+  const model = computeSeasonalityTargets(actuals, { now: NOW })
+  const withDone = applyRollingReallocation(model, actuals, { year: 2026, now: NOW, committed: { 3: 50_000 } }) // March is completed
+  const without = applyRollingReallocation(model, actuals, { year: 2026, now: NOW })
+  assert.equal(withDone.sums.base, without.sums.base)
+  for (let i = 0; i < 12; i++) assert.equal(withDone.months[i].base, without.months[i].base)
+})
+
 test('outlier sample is flagged but still included', () => {
   const actuals = seasonalActuals()
   actuals.push({ year: 2022, month: 3, revenue: 900000 }) // wild March
