@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  PieChart, Pie, Cell,
 } from 'recharts'
 import { LayersIcon, TargetIcon, TriangleAlertIcon, ChartBarIcon } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
@@ -33,10 +34,11 @@ const MONO = '"JetBrains Mono", monospace'
 // brand accents alias each other (gold === orange, aqua === blue), which made
 // stacked segments indistinguishable.
 const CAT = palette.cat // [orange, teal, red, deep red, cream, orange 300, teal 400, red 400]
+const GREY = '#a0a0a0' // neutral segment hue (per Damian: grey, not cream)
 const CUSTOMER_SEGMENTS = [
   { key: 'Consumers',    hue: CAT[0] }, // orange
   { key: 'Distributors', hue: CAT[1] }, // teal
-  { key: 'Fleet',        hue: CAT[4] }, // cream
+  { key: 'Fleet',        hue: GREY },
   { key: 'Bespoke',      hue: CAT[2] }, // red
 ]
 // Category tree: `children` are the leaf buckets stored in the DB; a segment
@@ -49,7 +51,7 @@ const CATEGORY_SEGMENTS = [
     { key: 'Electrical',             hue: CAT[0] },
   ] },
   { key: 'Communication', hue: CAT[1] }, // teal
-  { key: 'Storage',       hue: CAT[4] }, // cream
+  { key: 'Storage',       hue: GREY },
   { key: 'Safety',        hue: CAT[2] }, // red
   { key: 'Other',         hue: CAT[6] }, // teal 400
 ]
@@ -166,8 +168,21 @@ function segmentPeriodValues(rowsByMonth, monthKeys, seg) {
   return out
 }
 
-// One cross-section: stacked monthly chart + table for the selected period.
-function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric }) {
+function PieTip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0]?.payload
+  if (!d) return null
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 5, padding: '8px 10px', fontFamily: MONO, fontSize: 11 }}>
+      <div style={{ color: d.hue, marginBottom: 2 }}>{d.name}</div>
+      <div style={{ color: C.text }}>{money(d.real)}{d.share != null ? ` · ${pct(d.share)}` : ''}</div>
+    </div>
+  )
+}
+
+// One cross-section: chart (stacked monthly bars or period pie) + table for the
+// selected period.
+function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, chartType }) {
   const isMobile = useIsMobile()
 
   const chartData = useMemo(() => chartMonths.map((m) => {
@@ -193,8 +208,51 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   }
   const th = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: C.muted, textAlign: 'right' }
 
+  // Pie: the selected period's split per top-level segment. Negative values
+  // (e.g. a loss-making segment on the Profit metric) can't be a slice — they
+  // render at 0 with the true figure in the tooltip.
+  const pieData = useMemo(() => {
+    const rows = tableRows.rows.map((r) => ({ name: r.key, hue: r.hue, real: r[metric], value: Math.max(0, r[metric]) }))
+    const sum = rows.reduce((s, r) => s + r.value, 0)
+    return rows.map((r) => ({ ...r, share: sum ? r.value / sum : null }))
+  }, [tableRows, metric])
+  const pieTotal = tableRows.total[metric]
+
+  const pieLabel = ({ cx, cy, midAngle, outerRadius, percent, payload }) => {
+    if (!percent || percent < 0.04) return null
+    const RAD = Math.PI / 180
+    const x = cx + (outerRadius + 12) * Math.cos(-midAngle * RAD)
+    const y = cy + (outerRadius + 12) * Math.sin(-midAngle * RAD)
+    return (
+      <text x={x} y={y} fill={C.muted} fontSize={10.5} fontFamily={MONO}
+        textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    )
+  }
+
   return (
     <Panel title={title} icon={icon} right={<Legend segments={segments} />}>
+      {chartType === 'pie' ? (
+        <ResponsiveContainer width="100%" height={isMobile ? 210 : 240}>
+          <PieChart>
+            <Tooltip content={<PieTip />} />
+            <Pie data={pieData} dataKey="value" nameKey="name"
+              innerRadius="55%" outerRadius="78%" paddingAngle={2}
+              stroke={C.panel} strokeWidth={2}
+              labelLine={false} label={pieLabel} isAnimationActive={false}>
+              {pieData.map((d) => <Cell key={d.name} fill={d.hue} fillOpacity={0.85} />)}
+            </Pie>
+            {/* Period total in the donut centre */}
+            <text x="50%" y="47%" textAnchor="middle" fill={C.text} fontSize={17} fontWeight={600} fontFamily={MONO}>
+              {compact(pieTotal)}
+            </text>
+            <text x="50%" y="47%" dy={16} textAnchor="middle" fill={C.faint} fontSize={9.5} fontFamily={MONO} letterSpacing="0.1em">
+              {METRICS.find((m) => m.key === metric)?.label.toUpperCase()} · {periodLabel}
+            </text>
+          </PieChart>
+        </ResponsiveContainer>
+      ) : (
       <ResponsiveContainer width="100%" height={isMobile ? 190 : 230}>
         <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: isMobile ? 0 : 6, bottom: 0 }}>
           <CartesianGrid stroke={C.borderSoft} vertical={false} />
@@ -208,6 +266,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
           ))}
         </ComposedChart>
       </ResponsiveContainer>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...grid, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
@@ -268,6 +327,10 @@ export default function StatBreakdown() {
   // Same period filter as the Finance Dashboard: grain + anchor (periods.js).
   const [grain, setGrain] = useState('month')
   const [anchor, setAnchor] = useState(null)
+  // Chart style — a single month has no trend to stack, so Month grain is
+  // always a pie; Bar becomes selectable on CY/FY.
+  const [chartTypeRaw, setChartTypeRaw] = useState('bar')
+  const chartType = grain === 'month' ? 'pie' : chartTypeRaw
 
   // 'YYYY-MM' → segment → {revenue, cost, profit}, per dimension
   const { customerByMonth, categoryByMonth, availableKeys } = useMemo(() => {
@@ -319,6 +382,28 @@ export default function StatBreakdown() {
                   {m.label}
                 </button>
               ))}
+            </div>
+            {/* Chart style — Bar is disabled on Month grain (pie only) */}
+            <div style={{ display: 'flex', background: C.panel, border: `1px solid ${C.border}`, borderRadius: 7, padding: 2 }}>
+              {[{ key: 'bar', label: 'Bar' }, { key: 'pie', label: 'Pie' }].map((t) => {
+                const disabled = t.key === 'bar' && grain === 'month'
+                const active = chartType === t.key
+                return (
+                  <button key={t.key} onClick={() => !disabled && setChartTypeRaw(t.key)}
+                    disabled={disabled}
+                    title={disabled ? 'Single-month view is always a pie' : undefined}
+                    style={{
+                      border: 'none', cursor: disabled ? 'default' : 'pointer', padding: '6px 12px', borderRadius: 5, fontSize: 11.5,
+                      fontFamily: MONO,
+                      background: active ? C.accent : 'transparent',
+                      color: active ? C.bg : disabled ? C.faint : C.muted, fontWeight: active ? 600 : 400,
+                      opacity: disabled ? 0.5 : 1,
+                      transition: 'background 120ms, color 120ms',
+                    }}>
+                    {t.label}
+                  </button>
+                )
+              })}
             </div>
             {/* Same period filter as the Finance Dashboard */}
             <div style={{ display: 'flex', background: C.panel, border: `1px solid ${C.border}`, borderRadius: 7, padding: 2 }}>
@@ -375,10 +460,10 @@ export default function StatBreakdown() {
           <>
             <Breakdown title="By Customer Type" icon={TargetIcon} segments={CUSTOMER_SEGMENTS}
               rowsByMonth={customerByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
-              periodLabel={periodLabel} metric={metric} />
+              periodLabel={periodLabel} metric={metric} chartType={chartType} />
             <Breakdown title="By Product Category" icon={ChartBarIcon} segments={CATEGORY_SEGMENTS}
               rowsByMonth={categoryByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
-              periodLabel={periodLabel} metric={metric} />
+              periodLabel={periodLabel} metric={metric} chartType={chartType} />
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Customer types from Cin7 customer tags (D = Distributors, F = Fleet, A = Bespoke, otherwise Consumers).
               Electrical = Lighting + Behind Grille Lighting + Electrical; Other = all remaining Cin7 categories.
