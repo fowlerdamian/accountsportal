@@ -665,7 +665,7 @@ export default function RevenueTargets() {
             emptyHint={`No target set for ${MONTHS[thisMonth - 1]} — enter one in the matrix below to enable pacing.`}
           />
           <PacingPanel
-            title={`Rear View Forecast — ${thisYear}`}
+            title={`Annual Projection — ${thisYear}`}
             gauge={<ForecastGauge value={rearView?.forecast} plan={BASE_TOTAL} />}
             right={
               <span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
