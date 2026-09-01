@@ -26,12 +26,16 @@ export default function InvoiceDropZone() {
 
   useEffect(() => {
     const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
+    // Pages with their own drop zone (e.g. Invoice Profit Analysis) opt out of
+    // the portal-wide freight importer by marking it with data-local-dropzone —
+    // otherwise this window-level handler hijacks their drops.
+    const pageHandlesDrops = () => !!document.querySelector('[data-local-dropzone]')
 
-    const onDragEnter = (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth.current++; setDragging(true) }
-    const onDragOver  = (e) => { if (!hasFiles(e)) return; e.preventDefault() }
-    const onDragLeave = (e) => { if (!hasFiles(e)) return; if (--dragDepth.current <= 0) { dragDepth.current = 0; setDragging(false) } }
+    const onDragEnter = (e) => { if (!hasFiles(e) || pageHandlesDrops()) return; e.preventDefault(); dragDepth.current++; setDragging(true) }
+    const onDragOver  = (e) => { if (!hasFiles(e) || pageHandlesDrops()) return; e.preventDefault() }
+    const onDragLeave = (e) => { if (!hasFiles(e) || pageHandlesDrops()) return; if (--dragDepth.current <= 0) { dragDepth.current = 0; setDragging(false) } }
     const onDrop = async (e) => {
-      if (!hasFiles(e)) return
+      if (!hasFiles(e) || pageHandlesDrops()) return
       e.preventDefault()
       dragDepth.current = 0
       setDragging(false)

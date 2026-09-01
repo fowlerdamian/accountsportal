@@ -71,7 +71,9 @@ function extractMetadata(rows, headerRowIndex) {
   for (let i = 0; i < headerRowIndex && i < 5; i++) {
     const nonEmpty = rows[i]
       .map((c) => String(c).trim())
-      .filter((c) => c !== '' && c !== '0')
+      // "Grand Total" cells are spreadsheet plumbing repeated across column
+      // groups above the header row — not report metadata
+      .filter((c) => c !== '' && c !== '0' && c.toLowerCase() !== 'grand total')
     if (nonEmpty.length > 0) lines.push(nonEmpty.join('  '))
   }
 

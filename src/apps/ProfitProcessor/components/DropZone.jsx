@@ -14,6 +14,7 @@ export default function DropZone({ onFile }) {
   const handleDrop = useCallback(
     (e) => {
       e.preventDefault()
+      e.stopPropagation() // keep the drop away from the portal-wide freight importer
       setDragging(false)
       const file = e.dataTransfer.files?.[0]
       if (file && isValidFile(file)) onFile(file)
@@ -45,6 +46,7 @@ export default function DropZone({ onFile }) {
 
   return (
     <div
+      data-local-dropzone
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
