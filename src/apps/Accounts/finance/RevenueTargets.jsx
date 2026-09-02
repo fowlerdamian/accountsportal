@@ -630,7 +630,7 @@ export default function RevenueTargets() {
 
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Revenue &amp; Targets</h1>
+            <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Targets</h1>
             <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
               Actuals: Xero P&amp;L revenue (GST-exclusive) — same source as the Finance Dashboard · targets editable inline
             </span>

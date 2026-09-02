@@ -384,7 +384,7 @@ export default function FinanceDashboard() {
         {/* Header + filter bar */}
         <div className="finance-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Finance Dashboard</h1>
+            <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Overview</h1>
             <span style={{ fontSize: 12, color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
               {periodLabel} · GST-exclusive · source: Xero{curr?.months ? ` · ${curr.months} mo` : ''}
             </span>

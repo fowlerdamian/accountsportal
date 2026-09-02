@@ -458,7 +458,7 @@ export default function ChatFunctions() {
     }}>
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
-          Chat Functions
+          Alerts
         </h1>
         <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', ...monoStyle }}>
           Cin7 → Google Chat automations

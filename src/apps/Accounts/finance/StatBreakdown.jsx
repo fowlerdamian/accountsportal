@@ -404,7 +404,7 @@ export default function StatBreakdown() {
 
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Stat Breakdown</h1>
+            <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Sales Mix</h1>
             <span style={{ fontSize: 12, color: C.muted, fontFamily: MONO }}>
               Cin7 invoiced sales · GST-exclusive · cost = Cin7 avg cost at invoice
             </span>

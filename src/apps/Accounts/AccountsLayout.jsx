@@ -3,13 +3,13 @@ import { ChartBarIcon, LayersIcon, MessageCircleIcon, FilledBellIcon, LayoutDash
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 const NAV = [
-  { label: 'Finance Dashboard',       shortLabel: 'Finance', route: '/accounts',                icon: LayoutDashboardIcon, end: true  },
-  { label: 'Cash Flow',               shortLabel: 'Cash',    route: '/accounts/cashflow',       icon: WalletIcon,          end: false },
-  { label: 'Revenue & Targets',       shortLabel: 'Targets', route: '/accounts/targets',        icon: TargetIcon,          end: false },
-  { label: 'Stat Breakdown',          shortLabel: 'Stats',   route: '/accounts/stats',          icon: LayersIcon,          end: false },
-  { label: 'Invoice Profit Analysis', shortLabel: 'P&L',     route: '/accounts/profit',         icon: ChartBarIcon,        end: false },
-  { label: 'Xero Chatbot',            shortLabel: 'Xero',    route: '/accounts/xero',           icon: MessageCircleIcon,   end: false },
-  { label: 'Chat Functions',          shortLabel: 'Chat',    route: '/accounts/chat-functions', icon: FilledBellIcon,      end: false },
+  { label: 'Overview',     shortLabel: 'Home',    route: '/accounts',                icon: LayoutDashboardIcon, end: true  },
+  { label: 'Cash Flow',    shortLabel: 'Cash',    route: '/accounts/cashflow',       icon: WalletIcon,          end: false },
+  { label: 'Targets',      shortLabel: 'Targets', route: '/accounts/targets',        icon: TargetIcon,          end: false },
+  { label: 'Sales Mix',    shortLabel: 'Sales',   route: '/accounts/stats',          icon: LayersIcon,          end: false },
+  { label: 'Order Profit', shortLabel: 'Profit',  route: '/accounts/profit',         icon: ChartBarIcon,        end: false },
+  { label: 'Ask Xero',     shortLabel: 'Xero',    route: '/accounts/xero',           icon: MessageCircleIcon,   end: false },
+  { label: 'Alerts',       shortLabel: 'Alerts',  route: '/accounts/chat-functions', icon: FilledBellIcon,      end: false },
 ]
 
 export default function AccountsLayout() {
