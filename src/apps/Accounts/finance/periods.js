@@ -28,12 +28,12 @@ export function fyOf(key) {
 
 export function fyLabel(fy) { return `FY${String(fy).slice(2)}` }
 
-const MONTH_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-// 'YYYY-MM' → 'July 26' (MMMM YY — the house style for month labels in reports)
+// 'YYYY-MM' → 'Jul 26' (MMM YY — the house style for month labels in reports)
 export function monthLabel(key) {
   const { y, m } = ymParts(key)
-  return `${MONTH_FULL[m - 1]} ${String(y).slice(2)}`
+  return `${MONTH_SHORT[m - 1]} ${String(y).slice(2)}`
 }
 
 // The 12 month-keys of a financial year (Jul (fy-1) → Jun (fy)).

@@ -32,6 +32,7 @@ const OpportunityPressure = lazy(() => import('./apps/Opportunities/OpportunityP
 const Marketing = lazy(() => import('./apps/Marketing/index.jsx'))
 const ComplianceApp = lazy(() => import('./apps/Compliance/index'))
 const XeroChat = lazy(() => import('./apps/Xero/index'))
+const Cin7Chat = lazy(() => import('./apps/Cin7/index'))
 const AccountsLayout = lazy(() => import('./apps/Accounts/AccountsLayout'))
 const ChatFunctions = lazy(() => import('./apps/Accounts/ChatFunctions.jsx'))
 const FinanceDashboard = lazy(() => import('./apps/Accounts/finance/FinanceDashboard.jsx'))
@@ -262,6 +263,7 @@ export default function App() {
                 {/* Old direct link to the dashboard now lives at the index. */}
                 <Route path="finance" element={<Navigate to="/accounts" replace />} />
                 <Route path="xero" element={<XeroChat />} />
+                <Route path="cin7" element={<Cin7Chat />} />
                 <Route path="chat-functions" element={<ChatFunctions />} />
               </Route>
               <Route path="logistics" element={<Navigate to="/logistics/invoices" replace />} />

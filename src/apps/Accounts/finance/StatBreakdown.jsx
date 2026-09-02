@@ -199,7 +199,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   const isMobile = useIsMobile()
 
   const chartData = useMemo(() => chartMonths.map((m) => {
-    const row = { label: monthLabel(m) } // 'MMMM YY'
+    const row = { label: monthLabel(m) } // 'MMM YY'
     const byseg = rowsByMonth.get(m)
     for (const s of segments) row[s.key] = segmentValues(byseg, s)[metric]
     return row

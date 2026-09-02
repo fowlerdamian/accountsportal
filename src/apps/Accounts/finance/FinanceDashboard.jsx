@@ -222,7 +222,7 @@ export default function FinanceDashboard() {
       const s = snapByKey.get(k)
       const c = casesByKey.get(k)
       return {
-        key: k, label: monthLabel(k), // 'MMMM YY'
+        key: k, label: monthLabel(k), // 'MMM YY'
         revenue: s ? Number(s.revenue) : 0,
         breakeven: s ? Number(s.breakeven_revenue) : null,
         ebitda: s ? Number(s.ebitda) : 0,

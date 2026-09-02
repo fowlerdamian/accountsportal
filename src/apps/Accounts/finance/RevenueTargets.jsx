@@ -22,8 +22,8 @@ const C = {
   green: palette.aqua, red: palette.pink,
 }
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-const yy = (year) => String(year).slice(2) // 'MMMM YY' house style
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const yy = (year) => String(year).slice(2) // 'MMM YY' house style
 
 // Committed revenue by year → calendar month → $ (see seasonalityTargets.js).
 const COMMITTED_REVENUE = { 2026: { 10: 170_000 } }
@@ -691,7 +691,7 @@ export default function RevenueTargets() {
                 value: `${rearView.growthAnnual >= 0 ? '+' : ''}${(rearView.growthAnnual * 100).toFixed(0)}%/yr`,
                 color: rearView.growthAnnual >= 0 ? C.green : C.red,
               },
-              { label: `Forecast ${MONTHS[thisMonth - 1]}–December`, value: money(rearView.remainderForecast), color: C.target },
+              { label: `Forecast ${MONTHS[thisMonth - 1]}–Dec`, value: money(rearView.remainderForecast), color: C.target },
               {
                 label: 'Forecast year-end',
                 value: money(rearView.forecast),
@@ -760,7 +760,7 @@ export default function RevenueTargets() {
               <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>swipe table sideways ›</span>
             )}
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 1240 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 980 }}>
                 <thead>
                   <tr>
                     <th style={{ padding: '7px 10px', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Series</th>
@@ -814,7 +814,7 @@ export default function RevenueTargets() {
         <Panel title="Sales Targets Matrix" icon={CurrencyDollarIcon}
           right={<span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>{isMobile ? 'tap a target/stretch cell to edit · swipe sideways ›' : 'click a target/stretch cell to edit'}</span>}>
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 1240 }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 980 }}>
               <thead>
                 <tr>
                   <th style={{ ...th, textAlign: 'left' }}>Year</th>

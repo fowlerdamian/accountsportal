@@ -66,7 +66,7 @@ export default function ProfitDashboard({ result, onReset, orderLinks = {}, link
       >
         <div>
           <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: '#888' }}>
-            Profit Summary Processor
+            Order Profit Tool
           </p>
           {period && (
             <p className="text-[11px] font-mono mt-0.5" style={{ color: '#a0a0a0' }}>
