@@ -50,8 +50,8 @@ const CATEGORY_SEGMENTS = [
     { key: 'Behind Grille Lighting', hue: CAT[0] },
     { key: 'Electrical',             hue: CAT[0] },
   ] },
+  { key: 'Storage',       hue: GREY }, // stacked 2nd, directly above Electrical
   { key: 'Communication', hue: CAT[1] }, // teal
-  { key: 'Storage',       hue: GREY },
   { key: 'Safety',        hue: CAT[2] }, // red
   { key: 'Other',         hue: CAT[6] }, // teal 400
 ]
