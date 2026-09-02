@@ -22,7 +22,8 @@ const C = {
   green: palette.aqua, red: palette.pink,
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const yy = (year) => String(year).slice(2) // 'MMMM YY' house style
 
 // Committed revenue by year → calendar month → $ (see seasonalityTargets.js).
 const COMMITTED_REVENUE = { 2026: { 10: 170_000 } }
@@ -639,7 +640,7 @@ export default function RevenueTargets() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: isMobile ? 8 : 12 }}>
-          <Tile compact={isMobile} icon={CurrencyDollarIcon} label={`${MONTHS[thisMonth - 1]} ${thisYear} Actual`} value={money(curr?.actual)} hue={C.accent} valueColor={C.accent}
+          <Tile compact={isMobile} icon={CurrencyDollarIcon} label={`${MONTHS[thisMonth - 1]} ${yy(thisYear)} Actual`} value={money(curr?.actual)} hue={C.accent} valueColor={C.accent}
             sub={curr?.target != null ? `target ${money(curr.target)}` : 'no target set'} />
           <Tile compact={isMobile} icon={GaugeIcon} label="Month vs Target"
             value={curr?.target ? pct(curr.actual != null ? curr.actual / curr.target : null) : '—'}
@@ -654,7 +655,7 @@ export default function RevenueTargets() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(460px, 100%), 1fr))', gap: 16 }}>
           <PacingPanel
-            title={`MTD Pacing — ${MONTHS[thisMonth - 1]} ${thisYear}`}
+            title={`MTD Pacing — ${MONTHS[thisMonth - 1]} ${yy(thisYear)}`}
             gaugeLabel="MTD PACE"
             ratio={mtdPace}
             right={
@@ -690,7 +691,7 @@ export default function RevenueTargets() {
                 value: `${rearView.growthAnnual >= 0 ? '+' : ''}${(rearView.growthAnnual * 100).toFixed(0)}%/yr`,
                 color: rearView.growthAnnual >= 0 ? C.green : C.red,
               },
-              { label: `Forecast ${MONTHS[thisMonth - 1]}–Dec`, value: money(rearView.remainderForecast), color: C.target },
+              { label: `Forecast ${MONTHS[thisMonth - 1]}–December`, value: money(rearView.remainderForecast), color: C.target },
               {
                 label: 'Forecast year-end',
                 value: money(rearView.forecast),
@@ -759,13 +760,13 @@ export default function RevenueTargets() {
               <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>swipe table sideways ›</span>
             )}
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 980 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 1240 }}>
                 <thead>
                   <tr>
                     <th style={{ padding: '7px 10px', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>Series</th>
                     {seasonality.rolling.months.map((m) => (
                       <th key={m.month} style={{ padding: '7px 10px', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: m.completed ? C.faint : C.muted, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>
-                        {m.name}{m.completed ? ' ✓' : ''}
+                        {MONTHS[m.month - 1]}{m.completed ? ' ✓' : ''}
                       </th>
                     ))}
                     <th style={{ padding: '7px 10px', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.text, textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>Year</th>
@@ -813,7 +814,7 @@ export default function RevenueTargets() {
         <Panel title="Sales Targets Matrix" icon={CurrencyDollarIcon}
           right={<span style={{ fontSize: 11, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>{isMobile ? 'tap a target/stretch cell to edit · swipe sideways ›' : 'click a target/stretch cell to edit'}</span>}>
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 980 }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 1240 }}>
               <thead>
                 <tr>
                   <th style={{ ...th, textAlign: 'left' }}>Year</th>

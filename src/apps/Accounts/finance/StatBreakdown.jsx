@@ -18,7 +18,7 @@ import { LayersIcon, TargetIcon, TriangleAlertIcon, ChartBarIcon } from '@portal
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
-import { GRAINS, buildOptions, periodKeys, chartKeys, toKey } from './periods.js'
+import { GRAINS, buildOptions, periodKeys, chartKeys, toKey, monthLabel } from './periods.js'
 import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
 
 const C = {
@@ -38,7 +38,7 @@ const GREY = '#a0a0a0' // neutral segment hue (per Damian: grey, not cream)
 const CUSTOMER_SEGMENTS = [
   { key: 'Consumers',    hue: CAT[0] }, // orange
   { key: 'Distributors', hue: CAT[1] }, // teal
-  { key: 'Fleet',        hue: GREY },
+  { key: 'Fleet',        hue: GREY, stackTop: true }, // rendered last → top of the stacked bars
   { key: 'Bespoke',      hue: CAT[2] }, // red
 ]
 // Category tree: `children` are the leaf buckets stored in the DB; a segment
@@ -199,7 +199,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   const isMobile = useIsMobile()
 
   const chartData = useMemo(() => chartMonths.map((m) => {
-    const row = { label: m.slice(2) } // 'YY-MM'
+    const row = { label: monthLabel(m) } // 'MMMM YY'
     const byseg = rowsByMonth.get(m)
     for (const s of segments) row[s.key] = segmentValues(byseg, s)[metric]
     return row
@@ -301,7 +301,8 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
           <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
           <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={isMobile ? 40 : 48} />
           <Tooltip content={<ChartTip segments={segments} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-          {segments.map((s, i) => (
+          {/* Recharts stacks in render order (first = bottom); stackTop segments go last */}
+          {[...segments.filter((s) => !s.stackTop), ...segments.filter((s) => s.stackTop)].map((s, i) => (
             <Bar key={s.key} dataKey={s.key} name={s.key} stackId="m" fill={s.hue}
               fillOpacity={0.8} radius={i === segments.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]}
               isAnimationActive={false} />

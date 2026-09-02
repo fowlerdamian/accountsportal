@@ -28,6 +28,14 @@ export function fyOf(key) {
 
 export function fyLabel(fy) { return `FY${String(fy).slice(2)}` }
 
+const MONTH_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+// 'YYYY-MM' → 'July 26' (MMMM YY — the house style for month labels in reports)
+export function monthLabel(key) {
+  const { y, m } = ymParts(key)
+  return `${MONTH_FULL[m - 1]} ${String(y).slice(2)}`
+}
+
 // The 12 month-keys of a financial year (Jul (fy-1) → Jun (fy)).
 export function fyMonths(fy) {
   const out = []
@@ -60,7 +68,7 @@ export function trailing(key, n) {
 export function buildOptions(grain, availableKeys) {
   const keys = [...availableKeys].sort()
   if (grain === 'month') {
-    return keys.map((k) => ({ value: k, label: k }))
+    return keys.map((k) => ({ value: k, label: monthLabel(k) }))
   }
   if (grain === 'cy') {
     const years = [...new Set(keys.map((k) => ymParts(k).y))].sort()

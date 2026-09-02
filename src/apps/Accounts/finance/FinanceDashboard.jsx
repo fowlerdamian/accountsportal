@@ -11,7 +11,7 @@ import {
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import {
-  GRAINS, buildOptions, periodKeys, chartKeys, aggregate, toKey,
+  GRAINS, buildOptions, periodKeys, chartKeys, aggregate, toKey, monthLabel,
   prevAnchor, ytdWindow, periodElapsed,
 } from './periods.js'
 import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
@@ -222,7 +222,7 @@ export default function FinanceDashboard() {
       const s = snapByKey.get(k)
       const c = casesByKey.get(k)
       return {
-        key: k, label: k.slice(2), // 'YY-MM'
+        key: k, label: monthLabel(k), // 'MMMM YY'
         revenue: s ? Number(s.revenue) : 0,
         breakeven: s ? Number(s.breakeven_revenue) : null,
         ebitda: s ? Number(s.ebitda) : 0,
