@@ -14,7 +14,7 @@
 //
 // Scope (owner-specified): drop-ship products and non-inventory items (Cin7
 // product Type ≠ Stock) are excluded in SQL; a built-to-order assembly's sale is
-// attributed to its main (highest-cost) component in SQL; lines with no units on hand, under $100
+// attributed to its main (highest-cost) component in SQL; lines with no units on hand, under $1,000
 // of stock, or with no COGS in the window are hidden here, everywhere on the page.
 
 import { useMemo, useState } from 'react'
@@ -39,7 +39,7 @@ const MONO = '"JetBrains Mono", monospace'
 const TARGET = 200
 // Lines holding less than this (at cost, latest snapshot) are hidden from the
 // whole dashboard — tiles, charts, categories and the table.
-const MIN_STOCK = 100
+const MIN_STOCK = 1000
 const PAGE = 100
 
 const WINDOWS = [
