@@ -234,7 +234,6 @@ export default function GuidesList() {
                     <h3 className="font-semibold text-sm truncate">{guide.title}</h3>
                     <code className="text-xs bg-muted px-1.5 py-0.5 rounded shrink-0">{guide.product_code}</code>
                   </div>
-                   <p className="text-sm text-muted-foreground line-clamp-1">{guide.short_description}</p>
                    {guideVehicles.length > 0 && (
                      <div className="flex flex-wrap gap-1.5 mt-2">
                        {guideVehicles.map((v, i) => (
@@ -244,13 +243,7 @@ export default function GuidesList() {
                        ))}
                      </div>
                    )}
-                   <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                     <span>{guide.categories?.name ?? '—'}</span>
-                     <span>•</span>
-                     <span>{guide.estimated_time ?? '—'}</span>
-                     <span>•</span>
-                     <span>Updated {new Date(guide.updated_at).toLocaleDateString()}</span>
-                   </div>
+                   <div className="mt-2 text-xs text-muted-foreground">Updated {new Date(guide.updated_at).toLocaleDateString()}</div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
