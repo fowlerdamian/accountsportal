@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { ChartBarIcon, LayersIcon, MessageCircleIcon, FilledBellIcon, LayoutDashboardIcon, TargetIcon, WalletIcon } from '@portal/components/icons'
+import { ChartBarIcon, LayersIcon, MessageCircleIcon, FilledBellIcon, LayoutDashboardIcon, TargetIcon, WalletIcon, RefreshIcon } from '@portal/components/icons'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 const NAV = [
@@ -7,6 +7,7 @@ const NAV = [
   { label: 'Cash Flow',    shortLabel: 'Cash',    route: '/accounts/cashflow',       icon: WalletIcon,          end: false },
   { label: 'Targets',      shortLabel: 'Targets', route: '/accounts/targets',        icon: TargetIcon,          end: false },
   { label: 'Sales Mix',    shortLabel: 'Sales',   route: '/accounts/stats',          icon: LayersIcon,          end: false },
+  { label: 'Stock Turn',   shortLabel: 'Stock',   route: '/accounts/stock-turn',     icon: RefreshIcon,         end: false },
   { label: 'Order Profit Tool', shortLabel: 'Profit', route: '/accounts/profit',     icon: ChartBarIcon,        end: false },
   { label: 'Ask Xero',     shortLabel: 'Xero',    route: '/accounts/xero',           icon: MessageCircleIcon,   end: false },
   { label: 'Ask Cin7',     shortLabel: 'Cin7',    route: '/accounts/cin7',           icon: MessageCircleIcon,   end: false },

@@ -3,12 +3,14 @@
 //   1. /api/finance-snapshot   → xero-pl-snapshot → finance_snapshot   (Finance Dashboard)
 //   2. request_xero_invoice_sync RPC (pg_net → edge fn, ~1 min)         (Revenue & Targets)
 //   3. cashflow-forecast edge fn re-run (Xero + Cin7 live)              (Cash Flow)
+//   4. stat-breakdown-sync edge fn (Cin7 sales → stat + product lines)  (Sales Mix, Stock Turn)
+//   5. stock-turn-snapshot edge fn (today's stock on hand at cost)      (Stock Turn)
 // Then every finance query key is invalidated so whichever page is open re-renders.
 
 import { useSyncExternalStore } from 'react'
 import { supabase } from '@portal/lib/supabase'
 
-export const FINANCE_QUERY_KEYS = [['finance-dashboard'], ['revenue-targets'], ['cashflow-forecast'], ['stat-breakdown']]
+export const FINANCE_QUERY_KEYS = [['finance-dashboard'], ['revenue-targets'], ['cashflow-forecast'], ['stat-breakdown'], ['stock-turn']]
 
 // Invoice sync is fired async by pg_net; give it this long before refetching targets.
 const INVOICE_SYNC_SETTLE_MS = 75_000
@@ -52,6 +54,11 @@ export function runFinanceSync(qc) {
       supabase.functions.invoke('stat-breakdown-sync', { body: { drainMs: 60_000 } }).then(({ data, error: e }) => {
         if (e) throw e
         if (data && data.ok === false) throw new Error(data.error || 'stat-breakdown-sync failed')
+      }),
+      // 5. Stock Turn — fresh stock-on-hand snapshot (~4 Cin7 calls)
+      supabase.functions.invoke('stock-turn-snapshot', { body: {} }).then(({ data, error: e }) => {
+        if (e) throw e
+        if (data && data.ok === false) throw new Error(data.error || 'stock-turn-snapshot failed')
       }),
     ])
     const failed = results.filter((r) => r.status === 'rejected')

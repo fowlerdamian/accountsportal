@@ -39,6 +39,7 @@ const FinanceDashboard = lazy(() => import('./apps/Accounts/finance/FinanceDashb
 const RevenueTargets = lazy(() => import('./apps/Accounts/finance/RevenueTargets.jsx'))
 const CashFlow = lazy(() => import('./apps/Accounts/finance/CashFlow.jsx'))
 const StatBreakdown = lazy(() => import('./apps/Accounts/finance/StatBreakdown.jsx'))
+const StockTurn = lazy(() => import('./apps/Accounts/finance/StockTurn.jsx'))
 
 // Contractor Hub
 const ContractorsList = lazy(() => import('./apps/ContractorHub/pages/ContractorsList'))
@@ -259,6 +260,7 @@ export default function App() {
                 <Route path="cashflow" element={<CashFlow />} />
                 <Route path="targets" element={<RevenueTargets />} />
                 <Route path="stats" element={<StatBreakdown />} />
+                <Route path="stock-turn" element={<StockTurn />} />
                 <Route path="profit" element={<ProfitProcessor />} />
                 {/* Old direct link to the dashboard now lives at the index. */}
                 <Route path="finance" element={<Navigate to="/accounts" replace />} />
