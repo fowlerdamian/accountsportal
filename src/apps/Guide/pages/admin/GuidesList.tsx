@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Filter, Loader2, Trash2 } from "lucide-react";
+import { Plus, Search, Filter, Loader2, Trash2, QrCode } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 import { BookIcon, MessageCircleIcon, FileDescriptionIcon, TriangleAlertIcon } from "@portal/components/icons";
 import { StatsCard } from "@guide/components/admin/StatsCard";
 import { Button } from "@guide/components/ui/button";
@@ -7,7 +8,7 @@ import { Input } from "@guide/components/ui/input";
 import { Badge } from "@guide/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { useInstructionSets, useCategories, usePublications, useBrands, useAllGuideVehicles, useSupportQuestions, useFeedback } from "@guide/hooks/use-supabase-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -45,6 +46,15 @@ function DeleteGuideDialog({ guide, onDelete }: { guide: any; onDelete: (id: str
   );
 }
 
+function CopiedTip({ children }: { children: React.ReactNode }) {
+  return (
+    <span role="status" className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-8 whitespace-nowrap rounded bg-foreground text-background text-[11px] px-2 py-1 shadow animate-fade-in">
+      {children}
+      <span className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-foreground" />
+    </span>
+  );
+}
+
 export default function GuidesList() {
   const navigate = useNavigate();
   const { data: guides = [], isLoading } = useInstructionSets();
@@ -73,23 +83,61 @@ export default function GuidesList() {
     return matchSearch && matchCat && matchStatus;
   });
 
-  // Share: copy the public link (brand it's published on, else the first brand)
-  // to the clipboard. The toast offers the full share page (QR / per-brand links).
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const shareGuide = async (guide: any) => {
+  // Public link for a guide: the brand it's published on, else the first brand.
+  const shareTarget = (guide: any) => {
     const pubBrand = brands.find(b => publications.some((p: any) => p.instruction_set_id === guide.id && p.brand_id === b.id && p.status === "published"));
     const brand = pubBrand ?? brands[0];
     const url = brand ? `https://${brand.domain}/${guide.slug}` : `${window.location.origin}/guide/view/${guide.slug}`;
-    const action = { label: "Share options", onClick: () => navigate(`/guide/guides/${guide.id}/share`) };
+    return { url, published: !!pubBrand };
+  };
+  const shareAction = (guide: any) => ({ label: "Share options", onClick: () => navigate(`/guide/guides/${guide.id}/share`) });
+
+  // Brief "copied" tooltip over whichever button was pressed.
+  const [copied, setCopied] = useState<{ id: string; kind: "link" | "qr" } | null>(null);
+  const flashCopied = (id: string, kind: "link" | "qr") => {
+    setCopied({ id, kind });
+    window.setTimeout(() => setCopied((c) => (c?.id === id && c.kind === kind ? null : c)), 1800);
+  };
+
+  // Share: copy the public link to the clipboard. The toast offers the full
+  // share page (QR / per-brand links).
+  const shareGuide = async (guide: any) => {
+    const { url, published } = shareTarget(guide);
     try {
       await navigator.clipboard.writeText(url);
-      setCopiedId(guide.id);
-      window.setTimeout(() => setCopiedId((c) => (c === guide.id ? null : c)), 1800);
-      if (!pubBrand) toast.message("Link copied — guide is not published yet", { description: url, action });
+      flashCopied(guide.id, "link");
+      if (!published) toast.message("Link copied — guide is not published yet", { description: url, action: shareAction(guide) });
     } catch {
-      toast.error("Couldn't copy link", { description: url, action });
+      toast.error("Couldn't copy link", { description: url, action: shareAction(guide) });
     }
   };
+
+  // QR: render the code offscreen for the clicked guide, then copy it to the
+  // clipboard as a PNG. The render is a single frame, so it stays inside the
+  // browser's user-gesture window for clipboard writes.
+  const [qrJob, setQrJob] = useState<{ guide: any; url: string; published: boolean } | null>(null);
+  const qrHost = useRef<HTMLDivElement | null>(null);
+  const copyQr = (guide: any) => setQrJob({ guide, ...shareTarget(guide) });
+  useEffect(() => {
+    if (!qrJob) return;
+    const { guide, url, published } = qrJob;
+    const canvas = qrHost.current?.querySelector("canvas");
+    const fail = (why: string) => toast.error("Couldn't copy QR code", { description: why, action: shareAction(guide) });
+    if (!canvas) { fail("QR code did not render"); setQrJob(null); return; }
+    canvas.toBlob(async (blob) => {
+      try {
+        if (!blob) throw new Error("PNG encode failed");
+        if (typeof ClipboardItem === "undefined") throw new Error("This browser can't copy images to the clipboard");
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        flashCopied(guide.id, "qr");
+        if (!published) toast.message("QR code copied — guide is not published yet", { description: url, action: shareAction(guide) });
+      } catch (err: any) {
+        fail(err?.message ?? String(err));
+      } finally {
+        setQrJob(null);
+      }
+    }, "image/png");
+  }, [qrJob]);
 
   const deleteGuide = async (id: string) => {
     try {
@@ -219,12 +267,13 @@ export default function GuidesList() {
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/view/${guide.slug}`)}>Preview</Button>
                   <span className="relative inline-flex">
                     <Button variant="ghost" size="sm" onClick={() => shareGuide(guide)} title="Copy public link">Share</Button>
-                    {copiedId === guide.id && (
-                      <span role="status" className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-8 whitespace-nowrap rounded bg-foreground text-background text-[11px] px-2 py-1 shadow animate-fade-in">
-                        Link copied to clipboard
-                        <span className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-foreground" />
-                      </span>
-                    )}
+                    {copied?.id === guide.id && copied.kind === "link" && <CopiedTip>Link copied to clipboard</CopiedTip>}
+                  </span>
+                  <span className="relative inline-flex">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyQr(guide)} disabled={qrJob?.guide.id === guide.id} title="Copy QR code as PNG" aria-label="Copy QR code as PNG">
+                      <QrCode className="w-4 h-4" />
+                    </Button>
+                    {copied?.id === guide.id && copied.kind === "qr" && <CopiedTip>QR code copied to clipboard</CopiedTip>}
                   </span>
                   <DeleteGuideDialog guide={guide} onDelete={deleteGuide} />
                 </div>
@@ -238,6 +287,13 @@ export default function GuidesList() {
           </div>
         )}
       </div>
+
+      {/* Offscreen QR render target for copyQr — mounted only while a copy is in flight */}
+      {qrJob && (
+        <div ref={qrHost} aria-hidden className="fixed -left-[9999px] top-0">
+          <QRCodeCanvas value={qrJob.url} size={512} marginSize={2} bgColor="#ffffff" fgColor="#000000" level="M" />
+        </div>
+      )}
     </div>
   );
 }
