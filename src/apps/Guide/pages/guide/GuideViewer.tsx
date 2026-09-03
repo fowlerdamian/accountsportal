@@ -393,7 +393,11 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
     const trimmed = comment.trim();
     if (!ratingRowRef.current) {
       ratingRowRef.current = (async () => {
-        const { data, error } = await supabase.from("feedback").insert({
+        // Client-generated id: anon has no SELECT policy, so INSERT … RETURNING
+        // would be rejected. Later star taps update this row by id.
+        const id = crypto.randomUUID();
+        const { error } = await supabase.from("feedback").insert({
+          id,
           instruction_set_id: guide.id,
           brand_id: brand.id,
           session_id: sessionId,
@@ -401,18 +405,18 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
           comment: trimmed || null,
           type: 'rating' as const,
           variant_id: selectedVariantId ?? null,
-        }).select('id').single();
-        if (error || !data) { ratingRowRef.current = null; return null; }
-        return data.id;
+        });
+        if (error) { ratingRowRef.current = null; return null; }
+        return id;
       })();
       return !!(await ratingRowRef.current);
     }
     const id = await ratingRowRef.current;
     if (!id) { ratingRowRef.current = null; return persistRating(r); }
-    const { error } = await supabase.from("feedback")
-      .update({ rating: r, comment: trimmed || null })
-      .eq('id', id);
-    return !error;
+    // Anonymous customers can't UPDATE feedback directly (no SELECT policy);
+    // update_guide_rating is a narrow RPC that only touches this fresh rating row.
+    const { data: changed, error } = await supabase.rpc("update_guide_rating", { p_id: id, p_rating: r, p_comment: trimmed || null });
+    return !error && changed !== false;
   };
 
   const submitRating = async (r: number) => {
@@ -485,7 +489,9 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
     const email = supportEmail.trim();
     if (email && !emailLooksValid(email)) { toast.error("That email address doesn't look right."); return; }
     setSubmitting('support');
-    const { data: row, error } = await supabase.from("support_questions").insert({
+    const questionId = crypto.randomUUID(); // no RETURNING for anon — see persistRating
+    const { error } = await supabase.from("support_questions").insert({
+      id: questionId,
       instruction_set_id: guide.id,
       brand_id: brand.id,
       session_id: sessionId,
@@ -494,10 +500,10 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
       question: trimmed,
       customer_name: supportName.trim() || null,
       customer_email: email || null,
-    }).select('id').single();
+    });
     setSubmitting(null);
-    if (error || !row) { reportError('message'); return; }
-    notifySupportQuestion(row.id);
+    if (error) { reportError('message'); return; }
+    notifySupportQuestion(questionId);
     safeLocal.set('guide-contact', JSON.stringify({ name: supportName.trim(), email }));
     setSupportMessage("");
     setSupportOpen(false);
