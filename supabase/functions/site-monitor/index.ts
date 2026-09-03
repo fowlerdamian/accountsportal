@@ -40,24 +40,20 @@ const CHECKS: Check[] = [
     ],
     recovery: HOME_RECOVERY,
   },
-  {
-    key: "fleetcraft-emergency", label: "fleetcraft.com.au /emergency-services/", url: "https://fleetcraft.com.au/emergency-services/", minBytes: 40_000,
-    markers: [
-      { name: "hero image", pattern: "hero-bg-media", min: 1 },
-      { name: "capability cards", pattern: "services-grid-card", min: 6 },
-      { name: "vehicle program cards", pattern: "industry-card-content", min: 5 },
-    ],
-    recovery: PAGE_RECOVERY,
-  },
-  {
-    key: "fleetcraft-utilities", label: "fleetcraft.com.au /utilities-telco/", url: "https://fleetcraft.com.au/utilities-telco/", minBytes: 40_000,
+  // Industry pages share one template (page-industry): hero + 5-6 capability cards + 5 vehicle cards.
+  ...[
+    { key: "fleetcraft-emergency", slug: "emergency-services" },
+    { key: "fleetcraft-utilities", slug: "utilities-telco" },
+    { key: "fleetcraft-mining", slug: "mining-resources" },
+  ].map((p): Check => ({
+    key: p.key, label: `fleetcraft.com.au /${p.slug}/`, url: `https://fleetcraft.com.au/${p.slug}/`, minBytes: 40_000,
     markers: [
       { name: "hero image", pattern: "hero-bg-media", min: 1 },
       { name: "capability cards", pattern: "services-grid-card", min: 5 },
       { name: "vehicle program cards", pattern: "industry-card-content", min: 5 },
     ],
     recovery: PAGE_RECOVERY,
-  },
+  })),
 ];
 
 const REALERT_MS = 24 * 60 * 60 * 1000;
