@@ -14,6 +14,8 @@
 //   { action: "ingest", order_id }  — manually enqueue a Shopify order by numeric id
 //   { action: "preview", skus[] }   — dry-run matching for a list of SKUs
 //   { action: "test", to }          — send a sample email to an address
+//   { action: "unmatched-backfill" } — create "map this SKU" tasks for every delivery that
+//                                      already has unmatched SKUs but no task (one-off / repair)
 //
 // Non-webhook actions require a staff JWT or the service-role key (cron).
 // Deploy with --no-verify-jwt (Shopify cannot send a Supabase JWT).
@@ -38,6 +40,8 @@ type Settings = {
   sku_patterns: string[];
   sku_exclude_patterns: string[];
   exclude_customer_tags: string[];
+  /** auth user who gets a staff task when an order has SKUs no guide matches; null disables */
+  unmatched_task_assignee: string | null;
 };
 
 function admin(): SupabaseClient {
@@ -86,6 +90,79 @@ function failAlert(row: any, reason: string, detail?: string) {
     `${reason}${detail ? `\n\`${detail.slice(0, 300)}\`` : ""}\n` +
     `${who}\nSKUs: ${skus}\n<${PORTAL_URL}/guide/deliveries|Open auto-delivery>`,
   );
+}
+
+// ── Unmatched-SKU tasks ──────────────────────────────────────────────────────
+// A delivery with SKUs that no guide matches raises a staff task for the mapping
+// owner (settings.unmatched_task_assignee) so the SKU gets linked to a guide.
+// One open task per SKU set: if an open task already covers every unmatched SKU
+// the order is appended to it. Each delivery row is stamped with the task id so
+// re-runs, resends and the backfill are idempotent.
+const TASK_TITLE_PREFIX = "Map guide for SKU";
+const TASK_DUE_DAYS = 2;
+
+function aestDatePlus(days: number): string {
+  return new Date(Date.now() + 10 * 3600_000 + days * 86_400_000).toISOString().slice(0, 10);
+}
+function orderLine(row: any, skus: string[]): string {
+  const who = [row?.customer_name, row?.customer_email].filter(Boolean).join(" · ") || "no customer details";
+  return `• Order ${row?.order_name ?? `#${row?.shopify_order_id}`} — ${who} — ${skus.join(", ")}`;
+}
+
+async function ensureUnmatchedTask(
+  db: SupabaseClient, settings: Settings, row: any, unmatched: string[], opts: { notify?: boolean } = {},
+): Promise<{ task_id: string; reused: boolean; title: string } | null> {
+  const assignee = settings.unmatched_task_assignee;
+  if (!assignee || !unmatched.length || row.unmatched_task_id) return null;
+  const skus = [...new Set(unmatched.map((s) => s.trim().toUpperCase()).filter(Boolean))].sort();
+  if (!skus.length) return null;
+
+  // An open task already covering every SKU → append this order to it.
+  const { data: open } = await db.from("staff_tasks").select("id,title,description")
+    .eq("assigned_to", assignee).neq("status", "done").ilike("title", `${TASK_TITLE_PREFIX}%`);
+  const covers = (open ?? []).find((t: any) => { const up = String(t.title).toUpperCase(); return skus.every((s) => up.includes(s)); });
+  if (covers) {
+    const description = `${covers.description ?? ""}\n${orderLine(row, skus)}`.trim();
+    await db.from("staff_tasks").update({ description }).eq("id", covers.id);
+    await db.from("guide_deliveries").update({ unmatched_task_id: covers.id }).eq("id", row.id);
+    return { task_id: covers.id, reused: true, title: covers.title };
+  }
+
+  const title = `${TASK_TITLE_PREFIX} ${skus.join(", ")}`;
+  const description = [
+    `Guide auto-delivery could not find an installation guide for ${skus.length === 1 ? "this SKU" : "these SKUs"}: ${skus.join(", ")}.`,
+    "",
+    "Fix: Guide → Auto-delivery → SKU mapping — link the SKU to the right guide (or suppress it if no guide applies), then Resend the order.",
+    `${PORTAL_URL}/guide/deliveries`,
+    "",
+    "Orders affected:",
+    orderLine(row, skus),
+  ].join("\n");
+  const { data: task, error } = await db.from("staff_tasks").insert({
+    title, description, status: "not_started",
+    created_by: assignee, assigned_to: assignee,
+    due_date: aestDatePlus(TASK_DUE_DAYS), urgency: 3, importance: 4,
+  }).select("id").single();
+  if (error || !task) { console.error("unmatched-SKU task insert failed:", error?.message); return null; }
+  await db.from("guide_deliveries").update({ unmatched_task_id: task.id }).eq("id", row.id);
+
+  if (opts.notify !== false) await dmAssignee(db, assignee, task.id, title, `Order ${row.order_name ?? row.shopify_order_id}: no guide matched ${skus.join(", ")} — map it in SKU mapping`);
+  return { task_id: task.id, reused: false, title };
+}
+
+// Google Chat DM to the assignee's personal webhook — same 3-line shape as
+// api/notify-task-assignee.js (which needs a user JWT this cron path lacks).
+async function dmAssignee(db: SupabaseClient, userId: string, taskId: string, title: string, summary: string) {
+  try {
+    const { data: prof } = await db.from("profiles").select("google_chat_webhook_url").eq("id", userId).single();
+    if (!prof?.google_chat_webhook_url) return;
+    const taskUrl = `${PORTAL_URL}/tasks?task=${encodeURIComponent(taskId)}`;
+    const text = `📋 *<${taskUrl}|${title.replace(/[|<>]/g, " ")}>* — from Guide auto-delivery\n${summary}\nDue ${aestDatePlus(TASK_DUE_DAYS)} · Do`;
+    const r = await fetch(prof.google_chat_webhook_url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    if (!r.ok) console.warn("task DM →", r.status, await r.text());
+  } catch (e) {
+    console.warn("task DM failed:", e);
+  }
 }
 
 async function loadSettings(db: SupabaseClient): Promise<Settings> {
@@ -342,6 +419,11 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
   const items = row.line_items as LineItem[];
   const { matched, unmatched, ignored } = matchLineItems(items, cat, settings.auto_match, settings.sku_patterns, settings.sku_exclude_patterns);
   const base = { matched_guides: matched, unmatched_skus: unmatched, attempts: (row.attempts ?? 0) + 1 };
+  // Unmatched SKUs need a human to map them — raise the task now, whatever happens to the email below.
+  if (unmatched.length) {
+    const t = await ensureUnmatchedTask(db, settings, row, unmatched);
+    if (t) row.unmatched_task_id = t.task_id;
+  }
   if (matched.length === 0 && unmatched.length === 0) {
     // Nothing on this order needs a guide — silent skip, no alert.
     await db.from("guide_deliveries").update({ ...base, status: "skipped", error: `No guide-eligible products (${ignored.length} ignored)` }).eq("id", row.id);
@@ -534,6 +616,27 @@ Deno.serve(async (req) => {
         });
         const out = await res.json();
         return json({ ok: res.ok, removed, webhook: out.webhook ?? out }, res.ok ? 200 : 500);
+      }
+      case "unmatched-backfill": {
+        // One-off / repair: every delivery that already has unmatched SKUs but no task.
+        const settings = await loadSettings(db);
+        if (!settings.unmatched_task_assignee) return json({ error: "unmatched_task_assignee not set in guide_delivery_settings" }, 400);
+        const { data: rows, error } = await db.from("guide_deliveries").select("*")
+          .is("unmatched_task_id", null).not("unmatched_skus", "is", null).order("created_at");
+        if (error) throw error;
+        const created: { task_id: string; title: string }[] = [];
+        const results = [];
+        for (const row of rows ?? []) {
+          if (!row.unmatched_skus?.length) continue;
+          const t = await ensureUnmatchedTask(db, settings, row, row.unmatched_skus, { notify: false });
+          if (t) { row.unmatched_task_id = t.task_id; if (!t.reused) created.push({ task_id: t.task_id, title: t.title }); }
+          results.push({ id: row.id, order: row.order_name, skus: row.unmatched_skus, task_id: t?.task_id ?? null, reused: t?.reused ?? null });
+        }
+        if (created.length) {
+          const lines = created.map((c) => `• <${PORTAL_URL}/tasks?task=${encodeURIComponent(c.task_id)}|${c.title.replace(/[|<>]/g, " ")}>`).join("\n");
+          await dmAssignee(db, settings.unmatched_task_assignee, created[0].task_id, `${created.length} SKU${created.length === 1 ? "" : "s"} need${created.length === 1 ? "s" : ""} a guide mapped`, lines);
+        }
+        return json({ ok: true, scanned: (rows ?? []).length, created: created.length, results });
       }
       case "domains": {
         // Diagnostic: which sender domains are verified on the Resend account.

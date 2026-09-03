@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@guide/components/ui/table";
 import { toast } from "sonner";
 import { Loader2, RefreshCw, Send, Mail, Link2, Trash2, ExternalLink, Search } from "lucide-react";
+import { Link as RouterLink } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 
 type Delivery = {
@@ -25,6 +26,7 @@ type Delivery = {
   matched_guides: { sku: string; title: string; url: string; match: string }[];
   unmatched_skus: string[]; error: string | null; sent_at: string | null; created_at: string; attempts: number;
   fulfilled_at: string | null; send_after: string | null; refreshed_at: string | null;
+  unmatched_task_id: string | null;
 };
 type Settings = {
   id: number; enabled: boolean; brand_id: string | null; from_email: string; reply_to: string | null; bcc_email: string | null;
@@ -220,7 +222,12 @@ function DeliveryLog({ deliveries, loading, busy, onResend }: {
                     </div>
                   ))}
                   {d.unmatched_skus.length > 0 && (
-                    <div className="text-xs text-muted-foreground mt-1">No guide: {d.unmatched_skus.join(", ")}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      No guide: {d.unmatched_skus.join(", ")}
+                      {d.unmatched_task_id && (
+                        <RouterLink to={`/tasks?task=${d.unmatched_task_id}`} className="ml-1.5 underline underline-offset-2 hover:text-foreground" title="Open the mapping task">task ↗</RouterLink>
+                      )}
+                    </div>
                   )}
                 </TableCell>
                 <TableCell>
