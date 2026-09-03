@@ -12,7 +12,8 @@ import { Textarea } from "@guide/components/ui/textarea";
 import { Label } from "@guide/components/ui/label";
 import { Toaster } from "@guide/components/ui/sonner";
 import { toast } from "sonner";
-import { notifyGuideComment, notifyGuideFlag } from "@guide/lib/notifyGoogleChat";
+import { notifyGuideComment, notifyGuideFlag, notifySupportQuestion } from "@guide/lib/notifyGoogleChat";
+import { Input } from "@guide/components/ui/input";
 import { safeLocal, safeSession } from "@guide/lib/safeStorage";
 import { GuideErrorBoundary } from "@guide/components/ui/GuideErrorBoundary";
 
@@ -158,6 +159,9 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
   const [openNotice, setOpenNotice] = useState<number | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportMessage, setSupportMessage] = useState("");
+  // Optional contact details so we can actually reply. Remembered per device.
+  const [supportName, setSupportName] = useState(() => safeLocal.getJSON<{ name?: string; email?: string }>('guide-contact')?.name ?? "");
+  const [supportEmail, setSupportEmail] = useState(() => safeLocal.getJSON<{ name?: string; email?: string }>('guide-contact')?.email ?? "");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
@@ -474,22 +478,30 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
     toast.success("Step flagged. Thank you!");
   };
 
+  const emailLooksValid = (e: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e.trim());
   const submitSupport = async () => {
     const trimmed = supportMessage.trim();
     if (!trimmed || !brand || submitting) return;
+    const email = supportEmail.trim();
+    if (email && !emailLooksValid(email)) { toast.error("That email address doesn't look right."); return; }
     setSubmitting('support');
-    const { error } = await supabase.from("support_questions").insert({
+    const { data: row, error } = await supabase.from("support_questions").insert({
       instruction_set_id: guide.id,
       brand_id: brand.id,
       session_id: sessionId,
       step_number: displayStepNumber > 0 ? displayStepNumber : null,
+      step_title: step && !isDivider ? (step.subtitle ?? null) : null,
       question: trimmed,
-    });
+      customer_name: supportName.trim() || null,
+      customer_email: email || null,
+    }).select('id').single();
     setSubmitting(null);
-    if (error) { reportError('message'); return; }
+    if (error || !row) { reportError('message'); return; }
+    notifySupportQuestion(row.id);
+    safeLocal.set('guide-contact', JSON.stringify({ name: supportName.trim(), email }));
     setSupportMessage("");
     setSupportOpen(false);
-    toast.success("Question sent! We'll get back to you.");
+    toast.success(email ? `Sent — we'll reply to ${email}.` : `Sent — we'll do our best to help.${brand.support_phone ? ` For anything urgent call ${brand.support_phone}.` : ""}`);
   };
 
   const openLightbox = (src: string, alt: string) => setLightbox({ src, alt });
@@ -977,6 +989,11 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
                 placeholder={step && !isDivider ? `I'm stuck on Step ${displayStepNumber} — ${step.subtitle}. Can you help?` : "How can we help?"}
                 rows={3}
               />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input value={supportName} onChange={e => setSupportName(e.target.value)} placeholder="Your name (optional)" autoComplete="name" aria-label="Your name" className="h-11 text-base md:text-sm" />
+                <Input value={supportEmail} onChange={e => setSupportEmail(e.target.value)} placeholder="Email — so we can reply" type="email" inputMode="email" autoComplete="email" aria-label="Your email" className="h-11 text-base md:text-sm" />
+              </div>
+              <p className="text-[11px] text-muted-foreground -mt-2">Leave your email and we'll reply there, usually the same business day.</p>
               <div className="flex gap-2">
                 <Button className="flex-1 h-11" style={{ backgroundColor: brandColour }} onClick={submitSupport} disabled={!supportMessage.trim() || submitting === 'support'}>
                   {submitting === 'support'

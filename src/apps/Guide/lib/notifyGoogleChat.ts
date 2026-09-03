@@ -42,6 +42,16 @@ export function notifyGuideComment(opts: { guideTitle: string; comment: string; 
   sendToChat(text);
 }
 
+/**
+ * A support question was inserted — ask the guide-support fn to ping the
+ * support Google Chat space with a deep link. Fire-and-forget; the fn only
+ * accepts rows created in the last 10 minutes and notifies each once.
+ */
+export function notifySupportQuestion(id: string): void {
+  if (!id) return;
+  void invokeFunction('guide-support', { action: 'submitted', id });
+}
+
 export function notifyGuideFlag(opts: { guideTitle: string; stepNumber: number | null; description: string }): void {
   if (!opts.description?.trim()) return;
   const step = opts.stepNumber ? ` (Step ${opts.stepNumber})` : '';
