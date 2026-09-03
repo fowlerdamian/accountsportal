@@ -211,6 +211,7 @@ function TrendTip({ active, payload, label }) {
 }
 
 const PAGE = 100
+const CHART_MIN_STOCK = 100 // categories holding less than this (at cost) are noise on the ratio chart
 
 export default function StockTurn() {
   const isMobile = useIsMobile()
@@ -310,6 +311,7 @@ export default function StockTurn() {
   if (error) return <Centered tone={C.red}>Failed to load: {error.message}</Centered>
 
   const win = data.window
+  const chartCategories = byCategory.filter((c) => c.stockValue >= CHART_MIN_STOCK)
   const windowLabel = `${monthLabel(win.fromKey)} – ${monthLabel(win.toKey)}`
   const snapshotDays = data.rows[0]?.snapshot_days ?? null
   const noSnapshot = !data.latestSnapshot
@@ -404,10 +406,10 @@ export default function StockTurn() {
             {/* Charts */}
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
               <Panel title="Ratio by category" icon={ChartBarIcon}
-                right={<span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>dashed line = target {TARGET}</span>}>
-                <ResponsiveContainer width="100%" height={Math.max(180, byCategory.length * 26 + 30)}>
+                right={<span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>dashed line = target {TARGET} · categories with ≥ {money(CHART_MIN_STOCK)} stock</span>}>
+                <ResponsiveContainer width="100%" height={Math.max(180, chartCategories.length * 26 + 30)}>
                   {/* Bars are clamped to 0…3× target for display; the tooltip shows the true ratio */}
-                  <ComposedChart layout="vertical" data={byCategory.map((c) => ({ ...c, value: c.ratio == null ? 0 : c.ratio === Infinity ? TARGET * 2 : Math.max(0, Math.min(c.ratio, TARGET * 3)) }))}
+                  <ComposedChart layout="vertical" data={chartCategories.map((c) => ({ ...c, value: c.ratio == null ? 0 : c.ratio === Infinity ? TARGET * 2 : Math.max(0, Math.min(c.ratio, TARGET * 3)) }))}
                     margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
                     <CartesianGrid stroke={C.borderSoft} horizontal={false} />
                     <XAxis type="number" domain={[0, 'auto']} tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
@@ -415,7 +417,7 @@ export default function StockTurn() {
                     <Tooltip content={<CategoryTip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                     <ReferenceLine x={TARGET} stroke={C.text} strokeOpacity={0.6} strokeDasharray="3 3" />
                     <Bar dataKey="value" isAnimationActive={false} radius={[0, 2, 2, 0]} fillOpacity={0.85}>
-                      {byCategory.map((c) => <Cell key={c.name} fill={STATUS[c.status].hue} />)}
+                      {chartCategories.map((c) => <Cell key={c.name} fill={STATUS[c.status].hue} />)}
                     </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
