@@ -9,6 +9,10 @@ import { useState, useRef, useCallback } from "react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@guide/components/ui/alert-dialog";
 
 export default function GuideShare() {
   const { id } = useParams();
@@ -18,6 +22,9 @@ export default function GuideShare() {
   const { data: brands = [] } = useBrands();
   const [copied, setCopied] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState<string | null>(null);
+  // Brand whose publication is pending a "revert to draft" confirmation.
+  const [revertTarget, setRevertTarget] = useState<{ pubId: string; brandName: string } | null>(null);
+  const [reverting, setReverting] = useState(false);
   const qrRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const queryClient = useQueryClient();
 
@@ -30,10 +37,14 @@ export default function GuideShare() {
   }
   if (!guide) return <div className="p-8 text-center text-muted-foreground">Guide not found</div>;
 
-  const copyUrl = (url: string, key: string) => {
-    navigator.clipboard.writeText(url);
-    setCopied(key);
-    setTimeout(() => setCopied(null), 2000);
+  const copyUrl = async (url: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
+    } catch (err: any) {
+      toast.error("Couldn't copy link", { description: err?.message ?? url });
+    }
   };
 
   const downloadQRPng = (brandKey: string) => {
@@ -401,14 +412,30 @@ export default function GuideShare() {
     if (!id) return;
     const pub = publications.find((p: any) => p.brand_id === brandId);
     try {
-      if (pub) {
-        await supabase.from("guide_publications").update({ status: 'published', published_at: new Date().toISOString() }).eq("id", pub.id);
-      } else {
-        await supabase.from("guide_publications").insert({ instruction_set_id: id, brand_id: brandId, status: 'published', published_at: new Date().toISOString() });
-      }
+      // supabase-js resolves with { error } rather than throwing — check it.
+      const { error } = pub
+        ? await supabase.from("guide_publications").update({ status: 'published', published_at: new Date().toISOString() }).eq("id", pub.id)
+        : await supabase.from("guide_publications").insert({ instruction_set_id: id, brand_id: brandId, status: 'published', published_at: new Date().toISOString() });
+      if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["publications"] });
       toast.success("Published!");
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: any) { toast.error(err.message ?? "Publish failed"); }
+  };
+
+  const revertToDraft = async () => {
+    if (!revertTarget) return;
+    setReverting(true);
+    try {
+      const { error } = await supabase.from("guide_publications").update({ status: 'draft', published_at: null }).eq("id", revertTarget.pubId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["publications"] });
+      toast.success(`Reverted ${revertTarget.brandName} to draft`);
+      setRevertTarget(null);
+    } catch (err: any) {
+      toast.error(err.message ?? "Revert failed");
+    } finally {
+      setReverting(false);
+    }
   };
 
   return (
@@ -422,7 +449,7 @@ export default function GuideShare() {
       </div>
 
       {brands.length > 0 && (
-        <Tabs defaultValue={brands.find(b => b.key === 'trailbait')?.key || brands[0]?.key}>
+        <Tabs defaultValue={brands[0]?.key}>
           <TabsList className="w-full">
             {brands.map(b => (
               <TabsTrigger key={b.key} value={b.key} className="flex-1">{b.name}</TabsTrigger>
@@ -470,16 +497,7 @@ export default function GuideShare() {
                           variant="destructive"
                           size="sm"
                           className="mt-2"
-                          onClick={async () => {
-                            if (!pub) return;
-                            try {
-                              await supabase.from("guide_publications").update({ status: 'draft', published_at: null }).eq("id", pub.id);
-                              queryClient.invalidateQueries({ queryKey: ["publications"] });
-                              toast.success(`Reverted ${brand.name} to draft`);
-                            } catch (err: any) {
-                              toast.error(err.message);
-                            }
-                          }}
+                          onClick={() => { if (pub) setRevertTarget({ pubId: pub.id, brandName: brand.name }); }}
                         >
                           Revert to Draft
                         </Button>
@@ -497,6 +515,24 @@ export default function GuideShare() {
           })}
         </Tabs>
       )}
+
+      <AlertDialog open={!!revertTarget} onOpenChange={(v) => { if (!v && !reverting) setRevertTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revert {revertTarget?.brandName} to draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This takes the guide offline on {revertTarget?.brandName}. Any QR codes or links already printed or shared for this brand will stop working until it is published again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reverting}>Cancel</AlertDialogCancel>
+            {/* preventDefault keeps the dialog open until the update has actually succeeded */}
+            <AlertDialogAction disabled={reverting} onClick={(e) => { e.preventDefault(); revertToDraft(); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {reverting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Revert to Draft"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {fullscreen && (
         <div className="fixed inset-0 z-50 bg-background/95 flex items-center justify-center" onClick={() => setFullscreen(null)}>

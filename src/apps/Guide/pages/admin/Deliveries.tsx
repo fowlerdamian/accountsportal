@@ -34,6 +34,7 @@ type Settings = {
   sku_patterns: string[];
   sku_exclude_patterns: string[];
   exclude_customer_tags: string[];
+  updated_at?: string | null;
 };
 type Link = { id: string; sku: string; instruction_set_id: string | null; note: string | null };
 
@@ -165,6 +166,16 @@ export default function Deliveries() {
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4">
+          {settingsQ.isLoading && (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+          )}
+          {settingsQ.isError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-2" role="alert">
+              <div className="font-medium text-destructive">Couldn't load delivery settings</div>
+              <div className="text-muted-foreground">{(settingsQ.error as any)?.message ?? String(settingsQ.error)}</div>
+              <Button variant="outline" size="sm" onClick={() => settingsQ.refetch()}><RefreshCw className="w-4 h-4 mr-1.5" /> Retry</Button>
+            </div>
+          )}
           {settingsQ.data && <SettingsForm settings={settingsQ.data} brands={brands} busy={busy} run={run}
             onSaved={() => qc.invalidateQueries({ queryKey: ["guide_delivery_settings"] })} />}
         </TabsContent>
@@ -190,7 +201,7 @@ function DeliveryLog({ deliveries, loading, busy, onResend }: {
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {["all", "sent", "scheduled", "failed", "skipped"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            {["all", "sent", "scheduled", "pending", "failed", "skipped"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -267,17 +278,24 @@ function SkuLinks({ links, guides, unmatched, onChange }: {
   const save = async (s: string, g: string) => {
     if (!s.trim() || !g) return;
     setSaving(true);
+    const upper = s.trim().toUpperCase();
+    const row = { sku: upper, instruction_set_id: g === NONE ? null : g };
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from("guide_product_links")
-      .upsert({ sku: s.trim().toUpperCase(), instruction_set_id: g === NONE ? null : g, created_by: user?.id }, { onConflict: "sku" });
-    // onConflict on the expression index isn't supported by PostgREST; fall back to delete+insert.
+      .upsert({ ...row, created_by: user?.id }, { onConflict: "sku" });
     if (error) {
-      await supabase.from("guide_product_links").delete().ilike("sku", s.trim());
+      // 42P10 = "no unique or exclusion constraint matching the ON CONFLICT
+      // specification": the unique index is on upper(sku), which PostgREST
+      // can't target, so replace the row by hand. Any other error (RLS,
+      // network, FK) must NOT delete the existing mapping.
+      if (error.code !== "42P10") { toast.error(error.message); setSaving(false); return; }
+      const { error: delErr } = await supabase.from("guide_product_links").delete().eq("sku", upper);
+      if (delErr) { toast.error(delErr.message); setSaving(false); return; }
       const { error: e2 } = await supabase.from("guide_product_links")
-        .insert({ sku: s.trim().toUpperCase(), instruction_set_id: g === NONE ? null : g, created_by: user?.id });
+        .insert({ ...row, created_by: user?.id });
       if (e2) { toast.error(e2.message); setSaving(false); return; }
     }
-    toast.success(`Mapped ${s.trim().toUpperCase()}`);
+    toast.success(`Mapped ${upper}`);
     setSku(""); setGuideId(""); setSaving(false); onChange();
   };
   const remove = async (id: string) => {
@@ -324,7 +342,7 @@ function SkuLinks({ links, guides, unmatched, onChange }: {
                   <TableCell className="font-mono">{l.sku}</TableCell>
                   <TableCell>{guideName(l.instruction_set_id)}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="ghost" onClick={() => remove(l.id)}><Trash2 className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" aria-label={`Remove mapping for ${l.sku}`} title="Remove mapping" onClick={() => remove(l.id)}><Trash2 className="w-4 h-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -377,9 +395,18 @@ function SettingsForm({ settings, brands, busy, run, onSaved }: {
 }) {
   const [s, setS] = useState<Settings>(settings);
   const [testTo, setTestTo] = useState("");
-  useEffect(() => setS(settings), [settings]);
+  // Only re-seed the form when the server row actually changes (a save, or
+  // another admin's edit) — not on every background refetch, which would
+  // wipe unsaved edits.
+  useEffect(() => setS(settings), [settings.id, settings.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setTestTo((t) => t || data.user?.email || "")); }, []);
   const set = (k: keyof Settings, v: unknown) => setS((p) => ({ ...p, [k]: v }));
+  // Number("") is 0 — a cleared numeric field must keep its previous value.
+  const setNum = (k: "delay_hours" | "poll_lookback_hours") => (e: ChangeEvent<HTMLInputElement>) => {
+    const n = e.target.valueAsNumber;
+    if (Number.isNaN(n)) return;
+    set(k, n);
+  };
 
   const save = () => run("save", async () => {
     const { id: _id, ...patch } = s;
@@ -448,12 +475,12 @@ function SettingsForm({ settings, brands, busy, run, onSaved }: {
         </div>
         <div>
           <Label>Delay after shipment (hours)</Label>
-          <Input type="number" min={0} max={720} value={s.delay_hours} onChange={(e) => set("delay_hours", Number(e.target.value))} className="mt-1 w-32" />
+          <Input type="number" min={0} max={720} value={s.delay_hours} onChange={setNum("delay_hours")} className="mt-1 w-32" />
           <div className="text-xs text-muted-foreground mt-1">Email goes out this many hours after the order is marked fulfilled in Shopify. The order is re-fetched at that moment so cancellations, refunds and email changes are respected.</div>
         </div>
         <div>
           <Label>Backup poll look-back (hours)</Label>
-          <Input type="number" min={1} max={720} value={s.poll_lookback_hours} onChange={(e) => set("poll_lookback_hours", Number(e.target.value))} className="mt-1 w-32" />
+          <Input type="number" min={1} max={720} value={s.poll_lookback_hours} onChange={setNum("poll_lookback_hours")} className="mt-1 w-32" />
           <div className="text-xs text-muted-foreground mt-1">The webhook is instant; a 15-minute poll also catches anything the webhook missed.</div>
         </div>
         <Button onClick={save} disabled={busy !== null}>{busy === "save" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save settings"}</Button>

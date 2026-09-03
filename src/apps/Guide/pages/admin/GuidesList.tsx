@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Checkbox } from "@guide/components/ui/checkbox";
 import { Label } from "@guide/components/ui/label";
+import { brandShort } from "@guide/lib/utils";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -26,7 +27,7 @@ function DeleteGuideDialog({ guide, onDelete }: { guide: any; onDelete: (id: str
   return (
     <AlertDialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setConfirmed(false); }}>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete guide" aria-label={`Delete ${guide.title}`}><Trash2 className="w-4 h-4" /></Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -141,20 +142,14 @@ export default function GuidesList() {
 
   const deleteGuide = async (id: string) => {
     try {
-      // Delete every child table first, checking each result — abort on the
-      // first failure so we never orphan rows or hit FK violations silently.
-      const { error: stepsErr } = await supabase.from("instruction_steps").delete().eq("instruction_set_id", id);
-      if (stepsErr) throw stepsErr;
-      const { error: pubsErr } = await supabase.from("guide_publications").delete().eq("instruction_set_id", id);
-      if (pubsErr) throw pubsErr;
-      const { error: variantsErr } = await supabase.from("guide_variants").delete().eq("instruction_set_id", id);
-      if (variantsErr) throw variantsErr;
-      const { error: vehiclesErr } = await supabase.from("guide_vehicles").delete().eq("instruction_set_id", id);
-      if (vehiclesErr) throw vehiclesErr;
+      // Child rows (steps, publications, variants, vehicles, support
+      // questions, feedback) cascade in the DB — a single parent delete is
+      // atomic, so nothing is orphaned on a mid-way failure.
       const { error } = await supabase.from("instruction_sets").delete().eq("id", id);
       if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["instruction_sets"] });
-      queryClient.invalidateQueries({ queryKey: ["guide_vehicles_all"] });
+      for (const key of ["instruction_sets", "publications", "support_questions", "feedback", "guide_vehicles_all"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
       toast.success("Guide deleted");
     } catch (err: any) {
       toast.error(err.message);
@@ -228,8 +223,8 @@ export default function GuidesList() {
 
           return (
             <div key={guide.id} className="bg-card rounded-lg border p-5 hover:border-primary/30 transition-colors group">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
+              <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                <div className="flex-1 min-w-0 w-full">
                   <div className="flex items-center gap-3 mb-1">
                     <h3 className="font-semibold text-sm truncate">{guide.title}</h3>
                     <code className="text-xs bg-muted px-1.5 py-0.5 rounded shrink-0">{guide.product_code}</code>
@@ -246,11 +241,11 @@ export default function GuidesList() {
                    <div className="mt-2 text-xs text-muted-foreground">Updated {new Date(guide.updated_at).toLocaleDateString()}</div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <div className="flex gap-1.5">
                     {brands.map(b => {
                       const pub = guidePubs.find((p: any) => p.brand_id === b.id);
-                      const short = b.key === 'trailbait' ? 'TB' : 'AGA';
+                      const short = brandShort(b);
                       if (pub?.status === 'published') return <Badge key={b.id} className="bg-success text-success-foreground text-xs" title={`${b.name}: published`}>{short} ✓</Badge>;
                       if (pub) return <Badge key={b.id} className="bg-warning text-warning-foreground text-xs" title={`${b.name}: draft`}>{short} draft</Badge>;
                       return <Badge key={b.id} variant="outline" className="text-muted-foreground text-xs" title={`${b.name}: not published`}>{short}</Badge>;

@@ -11,8 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@guide/compone
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@guide/integrations/supabase/types";
+import { brandShort } from "@guide/lib/utils";
 
-export default function Brands() {
+export default function Brands({ embedded = false }: { embedded?: boolean }) {
+  const Heading = embedded ? "h2" : "h1";
   const { data: brands = [], isLoading } = useBrands();
   const [editBrand, setEditBrand] = useState<Tables<"brands"> | null>(null);
   const queryClient = useQueryClient();
@@ -71,21 +73,21 @@ export default function Brands() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold">Brands</h1>
+        <Heading className="text-2xl font-bold">Brands</Heading>
         <p className="text-muted-foreground text-sm">Manage brand settings for customer-facing guides</p>
       </div>
 
       <div className="grid gap-4">
         {brands.map(b => (
           <div key={b.id} className="bg-card rounded-lg border p-5">
-            <div className="flex items-start justify-between">
-              <div className="space-y-2">
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+              <div className="space-y-2 min-w-0">
                 <div className="flex items-center gap-3">
                   {b.logo_url ? (
                     <img src={b.logo_url} alt={b.name} className="h-10 w-10 object-contain rounded-lg" />
                   ) : (
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold" style={{ backgroundColor: b.primary_colour + '20', color: b.primary_colour }}>
-                      {b.key === 'trailbait' ? 'TB' : 'AGA'}
+                      {brandShort(b)}
                     </div>
                   )}
                   <div>
@@ -95,7 +97,7 @@ export default function Brands() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-4 text-xs text-muted-foreground mt-3">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-3">
                   <span>Phone: {b.support_phone ?? '—'}</span>
                   <span>Email: {b.support_email ?? '—'}</span>
                   <span>Dymo: {b.dymo_label_size}</span>
@@ -126,7 +128,7 @@ export default function Brands() {
                   {formLogoUrl ? (
                     <div className="relative inline-block">
                       <img src={formLogoUrl} alt="" className="h-16 object-contain rounded border p-1" />
-                      <button className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5" onClick={() => setFormLogoUrl(null)}><X className="w-3 h-3" /></button>
+                      <button type="button" aria-label="Remove logo" title="Remove logo" className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5" onClick={() => setFormLogoUrl(null)}><X className="w-3 h-3" /></button>
                     </div>
                   ) : (
                     <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={uploading}>
