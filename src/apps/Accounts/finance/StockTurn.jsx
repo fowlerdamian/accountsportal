@@ -630,7 +630,7 @@ export default function StockTurn() {
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Stock turn = COGS over the last {months} full months × {12 / months} ÷ average stock value (mean of daily snapshots in the window; latest snapshot until history exists).
               Ratio = stock turn × GP% as a number (e.g. 5 turns × 40% = 200).
-              Shown: stocked inventory items with units in the main warehouse, ≥ {money(MIN_STOCK)} at cost and sales in the window; drop-ship and non-inventory items are left out entirely.
+              Shown: stocked inventory items with units in the main warehouse, ≥ {money(MIN_STOCK)} at cost and sales in the window; drop-ship, non-inventory, Merchandise and Other-category items are left out entirely.
               A built-to-order assembly's sale counts against its main (highest-cost) component. Product lines only (freight/charges excluded); credit notes subtracted in their month.
             </span>
           </>

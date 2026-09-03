@@ -1,0 +1,10 @@
+-- Stock Turn: exclude the Cin7 categories "Merchandise" and "Other" entirely
+-- (applied 2026-09-03 via MCP as stock_turn_exclude_categories). Both RPCs are
+-- the 000008 bodies with the `excluded` CTE widened to:
+--
+--   select product_id from cin7_products
+--   where (drop_ship_mode is not null and drop_ship_mode <> 'No Drop Ship')
+--      or (product_type is not null and product_type <> 'Stock')
+--      or lower(coalesce(category, '')) in ('merchandise', 'other')
+--
+-- See pg_get_functiondef('stock_turn_report(date,date)') for the live body.
