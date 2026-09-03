@@ -1,34 +1,161 @@
-import { useParams } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { useGuideBySlug, useGuideStepsBySetId, useGuideVariants, useBrands, useGuideVehicles } from "@guide/hooks/use-supabase-query";
 import { supabase } from "@guide/integrations/supabase/client";
+import type { Tables } from "@guide/integrations/supabase/types";
 import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
-import { Clock, Wrench, ChevronLeft, ChevronRight, Check, Star, ArrowLeft, Loader2, Flag, X, Send, Car, Zap } from "lucide-react";
+import { Clock, Wrench, ChevronLeft, ChevronRight, Check, Star, ArrowLeft, Loader2, Flag, X, Send, Car, Zap, Phone } from "lucide-react";
 import { BookIcon, MessageCircleIcon, LayersIcon } from "@portal/components/icons";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@guide/components/ui/sheet";
 import { Textarea } from "@guide/components/ui/textarea";
-import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
+import { Toaster } from "@guide/components/ui/sonner";
 import { toast } from "sonner";
 import { notifyGuideComment, notifyGuideFlag } from "@guide/lib/notifyGoogleChat";
+import { safeLocal, safeSession } from "@guide/lib/safeStorage";
+import { GuideErrorBoundary } from "@guide/components/ui/GuideErrorBoundary";
+
+type Brand = Tables<"brands">;
+type Step = Tables<"instruction_steps">;
+type Submitting = null | "rating" | "comment" | "flag" | "support";
 
 function generateSessionId() {
   return 'sess-' + Math.random().toString(36).substring(2, 10);
 }
 
+// Which brand is this visitor looking at? The viewer is served on each brand's
+// own guide subdomain, so the hostname is authoritative; AGA is the fallback
+// for the staff portal / local dev, then whatever is first.
+function resolveBrand(brands: Brand[]): Brand | undefined {
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  return brands.find(b => b.domain === host) ?? brands.find(b => b.key === 'aga') ?? brands[0];
+}
+
+function brandInitials(name: string) {
+  return name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase();
+}
+
+function telHref(phone: string) {
+  return `tel:${phone.replace(/[^\d+]/g, '')}`;
+}
+
+const isDividerStep = (s: Step | undefined) => !!(s && (s as any).is_divider);
+
+// Guides opened this page load — backstop for when sessionStorage is unavailable.
+const openedThisLoad = new Set<string>();
+
+function SupportContact({ brand, className = "" }: { brand: Brand | undefined; className?: string }) {
+  if (!brand || (!brand.support_phone && !brand.support_email)) return null;
+  return (
+    <div className={`text-sm text-muted-foreground space-y-1.5 ${className}`}>
+      {brand.support_phone && (
+        <p>
+          <a href={telHref(brand.support_phone)} className="inline-flex items-center gap-1.5 min-h-[44px] font-medium text-foreground underline underline-offset-4">
+            <Phone className="w-4 h-4" /> Call us on {brand.support_phone}
+          </a>
+        </p>
+      )}
+      {brand.support_email && (
+        <p>
+          <a href={`mailto:${brand.support_email}`} className="inline-flex items-center min-h-[44px] underline underline-offset-4">
+            {brand.support_email}
+          </a>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function UnavailableCard({ brand, title, body }: { brand: Brand | undefined; title: string; body: ReactNode }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-muted/30">
+      <div className="text-center space-y-4 px-6 max-w-md">
+        <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto">
+          <BookIcon className="w-8 h-8 text-primary-foreground" />
+        </div>
+        <h1 className="text-xl font-bold">{title}</h1>
+        <p className="text-muted-foreground text-sm">{body}</p>
+        <SupportContact brand={brand} className="mt-4" />
+      </div>
+    </div>
+  );
+}
+
 export default function GuideViewer() {
-  const { slug } = useParams();
-  const { data: guide, isLoading: loadingGuide } = useGuideBySlug(slug);
-  const { data: variants = [] } = useGuideVariants(guide?.id);
-  // undefined = not chosen yet (show picker); null = Standard; string = a variant id
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null | undefined>(undefined);
-  const { data: guideSteps = [] } = useGuideStepsBySetId(guide?.id, selectedVariantId);
   const { data: brands = [] } = useBrands();
+  const brand = useMemo(() => resolveBrand(brands), [brands]);
+
+  return (
+    <>
+      <Toaster position="top-center" richColors />
+      <GuideErrorBoundary
+        fallback={
+          <UnavailableCard
+            brand={brand}
+            title="This guide isn't available right now."
+            body="Something went wrong while showing this guide. Please reload the page, or get in touch and we'll help you out."
+          />
+        }
+      >
+        <GuideViewerInner brand={brand} />
+      </GuideErrorBoundary>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// URL ↔ navigation state. `?v=<variantId|standard>&step=<n|done>` mirrors the
+// customer's position so the phone back button steps back through the guide
+// instead of leaving it, and a refresh lands on the same step.
+// ─────────────────────────────────────────────────────────────────────────────
+type VariantChoice = string | null | undefined;
+
+function navSerial(variant: VariantChoice, stepIdx: number | null, finished: boolean) {
+  const p = new URLSearchParams();
+  if (variant !== undefined) p.set('v', variant ?? 'standard');
+  if (finished) p.set('step', 'done');
+  else if (stepIdx !== null) p.set('step', String(stepIdx + 1));
+  return p.toString();
+}
+
+function parseNav(p: URLSearchParams) {
+  const v = p.get('v');
+  const s = p.get('step');
+  const variant: VariantChoice = v === null ? undefined : v === 'standard' ? null : v;
+  const finished = s === 'done';
+  const n = s && !finished ? parseInt(s, 10) : NaN;
+  const stepIdx = Number.isFinite(n) && n >= 1 ? n - 1 : null;
+  return { variant, stepIdx, finished };
+}
+
+function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
+  const { slug } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const guideQuery = useGuideBySlug(slug);
+  const guide = guideQuery.data ?? null;
+  const loadingGuide = !!slug && guideQuery.isLoading;
+
+  const variantsQuery = useGuideVariants(guide?.id);
+  const variants = variantsQuery.data ?? [];
+  const variantsLoaded = variantsQuery.isSuccess || variantsQuery.isError;
+
+  // undefined = not chosen yet (show picker); null = Standard; string = a variant id
+  const [selectedVariantId, setSelectedVariantId] = useState<VariantChoice>(undefined);
+  const stepsQuery = useGuideStepsBySetId(guide?.id, selectedVariantId);
+  const guideSteps: Step[] = stepsQuery.data ?? [];
+  const stepsLoaded = stepsQuery.isSuccess || stepsQuery.isError;
+  const stepsError = stepsQuery.error;
   const { data: vehicles = [] } = useGuideVehicles(guide?.id);
 
   const [currentStep, setCurrentStep] = useState<number | null>(null);
-  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [finished, setFinished] = useState(false);
+  // Progress is stored as completed step *ids* so editing/reordering steps in
+  // the admin never shifts a customer's ticks onto the wrong step.
+  const [progress, setProgress] = useState<{ key: string | null; ids: Set<string> }>(() => ({ key: null, ids: new Set() }));
+  const completedIds = progress.ids;
+  const [openNotice, setOpenNotice] = useState<number | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportMessage, setSupportMessage] = useState("");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -37,17 +164,16 @@ export default function GuideViewer() {
   const [flagStep, setFlagStep] = useState("");
   const [flagDesc, setFlagDesc] = useState("");
   const [feedbackTab, setFeedbackTab] = useState<'rate' | 'flag'>('rate');
-  const [finished, setFinished] = useState(false);
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [submitting, setSubmitting] = useState<Submitting>(null);
+  const ratingRowRef = useRef<Promise<string | null> | null>(null);
   const [sessionId] = useState(() => {
-    const stored = sessionStorage.getItem('guide-session-id');
+    const stored = safeSession.get('guide-session-id');
     if (stored) return stored;
     const id = generateSessionId();
-    sessionStorage.setItem('guide-session-id', id);
+    safeSession.set('guide-session-id', id);
     return id;
   });
-
-  const brand = brands[0];
 
   useEffect(() => {
     document.title = guide?.title ? `${guide.title} | Product Guide` : 'Product Guide';
@@ -55,19 +181,111 @@ export default function GuideViewer() {
   }, [guide?.title]);
 
   const variantKey = selectedVariantId ?? 'standard';
+  const progressKey = guide?.id ? `guide-progress-${guide.id}-${variantKey}` : null;
 
+  // Load progress for this guide+variant. Older builds stored numeric indexes;
+  // those are ignored (only string ids survive) rather than mis-applied.
   useEffect(() => {
-    if (guide?.id) {
-      const saved = localStorage.getItem(`guide-progress-${guide.id}-${variantKey}`);
-      setCompletedSteps(saved ? new Set(JSON.parse(saved)) : new Set());
-    }
-  }, [guide?.id, variantKey]);
+    if (!progressKey) return;
+    const saved = safeLocal.getJSON<unknown>(progressKey);
+    const ids = Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : [];
+    setProgress({ key: progressKey, ids: new Set(ids) });
+  }, [progressKey]);
 
+  // Persist — only once the set in memory belongs to the current key.
   useEffect(() => {
-    if (guide?.id) {
-      localStorage.setItem(`guide-progress-${guide.id}-${variantKey}`, JSON.stringify([...completedSteps]));
+    if (!progressKey || progress.key !== progressKey) return;
+    safeLocal.set(progressKey, JSON.stringify([...progress.ids]));
+  }, [progress, progressKey]);
+
+  const setCompletedIds = (next: Set<string>) => setProgress(p => ({ ...p, ids: next }));
+
+  // ── URL sync ──────────────────────────────────────────────────────────────
+  // URL → state is applied *during render* (the "adjust state on prop change"
+  // pattern) so navigation state never lags the address bar — on mount, on
+  // back/forward, and under StrictMode's double effects.
+  const urlNav = parseNav(searchParams);
+  const urlSerial = navSerial(urlNav.variant, urlNav.stepIdx, urlNav.finished);
+  const [appliedUrl, setAppliedUrl] = useState<string | null>(null);
+  if (appliedUrl !== urlSerial) {
+    setAppliedUrl(urlSerial);
+    setSelectedVariantId(urlNav.variant);
+    setCurrentStep(urlNav.stepIdx);
+    setFinished(urlNav.finished);
+  }
+
+  // State → URL: push a history entry for every navigation the customer makes,
+  // so the phone back button steps back through the guide.
+  useEffect(() => {
+    const serial = navSerial(selectedVariantId, currentStep, finished);
+    if (serial === urlSerial) return;
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('v');
+      next.delete('step');
+      new URLSearchParams(serial).forEach((val, key) => next.set(key, val));
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVariantId, currentStep, finished, urlSerial]);
+
+  // A variant id from the URL that no longer exists → back to the picker.
+  useEffect(() => {
+    if (!variantsLoaded) return;
+    if (typeof selectedVariantId === 'string' && !variants.some(v => v.id === selectedVariantId)) {
+      setSelectedVariantId(undefined);
     }
-  }, [completedSteps, guide?.id, variantKey]);
+  }, [variantsLoaded, variants, selectedVariantId]);
+
+  // Step index outside the loaded steps (edited guide, stale URL) → overview.
+  useEffect(() => {
+    if (!stepsLoaded) return;
+    if (currentStep !== null && !guideSteps[currentStep]) setCurrentStep(null);
+  }, [stepsLoaded, guideSteps, currentStep]);
+
+  // Fresh screen on every step change and on the finish screen.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    setOpenNotice(null);
+  }, [currentStep, finished]);
+
+  // Warm the next step's images so the tap-through feels instant.
+  useEffect(() => {
+    if (currentStep === null) return;
+    const next = guideSteps[currentStep + 1];
+    if (!next) return;
+    [next.image_url, next.image2_url].forEach(url => {
+      if (url) { const img = new Image(); img.decoding = 'async'; img.src = url; }
+    });
+  }, [currentStep, guideSteps]);
+
+  // Escape closes the lightbox.
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
+
+  // "Guide opened" — one row per session+guide so drop-off before step 1 is
+  // measurable in reports. step_number 0, completed false.
+  useEffect(() => {
+    if (!guide?.id || !brand) return;
+    const key = `guide-opened-${guide.id}`;
+    if (openedThisLoad.has(key) || safeSession.get(key)) return;
+    openedThisLoad.add(key);
+    safeSession.set(key, '1');
+    supabase.from("step_views").insert({
+      instruction_set_id: guide.id,
+      brand_id: brand.id,
+      session_id: sessionId,
+      step_number: 0,
+      completed: false,
+    }).then(({ error }) => {
+      if (error) console.warn('[guide] step_views open insert failed:', error.message);
+    });
+  }, [guide?.id, brand, sessionId]);
 
   if (loadingGuide) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -75,111 +293,181 @@ export default function GuideViewer() {
 
   if (!guide) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/30">
-        <div className="text-center space-y-4 px-6">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto">
-            <BookIcon className="w-8 h-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-xl font-bold">This guide isn't available right now.</h1>
-          <p className="text-muted-foreground text-sm">The guide may have been unpublished or the link is incorrect.</p>
-          {brand && (
-            <div className="text-sm text-muted-foreground space-y-1 mt-4">
-              {brand.support_phone && <p>📞 {brand.support_phone}</p>}
-              {brand.support_email && <p>✉️ {brand.support_email}</p>}
-            </div>
-          )}
-        </div>
-      </div>
+      <UnavailableCard
+        brand={brand}
+        title="This guide isn't available right now."
+        body="The guide may have been unpublished or the link is incorrect."
+      />
     );
   }
 
   const brandColour = brand?.primary_colour ?? '#F59E0B';
-  const chatEnabled = (brand as any)?.chat_enabled ?? true;
+  const chatEnabled = brand?.chat_enabled ?? true;
+  const supportHint = brand?.support_phone ? ` If it keeps happening, call us on ${brand.support_phone}.` : '';
+  const reportError = (what: string) => toast.error(`Couldn't send your ${what}.${supportHint}`);
 
   // When a guide has variants, make the customer pick one before the overview.
   const needsVariantChoice = variants.length > 0 && selectedVariantId === undefined;
   const selectedVariantLabel = selectedVariantId
     ? variants.find(v => v.id === selectedVariantId)?.variant_label
-    : (guide?.default_variant_label || 'Standard');
+    : (guide.default_variant_label || 'Standard');
 
-  const markDone = (stepIndex: number) => {
-    const newCompleted = new Set(completedSteps);
-    const wasCompleted = newCompleted.has(stepIndex);
+  // Wiring-break dividers are not "real" steps — they sit between groups of
+  // bracket-only and wiring instructions. They're excluded from the count, the
+  // progress bar, the completion total and every step number we record.
+  const realSteps = guideSteps.filter(s => !isDividerStep(s));
+  const realStepCount = realSteps.length;
+  const realStepIndexOf = (fullIndex: number) =>
+    guideSteps.slice(0, fullIndex + 1).filter(s => !isDividerStep(s)).length - 1;
+  const completedRealCount = realSteps.filter(s => completedIds.has(s.id)).length;
+  const firstIncompleteFullIndex = guideSteps.findIndex(s => !isDividerStep(s) && !completedIds.has(s.id));
 
-    if (wasCompleted) {
-      newCompleted.delete(stepIndex);
-      setCompletedSteps(newCompleted);
-      return;
-    }
+  const step = currentStep !== null ? guideSteps[currentStep] : undefined;
+  const isDivider = isDividerStep(step);
+  const currentRealIndex = step && !isDivider ? realStepIndexOf(currentStep!) : -1;
+  // The one step number shown to the customer and written to every table.
+  const displayStepNumber = currentRealIndex + 1; // 0 when no real step is showing
+  const isCurrentDone = !!(step && completedIds.has(step.id));
 
-    newCompleted.add(stepIndex);
-    setCompletedSteps(newCompleted);
+  // Reached the end: finish only when everything is ticked, otherwise jump to
+  // the first step still open and say so.
+  const finishOrJump = (ids: Set<string>) => {
+    const done = realSteps.filter(s => ids.has(s.id)).length;
+    if (done >= realStepCount) { setFinished(true); return; }
+    const idx = guideSteps.findIndex(s => !isDividerStep(s) && !ids.has(s.id));
+    setCurrentStep(idx >= 0 ? idx : null);
+    // Set after the scroll effect clears it — deferred to the next tick.
+    const open = realStepCount - done;
+    setTimeout(() => setOpenNotice(open), 0);
+  };
+
+  const advanceFrom = (fullIndex: number, ids: Set<string>) => {
+    if (fullIndex < guideSteps.length - 1) setCurrentStep(fullIndex + 1);
+    else finishOrJump(ids);
+  };
+
+  const markDone = (fullIndex: number) => {
+    const s = guideSteps[fullIndex];
+    if (!s || isDividerStep(s)) return;
+
+    // Already ticked → just move on (Undo is a separate control).
+    if (completedIds.has(s.id)) { advanceFrom(fullIndex, completedIds); return; }
+
+    const next = new Set(completedIds);
+    next.add(s.id);
+    setCompletedIds(next);
 
     if (brand) {
       supabase.from("step_views").insert({
         instruction_set_id: guide.id,
         brand_id: brand.id,
         session_id: sessionId,
-        step_number: stepIndex + 1,
+        step_number: realStepIndexOf(fullIndex) + 1,
+        variant_id: selectedVariantId ?? null,
         completed: true,
-      }).then(() => {});
+      }).then(({ error }) => {
+        if (error) console.warn('[guide] step_views insert failed:', error.message);
+      });
     }
 
-    if (stepIndex < guideSteps.length - 1) {
-      setCurrentStep(stepIndex + 1);
-    } else {
-      setFinished(true);
+    advanceFrom(fullIndex, next);
+  };
+
+  const undoDone = (fullIndex: number) => {
+    const s = guideSteps[fullIndex];
+    if (!s) return;
+    const next = new Set(completedIds);
+    next.delete(s.id);
+    setCompletedIds(next);
+  };
+
+  // One feedback row per session for the rating: the first tap inserts and
+  // remembers the id (as a promise, so rapid taps chain instead of racing);
+  // every later tap updates that row.
+  const persistRating = async (r: number): Promise<boolean> => {
+    if (!brand) return false;
+    const trimmed = comment.trim();
+    if (!ratingRowRef.current) {
+      ratingRowRef.current = (async () => {
+        const { data, error } = await supabase.from("feedback").insert({
+          instruction_set_id: guide.id,
+          brand_id: brand.id,
+          session_id: sessionId,
+          rating: r,
+          comment: trimmed || null,
+          type: 'rating' as const,
+          variant_id: selectedVariantId ?? null,
+        }).select('id').single();
+        if (error || !data) { ratingRowRef.current = null; return null; }
+        return data.id;
+      })();
+      return !!(await ratingRowRef.current);
     }
+    const id = await ratingRowRef.current;
+    if (!id) { ratingRowRef.current = null; return persistRating(r); }
+    const { error } = await supabase.from("feedback")
+      .update({ rating: r, comment: trimmed || null })
+      .eq('id', id);
+    return !error;
   };
 
   const submitRating = async (r: number) => {
     setRating(r);
-    if (brand) {
-      const trimmed = comment.trim();
-      await supabase.from("feedback").insert({
-        instruction_set_id: guide.id,
-        brand_id: brand.id,
-        session_id: sessionId,
-        rating: r,
-        comment: trimmed || null,
-        type: 'rating' as const,
-      });
-      // Only ping chat when the user actually wrote something — bare ratings are noise.
-      if (trimmed && guide?.title) {
-        notifyGuideComment({ guideTitle: guide.title, comment: trimmed, rating: r });
-      }
-    }
+    if (!brand) return;
+    setSubmitting('rating');
+    const ok = await persistRating(r);
+    setSubmitting(null);
+    if (!ok) { reportError('rating'); return; }
+    const trimmed = comment.trim();
+    // Only ping chat when the user actually wrote something — bare ratings are noise.
+    if (trimmed && guide.title) notifyGuideComment({ guideTitle: guide.title, comment: trimmed, rating: r });
     toast.success("Thanks for your feedback!");
   };
 
   const submitComment = async () => {
-    if (!comment.trim() || !brand) return;
     const trimmed = comment.trim();
-    await supabase.from("feedback").insert({
+    if (!trimmed || !brand || submitting) return;
+    setSubmitting('comment');
+    const { error } = await supabase.from("feedback").insert({
       instruction_set_id: guide.id,
       brand_id: brand.id,
       session_id: sessionId,
       comment: trimmed,
       type: 'comment' as const,
+      variant_id: selectedVariantId ?? null,
     });
-    if (guide?.title) notifyGuideComment({ guideTitle: guide.title, comment: trimmed });
+    setSubmitting(null);
+    if (error) { reportError('comment'); return; }
+    if (guide.title) notifyGuideComment({ guideTitle: guide.title, comment: trimmed });
     setComment("");
     toast.success("Comment submitted!");
   };
 
+  const openFlag = () => {
+    setFlagStep(displayStepNumber > 0 ? String(displayStepNumber) : "");
+    setFeedbackTab('flag');
+    setSupportOpen(false);
+    setFeedbackOpen(true);
+  };
+
   const submitFlag = async () => {
-    if (!flagDesc.trim() || !brand) return;
     const trimmed = flagDesc.trim();
-    const step = flagStep ? parseInt(flagStep) : null;
-    await supabase.from("feedback").insert({
+    if (!trimmed || !brand || submitting) return;
+    const stepNo = flagStep ? parseInt(flagStep, 10) : NaN;
+    const flagged = Number.isFinite(stepNo) && stepNo >= 1 ? stepNo : null;
+    setSubmitting('flag');
+    const { error } = await supabase.from("feedback").insert({
       instruction_set_id: guide.id,
       brand_id: brand.id,
       session_id: sessionId,
-      flagged_step: step,
+      flagged_step: flagged,
       comment: trimmed,
       type: 'flag' as const,
+      variant_id: selectedVariantId ?? null,
     });
-    if (guide?.title) notifyGuideFlag({ guideTitle: guide.title, stepNumber: step, description: trimmed });
+    setSubmitting(null);
+    if (error) { reportError('flag'); return; }
+    if (guide.title) notifyGuideFlag({ guideTitle: guide.title, stepNumber: flagged, description: trimmed });
     setFlagStep("");
     setFlagDesc("");
     setFeedbackOpen(false);
@@ -187,65 +475,88 @@ export default function GuideViewer() {
   };
 
   const submitSupport = async () => {
-    if (!supportMessage.trim() || !brand) return;
-    await supabase.from("support_questions").insert({
+    const trimmed = supportMessage.trim();
+    if (!trimmed || !brand || submitting) return;
+    setSubmitting('support');
+    const { error } = await supabase.from("support_questions").insert({
       instruction_set_id: guide.id,
       brand_id: brand.id,
       session_id: sessionId,
-      step_number: currentStep !== null ? currentStep + 1 : null,
-      question: supportMessage.trim(),
+      step_number: displayStepNumber > 0 ? displayStepNumber : null,
+      question: trimmed,
     });
+    setSubmitting(null);
+    if (error) { reportError('message'); return; }
     setSupportMessage("");
     setSupportOpen(false);
     toast.success("Question sent! We'll get back to you.");
   };
 
-  const step = currentStep !== null ? guideSteps[currentStep] : null;
+  const openLightbox = (src: string, alt: string) => setLightbox({ src, alt });
 
-  // Wiring-break dividers are not "real" steps — they sit between groups of
-  // bracket-only and wiring instructions. They're excluded from the count, the
-  // progress bar, and the completion total.
-  const realSteps          = guideSteps.filter(s => !(s as any).is_divider);
-  const realStepCount      = realSteps.length;
-  const realStepIndexOf    = (fullIndex: number) =>
-    guideSteps.slice(0, fullIndex + 1).filter(s => !(s as any).is_divider).length - 1;
-  const isDivider          = !!(step && (step as any).is_divider);
-  const currentRealIndex   = step && !isDivider ? realStepIndexOf(currentStep!) : -1;
+  const stepImage = (src: string, alt: string, extraClass = "") => (
+    <button
+      type="button"
+      onClick={() => openLightbox(src, alt)}
+      aria-label={`Enlarge image: ${alt}`}
+      className={`block w-full rounded-lg bg-muted overflow-hidden hover:opacity-90 transition-opacity ${extraClass}`}
+    >
+      <img src={src} alt={alt} decoding="async" className="w-full h-auto object-contain bg-white" />
+    </button>
+  );
+
+  const productImage = (
+    <div className="w-full rounded-xl bg-muted flex items-center justify-center overflow-hidden">
+      {guide.product_image_url ? (
+        <img src={guide.product_image_url} alt={guide.title} decoding="async" className="w-full max-h-64 sm:max-h-80 object-contain bg-white" />
+      ) : (
+        <BookIcon className="w-12 h-12 text-muted-foreground/30 my-10" />
+      )}
+    </div>
+  );
+
+  const showOverview = !needsVariantChoice && currentStep === null && !finished;
+  const showStepView = !needsVariantChoice && currentStep !== null && !finished;
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-background border-b px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {brand?.logo_url ? (
-              <img src={brand.logo_url} alt={brand.name} className="h-8 object-contain" />
-            ) : brand && (
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold" style={{ backgroundColor: brandColour + '20', color: brandColour }}>
-                {brand.key === 'trailbait' ? 'TB' : 'AGA'}
-              </div>
-            )}
+      <header className="sticky top-0 z-30 bg-background border-b px-4 py-2">
+        <div className="max-w-2xl mx-auto flex items-center justify-between min-h-[44px]">
+          <div className="flex items-center gap-1">
             {!finished && currentStep !== null && (
-              <button onClick={() => setCurrentStep(null)} className="text-muted-foreground hover:text-foreground">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(null)}
+                aria-label="Back to guide overview"
+                className="w-11 h-11 -ml-3 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+              >
                 <ArrowLeft className="w-5 h-5" />
               </button>
+            )}
+            {brand?.logo_url ? (
+              <img src={brand.logo_url} alt={brand.name} decoding="async" className="h-8 object-contain" />
+            ) : brand && (
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold" style={{ backgroundColor: brandColour + '20', color: brandColour }} aria-label={brand.name}>
+                {brandInitials(brand.name)}
+              </div>
             )}
           </div>
           <span className="text-xs text-muted-foreground">{guide.product_code}</span>
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      {/* pb-28 keeps the floating support button clear of Next / Mark done */}
+      <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-28">
+        {/* Variants still loading — don't show an overview the customer could start from */}
+        {!variantsLoaded && (
+          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+        )}
+
         {/* Variant selection — shown first when the guide has variants */}
-        {needsVariantChoice && currentStep === null && !finished && (
+        {variantsLoaded && needsVariantChoice && !finished && (
           <div className="space-y-5 sm:space-y-6 animate-fade-in">
-            <div className="w-full rounded-xl bg-muted flex items-center justify-center overflow-hidden">
-              {guide.product_image_url ? (
-                <img src={guide.product_image_url} alt={guide.title} className="w-full h-auto object-contain bg-white" />
-              ) : (
-                <BookIcon className="w-12 h-12 text-muted-foreground/30" />
-              )}
-            </div>
+            {productImage}
 
             <div>
               <h1 className="text-xl font-bold">{guide.title}</h1>
@@ -262,6 +573,7 @@ export default function GuideViewer() {
             <div className="space-y-2.5">
               {/* Base variant is always available — it uses the guide's base steps */}
               <button
+                type="button"
                 onClick={() => setSelectedVariantId(null)}
                 className="w-full flex items-center justify-between gap-3 rounded-xl border p-4 text-left hover:border-primary hover:bg-muted/40 transition-colors"
               >
@@ -272,6 +584,7 @@ export default function GuideViewer() {
               {variants.map((v) => (
                 <button
                   key={v.id}
+                  type="button"
                   onClick={() => setSelectedVariantId(v.id)}
                   className="w-full flex items-center justify-between gap-3 rounded-xl border p-4 text-left hover:border-primary hover:bg-muted/40 transition-colors"
                 >
@@ -284,7 +597,7 @@ export default function GuideViewer() {
         )}
 
         {/* Overview */}
-        {!needsVariantChoice && currentStep === null && !finished && (
+        {variantsLoaded && showOverview && (
           <div className="space-y-5 sm:space-y-6 animate-fade-in">
             {variants.length > 0 && (
               <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
@@ -294,25 +607,19 @@ export default function GuideViewer() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs"
+                  className="h-9 text-xs"
                   onClick={() => { setSelectedVariantId(undefined); setCurrentStep(null); }}
                 >
                   Change
                 </Button>
               </div>
             )}
-            <div className="w-full rounded-xl bg-muted flex items-center justify-center overflow-hidden">
-              {guide.product_image_url ? (
-                <img src={guide.product_image_url} alt={guide.title} className="w-full h-auto object-contain bg-white" />
-              ) : (
-                <BookIcon className="w-12 h-12 text-muted-foreground/30" />
-              )}
-            </div>
+            {productImage}
 
             <div>
               <h1 className="text-xl font-bold">{guide.title}</h1>
               <code className="text-xs text-muted-foreground">{guide.product_code}</code>
-              <p className="text-sm text-muted-foreground mt-2">{guide.short_description}</p>
+              {guide.short_description && <p className="text-base text-muted-foreground mt-2">{guide.short_description}</p>}
             </div>
 
             {/* Vehicle Fitment */}
@@ -322,8 +629,8 @@ export default function GuideViewer() {
                   <Car className="w-4 h-4" /> Suits
                 </h2>
                 <div className="flex flex-wrap gap-2">
-                  {vehicles.map((v, i) => (
-                    <Badge key={i} variant="secondary" className="text-sm font-medium py-1.5 px-3">
+                  {vehicles.map((v) => (
+                    <Badge key={v.id} variant="secondary" className="text-sm font-medium py-1.5 px-3">
                       {v.make} {v.model} ({v.year_from}–{v.year_to === 0 || !v.year_to ? 'Current' : v.year_to})
                     </Badge>
                   ))}
@@ -358,60 +665,110 @@ export default function GuideViewer() {
               </div>
             )}
 
-            {completedSteps.size > 0 && (
-              <div className="bg-muted rounded-lg p-4 flex items-center justify-between">
+            {stepsLoaded && realStepCount > 0 && completedRealCount > 0 && (
+              <div className="bg-muted rounded-lg p-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium">Resume — Step {Math.max(...completedSteps) + 2}</p>
-                  <p className="text-xs text-muted-foreground">{completedSteps.size} of {realStepCount} steps done</p>
+                  <p className="text-sm font-medium">
+                    {firstIncompleteFullIndex >= 0
+                      ? `Resume — Step ${realStepIndexOf(firstIncompleteFullIndex) + 1}`
+                      : 'All steps done'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{completedRealCount} of {realStepCount} steps done</p>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => { setCompletedSteps(new Set()); setCurrentStep(0); }}>Start Over</Button>
-                  <Button size="sm" onClick={() => setCurrentStep(Math.min(Math.max(...completedSteps) + 1, guideSteps.length - 1))} style={{ backgroundColor: brandColour }}>Resume</Button>
+                <div className="flex gap-2 shrink-0">
+                  <Button variant="outline" size="sm" className="h-10" onClick={() => { setCompletedIds(new Set()); setCurrentStep(0); }}>Start Over</Button>
+                  <Button
+                    size="sm"
+                    className="h-10"
+                    style={{ backgroundColor: brandColour }}
+                    onClick={() => {
+                      if (firstIncompleteFullIndex >= 0) setCurrentStep(firstIncompleteFullIndex);
+                      else setFinished(true);
+                    }}
+                  >
+                    {firstIncompleteFullIndex >= 0 ? 'Resume' : 'Finish'}
+                  </Button>
                 </div>
               </div>
             )}
 
-            <Button className="w-full py-6 text-base font-semibold" style={{ backgroundColor: brandColour }} onClick={() => setCurrentStep(0)}>
-              Start Guide →
-            </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              {guideSteps.filter(s => !(s as any).is_divider).length} steps
-              {guideSteps.some(s => (s as any).is_divider) && " · includes wiring instructions"}
-            </p>
+            {stepsLoaded && (stepsError || realStepCount === 0) ? (
+              <div className="rounded-xl border p-5 text-center space-y-2">
+                <p className="font-semibold">
+                  {stepsError ? "We couldn't load the steps for this guide." : "This guide has no steps yet."}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {stepsError
+                    ? "Please check your connection and reload the page."
+                    : "We're still putting the instructions together. Please check back soon, or get in touch and we'll help you out."}
+                </p>
+                <SupportContact brand={brand} className="pt-2 flex flex-col items-center" />
+              </div>
+            ) : (
+              <>
+                <Button
+                  className="w-full py-6 text-base font-semibold"
+                  style={{ backgroundColor: brandColour }}
+                  disabled={!stepsLoaded}
+                  onClick={() => setCurrentStep(0)}
+                >
+                  {stepsLoaded ? 'Start Guide →' : <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading steps…</>}
+                </Button>
+                {stepsLoaded && (
+                  <p className="text-center text-xs text-muted-foreground">
+                    {realStepCount} steps
+                    {guideSteps.some(s => isDividerStep(s)) && " · includes wiring instructions"}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
 
         {/* Step View */}
-        {currentStep !== null && step && !finished && (
+        {showStepView && !stepsLoaded && (
+          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+        )}
+        {showStepView && stepsLoaded && step && (
           <div className="space-y-6 animate-fade-in">
             {/* Progress bar — one segment per real step, dividers excluded */}
-            <div className="flex gap-1">
+            <div className="flex gap-1 h-11 -my-3 items-center" role="list" aria-label={`Progress: ${completedRealCount} of ${realStepCount} steps done`}>
               {realSteps.map((realStep, ri) => {
                 const fullIndex = guideSteps.indexOf(realStep);
+                const done = completedIds.has(realStep.id);
+                const current = fullIndex === currentStep;
                 return (
                   <button
-                    key={realStep.id ?? ri}
+                    key={realStep.id}
+                    type="button"
+                    role="listitem"
                     onClick={() => setCurrentStep(fullIndex)}
-                    className="flex-1 h-2 rounded-full transition-colors"
-                    style={{
-                      backgroundColor: completedSteps.has(fullIndex) ? 'hsl(var(--success))' :
-                        fullIndex === currentStep ? brandColour : 'hsl(var(--muted))'
-                    }}
-                  />
+                    aria-label={`Go to step ${ri + 1}${done ? ' (done)' : ''}`}
+                    aria-current={current ? 'step' : undefined}
+                    className="flex-1 h-11 flex items-center"
+                  >
+                    <span
+                      className="block w-full h-2 rounded-full transition-colors"
+                      style={{
+                        backgroundColor: done ? 'hsl(var(--success))' : current ? brandColour : 'hsl(var(--muted))',
+                      }}
+                    />
+                  </button>
                 );
               })}
             </div>
+
+            {openNotice !== null && openNotice > 0 && (
+              <div className="rounded-lg bg-warning/10 border border-warning/20 px-3 py-2 text-sm text-warning" role="status">
+                {openNotice} {openNotice === 1 ? 'step is' : 'steps are'} still open — we've brought you to the first one.
+              </div>
+            )}
 
             {isDivider ? (
               /* Wiring-break interstitial — full-card "Continue" prompt */
               <div className="rounded-xl border-2 border-[rgba(var(--brand-accent-rgb),0.4)] bg-[rgba(var(--brand-accent-rgb),0.05)] p-5 sm:p-7 space-y-5 text-center">
                 {step.image_url ? (
-                  <img
-                    src={step.image_url}
-                    alt={step.subtitle}
-                    className="w-full max-w-xs mx-auto rounded-lg bg-white cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => setLightbox(step.image_url!)}
-                  />
+                  stepImage(step.image_url, step.subtitle, "max-w-xs mx-auto")
                 ) : (
                   <div className="w-12 h-12 mx-auto rounded-full bg-[rgba(var(--brand-accent-rgb),0.15)] flex items-center justify-center">
                     <Zap className="w-6 h-6 text-[var(--brand-orange)] dark:text-[var(--brand-orange)]" />
@@ -419,7 +776,7 @@ export default function GuideViewer() {
                 )}
                 <div className="space-y-2">
                   <h2 className="text-lg sm:text-xl font-bold">{step.subtitle}</h2>
-                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                  <p className="text-base text-muted-foreground leading-relaxed whitespace-pre-line">
                     {step.description}
                   </p>
                 </div>
@@ -429,46 +786,31 @@ export default function GuideViewer() {
                   onClick={() => {
                     // Skip past the divider — don't count it toward completion.
                     if (currentStep < guideSteps.length - 1) setCurrentStep(currentStep + 1);
-                    else setFinished(true);
+                    else finishOrJump(completedIds);
                   }}
                 >
                   Continue to Wiring <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </div>
             ) : (
-              <div className={`rounded-xl border p-3 sm:p-5 space-y-4 transition-opacity ${completedSteps.has(currentStep) ? 'opacity-60' : ''}`}>
+              <div className={`rounded-xl border p-3 sm:p-5 space-y-4 transition-opacity ${isCurrentDone ? 'opacity-60' : ''}`}>
                 <div className="flex items-start gap-3">
                   <span className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0" style={{ backgroundColor: brandColour + '20', color: brandColour }}>
-                    {currentRealIndex + 1}
+                    {displayStepNumber}
                   </span>
-                  <h2 className="font-semibold text-sm sm:text-base">{step.subtitle}</h2>
+                  <h2 className="text-base font-semibold pt-1.5 sm:pt-2">{step.subtitle}</h2>
                 </div>
 
-                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line break-words">{step.description}</p>
+                <p className="text-base text-muted-foreground leading-relaxed whitespace-pre-line break-words">{step.description}</p>
 
                 {/* Dual image support — stack on mobile */}
                 {step.image_url && step.image2_url ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <img
-                      src={step.image_url}
-                      alt={`${step.subtitle} - 1`}
-                      className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity bg-white"
-                      onClick={() => setLightbox(step.image_url!)}
-                    />
-                    <img
-                      src={step.image2_url}
-                      alt={`${step.subtitle} - 2`}
-                      className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity bg-white"
-                      onClick={() => setLightbox(step.image2_url!)}
-                    />
+                    {stepImage(step.image_url, `${step.subtitle} — image 1`)}
+                    {stepImage(step.image2_url, `${step.subtitle} — image 2`)}
                   </div>
                 ) : step.image_url ? (
-                  <img
-                    src={step.image_url}
-                    alt={step.subtitle}
-                    className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity bg-white"
-                    onClick={() => setLightbox(step.image_url!)}
-                  />
+                  stepImage(step.image_url, step.subtitle)
                 ) : (
                   <div className="w-full aspect-video rounded-lg bg-muted flex items-center justify-center">
                     <span className="text-xs text-muted-foreground">Step image</span>
@@ -478,27 +820,40 @@ export default function GuideViewer() {
             )}
 
             {!isDivider && (
-              <Button
-                className="w-full py-5 font-semibold"
-                style={{ backgroundColor: completedSteps.has(currentStep) ? 'hsl(var(--success))' : brandColour }}
-                onClick={() => markDone(currentStep)}
-              >
-                {completedSteps.has(currentStep) ? (
-                  <><Check className="w-4 h-4 mr-2" /> Done — Next Step</>
-                ) : (
-                  <>✓ Mark as Done</>
+              <div className="space-y-2">
+                <Button
+                  className="w-full py-5 font-semibold"
+                  style={{ backgroundColor: isCurrentDone ? 'hsl(var(--success))' : brandColour }}
+                  onClick={() => markDone(currentStep)}
+                >
+                  {isCurrentDone ? (
+                    <><Check className="w-4 h-4 mr-2" /> Done — Next Step</>
+                  ) : (
+                    <>✓ Mark as Done</>
+                  )}
+                </Button>
+                {isCurrentDone && (
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => undoDone(currentStep)}
+                      className="inline-flex items-center min-h-[44px] px-3 text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                    >
+                      Undo — mark step {displayStepNumber} as not done
+                    </button>
+                  </div>
                 )}
-              </Button>
+              </div>
             )}
 
             <div className="flex justify-between">
-              <Button variant="ghost" size="sm" disabled={currentStep === 0} onClick={() => setCurrentStep(currentStep - 1)}>
+              <Button variant="ghost" size="sm" className="h-11" disabled={currentStep === 0} onClick={() => setCurrentStep(currentStep - 1)}>
                 <ChevronLeft className="w-4 h-4 mr-1" /> Previous
               </Button>
               <span className="text-xs text-muted-foreground self-center">
-                {isDivider ? "Wiring instructions" : `${currentRealIndex + 1} of ${realStepCount}`}
+                {isDivider ? "Wiring instructions" : `${displayStepNumber} of ${realStepCount}`}
               </span>
-              <Button variant="ghost" size="sm" disabled={currentStep === guideSteps.length - 1} onClick={() => setCurrentStep(currentStep + 1)}>
+              <Button variant="ghost" size="sm" className="h-11" disabled={currentStep === guideSteps.length - 1} onClick={() => setCurrentStep(currentStep + 1)}>
                 Next <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             </div>
@@ -510,13 +865,20 @@ export default function GuideViewer() {
           <div className="text-center space-y-6 py-12 animate-fade-in">
             <div className="text-5xl">✅</div>
             <h1 className="text-2xl font-bold">Installation Complete!</h1>
-            <p className="text-muted-foreground text-sm">Great work! Your {guide.title} has been installed successfully.</p>
+            <p className="text-muted-foreground text-base">Great work! Your {guide.title} has been installed successfully.</p>
 
             <div className="space-y-3">
               <p className="text-sm font-medium">How was this guide?</p>
-              <div className="flex justify-center gap-1">
+              <div className="flex justify-center" role="group" aria-label="Rate this guide">
                 {[1, 2, 3, 4, 5].map(n => (
-                  <button key={n} onClick={() => submitRating(n)}>
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => submitRating(n)}
+                    aria-label={`${n} star${n > 1 ? 's' : ''}`}
+                    aria-pressed={n <= rating}
+                    className="w-11 h-11 flex items-center justify-center"
+                  >
                     <Star className={`w-8 h-8 ${n <= rating ? 'fill-primary text-primary' : 'text-muted-foreground/30'}`} />
                   </button>
                 ))}
@@ -528,10 +890,11 @@ export default function GuideViewer() {
                     onChange={e => setComment(e.target.value)}
                     placeholder="Any comments? (optional)"
                     rows={2}
-                    className="text-sm"
                   />
                   {comment.trim() && (
-                    <Button size="sm" variant="outline" onClick={submitComment}>Submit Comment</Button>
+                    <Button size="sm" variant="outline" className="h-10" onClick={submitComment} disabled={submitting === 'comment'}>
+                      {submitting === 'comment' ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</> : 'Submit Comment'}
+                    </Button>
                   )}
                   <p className="text-xs text-muted-foreground">Thanks! Your feedback helps us improve.</p>
                 </div>
@@ -539,22 +902,49 @@ export default function GuideViewer() {
             </div>
 
             <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={() => { setFinished(false); setCurrentStep(null); setCompletedSteps(new Set()); setRating(0); }}>
+              <Button variant="outline" className="h-11" onClick={() => { setFinished(false); setCurrentStep(null); setCompletedIds(new Set()); setRating(0); }}>
                 Start Over
               </Button>
-              <Button variant="outline" onClick={() => { setFeedbackOpen(true); setFeedbackTab('flag'); }}>
+              <Button variant="outline" className="h-11" onClick={openFlag}>
                 <Flag className="w-4 h-4 mr-2" /> Flag a Step
               </Button>
             </div>
+
+            {brand?.support_phone && (
+              <div className="pt-2">
+                <p className="text-sm text-muted-foreground">Need a hand?</p>
+                <SupportContact brand={{ ...brand, support_email: null }} className="flex flex-col items-center" />
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Lightbox */}
       {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-          <button className="absolute top-4 right-4 text-white" onClick={() => setLightbox(null)}><X className="w-6 h-6" /></button>
-          <img src={lightbox} alt="" className="max-w-full max-h-full object-contain" />
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+        >
+          <button
+            type="button"
+            aria-label="Close image"
+            className="absolute top-3 right-3 w-11 h-11 flex items-center justify-center rounded-full bg-black/40 text-white"
+            onClick={() => setLightbox(null)}
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={lightbox.src}
+            alt={lightbox.alt}
+            decoding="async"
+            className="max-w-full max-h-full object-contain"
+            style={{ touchAction: 'pinch-zoom' }}
+            onClick={e => e.stopPropagation()}
+          />
         </div>
       )}
 
@@ -562,7 +952,12 @@ export default function GuideViewer() {
       {!finished && chatEnabled && (
         <Sheet open={supportOpen} onOpenChange={setSupportOpen}>
           <SheetTrigger asChild>
-            <button className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-40" style={{ backgroundColor: brandColour }}>
+            <button
+              type="button"
+              aria-label="Need help? Message support"
+              className="fixed right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-40"
+              style={{ backgroundColor: brandColour, bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+            >
               <MessageCircleIcon className="w-6 h-6 text-white" />
             </button>
           </SheetTrigger>
@@ -571,25 +966,35 @@ export default function GuideViewer() {
               <SheetTitle>Need help?</SheetTitle>
             </SheetHeader>
             <div className="mt-4 space-y-4">
-              {step && (
+              {step && !isDivider && (
                 <p className="text-xs text-muted-foreground bg-muted rounded-lg p-3">
-                  You're on Step {step.step_number} — {step.subtitle}
+                  You're on Step {displayStepNumber} — {step.subtitle}
                 </p>
               )}
               <Textarea
                 value={supportMessage}
                 onChange={e => setSupportMessage(e.target.value)}
-                placeholder={step ? `I'm stuck on Step ${step.step_number} — ${step.subtitle}. Can you help?` : "How can we help?"}
+                placeholder={step && !isDivider ? `I'm stuck on Step ${displayStepNumber} — ${step.subtitle}. Can you help?` : "How can we help?"}
                 rows={3}
               />
               <div className="flex gap-2">
-                <Button className="flex-1" style={{ backgroundColor: brandColour }} onClick={submitSupport}>
-                  <Send className="w-4 h-4 mr-2" /> Send Message
+                <Button className="flex-1 h-11" style={{ backgroundColor: brandColour }} onClick={submitSupport} disabled={!supportMessage.trim() || submitting === 'support'}>
+                  {submitting === 'support'
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</>
+                    : <><Send className="w-4 h-4 mr-2" /> Send Message</>}
                 </Button>
-                <Button variant="outline" onClick={() => { setSupportOpen(false); setFeedbackOpen(true); setFeedbackTab('flag'); }}>
+                <Button variant="outline" className="h-11" onClick={openFlag}>
                   <Flag className="w-4 h-4 mr-2" /> Flag Step
                 </Button>
               </div>
+              {brand?.support_phone && (
+                <p className="text-sm text-muted-foreground">
+                  Prefer to talk?{' '}
+                  <a href={telHref(brand.support_phone)} className="inline-flex items-center gap-1 min-h-[44px] font-medium text-foreground underline underline-offset-4">
+                    <Phone className="w-4 h-4" /> Call us on {brand.support_phone}
+                  </a>
+                </p>
+              )}
             </div>
           </SheetContent>
         </Sheet>
@@ -603,26 +1008,38 @@ export default function GuideViewer() {
           </SheetHeader>
           <div className="mt-4 space-y-4">
             <div className="flex gap-2">
-              <Button variant={feedbackTab === 'rate' ? 'default' : 'outline'} size="sm" onClick={() => setFeedbackTab('rate')}>
+              <Button variant={feedbackTab === 'rate' ? 'default' : 'outline'} size="sm" className="h-10" onClick={() => setFeedbackTab('rate')}>
                 <Star className="w-4 h-4 mr-1" /> Rate
               </Button>
-              <Button variant={feedbackTab === 'flag' ? 'default' : 'outline'} size="sm" onClick={() => setFeedbackTab('flag')}>
+              <Button variant={feedbackTab === 'flag' ? 'default' : 'outline'} size="sm" className="h-10" onClick={() => { if (!flagStep && displayStepNumber > 0) setFlagStep(String(displayStepNumber)); setFeedbackTab('flag'); }}>
                 <Flag className="w-4 h-4 mr-1" /> Flag a Step
               </Button>
             </div>
 
             {feedbackTab === 'rate' && (
               <div className="space-y-3">
-                <div className="flex justify-center gap-1">
+                <div className="flex justify-center" role="group" aria-label="Rate this guide">
                   {[1, 2, 3, 4, 5].map(n => (
-                    <button key={n} onClick={() => setRating(n)}>
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setRating(n)}
+                      aria-label={`${n} star${n > 1 ? 's' : ''}`}
+                      aria-pressed={n <= rating}
+                      className="w-11 h-11 flex items-center justify-center"
+                    >
                       <Star className={`w-8 h-8 ${n <= rating ? 'fill-primary text-primary' : 'text-muted-foreground/30'}`} />
                     </button>
                   ))}
                 </div>
                 <Textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Optional comment..." rows={2} />
-                <Button className="w-full" style={{ backgroundColor: brandColour }} onClick={() => { submitRating(rating); setFeedbackOpen(false); }} disabled={rating === 0}>
-                  Submit Rating
+                <Button
+                  className="w-full h-11"
+                  style={{ backgroundColor: brandColour }}
+                  onClick={async () => { await submitRating(rating); setFeedbackOpen(false); }}
+                  disabled={rating === 0 || submitting === 'rating'}
+                >
+                  {submitting === 'rating' ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</> : 'Submit Rating'}
                 </Button>
               </div>
             )}
@@ -630,15 +1047,27 @@ export default function GuideViewer() {
             {feedbackTab === 'flag' && (
               <div className="space-y-3">
                 <div>
-                  <Label className="text-sm">Which step has an issue?</Label>
-                  <Input value={flagStep} onChange={e => setFlagStep(e.target.value)} placeholder="e.g. 3" type="number" min="1" max={guideSteps.length} className="mt-1" />
+                  <Label htmlFor="flag-step" className="text-sm">Which step has an issue?</Label>
+                  <select
+                    id="flag-step"
+                    value={flagStep}
+                    onChange={e => setFlagStep(e.target.value)}
+                    className="mt-1 flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="">Not sure / general</option>
+                    {realSteps.map((s, ri) => (
+                      <option key={s.id} value={String(ri + 1)}>
+                        Step {ri + 1} — {s.subtitle}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <Label className="text-sm">What's the problem?</Label>
-                  <Textarea value={flagDesc} onChange={e => setFlagDesc(e.target.value)} placeholder="Describe the issue..." rows={3} className="mt-1" />
+                  <Label htmlFor="flag-desc" className="text-sm">What's the problem?</Label>
+                  <Textarea id="flag-desc" value={flagDesc} onChange={e => setFlagDesc(e.target.value)} placeholder="Describe the issue..." rows={3} className="mt-1" />
                 </div>
-                <Button className="w-full" style={{ backgroundColor: brandColour }} onClick={submitFlag} disabled={!flagDesc.trim()}>
-                  Submit Flag
+                <Button className="w-full h-11" style={{ backgroundColor: brandColour }} onClick={submitFlag} disabled={!flagDesc.trim() || submitting === 'flag'}>
+                  {submitting === 'flag' ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</> : 'Submit Flag'}
                 </Button>
               </div>
             )}

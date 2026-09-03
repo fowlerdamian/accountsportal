@@ -102,6 +102,10 @@ export function GlobalMentions() {
   }
 
   useEffect(() => {
+    // Staff-only feature — never attach document-wide listeners for anonymous
+    // visitors (the public guide viewer renders under the same App shell).
+    if (!user) return
+
     function onInput(e: Event) {
       const el = e.target
       if (!isField(el) || modeOf(el) === 'native') { setActive(null); return }
@@ -169,7 +173,7 @@ export function GlobalMentions() {
       window.removeEventListener('resize', onScroll)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   if (!user) return null
 

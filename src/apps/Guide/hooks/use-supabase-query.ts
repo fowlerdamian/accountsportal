@@ -128,7 +128,15 @@ export function useProfiles() {
   });
 }
 
-// Customer-facing: fetch guide by slug (uses anon key)
+// Customer-facing: fetch guide by slug (uses anon key).
+// Only guides with at least one *published* publication are returned — the
+// `!inner` join plus the status filter drops drafts/unpublished guides at the
+// query level. Unknown slugs resolve to `null` (maybeSingle) rather than
+// throwing, so the viewer can render its "not available" card immediately.
+export type PublicGuide = Tables<"instruction_sets"> & {
+  guide_publications: { status: Tables<"guide_publications">["status"]; brand_id: string }[];
+};
+
 export function useGuideBySlug(slug: string | undefined) {
   return useQuery({
     queryKey: ["guide_by_slug", slug],
@@ -136,11 +144,12 @@ export function useGuideBySlug(slug: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("instruction_sets")
-        .select("*")
+        .select("*, guide_publications!inner(status, brand_id)")
         .eq("slug", slug!)
-        .single();
+        .eq("guide_publications.status", "published")
+        .maybeSingle();
       if (error) throw error;
-      return data;
+      return (data as PublicGuide | null) ?? null;
     },
   });
 }
