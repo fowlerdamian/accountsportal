@@ -173,22 +173,22 @@ export default function GuidesList() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <button type="button" className="text-left" onClick={() => setStatusFilter("all")}>
-          <StatsCard title="Total Guides" value={guides.length} icon={<BookIcon className="w-5 h-5" />} />
-        </button>
-        <button type="button" className="text-left" onClick={() => setStatusFilter(statusFilter === "published" ? "all" : "published")}>
-          <StatsCard title="Published" value={publishedCount} icon={<FileDescriptionIcon className="w-5 h-5" />} subtitle={statusFilter === "published" ? "Filtering" : "Across all brands"} />
-        </button>
-        <button type="button" className="text-left" onClick={() => setStatusFilter(statusFilter === "draft" ? "all" : "draft")}>
-          <StatsCard title="Drafts" value={draftCount} icon={<FileDescriptionIcon className="w-5 h-5" />} subtitle={statusFilter === "draft" ? "Filtering" : undefined} />
-        </button>
-        <button type="button" className="text-left" onClick={() => navigate("/guide/support")}>
-          <StatsCard title="Open Support" value={openSupport} icon={<MessageCircleIcon className="w-5 h-5" />} />
-        </button>
-        <button type="button" className="text-left" onClick={() => navigate("/guide/feedback")}>
-          <StatsCard title="Feedback Flags" value={openFeedback} icon={<TriangleAlertIcon className="w-5 h-5" />} />
-        </button>
+      {/* Metric tiles — the first three filter the list (active tile is outlined),
+          the last two jump to their pages. */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <StatsCard title="Total Guides" value={guides.length} icon={<BookIcon className="w-5 h-5" />}
+          subtitle={statusFilter === "all" ? "Showing all" : "Show all"} active={statusFilter === "all"}
+          onClick={() => setStatusFilter("all")} />
+        <StatsCard title="Published" value={publishedCount} icon={<FileDescriptionIcon className="w-5 h-5" />}
+          subtitle={statusFilter === "published" ? "Showing published only" : "Filter to published"} active={statusFilter === "published"}
+          onClick={() => setStatusFilter(statusFilter === "published" ? "all" : "published")} />
+        <StatsCard title="Drafts" value={draftCount} icon={<FileDescriptionIcon className="w-5 h-5" />}
+          subtitle={statusFilter === "draft" ? "Showing drafts only" : "Filter to drafts"} active={statusFilter === "draft"}
+          onClick={() => setStatusFilter(statusFilter === "draft" ? "all" : "draft")} />
+        <StatsCard title="Open Support" value={openSupport} icon={<MessageCircleIcon className="w-5 h-5" />}
+          subtitle="Open support queue" onClick={() => navigate("/guide/support")} />
+        <StatsCard title="Feedback Flags" value={openFeedback} icon={<TriangleAlertIcon className="w-5 h-5" />}
+          subtitle="Open flagged feedback" onClick={() => navigate("/guide/feedback")} />
       </div>
 
       <div className="flex gap-3 flex-wrap">
@@ -222,7 +222,15 @@ export default function GuidesList() {
           const guideVehicles = allVehicles.filter(v => v.instruction_set_id === guide.id);
 
           return (
-            <div key={guide.id} className="bg-card rounded-lg border px-4 py-2 hover:border-primary/30 transition-colors group">
+            <div
+              key={guide.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Edit ${guide.title}`}
+              onClick={() => navigate(`/guide/guides/${guide.id}/edit`)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/guide/guides/${guide.id}/edit`); } }}
+              className="bg-card rounded-lg border px-4 py-2 hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors group cursor-pointer"
+            >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex-1 min-w-0 w-full">
                   <div className="flex items-center gap-3">
@@ -241,7 +249,8 @@ export default function GuidesList() {
                    )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {/* Buttons (and the delete dialog, which portals but still bubbles through React) must not trigger the tile's edit click. */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                   <div className="flex gap-1.5">
                     {brands.map(b => {
                       const pub = guidePubs.find((p: any) => p.brand_id === b.id);
@@ -251,7 +260,6 @@ export default function GuidesList() {
                       return <Badge key={b.id} variant="outline" className="text-muted-foreground text-xs" title={`${b.name}: not published`}>{short}</Badge>;
                     })}
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/edit`)}>Edit</Button>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/view/${guide.slug}`)}>Preview</Button>
                   <span className="relative inline-flex">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => shareGuide(guide)} title="Copy public link" aria-label="Copy public link">

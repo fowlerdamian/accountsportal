@@ -1,5 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@guide/components/ui/tabs";
-import { Users, Tag, Printer, FolderOpen, Settings2, User } from "lucide-react";
+import { Users, Tag, Printer, FolderOpen, Settings2, User, Send } from "lucide-react";
+import { DeliverySettingsPanel } from "@guide/pages/admin/Deliveries";
 import UsersTab from "@guide/pages/admin/Users";
 import BrandsTab from "@guide/pages/admin/Brands";
 import CategoriesTab from "@guide/pages/admin/Categories";
@@ -44,6 +45,9 @@ export default function Settings() {
           <TabsTrigger value="categories" className="flex-1 gap-1.5">
             <FolderOpen className="w-4 h-4 hidden sm:block" /> Categories
           </TabsTrigger>
+          <TabsTrigger value="delivery" className="flex-1 gap-1.5">
+            <Send className="w-4 h-4 hidden sm:block" /> Auto-delivery
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="mt-6">
@@ -70,6 +74,10 @@ export default function Settings() {
 
         <TabsContent value="categories" className="mt-6">
           <CategoriesTab embedded />
+        </TabsContent>
+
+        <TabsContent value="delivery" className="mt-6">
+          <DeliverySettingsPanel />
         </TabsContent>
       </Tabs>
     </div>

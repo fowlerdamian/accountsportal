@@ -149,7 +149,6 @@ export default function Deliveries() {
           <TabsTrigger value="links" className="gap-1.5">
             SKU mapping {unmatchedCounts.length > 0 && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{unmatchedCounts.length}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="log" className="mt-4">
@@ -165,21 +164,56 @@ export default function Deliveries() {
           <SkuLinks links={linksQ.data ?? []} guides={guides} unmatched={unmatchedCounts} onChange={refreshAll} />
         </TabsContent>
 
-        <TabsContent value="settings" className="mt-4">
-          {settingsQ.isLoading && (
-            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-          )}
-          {settingsQ.isError && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-2" role="alert">
-              <div className="font-medium text-destructive">Couldn't load delivery settings</div>
-              <div className="text-muted-foreground">{(settingsQ.error as any)?.message ?? String(settingsQ.error)}</div>
-              <Button variant="outline" size="sm" onClick={() => settingsQ.refetch()}><RefreshCw className="w-4 h-4 mr-1.5" /> Retry</Button>
-            </div>
-          )}
-          {settingsQ.data && <SettingsForm settings={settingsQ.data} brands={brands} busy={busy} run={run}
-            onSaved={() => qc.invalidateQueries({ queryKey: ["guide_delivery_settings"] })} />}
-        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * Auto-delivery settings, rendered inside Guide → Settings → Auto-delivery.
+ * Self-contained (own query + busy state) so the Settings page needs no wiring.
+ */
+export function DeliverySettingsPanel() {
+  const qc = useQueryClient();
+  const { data: brands = [] } = useBrands();
+  const settingsQ = useQuery({
+    queryKey: ["guide_delivery_settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("guide_delivery_settings").select("*").eq("id", 1).single();
+      if (error) throw error;
+      return data as Settings;
+    },
+  });
+  const [busy, setBusy] = useState<string | null>(null);
+  const run = async (key: string, fn: () => Promise<void>) => {
+    setBusy(key);
+    try { await fn(); } catch (e: any) { toast.error(e.message ?? String(e)); } finally { setBusy(null); }
+  };
+
+  if (settingsQ.isLoading) {
+    return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  }
+  if (settingsQ.isError) {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-2" role="alert">
+        <div className="font-medium text-destructive">Couldn't load delivery settings</div>
+        <div className="text-muted-foreground">{(settingsQ.error as any)?.message ?? String(settingsQ.error)}</div>
+        <Button variant="outline" size="sm" onClick={() => settingsQ.refetch()}><RefreshCw className="w-4 h-4 mr-1.5" /> Retry</Button>
+      </div>
+    );
+  }
+  if (!settingsQ.data) return null;
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Auto-delivery</h2>
+        <p className="text-muted-foreground text-sm">
+          Controls the guide emails sent to Shopify customers after shipment. The delivery log and SKU mapping live under{" "}
+          <RouterLink to="/guide/deliveries" className="underline underline-offset-2 hover:text-foreground">Auto-delivery</RouterLink>.
+        </p>
+      </div>
+      <SettingsForm settings={settingsQ.data} brands={brands} busy={busy} run={run}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["guide_delivery_settings"] })} />
     </div>
   );
 }

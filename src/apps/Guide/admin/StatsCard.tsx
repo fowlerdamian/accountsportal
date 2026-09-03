@@ -9,11 +9,25 @@ interface StatsCardProps {
   trend?: string;
   className?: string;
   onClick?: () => void;
+  /** Highlighted (e.g. the filter this tile represents is currently applied). */
+  active?: boolean;
 }
 
-export function StatsCard({ title, value, subtitle, icon, trend, className, onClick }: StatsCardProps) {
+export function StatsCard({ title, value, subtitle, icon, trend, className, onClick, active }: StatsCardProps) {
   return (
-    <div className={cn("rounded-lg border bg-card p-5 animate-fade-in", className)} onClick={onClick} role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}>
+    <div
+      className={cn(
+        "rounded-lg border bg-card p-4 h-full animate-fade-in transition-colors",
+        onClick && "cursor-pointer select-none hover:border-primary/50 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active && "border-primary bg-primary/5 ring-1 ring-primary/40",
+        className,
+      )}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-pressed={onClick && active !== undefined ? active : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+    >
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted-foreground font-medium">{title}</p>
