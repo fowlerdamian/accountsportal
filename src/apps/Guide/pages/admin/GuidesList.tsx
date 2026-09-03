@@ -216,22 +216,22 @@ export default function GuidesList() {
         </Select>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-2">
         {filtered.map((guide: any) => {
           const guidePubs = publications.filter((p: any) => p.instruction_set_id === guide.id);
           const guideVehicles = allVehicles.filter(v => v.instruction_set_id === guide.id);
 
           return (
-            <div key={guide.id} className="bg-card rounded-lg border p-5 hover:border-primary/30 transition-colors group">
-              <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+            <div key={guide.id} className="bg-card rounded-lg border px-4 py-2 hover:border-primary/30 transition-colors group">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex-1 min-w-0 w-full">
-                  <div className="flex items-center gap-3 mb-1">
+                  <div className="flex items-center gap-3">
                     <h3 className="font-semibold text-sm truncate">{guide.title}</h3>
                     <code className="text-xs bg-muted px-1.5 py-0.5 rounded shrink-0">{guide.product_code}</code>
                     <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">Updated {new Date(guide.updated_at).toLocaleDateString()}</span>
                   </div>
                    {guideVehicles.length > 0 && (
-                     <div className="flex flex-wrap gap-1.5 mt-2">
+                     <div className="flex flex-wrap gap-1.5 mt-1">
                        {guideVehicles.map((v, i) => (
                          <Badge key={i} variant="secondary" className="text-xs font-normal gap-1">
                            🚗 {v.make} {v.model} {v.year_from}–{v.year_to === 0 || !v.year_to ? 'Current' : v.year_to}
