@@ -101,7 +101,7 @@ function useStockTurn(months) {
     queryFn: async () => {
       const [report, trend, pending, state, snaps] = await Promise.all([
         supabase.rpc('stock_turn_report', { p_from: win.from, p_to: win.to }),
-        supabase.rpc('stock_turn_trend'),
+        supabase.rpc('stock_turn_trend', { p_min_stock: MIN_STOCK }),
         supabase.from('cin7_stat_pending').select('*', { count: 'exact', head: true }),
         supabase.from('cin7_stat_sync_state').select('last_run, last_error, last_snapshot, last_snapshot_error').eq('id', 1).maybeSingle(),
         supabase.from('cin7_stock_snapshots').select('snapshot_date').order('snapshot_date', { ascending: false }).limit(1),
@@ -211,7 +211,9 @@ function TrendTip({ active, payload, label }) {
 }
 
 const PAGE = 100
-const CHART_MIN_STOCK = 100 // categories holding less than this (at cost) are noise on the ratio chart
+// Lines holding less than this (at cost, latest snapshot) are hidden from the
+// whole dashboard — tiles, charts, categories and the table.
+const MIN_STOCK = 100
 
 export default function StockTurn() {
   const isMobile = useIsMobile()
@@ -223,7 +225,6 @@ export default function StockTurn() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [hideNone, setHideNone] = useState(true)
   const [sort, setSort] = useState({ key: 'ratio', dir: 'desc' })
   const [limit, setLimit] = useState(PAGE)
   const toggleSort = (key) => {
@@ -232,7 +233,7 @@ export default function StockTurn() {
   }
 
   // Per-SKU rows with derived metrics
-  const rows = useMemo(() => (data?.rows ?? []).map((r) => {
+  const rows = useMemo(() => (data?.rows ?? []).filter((r) => Number(r.stock_value) >= MIN_STOCK).map((r) => {
     const base = {
       id: r.product_id, sku: r.sku, name: r.name ?? '', category: r.category || 'Uncategorised', brand: r.brand ?? '', pstatus: r.status ?? '',
       onHand: Number(r.on_hand), available: Number(r.available), onOrder: Number(r.on_order), avgCost: Number(r.avg_cost),
@@ -284,7 +285,6 @@ export default function StockTurn() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     let list = rows
-    if (hideNone) list = list.filter((r) => r.status !== 'none')
     if (category) list = list.filter((r) => r.category === category)
     if (statusFilter) list = list.filter((r) => r.status === statusFilter)
     if (q) list = list.filter((r) => r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q) || r.brand.toLowerCase().includes(q))
@@ -299,7 +299,7 @@ export default function StockTurn() {
       if (bv == null) return -1
       return mul * (av - bv)
     })
-  }, [rows, search, category, statusFilter, hideNone, sort])
+  }, [rows, search, category, statusFilter, sort])
 
   const filteredTotal = useMemo(() => {
     const t = filtered.reduce((a, r) => ({ cogs: a.cogs + r.cogs, revenue: a.revenue + r.revenue, avgStock: a.avgStock + r.avgStock, stockValue: a.stockValue + r.stockValue, qty: a.qty + r.qty, onHand: a.onHand + r.onHand }),
@@ -311,7 +311,7 @@ export default function StockTurn() {
   if (error) return <Centered tone={C.red}>Failed to load: {error.message}</Centered>
 
   const win = data.window
-  const chartCategories = byCategory.filter((c) => c.stockValue >= CHART_MIN_STOCK)
+  const chartCategories = byCategory
   const windowLabel = `${monthLabel(win.fromKey)} – ${monthLabel(win.toKey)}`
   const snapshotDays = data.rows[0]?.snapshot_days ?? null
   const noSnapshot = !data.latestSnapshot
@@ -337,7 +337,7 @@ export default function StockTurn() {
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Stock Turn</h1>
             <span style={{ fontSize: 12, color: C.muted, fontFamily: MONO }}>
-              {windowLabel} · annualised · stock at Cin7 avg cost · Ratio = turn × GP% (target {TARGET}+)
+              {windowLabel} · annualised · stock at Cin7 avg cost · lines with ≥ {money(MIN_STOCK)} stock · Ratio = turn × GP% (target {TARGET}+)
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -406,7 +406,7 @@ export default function StockTurn() {
             {/* Charts */}
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
               <Panel title="Ratio by category" icon={ChartBarIcon}
-                right={<span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>dashed line = target {TARGET} · categories with ≥ {money(CHART_MIN_STOCK)} stock</span>}>
+                right={<span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>dashed line = target {TARGET}</span>}>
                 <ResponsiveContainer width="100%" height={Math.max(180, chartCategories.length * 26 + 30)}>
                   {/* Bars are clamped to 0…3× target for display; the tooltip shows the true ratio */}
                   <ComposedChart layout="vertical" data={chartCategories.map((c) => ({ ...c, value: c.ratio == null ? 0 : c.ratio === Infinity ? TARGET * 2 : Math.max(0, Math.min(c.ratio, TARGET * 3)) }))}
@@ -478,16 +478,12 @@ export default function StockTurn() {
                   </select>
                   <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setLimit(PAGE) }} style={{ ...input, cursor: 'pointer' }}>
                     <option value="">All statuses</option>
-                    {Object.entries(STATUS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+                    {Object.entries(STATUS).filter(([k]) => k !== 'none').map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
                   </select>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.muted, fontFamily: MONO, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={hideNone} onChange={(e) => { setHideNone(e.target.checked); setLimit(PAGE) }} />
-                    hide no-stock
-                  </label>
                 </div>
               }>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {Object.entries(STATUS).map(([k, s]) => (
+                {Object.entries(STATUS).filter(([k]) => k !== 'none').map(([k, s]) => (
                   <span key={k} title={s.desc} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: C.muted, fontFamily: MONO }}>
                     <span style={{ width: 9, height: 9, borderRadius: 2, background: s.hue, display: 'inline-block' }} />
                     {s.label} <span style={{ color: C.faint }}>{fmt0.format(rows.filter((r) => r.status === k).length)}</span>
@@ -556,7 +552,7 @@ export default function StockTurn() {
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Stock turn = COGS over the last {months} full months × {12 / months} ÷ average stock value (mean of daily snapshots in the window; latest snapshot until history exists).
               Ratio = stock turn × GP% as a number (e.g. 5 turns × 40% = 200). ∞ = sold in the window with no stock on hand now.
-              Product lines only (freight/charges excluded; drop-ship products left out entirely); credit notes subtracted in their month.{noSales ? ' Sales backfill has not reached this window yet.' : ''}
+              Lines holding under {money(MIN_STOCK)} of stock are hidden everywhere. Product lines only (freight/charges excluded; drop-ship products left out entirely); credit notes subtracted in their month.{noSales ? ' Sales backfill has not reached this window yet.' : ''}
             </span>
           </>
         )}
