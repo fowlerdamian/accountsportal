@@ -1,7 +1,11 @@
 // guide-rewrite — rewrite a piece of installation-guide text into ASD-STE100
 // (Simplified Technical English) so customers can follow it without ambiguity.
-// Input:  { text, kind: "title" | "step" | "description" | "subtitle", context? }
+// Input:  { text, kind: "title" | "step" | "description" | "subtitle" | "notice" | "step_title", context? }
 // Output: { text }
+//
+// kind "step_title" is different from the rest: `text` is a step's description
+// and the output is a short clause (3–8 words) summarising it, used to
+// auto-generate the step heading in the guide editor.
 import { resolveModel } from "../_shared/model.ts";
 import { requireStaff } from "../_shared/auth.ts";
 
@@ -33,6 +37,10 @@ const KIND_HINT: Record<string, string> = {
   step: "This is the body of one installation step.",
   description: "This is a short customer-facing product description shown at the top of the guide (max 300 characters).",
   notice: "This is a notice shown to the customer before they start. Keep it to 1–3 sentences.",
+  step_title:
+    "Write the heading for this installation step: ONE short clause of 3–8 words that summarises what the step does. " +
+    "Imperative form, active voice, STE vocabulary, no step number, no trailing full stop, no quotes. " +
+    "Name the main part exactly as the step does. Return only the heading on one line.",
 };
 
 Deno.serve(async (req) => {
@@ -52,14 +60,17 @@ Deno.serve(async (req) => {
     const user =
       `${KIND_HINT[kind] ?? KIND_HINT.step}` +
       (context ? `\nGuide: ${String(context).slice(0, 200)}` : "") +
-      `\n\nRewrite this into ASD-STE100:\n\n${source}`;
+      (kind === "step_title"
+        ? `\n\nSummarise this step as a heading:\n\n${source}`
+        : `\n\nRewrite this into ASD-STE100:\n\n${source}`);
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
-        model: await resolveModel(apiKey),
-        max_tokens: 1024,
+        // Headings are tiny and fired on every description blur — use the fast tier.
+        model: await resolveModel(apiKey, kind === "step_title" ? "haiku" : "sonnet"),
+        max_tokens: kind === "step_title" ? 60 : 1024,
         temperature: 0.2,
         system: SYSTEM,
         messages: [{ role: "user", content: user }],
@@ -74,7 +85,10 @@ Deno.serve(async (req) => {
     const data = await res.json();
     let out = String(data.content?.[0]?.text ?? "").trim();
     out = out.replace(/^["'“”]+|["'“”]+$/g, "").trim();
-    if (kind === "title" || kind === "subtitle") out = out.split("\n")[0].replace(/\.$/, "");
+    if (kind === "title" || kind === "subtitle" || kind === "step_title") {
+      out = out.split("\n")[0].replace(/^(step\s*\d+\s*[:.\-–—]\s*)/i, "").replace(/[.\s]+$/, "").trim();
+    }
+    if (kind === "step_title" && out.length > 90) out = out.slice(0, 90).replace(/\s+\S*$/, "");
     if (kind === "description" && out.length > 300) out = out.slice(0, 297).replace(/\s+\S*$/, "") + "…";
     return json({ text: out || source });
   } catch (err) {

@@ -1,19 +1,27 @@
 // Subtle "rewrite with AI" affordance for guide text fields.
 // Wrap any Input/Textarea: <AiField value={v} onRewrite={setV} kind="step">…</AiField>
 // Calls the guide-rewrite edge function (ASD-STE100 Simplified Technical English).
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Sparkles, Loader2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@guide/integrations/supabase/client";
 import { cn } from "@guide/lib/utils";
+import { Input } from "@guide/components/ui/input";
+import { Textarea } from "@guide/components/ui/textarea";
 
-export type RewriteKind = "title" | "subtitle" | "step" | "description" | "notice";
+export type RewriteKind = "title" | "subtitle" | "step" | "description" | "notice" | "step_title";
 
 export async function rewriteText(text: string, kind: RewriteKind, context?: string): Promise<string> {
   const { data, error } = await supabase.functions.invoke("guide-rewrite", { body: { text, kind, context } });
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);
   return String(data?.text ?? "");
+}
+
+/** Short clause (3–8 words) summarising a step's description — used as the step heading. */
+export async function summariseStep(description: string, context?: string): Promise<string> {
+  const out = (await rewriteText(description, "step_title", context)).trim();
+  return out === description.trim() ? "" : out;
 }
 
 interface Props {
@@ -76,5 +84,72 @@ export function AiField({ value, onRewrite, kind, context, className, align = "b
         </div>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step title + description pair. The title is generated automatically as a
+// short clause summarising the description: when the description loses focus
+// and the title is blank (or still the last auto-generated one), we ask the
+// guide-rewrite function for a heading. A hand-typed title is never replaced.
+// ─────────────────────────────────────────────────────────────────────────────
+interface StepTextFieldsProps {
+  subtitle: string;
+  description: string;
+  /** Guide title — keeps part names consistent in generated headings. */
+  context?: string;
+  onSubtitle: (text: string) => void;
+  onDescription: (text: string) => void;
+  descriptionPlaceholder?: string;
+  rows?: number;
+  inputClassName?: string;
+  textareaClassName?: string;
+}
+
+export function StepTextFields({
+  subtitle, description, context, onSubtitle, onDescription,
+  descriptionPlaceholder = "Describe this step...", rows = 3, inputClassName, textareaClassName,
+}: StepTextFieldsProps) {
+  const [titleBusy, setTitleBusy] = useState(false);
+  const last = useRef<{ description: string; title: string } | null>(null);
+
+  const autoTitle = async () => {
+    const desc = description.trim();
+    const sub  = subtitle.trim();
+    if (!desc || titleBusy) return;
+    if (sub && sub !== last.current?.title) return;   // hand-written title — leave it alone
+    if (last.current?.description === desc) return;   // description unchanged since last run
+    setTitleBusy(true);
+    try {
+      const t = await summariseStep(desc, context);
+      if (t) { last.current = { description: desc, title: t }; onSubtitle(t); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't generate step title");
+    } finally {
+      setTitleBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <AiField value={subtitle} onRewrite={onSubtitle} kind="subtitle" align="middle">
+        <Input
+          value={subtitle}
+          onChange={e => onSubtitle(e.target.value)}
+          placeholder={titleBusy ? "Generating title…" : "Step title — generated from the description"}
+          className={cn("font-medium pr-8", titleBusy && "animate-pulse", inputClassName)}
+        />
+      </AiField>
+      <AiField value={description} onRewrite={onDescription} kind="step">
+        <Textarea
+          value={description}
+          onChange={e => onDescription(e.target.value)}
+          onBlur={autoTitle}
+          placeholder={descriptionPlaceholder}
+          rows={rows}
+          className={cn("pr-8", textareaClassName)}
+        />
+      </AiField>
+    </>
   );
 }

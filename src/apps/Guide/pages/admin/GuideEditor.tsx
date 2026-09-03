@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { AiField } from "@guide/AiRewrite";
+import { AiField, StepTextFields, summariseStep } from "@guide/AiRewrite";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
@@ -252,9 +252,11 @@ interface SortableStepProps {
   onOpenEditor: (index: number, field: 'image_url' | 'image2_url') => void;
   onRemove: (index: number) => void;
   canRemove: boolean;
+  /** Guide title — context for auto-generated step titles. */
+  context?: string;
 }
 
-function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImage, onOpenEditor, onRemove, canRemove }: SortableStepProps) {
+function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImage, onOpenEditor, onRemove, canRemove, context }: SortableStepProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -332,12 +334,13 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
           <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs sm:text-sm font-bold shrink-0">{index + 1}</span>
         </div>
         <div className="flex-1 min-w-0 space-y-3">
-          <AiField value={step.subtitle} onRewrite={t => onUpdate(index, 'subtitle', t)} kind="subtitle" align="middle">
-            <Input value={step.subtitle} onChange={e => onUpdate(index, 'subtitle', e.target.value)} placeholder="Step subtitle" className="font-medium pr-8" />
-          </AiField>
-          <AiField value={step.description} onRewrite={t => onUpdate(index, 'description', t)} kind="step">
-            <Textarea value={step.description} onChange={e => onUpdate(index, 'description', e.target.value)} placeholder="Describe this step..." rows={3} className="pr-8" />
-          </AiField>
+          <StepTextFields
+            subtitle={step.subtitle}
+            description={step.description}
+            context={context}
+            onSubtitle={t => onUpdate(index, 'subtitle', t)}
+            onDescription={t => onUpdate(index, 'description', t)}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DropZone
               label="Primary image"
@@ -507,7 +510,7 @@ export default function GuideEditor() {
     if (selected.steps && data.steps?.length) {
       const newSteps = data.steps.map((s: any, i: number) => ({
         step_number: i + 1,
-        subtitle: s.subtitle || `Step ${i + 1}`,
+        subtitle: s.subtitle || '',   // blank → auto-generated from the description on save
         description: s.description || '',
         order_index: i + 1,
         // Auto-assign extracted images to matching steps — using uploaded
@@ -671,7 +674,23 @@ export default function GuideEditor() {
       // already gone and we had no rollback. The RPC raises on any failure
       // and the prior content is preserved untouched.
       if (guideId) {
-        const stepsJson = guideSteps
+        // Any step with a description but no title gets a generated heading
+        // (short clause summarising the step) instead of the old "Step N".
+        // Failures fall back to "Step N" below rather than blocking the save.
+        const fillTitles = async <T extends { subtitle: string; description: string; is_divider?: boolean }>(steps: T[]): Promise<T[]> =>
+          Promise.all(steps.map(async (s) => {
+            if (s.is_divider || s.subtitle?.trim() || !s.description?.trim()) return s;
+            try {
+              const t = await summariseStep(s.description, title);
+              return t ? { ...s, subtitle: t } : s;
+            } catch { return s; }
+          }));
+        const filledSteps = await fillTitles(guideSteps);
+        const filledVariants = await Promise.all(variants.map(async (v) => ({ ...v, steps: await fillTitles(v.steps) })));
+        setGuideSteps(filledSteps);
+        setVariants(filledVariants);
+
+        const stepsJson = filledSteps
           .filter(s => s.subtitle || s.description || s.is_divider || s.image_url || s.image2_url)
           .map((s, i) => ({
             step_number: i + 1,
@@ -686,7 +705,7 @@ export default function GuideEditor() {
             is_divider: !!s.is_divider,
           }));
 
-        const variantsJson = variants.map(v => ({
+        const variantsJson = filledVariants.map(v => ({
           variant_label: v.variant_label,
           slug: v.slug || generateSlug(),
           steps: v.steps
@@ -1087,6 +1106,7 @@ export default function GuideEditor() {
                     onOpenEditor={openEditor}
                     onRemove={removeStep}
                     canRemove={guideSteps.length > 1}
+                    context={title}
                   />
                 ))}
               </SortableContext>
@@ -1208,39 +1228,28 @@ export default function GuideEditor() {
                             <X className="w-3 h-3" />
                           </Button>
                         </div>
-                        <AiField value={step.subtitle} kind="subtitle" align="middle" onRewrite={(t) => {
-                          const updated = [...variants];
-                          updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], subtitle: t };
-                          setVariants(updated);
-                        }}>
-                        <Input
-                          placeholder="Step subtitle"
-                          value={step.subtitle}
-                          onChange={(e) => {
-                            const updated = [...variants];
-                            updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], subtitle: e.target.value };
-                            setVariants(updated);
+                        <StepTextFields
+                          subtitle={step.subtitle}
+                          description={step.description}
+                          context={title}
+                          onSubtitle={(t) => {
+                            setVariants(prev => {
+                              const updated = [...prev];
+                              updated[vIdx] = { ...updated[vIdx], steps: updated[vIdx].steps.map((s, i) => i === sIdx ? { ...s, subtitle: t } : s) };
+                              return updated;
+                            });
                           }}
-                          className="h-8 text-sm pr-8"
-                        />
-                        </AiField>
-                        <AiField value={step.description} kind="step" onRewrite={(t) => {
-                          const updated = [...variants];
-                          updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], description: t };
-                          setVariants(updated);
-                        }}>
-                        <Textarea
-                          placeholder="Step description"
-                          value={step.description}
-                          onChange={(e) => {
-                            const updated = [...variants];
-                            updated[vIdx].steps[sIdx] = { ...updated[vIdx].steps[sIdx], description: e.target.value };
-                            setVariants(updated);
+                          onDescription={(t) => {
+                            setVariants(prev => {
+                              const updated = [...prev];
+                              updated[vIdx] = { ...updated[vIdx], steps: updated[vIdx].steps.map((s, i) => i === sIdx ? { ...s, description: t } : s) };
+                              return updated;
+                            });
                           }}
-                          rows={3}
-                          className="text-sm"
+                          descriptionPlaceholder="Step description"
+                          inputClassName="h-8 text-sm"
+                          textareaClassName="text-sm"
                         />
-                        </AiField>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <DropZone
                             label="Primary image"
