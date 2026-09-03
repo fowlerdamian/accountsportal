@@ -2,7 +2,7 @@
 // Accounts › Stock Turn tab can average inventory value over time.
 //
 //   1. /product (2 pages @ 1000)             → cin7_products (SKU, category, AverageCost, DropShipMode)
-//   2. /ref/productavailability (@ 1000)     → summed per product across locations/bins
+//   2. /ref/productavailability (@ 1000)     → summed per product across bins, STOCK_LOCATIONS only
 //                                            → cin7_stock_snapshots (one row per product
 //                                              per AEST day; products with no stock rows
 //                                              are simply absent for that day)
@@ -17,6 +17,9 @@ import { cin7Fetch } from "../_shared/cin7-client.ts";
 
 type Json = Record<string, unknown>;
 const UUID = /^[0-9a-f-]{36}$/i;
+// Only these Cin7 locations count as stock (owner: main warehouse only). Empty = all.
+// Matched case-insensitively against productavailability.Location.
+const STOCK_LOCATIONS: string[] = ["1. Main Warehouse"]; // others seen 2026-09-03: "2. Amazon Australia", "Consignment"
 
 async function cin7(path: string, query: Json): Promise<Json> {
   const r = await cin7Fetch(path, { query });
@@ -38,6 +41,7 @@ interface ProductRec {
 interface SnapRow {
   snapshot_date: string; product_id: string; sku: string | null;
   on_hand: number; available: number; allocated: number; on_order: number; avg_cost: number;
+  locations: Record<string, number>; // every location's on-hand, for reference (totals above are STOCK_LOCATIONS only)
 }
 
 serve(async (req) => {
@@ -91,6 +95,8 @@ serve(async (req) => {
 
     // ── 2. Stock on hand, summed per product ─────────────────────────────────
     const snaps = new Map<string, SnapRow>();
+    const seenLocations = new Map<string, number>(); // location → on-hand units seen
+    const wanted = new Set(STOCK_LOCATIONS.map((l) => l.trim().toLowerCase()));
     let availRows = 0, unmatched = 0;
     for (let page = 1; page <= 20; page++) {
       const d = await cin7("/ref/productavailability", { Page: page, Limit: 1000 });
@@ -101,15 +107,21 @@ serve(async (req) => {
         const rawId = String(it.ID ?? "");
         const id = UUID.test(rawId) && products.has(rawId) ? rawId : bySku.get(sku);
         if (!id) { unmatched++; continue; }
+        const loc = String(it.Location ?? "").trim();
+        const onHand = Number(it.OnHand) || 0;
+        seenLocations.set(loc, (seenLocations.get(loc) ?? 0) + onHand);
         let row = snaps.get(id);
         if (!row) {
           row = {
             snapshot_date: snapshotDate, product_id: id, sku: sku || products.get(id)?.sku || null,
             on_hand: 0, available: 0, allocated: 0, on_order: 0, avg_cost: products.get(id)?.avg_cost ?? 0,
+            locations: {},
           };
           snaps.set(id, row);
         }
-        row.on_hand += Number(it.OnHand) || 0;
+        if (onHand) row.locations[loc] = (row.locations[loc] ?? 0) + onHand;
+        if (wanted.size && !wanted.has(loc.toLowerCase())) continue; // not main-warehouse stock
+        row.on_hand += onHand;
         row.available += Number(it.Available) || 0;
         row.allocated += Number(it.Allocated) || 0;
         row.on_order += Number(it.OnOrder) || 0;
@@ -133,6 +145,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       ok: true, snapshot_date: snapshotDate, products: prodList.length, availability_rows: availRows,
       unmatched, snapshot_rows: snapList.length, stock_value: Math.round(stockValue), ms: Date.now() - started,
+      stock_locations: STOCK_LOCATIONS, locations_seen: Object.fromEntries(seenLocations),
     }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
     const msg = String(e);
