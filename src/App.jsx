@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthProvider } from './context/AuthContext.jsx'
+import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import { AuthProvider as GuideAuthProvider } from './apps/Guide/contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Layout from './components/Layout.jsx'
@@ -122,7 +122,14 @@ function GuideAppRouter() {
 }
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000 } },
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      // PostgREST errors (PGRST*) are deterministic — no row, bad filter — so
+      // retrying only delays the "not found" state on the public guide viewer.
+      retry: (count, err) => !String(err?.code ?? '').startsWith('PGRST') && count < 2,
+    },
+  },
 })
 
 // Longest prefix wins — more specific paths must come before their parents.
@@ -162,9 +169,15 @@ function DocumentTitle() {
 // Global chrome mounted above the router. The pinned desktop widget
 // (/tasks/widget) is intentionally chrome-free — no floating "Ask AI" button
 // and no bottom task dock — so those are suppressed on that route.
+// Staff-only: nothing mounts for anonymous visitors or on the customer guide
+// subdomains (guide.*), so the public viewer carries no document-wide
+// listeners, shortcuts or dialogs.
 function PortalChrome() {
   const { pathname } = useLocation()
+  const { user } = useAuth()
   const isWidget = pathname === '/tasks/widget'
+  const isGuideHost = typeof window !== 'undefined' && window.location.hostname.startsWith('guide.')
+  if (!user || isGuideHost) return null
   return (
     <>
       {!isWidget && <GlobalChat />}
