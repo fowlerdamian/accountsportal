@@ -148,21 +148,23 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
     }
   };
 
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
-  const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
-
+  // Goes through the Supabase client so the signed-in staff session's JWT is
+  // sent (the functions are staff-auth guarded) rather than the bare anon key.
   const invokeFunction = async (name: string, body: any): Promise<any> => {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON,
-        Authorization: `Bearer ${SUPABASE_ANON}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error ?? `Edge function error ${res.status}`);
+    const { data, error } = await supabase.functions.invoke(name, { body });
+    if (error) {
+      // FunctionsHttpError carries the Response — surface the function's own
+      // `{ error }` message when it sent one, otherwise the client's message.
+      let message = error.message || `Edge function error (${name})`;
+      const ctx = (error as any).context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const j = await ctx.json();
+          if (j?.error) message = String(j.error);
+        } catch { /* body wasn't JSON */ }
+      }
+      throw new Error(message);
+    }
     if (data?.error) throw new Error(data.error);
     return data;
   };
@@ -438,7 +440,7 @@ export default function PdfImportDialog({ open, onOpenChange, onApply }: PdfImpo
 
         {stage === "confirm" && (
           <DialogFooter>
-            <Button variant="outline" onClick={reset}>Cancel</Button>
+            <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
             <Button onClick={handleApply} disabled={!Object.values(selected).some(Boolean)}>
               Apply Selected
             </Button>

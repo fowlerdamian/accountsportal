@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { AiField, StepTextFields, summariseStep } from "@guide/AiRewrite";
-import { useNavigate, useParams } from "react-router-dom";
+import { useBeforeUnload, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
@@ -8,8 +8,11 @@ import { Textarea } from "@guide/components/ui/textarea";
 import { Badge } from "@guide/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { useCategories, useInstructionSet, useInstructionSteps, usePublications, useBrands, useGuideVehicles } from "@guide/hooks/use-supabase-query";
-import type { GuideVehicle } from "@guide/hooks/use-supabase-query";
 import { supabase } from "@guide/integrations/supabase/client";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@guide/components/ui/alert-dialog";
 import { Check, ChevronLeft, ChevronRight, Copy, FileText, GripVertical, ImagePlus, Loader2, Pencil, Plus, Save, Trash2, Upload, X, Car } from "lucide-react";
 import { duplicateGuide } from "@guide/lib/duplicateGuide";
 import { DndContext, closestCenter, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -25,6 +28,8 @@ import { useQueryClient } from "@tanstack/react-query";
 const wizardSteps = ["Product Details", "Tools Required", "Installation Steps", "Variants", "Review & Publish"];
 
 interface StepDraft {
+  /** Stable client-side identity — React key + dnd-kit sortable id. Never persisted. */
+  key: string;
   id?: string;
   step_number: number;
   subtitle: string;
@@ -47,6 +52,14 @@ const WIRING_BREAK_DESCRIPTION = "Depending on the manufacturer of your wiring, 
 // hotlink and so it loads under our CDN.
 const WIRING_BREAK_DEFAULT_IMAGE =
   "https://nvlezbqolzwixquusbfo.supabase.co/storage/v1/object/public/guide-images/wiring-break/wirled-kit-stedi.jpg";
+
+const newStepKey = () => crypto.randomUUID();
+const blankStep = (n: number): StepDraft => ({ key: newStepKey(), step_number: n, subtitle: '', description: '', order_index: n });
+/** True when a step carries anything worth keeping (text, image, or a divider). */
+const stepHasContent = (s: Pick<StepDraft, 'subtitle' | 'description' | 'image_url' | 'image2_url' | 'is_divider'>) =>
+  !!(s.subtitle || s.description || s.is_divider || s.image_url || s.image2_url);
+const renumber = <T extends { step_number: number; order_index: number }>(steps: T[]): T[] =>
+  steps.map((s, i) => ({ ...s, step_number: i + 1, order_index: i + 1 }));
 
 // --- Upload helpers ---
 async function uploadToStorage(file: File, folder: string): Promise<string> {
@@ -200,7 +213,8 @@ function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder, dragPa
           <button
             type="button"
             onClick={onEdit}
-            className="absolute bottom-1 left-1 bg-black/70 text-white rounded px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
+            aria-label={`Edit ${label.toLowerCase()}`}
+            className="absolute bottom-1 left-1 bg-black/70 text-white rounded px-2 py-1 text-xs opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity flex items-center gap-1"
           >
             <Pencil className="w-3 h-3" /> Edit
           </button>
@@ -209,7 +223,8 @@ function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder, dragPa
           <button
             type="button"
             onClick={onClear}
-            className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label={`Remove ${label.toLowerCase()}`}
+            className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
           >
             <X className="w-3 h-3" />
           </button>
@@ -315,7 +330,7 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
             </p>
           </div>
           {canRemove && (
-            <Button variant="ghost" size="icon" className="text-destructive sm:opacity-0 sm:group-hover:opacity-100 shrink-0" onClick={() => onRemove(index)}>
+            <Button variant="ghost" size="icon" aria-label="Remove wiring instructions" className="text-destructive sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 shrink-0" onClick={() => onRemove(index)}>
               <Trash2 className="w-4 h-4" />
             </Button>
           )}
@@ -365,7 +380,7 @@ function SortableStep({ id, step, index, onUpdate, onUpdateImage, onTransferImag
           </div>
         </div>
         {canRemove && (
-          <Button variant="ghost" size="icon" className="text-destructive sm:opacity-0 sm:group-hover:opacity-100 shrink-0" onClick={() => onRemove(index)}>
+          <Button variant="ghost" size="icon" aria-label={`Remove step ${index + 1}`} className="text-destructive sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 shrink-0" onClick={() => onRemove(index)}>
             <Trash2 className="w-4 h-4" />
           </Button>
         )}
@@ -381,7 +396,7 @@ export default function GuideEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isEditing = !!id;
-  const { data: existingGuide, isLoading: loadingGuide } = useInstructionSet(id);
+  const { data: existingGuide, isLoading: loadingGuide, isError: guideError } = useInstructionSet(id);
   const { data: existingSteps = [], isLoading: loadingSteps } = useInstructionSteps(id);
   const { data: categories = [] } = useCategories();
   const { data: brands = [] } = useBrands();
@@ -445,14 +460,25 @@ export default function GuideEditor() {
   const handleStepDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = guideSteps.findIndex((_, i) => `step-${i}` === active.id);
-    const newIndex = guideSteps.findIndex((_, i) => `step-${i}` === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
-    const reordered = arrayMove(guideSteps, oldIndex, newIndex).map((s, i) => ({
-      ...s, step_number: i + 1, order_index: i + 1,
-    }));
-    setGuideSteps(reordered);
-    toast.success(`Moved step to position ${newIndex + 1}`);
+    let landed = -1;
+    setGuideSteps(prev => {
+      const oldIndex = prev.findIndex(s => s.key === active.id);
+      const newIndex = prev.findIndex(s => s.key === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      landed = newIndex;
+      return renumber(arrayMove(prev, oldIndex, newIndex));
+    });
+    if (landed !== -1) toast.success(`Moved step to position ${landed + 1}`);
+  };
+
+  // PDF import onto a guide that already has steps/vehicles: ask Replace vs
+  // Append (AlertDialog) instead of silently wiping the existing content.
+  type PdfMergeMode = 'replace' | 'append' | 'cancel';
+  const [pdfMergePrompt, setPdfMergePrompt] = useState<{ resolve: (mode: PdfMergeMode) => void } | null>(null);
+  const askPdfMergeMode = () => new Promise<PdfMergeMode>((resolve) => setPdfMergePrompt({ resolve }));
+  const answerPdfMerge = (mode: PdfMergeMode) => {
+    pdfMergePrompt?.resolve(mode);
+    setPdfMergePrompt(null);
   };
 
   const handlePdfApply = async (data: any, selected: Record<string, boolean>, extractedImages?: ExtractionResult, categoryMatchResult?: CategoryMatch) => {
@@ -464,13 +490,28 @@ export default function GuideEditor() {
     if (selected.category && categoryMatchResult?.matched_category_id) {
       setCategoryId(categoryMatchResult.matched_category_id);
     }
-    if (selected.vehicles && data.vehicles?.length) {
-      setVehicles(data.vehicles.map((v: any) => ({
+
+    const importingSteps = !!(selected.steps && data.steps?.length);
+    const importingVehicles = !!(selected.vehicles && data.vehicles?.length);
+    const hasExistingSteps = guideSteps.some(stepHasContent);
+    const hasExistingVehicles = vehicles.some(v => v.make || v.model || v.year_from || v.year_to);
+    let mode: PdfMergeMode = 'replace';
+    if ((importingSteps && hasExistingSteps) || (importingVehicles && hasExistingVehicles)) {
+      mode = await askPdfMergeMode();
+      if (mode === 'cancel') {
+        toast.info("Existing steps and vehicles kept — other selected fields were imported.");
+        return;
+      }
+    }
+
+    if (importingVehicles) {
+      const imported = data.vehicles.map((v: any) => ({
         make: v.make || '',
         model: v.model || '',
         year_from: String(v.year_from || ''),
         year_to: v.year_to ? String(v.year_to) : '',
-      })));
+      }));
+      setVehicles(prev => (mode === 'append' ? [...prev, ...imported] : imported));
     }
 
     // Upload extracted PDF images to storage BEFORE assigning them to step
@@ -507,8 +548,9 @@ export default function GuideEditor() {
       }
     }
 
-    if (selected.steps && data.steps?.length) {
-      const newSteps = data.steps.map((s: any, i: number) => ({
+    if (importingSteps) {
+      const newSteps: StepDraft[] = data.steps.map((s: any, i: number) => ({
+        key: newStepKey(),
         step_number: i + 1,
         subtitle: s.subtitle || '',   // blank → auto-generated from the description on save
         description: s.description || '',
@@ -518,7 +560,7 @@ export default function GuideEditor() {
         // image's own step number, not array position.
         image_url: uploadedImages.find(u => u.step === (s.step_number ?? i + 1))?.url ?? undefined,
       }));
-      setGuideSteps(newSteps);
+      setGuideSteps(prev => renumber(mode === 'append' ? [...prev.filter(stepHasContent), ...newSteps] : newSteps));
     } else if (uploadedImages.length > 0) {
       // If only images were selected (no steps), assign to existing steps
       setGuideSteps(prev => prev.map((step, i) => ({
@@ -528,13 +570,30 @@ export default function GuideEditor() {
     }
   };
 
-  const [guideSteps, setGuideSteps] = useState<StepDraft[]>([
-    { step_number: 1, subtitle: '', description: '', order_index: 1 }
-  ]);
+  const [guideSteps, setGuideSteps] = useState<StepDraft[]>([blankStep(1)]);
+
+  // The route element is reused when the `:id` param changes (Duplicate
+  // navigates to the copy's /edit; a new guide's first save navigates to its
+  // /edit). Reset the per-guide state so the previous guide's form data is
+  // never saved over the next one.
+  const idRef = useRef(id);
+  idRef.current = id;
+  useEffect(() => {
+    setInitialized(false);
+    setCurrentStep(0);
+    setEditingVariantIdx(null);
+    setShowAddVariant(false);
+    setNewVariantLabel("");
+    setEditorOpen(false);
+    setEditorTarget(null);
+    setPdfImportOpen(false);
+    setPdfMergePrompt(null);
+    setSavedSig(null);
+  }, [id]);
 
   // Initialize form ONLY after ALL queries have finished loading
   useEffect(() => {
-    if (!isEditing || initialized) return;
+    if (!isEditing || !id || initialized) return;
     if (loadingGuide || loadingSteps || loadingVehicles) return;
     if (!existingGuide) return;
 
@@ -547,67 +606,91 @@ export default function GuideEditor() {
     setTools(existingGuide.tools_required ?? []);
     setDefaultVariantLabel(existingGuide.default_variant_label ?? "");
 
-    if (existingSteps.length > 0) {
-      setGuideSteps(existingSteps.map(s => ({
-        id: s.id,
-        step_number: s.step_number,
-        subtitle: s.subtitle,
-        description: s.description,
-        order_index: s.order_index,
-        image_url: s.image_url,
-        image_original_url: s.image_original_url,
-        image2_url: s.image2_url,
-        image2_original_url: s.image2_original_url,
-        is_divider: (s as any).is_divider ?? false,
-      })));
-    }
+    // Always replace (never merge) so nothing leaks from a previously edited guide.
+    setGuideSteps(existingSteps.length > 0
+      ? existingSteps.map(s => ({
+          key: newStepKey(),
+          id: s.id,
+          step_number: s.step_number,
+          subtitle: s.subtitle,
+          description: s.description,
+          order_index: s.order_index,
+          image_url: s.image_url,
+          image_original_url: s.image_original_url,
+          image2_url: s.image2_url,
+          image2_original_url: s.image2_original_url,
+          is_divider: (s as any).is_divider ?? false,
+        }))
+      : [blankStep(1)]);
 
-    if (existingVehicles.length > 0) {
-      setVehicles(existingVehicles.map(v => ({
-        make: v.make,
-        model: v.model,
-        year_from: String(v.year_from),
-        year_to: String(v.year_to),
-      })));
-    }
+    setVehicles(existingVehicles.map(v => ({
+      make: v.make,
+      model: v.model,
+      year_from: String(v.year_from),
+      // 0 / null is stored for "current" — show it as blank, not the literal "0".
+      year_to: v.year_to ? String(v.year_to) : '',
+    })));
 
-    // Load variants and their steps, then mark initialized
-    if (id) {
-      supabase.from("guide_variants").select("*").eq("instruction_set_id", id).then(({ data: variantRows }) => {
-        if (variantRows && variantRows.length > 0) {
-          Promise.all(variantRows.map(async (v: any) => {
-            const { data: vSteps } = await supabase.from("instruction_steps")
-              .select("*").eq("instruction_set_id", id).eq("variant_id", v.id).order("order_index");
-            return {
-              id: v.id,
-              variant_label: v.variant_label,
-              slug: v.slug,
-              steps: (vSteps || []).map((s: any) => ({
-                id: s.id, step_number: s.step_number, subtitle: s.subtitle,
-                description: s.description, order_index: s.order_index,
-                image_url: s.image_url, image_original_url: s.image_original_url,
-                image2_url: s.image2_url, image2_original_url: s.image2_original_url,
-              })),
-            } as VariantDraft;
-          })).then((variants) => {
-            setVariants(variants);
-            setInitialized(true);
-          });
-        } else {
-          setInitialized(true);
-        }
-      });
-    } else {
+    // Load variants and their steps, then mark initialized. If the route
+    // moved to another guide while this was in flight, drop the result.
+    const loadedFor = id;
+    supabase.from("guide_variants").select("*").eq("instruction_set_id", id).then(async ({ data: variantRows }) => {
+      const loaded = await Promise.all((variantRows ?? []).map(async (v: any) => {
+        const { data: vSteps } = await supabase.from("instruction_steps")
+          .select("*").eq("instruction_set_id", id).eq("variant_id", v.id).order("order_index");
+        return {
+          id: v.id,
+          variant_label: v.variant_label,
+          slug: v.slug,
+          steps: (vSteps || []).map((s: any): StepDraft => ({
+            key: newStepKey(),
+            id: s.id, step_number: s.step_number, subtitle: s.subtitle,
+            description: s.description, order_index: s.order_index,
+            image_url: s.image_url, image_original_url: s.image_original_url,
+            image2_url: s.image2_url, image2_original_url: s.image2_original_url,
+            is_divider: s.is_divider ?? false,
+          })),
+        } as VariantDraft;
+      }));
+      if (idRef.current !== loadedFor) return;
+      setVariants(loaded);
       setInitialized(true);
-    }
-  }, [isEditing, initialized, loadingGuide, loadingSteps, loadingVehicles, existingGuide, existingSteps, existingVehicles]);
+    });
+  }, [isEditing, id, initialized, loadingGuide, loadingSteps, loadingVehicles, existingGuide, existingSteps, existingVehicles]);
+
+  // ─── Dirty tracking ───
+  // A JSON signature of everything saveDraft persists. `savedSig` is the
+  // baseline (set once the guide has loaded, or on a blank new guide, and
+  // after every successful save); the form is dirty when they differ.
+  const sigOf = (steps: StepDraft[], vars: VariantDraft[]) => JSON.stringify({
+    title, productCode, categoryId, estimatedTime, description, productImageUrl, tools, vehicles, defaultVariantLabel, steps, vars,
+  });
+  const currentSig = useMemo(
+    () => sigOf(guideSteps, variants),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [title, productCode, categoryId, estimatedTime, description, productImageUrl, tools, vehicles, defaultVariantLabel, guideSteps, variants],
+  );
+  const [savedSig, setSavedSig] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isEditing || initialized) setSavedSig(currentSig);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, initialized]);
+  const dirty = savedSig !== null && currentSig !== savedSig;
+
+  // Browser-level guard (tab close / reload / external navigation). The app
+  // mounts a plain <BrowserRouter>, so react-router's useBlocker (data
+  // routers only) isn't available; in-app "Back" confirms explicitly below.
+  useBeforeUnload(useCallback((e: BeforeUnloadEvent) => {
+    if (dirty) { e.preventDefault(); e.returnValue = ''; }
+  }, [dirty]));
 
   const generateSlug = () => Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 10);
 
-  const saveDraft = async (): Promise<boolean> => {
+  /** Persist the guide. Resolves to the guide id on success, null on failure. */
+  const saveDraft = async (): Promise<string | null> => {
     if (!title || !productCode) {
       toast.error("Title and SKU are required");
-      return false;
+      return null;
     }
 
     // Refuse to save while uploads are in flight — otherwise we'd either
@@ -616,7 +699,7 @@ export default function GuideEditor() {
     // haven't finished uploading yet.
     if (hasPendingUploads()) {
       toast.error("Images are still uploading — wait for them to finish, then save.");
-      return false;
+      return null;
     }
 
     // Defence-in-depth: any `blob:` URL in image fields is a session-local
@@ -634,11 +717,11 @@ export default function GuideEditor() {
     });
     if (blobOffenders.length > 0) {
       toast.error(`Cannot save — these images haven't finished uploading yet: ${blobOffenders.slice(0, 5).join(', ')}${blobOffenders.length > 5 ? '…' : ''}. Re-drop or wait for upload to complete.`);
-      return false;
+      return null;
     }
 
-    if (parseSkus(productCode).length === 0) { toast.error("At least one SKU is required"); return false; }
-    if (skuClash) { toast.error(`SKU clash: ${skuClash}`); return false; }
+    if (parseSkus(productCode).length === 0) { toast.error("At least one SKU is required"); return null; }
+    if (skuClash) { toast.error(`SKU clash: ${skuClash}`); return null; }
 
     setSaving(true);
     try {
@@ -657,6 +740,9 @@ export default function GuideEditor() {
       };
 
       let guideId = id;
+      // What the form looks like once this save lands — the new dirty baseline.
+      let savedSteps = guideSteps;
+      let savedVariants = variants;
 
       if (isEditing && id) {
         const { error } = await supabase.from("instruction_sets").update(guideData).eq("id", id);
@@ -687,39 +773,43 @@ export default function GuideEditor() {
           }));
         const filledSteps = await fillTitles(guideSteps);
         const filledVariants = await Promise.all(variants.map(async (v) => ({ ...v, steps: await fillTitles(v.steps) })));
-        setGuideSteps(filledSteps);
-        setVariants(filledVariants);
+        // Merge generated titles back in by key so typing that happened during
+        // the round trip isn't clobbered.
+        const mergeTitles = (prev: StepDraft[], filled: StepDraft[]) => {
+          const byKey = new Map(filled.map(s => [s.key, s.subtitle]));
+          return prev.map(s => (!s.subtitle && byKey.get(s.key)) ? { ...s, subtitle: byKey.get(s.key)! } : s);
+        };
+        const mergeVariantTitles = (prev: VariantDraft[]) => prev.map(v => {
+          const fv = filledVariants.find(f => (f.id && f.id === v.id) || f.slug === v.slug);
+          return fv ? { ...v, steps: mergeTitles(v.steps, fv.steps) } : v;
+        });
+        setGuideSteps(prev => mergeTitles(prev, filledSteps));
+        setVariants(mergeVariantTitles);
+        savedSteps = mergeTitles(guideSteps, filledSteps);
+        savedVariants = mergeVariantTitles(variants);
 
-        const stepsJson = filledSteps
-          .filter(s => s.subtitle || s.description || s.is_divider || s.image_url || s.image2_url)
-          .map((s, i) => ({
-            step_number: i + 1,
-            order_index: i + 1,
-            subtitle: s.subtitle || (s.is_divider ? WIRING_BREAK_SUBTITLE : `Step ${i + 1}`),
-            description: s.description || (s.is_divider ? WIRING_BREAK_DESCRIPTION : ''),
-            image_url: s.image_url || null,
-            image_original_url: s.image_original_url || null,
-            // Dividers never carry a second image.
-            image2_url: s.is_divider ? null : (s.image2_url || null),
-            image2_original_url: s.is_divider ? null : (s.image2_original_url || null),
-            is_divider: !!s.is_divider,
-          }));
+        // Same shape for main and variant steps — image-only steps are kept in both.
+        const toStepJson = (s: StepDraft, i: number) => ({
+          step_number: i + 1,
+          order_index: i + 1,
+          subtitle: s.subtitle || (s.is_divider ? WIRING_BREAK_SUBTITLE : `Step ${i + 1}`),
+          description: s.description || (s.is_divider ? WIRING_BREAK_DESCRIPTION : ''),
+          image_url: s.image_url || null,
+          image_original_url: s.image_original_url || null,
+          // Dividers never carry a second image.
+          image2_url: s.is_divider ? null : (s.image2_url || null),
+          image2_original_url: s.is_divider ? null : (s.image2_original_url || null),
+          is_divider: !!s.is_divider,
+        });
+
+        const stepsJson = filledSteps.filter(stepHasContent).map(toStepJson);
 
         const variantsJson = filledVariants.map(v => ({
+          // Existing variant ids are passed through so the RPC can preserve them.
+          ...(v.id ? { id: v.id } : {}),
           variant_label: v.variant_label,
           slug: v.slug || generateSlug(),
-          steps: v.steps
-            .filter(s => s.subtitle || s.description)
-            .map((s, i) => ({
-              step_number: i + 1,
-              order_index: i + 1,
-              subtitle: s.subtitle || `Step ${i + 1}`,
-              description: s.description || '',
-              image_url: s.image_url || null,
-              image_original_url: s.image_original_url || null,
-              image2_url: s.image2_url || null,
-              image2_original_url: s.image2_original_url || null,
-            })),
+          steps: v.steps.filter(stepHasContent).map(toStepJson),
         }));
 
         const vehiclesJson = vehicles
@@ -741,16 +831,20 @@ export default function GuideEditor() {
       }
 
       queryClient.invalidateQueries({ queryKey: ["instruction_sets"] });
+      queryClient.invalidateQueries({ queryKey: ["instruction_set", guideId] });
       queryClient.invalidateQueries({ queryKey: ["instruction_steps"] });
+      queryClient.invalidateQueries({ queryKey: ["guide_variants_public", guideId] });
       queryClient.invalidateQueries({ queryKey: ["guide_vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["guide_vehicles_all"] });
+      setSavedSig(sigOf(savedSteps, savedVariants));
       toast.success("Guide saved!");
       if (!isEditing && guideId) {
         navigate(`/guide/guides/${guideId}/edit`, { replace: true });
       }
-      return true;
+      return guideId ?? null;
     } catch (err: any) {
       toast.error(err.message);
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -763,13 +857,11 @@ export default function GuideEditor() {
     }
   };
 
+  // All step/variant mutations are functional updates: StepTextFields and
+  // AiField call back asynchronously (after an edge-function round trip), so a
+  // closure over `guideSteps` would overwrite whatever was typed meanwhile.
   const addStep = () => {
-    setGuideSteps([...guideSteps, {
-      step_number: guideSteps.length + 1,
-      subtitle: '',
-      description: '',
-      order_index: guideSteps.length + 1,
-    }]);
+    setGuideSteps(prev => [...prev, blankStep(prev.length + 1)]);
   };
 
   const addWiringBreak = () => {
@@ -778,11 +870,12 @@ export default function GuideEditor() {
       toast.info("Wiring instructions already exist in this guide.");
       return;
     }
-    setGuideSteps([...guideSteps, {
-      step_number: guideSteps.length + 1,
+    setGuideSteps(prev => prev.some(s => s.is_divider) ? prev : [...prev, {
+      key: newStepKey(),
+      step_number: prev.length + 1,
       subtitle: WIRING_BREAK_SUBTITLE,
       description: WIRING_BREAK_DESCRIPTION,
-      order_index: guideSteps.length + 1,
+      order_index: prev.length + 1,
       is_divider: true,
       image_url: WIRING_BREAK_DEFAULT_IMAGE,
       image_original_url: WIRING_BREAK_DEFAULT_IMAGE,
@@ -790,16 +883,12 @@ export default function GuideEditor() {
   };
 
   const updateStep = (index: number, field: string, value: string) => {
-    const updated = [...guideSteps];
-    updated[index] = { ...updated[index], [field]: value };
-    setGuideSteps(updated);
+    setGuideSteps(prev => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
   };
 
   const transferStepImage = (index: number, field: 'image_url' | 'image2_url', url: string, originalUrl: string | null) => {
-    const updated = [...guideSteps];
     const origField = field === 'image_url' ? 'image_original_url' : 'image2_original_url';
-    updated[index] = { ...updated[index], [field]: url, [origField]: originalUrl ?? url };
-    setGuideSteps(updated);
+    setGuideSteps(prev => prev.map((s, i) => (i === index ? { ...s, [field]: url, [origField]: originalUrl ?? url } : s)));
     toast.success("Image copied to this slot");
   };
 
@@ -867,8 +956,12 @@ export default function GuideEditor() {
   };
 
   const removeStep = (index: number) => {
-    if (guideSteps.length <= 1) return;
-    setGuideSteps(guideSteps.filter((_, i) => i !== index).map((s, i) => ({ ...s, step_number: i + 1, order_index: i + 1 })));
+    setGuideSteps(prev => (prev.length <= 1 ? prev : renumber(prev.filter((_, i) => i !== index))));
+  };
+
+  /** Functional update of one variant by index. */
+  const updateVariant = (vIdx: number, fn: (v: VariantDraft) => VariantDraft) => {
+    setVariants(prev => prev.map((v, i) => (i === vIdx ? fn(v) : v)));
   };
 
   // --- Variant step image handlers (mirror updateStepImage / openEditor for variant steps) ---
@@ -899,14 +992,45 @@ export default function GuideEditor() {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
+  if (isEditing && (guideError || !existingGuide)) {
+    return (
+      <div className="max-w-4xl mx-auto animate-fade-in">
+        <div className="bg-card rounded-lg border p-8 text-center space-y-3">
+          <h1 className="text-xl font-bold">Guide not found</h1>
+          <p className="text-sm text-muted-foreground">
+            No guide exists with id <code className="font-mono text-xs">{id}</code>. It may have been deleted, or the link is wrong.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => navigate('/guide')}>
+            <ChevronLeft className="w-4 h-4 mr-1" /> Back to guides
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const goBack = () => {
+    if (dirty && !window.confirm("You have unsaved changes. Leave without saving?")) return;
+    navigate('/guide');
+  };
+
+  /** Save, then move to a wizard tab — only when the save succeeded. */
+  const goToStep = async (target: number) => {
+    if (saving || target === currentStep) return;
+    const saved = await saveDraft();
+    if (saved) setCurrentStep(target);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/guide')} className="mb-2">
+          <Button variant="ghost" size="sm" onClick={goBack} className="mb-2">
             <ChevronLeft className="w-4 h-4 mr-1" /> Back
           </Button>
-          <h1 className="text-xl sm:text-2xl font-bold">{isEditing ? 'Edit Guide' : 'Create New Guide'}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">
+            {isEditing ? 'Edit Guide' : 'Create New Guide'}
+            {dirty && <span className="ml-2 text-xs font-normal text-muted-foreground align-middle">Unsaved changes</span>}
+          </h1>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {isEditing && (
@@ -914,9 +1038,9 @@ export default function GuideEditor() {
               onClick={async () => {
                 setDuplicating(true);
                 try {
-                  const ok = await saveDraft();
-                  if (!ok) return;
-                  const newId = await duplicateGuide(id!);
+                  const savedId = await saveDraft();
+                  if (!savedId) return;
+                  const newId = await duplicateGuide(savedId);
                   toast.success("Guide duplicated — you're now editing the copy");
                   navigate(`/guide/guides/${newId}/edit`);
                 } catch (e: any) {
@@ -929,7 +1053,7 @@ export default function GuideEditor() {
               Duplicate
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
+          <Button variant="outline" size="sm" onClick={() => void saveDraft()} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Save
           </Button>
@@ -952,8 +1076,11 @@ export default function GuideEditor() {
         {wizardSteps.map((step, i) => (
           <button
             key={step}
-            onClick={() => setCurrentStep(i)}
-            className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm transition-colors whitespace-nowrap shrink-0 ${
+            type="button"
+            disabled={saving}
+            aria-current={i === currentStep ? 'step' : undefined}
+            onClick={() => void goToStep(i)}
+            className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm transition-colors whitespace-nowrap shrink-0 disabled:opacity-60 ${
               i === currentStep ? 'bg-primary text-primary-foreground font-medium' :
               i < currentStep ? 'text-success font-medium' : 'text-muted-foreground'
             }`}
@@ -1053,7 +1180,7 @@ export default function GuideEditor() {
                     <Label className="text-xs">To (blank = current)</Label>
                     <Input type="number" value={v.year_to} onChange={e => { const u = [...vehicles]; u[i] = { ...u[i], year_to: e.target.value }; setVehicles(u); }} placeholder="Current" className="mt-1" />
                   </div>
-                  <Button type="button" variant="ghost" size="icon" className="shrink-0 h-9 w-9 text-destructive" onClick={() => setVehicles(vehicles.filter((_, j) => j !== i))}>
+                  <Button type="button" variant="ghost" size="icon" aria-label={`Remove vehicle ${i + 1}`} className="shrink-0 h-9 w-9 text-destructive" onClick={() => setVehicles(prev => prev.filter((_, j) => j !== i))}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
@@ -1080,7 +1207,7 @@ export default function GuideEditor() {
               {tools.map((tool, i) => (
                 <Badge key={i} variant="secondary" className="px-3 py-1.5 text-sm gap-2">
                   {tool}
-                  <button onClick={() => setTools(tools.filter((_, j) => j !== i))}><X className="w-3 h-3" /></button>
+                  <button type="button" aria-label={`Remove ${tool}`} onClick={() => setTools(prev => prev.filter((_, j) => j !== i))}><X className="w-3 h-3" /></button>
                 </Badge>
               ))}
               {tools.length === 0 && <p className="text-sm text-muted-foreground">No tools added yet</p>}
@@ -1093,11 +1220,11 @@ export default function GuideEditor() {
             <h2 className="text-lg font-semibold">Installation Steps</h2>
             <p className="text-xs text-muted-foreground">Drag steps by the handle to reorder them.</p>
             <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleStepDragEnd}>
-              <SortableContext items={guideSteps.map((_, i) => `step-${i}`)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={guideSteps.map(s => s.key)} strategy={verticalListSortingStrategy}>
                 {guideSteps.map((step, i) => (
                   <SortableStep
-                    key={`step-${i}`}
-                    id={`step-${i}`}
+                    key={step.key}
+                    id={step.key}
                     step={step}
                     index={i}
                     onUpdate={updateStep}
@@ -1163,7 +1290,7 @@ export default function GuideEditor() {
 
             {/* Existing variants */}
             {variants.map((variant, vIdx) => (
-              <div key={vIdx} className="border rounded-lg overflow-hidden">
+              <div key={variant.id ?? variant.slug} className="border rounded-lg overflow-hidden">
                 <div
                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors"
                   onClick={() => setEditingVariantIdx(editingVariantIdx === vIdx ? null : vIdx)}
@@ -1176,10 +1303,11 @@ export default function GuideEditor() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      aria-label={`Remove variant ${variant.variant_label || vIdx + 1}`}
                       className="text-destructive h-8"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setVariants(variants.filter((_, i) => i !== vIdx));
+                        setVariants(prev => prev.filter((_, i) => i !== vIdx));
                         if (editingVariantIdx === vIdx) setEditingVariantIdx(null);
                         toast.success("Variant removed");
                       }}
@@ -1198,9 +1326,8 @@ export default function GuideEditor() {
                       <Input
                         value={variant.variant_label}
                         onChange={(e) => {
-                          const updated = [...variants];
-                          updated[vIdx] = { ...updated[vIdx], variant_label: e.target.value };
-                          setVariants(updated);
+                          const value = e.target.value;
+                          updateVariant(vIdx, v => ({ ...v, variant_label: value }));
                         }}
                         className="h-8 text-sm"
                       />
@@ -1208,21 +1335,24 @@ export default function GuideEditor() {
 
                     {/* Variant steps */}
                     {variant.steps.map((step, sIdx) => (
-                      <div key={sIdx} className="border rounded-lg p-3 space-y-2 bg-background">
+                      <div key={step.key} className="border rounded-lg p-3 space-y-2 bg-background">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-muted-foreground">Step {sIdx + 1}</span>
+                          <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                            Step {sIdx + 1}
+                            {step.is_divider && (
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-orange)] bg-[rgba(var(--brand-accent-rgb),0.15)] px-1.5 py-0.5 rounded">
+                                Wiring instructions
+                              </span>
+                            )}
+                          </span>
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label={`Remove step ${sIdx + 1} from ${variant.variant_label || 'variant'}`}
+                            disabled={variant.steps.length <= 1}
                             className="h-6 w-6 p-0 text-destructive"
                             onClick={() => {
-                              if (variant.steps.length <= 1) return;
-                              const updated = [...variants];
-                              updated[vIdx] = {
-                                ...updated[vIdx],
-                                steps: variant.steps.filter((_, i) => i !== sIdx).map((s, i) => ({ ...s, step_number: i + 1, order_index: i + 1 })),
-                              };
-                              setVariants(updated);
+                              updateVariant(vIdx, v => (v.steps.length <= 1 ? v : { ...v, steps: renumber(v.steps.filter((_, i) => i !== sIdx)) }));
                             }}
                           >
                             <X className="w-3 h-3" />
@@ -1233,18 +1363,10 @@ export default function GuideEditor() {
                           description={step.description}
                           context={title}
                           onSubtitle={(t) => {
-                            setVariants(prev => {
-                              const updated = [...prev];
-                              updated[vIdx] = { ...updated[vIdx], steps: updated[vIdx].steps.map((s, i) => i === sIdx ? { ...s, subtitle: t } : s) };
-                              return updated;
-                            });
+                            updateVariant(vIdx, v => ({ ...v, steps: v.steps.map((s, i) => (i === sIdx ? { ...s, subtitle: t } : s)) }));
                           }}
                           onDescription={(t) => {
-                            setVariants(prev => {
-                              const updated = [...prev];
-                              updated[vIdx] = { ...updated[vIdx], steps: updated[vIdx].steps.map((s, i) => i === sIdx ? { ...s, description: t } : s) };
-                              return updated;
-                            });
+                            updateVariant(vIdx, v => ({ ...v, steps: v.steps.map((s, i) => (i === sIdx ? { ...s, description: t } : s)) }));
                           }}
                           descriptionPlaceholder="Step description"
                           inputClassName="h-8 text-sm"
@@ -1275,17 +1397,7 @@ export default function GuideEditor() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        const updated = [...variants];
-                        updated[vIdx] = {
-                          ...updated[vIdx],
-                          steps: [...variant.steps, {
-                            step_number: variant.steps.length + 1,
-                            subtitle: '',
-                            description: '',
-                            order_index: variant.steps.length + 1,
-                          }],
-                        };
-                        setVariants(updated);
+                        updateVariant(vIdx, v => ({ ...v, steps: [...v.steps, blankStep(v.steps.length + 1)] }));
                       }}
                     >
                       <Plus className="w-3.5 h-3.5 mr-1" /> Add Step
@@ -1310,20 +1422,22 @@ export default function GuideEditor() {
                     size="sm"
                     disabled={!newVariantLabel.trim()}
                     onClick={() => {
-                      setVariants([...variants, {
-                        variant_label: newVariantLabel.trim(),
-                        slug: generateSlug(),
-                        steps: guideSteps.map((s, i) => ({
-                          step_number: i + 1,
-                          subtitle: s.subtitle,
-                          description: s.description,
-                          order_index: i + 1,
-                          image_url: s.image_url,
-                          image_original_url: s.image_original_url,
-                          image2_url: s.image2_url,
-                          image2_original_url: s.image2_original_url,
-                        })),
-                      }]);
+                      const label = newVariantLabel.trim();
+                      // Wiring-break dividers are carried through (is_divider) so
+                      // the copy keeps the same bracket→wiring transition.
+                      const copied: StepDraft[] = guideSteps.map((s, i) => ({
+                        key: newStepKey(),
+                        step_number: i + 1,
+                        subtitle: s.subtitle,
+                        description: s.description,
+                        order_index: i + 1,
+                        image_url: s.image_url,
+                        image_original_url: s.image_original_url,
+                        image2_url: s.image2_url,
+                        image2_original_url: s.image2_original_url,
+                        is_divider: s.is_divider ?? false,
+                      }));
+                      setVariants(prev => [...prev, { variant_label: label, slug: generateSlug(), steps: copied }]);
                       setNewVariantLabel("");
                       setShowAddVariant(false);
                       toast.success("Variant added — steps copied from the base variant");
@@ -1336,11 +1450,8 @@ export default function GuideEditor() {
                     size="sm"
                     disabled={!newVariantLabel.trim()}
                     onClick={() => {
-                      setVariants([...variants, {
-                        variant_label: newVariantLabel.trim(),
-                        slug: generateSlug(),
-                        steps: [{ step_number: 1, subtitle: '', description: '', order_index: 1 }],
-                      }]);
+                      const label = newVariantLabel.trim();
+                      setVariants(prev => [...prev, { variant_label: label, slug: generateSlug(), steps: [blankStep(1)] }]);
                       setNewVariantLabel("");
                       setShowAddVariant(false);
                       toast.success("Variant added — start fresh");
@@ -1395,20 +1506,24 @@ export default function GuideEditor() {
                       {brand.domain}/{(existingGuide as any)?.slug || '...'}
                     </p>
                     <Button size="sm" className="w-full" disabled={saving} onClick={async () => {
-                      const saved = await saveDraft();
-                      if (!saved) { toast.error("Publish cancelled — the guide could not be saved."); return; }
-                      if (!id) { toast.error("Save the guide first"); return; }
+                      // saveDraft resolves to the guide id — for a brand-new guide
+                      // the route param `id` is still undefined at this point.
+                      const savedId = await saveDraft();
+                      if (!savedId) { toast.error("Publish cancelled — the guide could not be saved."); return; }
                       try {
+                        const published_at = new Date().toISOString();
                         if (pub) {
-                          await supabase.from("guide_publications").update({ status: 'published', published_at: new Date().toISOString() }).eq("id", pub.id);
+                          const { error } = await supabase.from("guide_publications").update({ status: 'published', published_at }).eq("id", pub.id);
+                          if (error) throw error;
                         } else {
-                          await supabase.from("guide_publications").insert({ instruction_set_id: id, brand_id: brand.id, status: 'published', published_at: new Date().toISOString() });
+                          const { error } = await supabase.from("guide_publications").insert({ instruction_set_id: savedId, brand_id: brand.id, status: 'published', published_at });
+                          if (error) throw error;
                         }
                         queryClient.invalidateQueries({ queryKey: ["publications"] });
                         toast.success(`Published to ${brand.name}!`);
-                        navigate(`/guide/guides/${id}/share`);
+                        navigate(`/guide/guides/${savedId}/share`);
                       } catch (err: any) {
-                        toast.error(err.message);
+                        toast.error(err?.message ?? `Could not publish to ${brand.name}`);
                       }
                     }}>
                       {pub?.status === 'published' ? 'Update Live Version' : `Publish to ${brand.name}`}
@@ -1423,19 +1538,19 @@ export default function GuideEditor() {
 
       {/* Footer */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card rounded-lg border p-3 sm:p-4">
-        <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
+        <Button variant="outline" size="sm" onClick={() => void saveDraft()} disabled={saving}>
           {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
           Save
         </Button>
         <div className="flex gap-2 justify-end">
           {currentStep > 0 && (
-            <Button variant="outline" size="sm" disabled={saving} onClick={async () => { await saveDraft(); setCurrentStep(currentStep - 1); }}>
+            <Button variant="outline" size="sm" disabled={saving} onClick={() => void goToStep(currentStep - 1)}>
               {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
               <ChevronLeft className="w-4 h-4 mr-1" /> Back
             </Button>
           )}
           {currentStep < wizardSteps.length - 1 && (
-            <Button size="sm" disabled={saving} onClick={async () => { await saveDraft(); setCurrentStep(currentStep + 1); }}>
+            <Button size="sm" disabled={saving} onClick={() => void goToStep(currentStep + 1)}>
               {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
               Next <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
@@ -1443,6 +1558,23 @@ export default function GuideEditor() {
         </div>
       </div>
       <PdfImportDialog open={pdfImportOpen} onOpenChange={setPdfImportOpen} onApply={handlePdfApply} />
+      <AlertDialog open={!!pdfMergePrompt} onOpenChange={(v) => { if (!v) answerPdfMerge('cancel'); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace existing steps?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This guide already has installation steps or vehicle fitment. Replace them with the imported ones, or append the imported items after what's already here. Other selected fields are imported either way.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep existing</AlertDialogCancel>
+            <Button variant="outline" onClick={() => answerPdfMerge('append')}>Append</Button>
+            <AlertDialogAction onClick={() => answerPdfMerge('replace')} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Replace
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <ImageEditorModal
         open={editorOpen}
         imageUrl={editorImageUrl}

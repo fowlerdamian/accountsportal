@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@guide/components/ui/button";
 import { Slider } from "@guide/components/ui/slider";
 import {
   Circle, MousePointer2, Undo2, Trash2, RotateCw, RotateCcw, FlipHorizontal2, FlipVertical2,
-  MoveRight, Crop, RotateCcwIcon, Pen,
+  MoveRight,
 } from "lucide-react";
 import * as fabric from "fabric";
 
@@ -17,7 +17,7 @@ interface ImageEditorModalProps {
   onClose: () => void;
 }
 
-type TabId = "annotate" | "crop" | "rotate";
+type TabId = "annotate" | "rotate";
 type AnnotateTool = "circle" | "arrow" | "select";
 type StrokeWeight = 2 | 3 | 5;
 
@@ -30,13 +30,13 @@ const COLOUR_SWATCHES = [
   { label: "Green", hex: "#10B981" },
 ];
 
-const ASPECT_RATIOS: { label: string; value: number | null }[] = [
-  { label: "Free", value: null },
-  { label: "1:1", value: 1 },
-  { label: "4:3", value: 4 / 3 },
-  { label: "16:9", value: 16 / 9 },
-  { label: "3:4", value: 3 / 4 },
-];
+/** True when a keydown originated in a text-editing element — leave those keys alone. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
 
 // ─── Component ───
 export default function ImageEditorModal({ open, imageUrl, originalUrl, brandColour, onSave, onClose }: ImageEditorModalProps) {
@@ -48,16 +48,9 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
   const [tool, setTool] = useState<AnnotateTool>("circle");
   const [activeColour, setActiveColour] = useState(brandColour || "#F59E0B");
   const [strokeWeight, setStrokeWeight] = useState<StrokeWeight>(3);
-  const [history, setHistory] = useState<fabric.FabricObject[][]>([]);
   const [rotation, setRotation] = useState(0);
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
-
-  // Crop state
-  const [cropRect, setCropRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const [cropAspect, setCropAspect] = useState<number | null>(null);
-  const cropRectRef = useRef<fabric.Rect | null>(null);
-  const dimRectsRef = useRef<fabric.Rect[]>([]);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -110,8 +103,6 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
       canvas.dispose();
       fabricRef.current = null;
       bgImageRef.current = null;
-      cropRectRef.current = null;
-      dimRectsRef.current = [];
     };
   }, [open, srcUrl]);
 
@@ -126,8 +117,6 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
     // Make objects selectable only in select mode
     canvas.getObjects().forEach((obj) => {
       if (obj === bgImageRef.current) return;
-      if (obj === cropRectRef.current) return;
-      if (dimRectsRef.current.includes(obj as fabric.Rect)) return;
       obj.set({ selectable: tool === "select", evented: tool === "select" });
     });
     canvas.renderAll();
@@ -180,8 +169,6 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
       }
       if (tempObjectRef.current) {
         tempObjectRef.current.set({ selectable: false, evented: false });
-        // Push to history
-        setHistory((prev) => [...prev.slice(-19), canvas.getObjects().filter((o) => o !== bgImageRef.current)]);
         tempObjectRef.current = null;
       }
       drawStartRef.current = null;
@@ -199,22 +186,32 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
     };
   }, [tab, tool, activeColour, strokeWeight, isDrawing]);
 
-  // ─── Delete key ───
+  // ─── Keyboard: Escape closes, Delete/Backspace removes the selected annotation ───
   useEffect(() => {
+    if (!open) return;
     const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
+        // Typing in an input/textarea/contenteditable must not delete shapes.
+        if (isEditableTarget(e.target)) return;
         const canvas = fabricRef.current;
         if (!canvas) return;
         const active = canvas.getActiveObject();
         if (active && active !== bgImageRef.current) {
+          e.preventDefault();
           canvas.remove(active);
+          canvas.discardActiveObject();
           canvas.renderAll();
         }
       }
     };
-    if (open) window.addEventListener("keydown", handler);
+    window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open]);
+  }, [open, onClose]);
 
   // ─── Rotation / Flip ───
   useEffect(() => {
@@ -250,7 +247,7 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
   const handleUndo = () => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const objects = canvas.getObjects().filter((o) => o !== bgImageRef.current && !dimRectsRef.current.includes(o as fabric.Rect) && o !== cropRectRef.current);
+    const objects = canvas.getObjects().filter((o) => o !== bgImageRef.current);
     if (objects.length === 0) return;
     const last = objects[objects.length - 1];
     canvas.remove(last);
@@ -261,7 +258,7 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
   const handleClearAll = () => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const objects = canvas.getObjects().filter((o) => o !== bgImageRef.current && !dimRectsRef.current.includes(o as fabric.Rect) && o !== cropRectRef.current);
+    const objects = canvas.getObjects().filter((o) => o !== bgImageRef.current);
     objects.forEach((o) => canvas.remove(o));
     canvas.renderAll();
     setConfirmClear(false);
@@ -311,10 +308,6 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
     const bg = bgImageRef.current;
     if (!canvas || !bg) return;
 
-    // Remove crop overlay objects temporarily
-    dimRectsRef.current.forEach((r) => canvas.remove(r));
-    if (cropRectRef.current) canvas.remove(cropRectRef.current);
-
     // Create export canvas
     const exportCanvas = document.createElement("canvas");
     const origW = (bg as any)._element?.naturalWidth || (bg as any)._element?.width || 800;
@@ -325,10 +318,6 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
     const bgTop = bg.top || 0;
     const bgScaleX = bg.scaleX || 1;
     const bgScaleY = bg.scaleY || 1;
-
-    // Scale factor from canvas coords to original image pixels
-    const scaleFactorX = origW / (origW * bgScaleX);
-    const scaleFactorY = origH / (origH * bgScaleY);
 
     exportCanvas.width = origW;
     exportCanvas.height = origH;
@@ -344,9 +333,7 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
     ctx.restore();
 
     // Draw annotations scaled to original image size
-    const annotations = canvas.getObjects().filter(
-      (o) => o !== bg && !dimRectsRef.current.includes(o as fabric.Rect) && o !== cropRectRef.current
-    );
+    const annotations = canvas.getObjects().filter((o) => o !== bg);
     if (annotations.length > 0) {
       // Use fabric's toDataURL for annotations on a temp canvas at the canvas resolution
       // then draw that on top scaled
@@ -365,8 +352,6 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
       });
 
       // Scale annotations from canvas space to image space
-      const annotScaleX = origW / (origW * bgScaleX);
-      const annotScaleY = origH / (origH * bgScaleY);
       ctx.drawImage(
         tempCanvas,
         bgLeft, bgTop, origW * bgScaleX, origH * bgScaleY,
@@ -374,22 +359,7 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
       );
     }
 
-    // Apply crop if set
-    if (cropRect) {
-      const cropCanvas = document.createElement("canvas");
-      // Convert crop coords from canvas space to image space
-      const cx = ((cropRect.x - bgLeft) / bgScaleX);
-      const cy = ((cropRect.y - bgTop) / bgScaleY);
-      const cw = cropRect.w / bgScaleX;
-      const ch = cropRect.h / bgScaleY;
-      cropCanvas.width = cw;
-      cropCanvas.height = ch;
-      const cropCtx = cropCanvas.getContext("2d")!;
-      cropCtx.drawImage(exportCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
-      onSave(cropCanvas.toDataURL("image/jpeg", 0.92));
-    } else {
-      onSave(exportCanvas.toDataURL("image/jpeg", 0.92));
-    }
+    onSave(exportCanvas.toDataURL("image/jpeg", 0.92));
   };
 
   if (!open) return null;
@@ -400,12 +370,15 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#111] flex flex-col">
+    <div role="dialog" aria-modal="true" aria-label="Edit image" className="fixed inset-0 z-[100] bg-[#111] flex flex-col">
       {/* Tab bar */}
-      <div className="flex items-center gap-1 px-4 pt-3 pb-1">
-        {(["annotate", "crop", "rotate"] as TabId[]).map((t) => (
+      <div className="flex items-center gap-1 px-4 pt-3 pb-1" role="tablist">
+        {(["annotate", "rotate"] as TabId[]).map((t) => (
           <button
             key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
               tab === t ? "text-white border-b-2" : "text-white/50 hover:text-white/80"
@@ -489,30 +462,6 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
           </>
         )}
 
-        {tab === "crop" && (
-          <>
-            {ASPECT_RATIOS.map((ar) => (
-              <button
-                key={ar.label}
-                onClick={() => setCropAspect(ar.value)}
-                className={`px-3 py-1 text-xs rounded ${
-                  cropAspect === ar.value ? "bg-white/20 text-white" : "text-white/50 hover:text-white"
-                }`}
-              >
-                {ar.label}
-              </button>
-            ))}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white/60 hover:text-white text-xs"
-              onClick={() => setCropRect(null)}
-            >
-              Reset Crop
-            </Button>
-          </>
-        )}
-
         {tab === "rotate" && (
           <>
             <ToolBtn onClick={() => setRotation((r) => (r + 90) % 360)} title="Rotate 90° CW">
@@ -577,8 +526,11 @@ export default function ImageEditorModal({ open, imageUrl, originalUrl, brandCol
 function ToolBtn({ children, active, onClick, title }: { children: React.ReactNode; active?: boolean; onClick: () => void; title: string }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       title={title}
+      aria-label={title}
+      aria-pressed={active}
       className={`p-2 rounded transition-colors ${active ? "bg-white/20 text-white" : "text-white/50 hover:text-white hover:bg-white/10"}`}
     >
       {children}
