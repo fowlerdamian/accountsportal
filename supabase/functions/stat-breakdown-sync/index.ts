@@ -34,6 +34,7 @@ import { cin7Fetch } from "../_shared/cin7-client.ts";
 const START = "2025-01-01"; // earliest invoice month reported
 const DEFAULT_DRAIN_MS = 100_000; // stay under the edge-function wall clock
 const SCAN_OVERLAP_MS = 10 * 60_000; // re-scan overlap so no update is missed
+const CHUNK_MIN_MS = 3_300; // 3 sale fetches per chunk → ~55 calls/min (Cin7 allows 60)
 
 type Json = Record<string, unknown>;
 
@@ -273,7 +274,19 @@ serve(async (req) => {
         const prodRows: ProductRow[] = [];
         for (let i = 0; i < batch.length && Date.now() < deadline; i += 3) {
           const chunk = batch.slice(i, i + 3);
-          const sales = await Promise.all(chunk.map(({ sale_id }) => cin7("/sale", { ID: sale_id })));
+          // Pace to stay under Cin7's 60 calls/min, and ride out a 429 instead of
+          // failing the whole run — unfetched sales simply stay queued.
+          const chunkStart = Date.now();
+          let sales: Json[];
+          try {
+            sales = await Promise.all(chunk.map(({ sale_id }) => cin7("/sale", { ID: sale_id })));
+          } catch (e) {
+            if (!/60 calls|rate.?limit/i.test(String(e))) throw e;
+            console.warn("[stat-breakdown] Cin7 rate limit hit — pausing 20s");
+            await new Promise((r) => setTimeout(r, 20_000));
+            i -= 3; // retry this chunk
+            continue;
+          }
           for (const sale of sales) {
             const ctype = ctypes.get(String(sale.CustomerID)) ?? "Consumers";
             const r = saleToRows(sale, ctype, buckets);
@@ -281,6 +294,8 @@ serve(async (req) => {
             prodRows.push(...r.product);
             doneIds.push(String(sale.ID));
           }
+          const wait = CHUNK_MIN_MS - (Date.now() - chunkStart);
+          if (wait > 0) await new Promise((r) => setTimeout(r, wait));
         }
         if (!doneIds.length) break;
         const del = await sc.from("cin7_sale_stat_lines").delete().in("sale_id", doneIds);
