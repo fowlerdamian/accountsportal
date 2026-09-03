@@ -1,7 +1,7 @@
 // Stock Turn snapshot — records today's stock on hand at cost per product so the
 // Accounts › Stock Turn tab can average inventory value over time.
 //
-//   1. /product (2 pages @ 1000)             → cin7_products (SKU, category, AverageCost)
+//   1. /product (2 pages @ 1000)             → cin7_products (SKU, category, AverageCost, DropShipMode)
 //   2. /ref/productavailability (@ 1000)     → summed per product across locations/bins
 //                                            → cin7_stock_snapshots (one row per product
 //                                              per AEST day; products with no stock rows
@@ -32,6 +32,7 @@ function aestToday(): string {
 interface ProductRec {
   product_id: string; sku: string; name: string | null; category: string | null;
   brand: string | null; status: string | null; avg_cost: number; updated_at: string;
+  drop_ship_mode: string | null; tags: string | null;
 }
 interface SnapRow {
   snapshot_date: string; product_id: string; sku: string | null;
@@ -65,6 +66,8 @@ serve(async (req) => {
           product_id: id, sku, name: (p.Name as string) ?? null, category: (p.Category as string) ?? null,
           brand: (p.Brand as string) ?? null, status: (p.Status as string) ?? null,
           avg_cost: Number(p.AverageCost) || 0, updated_at: now,
+          // "No Drop Ship" | "Optional Drop Ship" | "Always Drop Ship" — the report excludes drop-ship lines
+          drop_ship_mode: (p.DropShipMode as string) ?? null, tags: (p.Tags as string) ?? null,
         });
         if (sku) bySku.set(sku, id);
       }

@@ -10,7 +10,8 @@
 // comes from daily snapshots (cin7_stock_snapshots, stock-turn-snapshot edge fn);
 // the average stock value is the mean of the snapshots inside the window, or the
 // latest snapshot while history is still accumulating. Both RPCs live in
-// migration 20260903000001_stock_turn.sql.
+// migration 20260903000001_stock_turn.sql. Drop-ship products (Cin7 DropShipMode
+// other than "No Drop Ship") are excluded from stock, sales and the trend.
 
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -551,7 +552,7 @@ export default function StockTurn() {
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Stock turn = COGS over the last {months} full months × {12 / months} ÷ average stock value (mean of daily snapshots in the window; latest snapshot until history exists).
               Ratio = stock turn × GP% as a number (e.g. 5 turns × 40% = 200). ∞ = sold in the window with no stock on hand now.
-              Product lines only (freight/charges excluded); credit notes subtracted in their month.{noSales ? ' Sales backfill has not reached this window yet.' : ''}
+              Product lines only (freight/charges excluded; drop-ship products left out entirely); credit notes subtracted in their month.{noSales ? ' Sales backfill has not reached this window yet.' : ''}
             </span>
           </>
         )}
