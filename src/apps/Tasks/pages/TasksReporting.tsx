@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { cn } from "@guide/lib/utils";
@@ -12,7 +12,6 @@ import {
   useStaffProfiles,
 } from "../hooks/use-task-queries";
 import { quadrantOf, QUADRANT_LABEL, type Quadrant } from "../lib/eisenhower";
-import { scoreFor, statsForDay, localDay, lastNDays } from "../lib/score";
 import { palette } from "@portal/lib/palette";
 
 const GOLD = palette.accent;
@@ -42,10 +41,24 @@ function shortDay(iso: string): string {
   return new Date(iso + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 }
 
-function scoreColor(score: number): string {
-  if (score >= 8) return palette.aqua;
-  if (score >= 5) return GOLD;
-  return palette.pink;
+/** Local "yyyy-MM-dd" for a timestamptz (null-safe). */
+function localDay(ts: string | null): string | null {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Last `n` local days, oldest first, as "yyyy-MM-dd". */
+function lastNDays(n: number): string[] {
+  const out: string[] = [];
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  for (let i = n - 1; i >= 0; i--) {
+    out.push(localDay(new Date(d.getTime() - i * 86_400_000).toISOString())!);
+  }
+  return out;
 }
 
 function KpiCard({ label, value, accent }: { label: string; value: React.ReactNode; accent?: string }) {
@@ -88,21 +101,12 @@ export function TasksReporting() {
   const today  = days[days.length - 1];
   const weekAgo = days[days.length - 7];
 
-  const todayStats = useMemo(() => statsForDay(pool, today), [pool, today]);
-  const todayScore = scoreFor(todayStats);
-
   const open    = pool.filter((t) => t.status !== "done");
   const overdue = open.filter((t) => t.due_date && t.due_date < today);
   const doneThisWeek = pool.filter((t) => {
     const d = t.status === "done" ? localDay(t.completed_at) : null;
     return d !== null && d >= weekAgo;
   });
-
-  // 14-day score trend — same formula the 5pm Google Chat report uses
-  const scoreTrend = useMemo(
-    () => days.map((day) => ({ date: shortDay(day), score: scoreFor(statsForDay(pool, day)) })),
-    [pool, days],
-  );
 
   // Created vs completed per day
   const throughput = useMemo(
@@ -167,31 +171,14 @@ export function TasksReporting() {
       <div className="flex items-center gap-1 flex-wrap">
         <FilterPill active={scope === "mine"} onClick={() => setScope("mine")}>My report</FilterPill>
         <FilterPill active={scope === "all"} onClick={() => setScope("all")}>Team report</FilterPill>
-        <span className="ml-auto text-[11px] text-muted-foreground/60">
-          Score matches the 5pm Google Chat daily report
-        </span>
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Today's score" value={`${todayScore}/10`} accent={scoreColor(todayScore)} />
+      <div className="grid grid-cols-3 gap-3">
         <KpiCard label="Open tasks" value={open.length} />
         <KpiCard label="Overdue" value={overdue.length} accent={overdue.length > 0 ? "var(--brand-pink)" : "var(--brand-aqua)"} />
         <KpiCard label="Completed this week" value={doneThisWeek.length} accent="var(--brand-aqua)" />
       </div>
-
-      {/* Score trend */}
-      <ChartCard title="Daily score — last 14 days">
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={scoreTrend} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#222" />
-            <XAxis dataKey="date" {...AXIS} />
-            <YAxis domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} {...AXIS} />
-            <Tooltip {...TOOLTIP_STYLE} />
-            <Line type="monotone" dataKey="score" stroke={GOLD} strokeWidth={2} dot={{ r: 2.5, fill: GOLD }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </ChartCard>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Throughput */}
