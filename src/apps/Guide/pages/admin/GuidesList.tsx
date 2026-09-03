@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Filter, Loader2, Trash2, QrCode } from "lucide-react";
+import { Plus, Search, Filter, Loader2, Trash2, QrCode, Link2 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { BookIcon, MessageCircleIcon, FileDescriptionIcon, TriangleAlertIcon } from "@portal/components/icons";
 import { StatsCard } from "@guide/components/admin/StatsCard";
@@ -266,7 +266,9 @@ export default function GuidesList() {
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/guides/${guide.id}/edit`)}>Edit</Button>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/guide/view/${guide.slug}`)}>Preview</Button>
                   <span className="relative inline-flex">
-                    <Button variant="ghost" size="sm" onClick={() => shareGuide(guide)} title="Copy public link">Share</Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => shareGuide(guide)} title="Copy public link" aria-label="Copy public link">
+                      <Link2 className="w-4 h-4" />
+                    </Button>
                     {copied?.id === guide.id && copied.kind === "link" && <CopiedTip>Link copied to clipboard</CopiedTip>}
                   </span>
                   <span className="relative inline-flex">
