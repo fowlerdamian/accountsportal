@@ -32,7 +32,8 @@ function aestToday(): string {
 interface ProductRec {
   product_id: string; sku: string; name: string | null; category: string | null;
   brand: string | null; status: string | null; avg_cost: number; updated_at: string;
-  drop_ship_mode: string | null; tags: string | null;
+  drop_ship_mode: string | null; tags: string | null; product_type: string | null;
+  bom: boolean; bom_components: unknown[] | null;
 }
 interface SnapRow {
   snapshot_date: string; product_id: string; sku: string | null;
@@ -56,7 +57,7 @@ serve(async (req) => {
     const products = new Map<string, ProductRec>();
     const bySku = new Map<string, string>();
     for (let page = 1; page <= 10; page++) {
-      const d = await cin7("/product", { Page: page, Limit: 1000 });
+      const d = await cin7("/product", { Page: page, Limit: 1000, IncludeBOM: true });
       const items = (d.Products as Json[]) ?? [];
       for (const p of items) {
         const id = String(p.ID ?? "");
@@ -68,6 +69,15 @@ serve(async (req) => {
           avg_cost: Number(p.AverageCost) || 0, updated_at: now,
           // "No Drop Ship" | "Optional Drop Ship" | "Always Drop Ship" — the report excludes drop-ship lines
           drop_ship_mode: (p.DropShipMode as string) ?? null, tags: (p.Tags as string) ?? null,
+          product_type: (p.Type as string) ?? null, // "Stock" | "Service" — non-stock items are excluded
+          // Bill of materials: assemblies built to order are exploded to components in the report
+          bom: p.BillOfMaterial === true,
+          bom_components: Array.isArray(p.BillOfMaterialsProducts) && p.BillOfMaterialsProducts.length
+            ? (p.BillOfMaterialsProducts as Json[]).map((c) => ({
+              product_id: c.ProductID ?? c.ComponentProductID ?? null, sku: c.ProductCode ?? c.SKU ?? null,
+              qty: Number(c.Quantity) || 0,
+            }))
+            : null,
         });
         if (sku) bySku.set(sku, id);
       }

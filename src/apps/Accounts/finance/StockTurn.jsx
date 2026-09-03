@@ -10,8 +10,12 @@
 // comes from daily snapshots (cin7_stock_snapshots, stock-turn-snapshot edge fn);
 // the average stock value is the mean of the snapshots inside the window, or the
 // latest snapshot while history is still accumulating. Both RPCs live in
-// migration 20260903000001_stock_turn.sql. Drop-ship products (Cin7 DropShipMode
-// other than "No Drop Ship") are excluded from stock, sales and the trend.
+// migration 20260903000001_stock_turn.sql (+ later stock_turn_* migrations).
+//
+// Scope (owner-specified): drop-ship products and non-inventory items (Cin7
+// product Type ≠ Stock) are excluded in SQL; built-to-order assemblies are
+// exploded to their components in SQL; lines with no units on hand, under $100
+// of stock, or with no COGS in the window are hidden here, everywhere on the page.
 
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -33,6 +37,10 @@ const C = {
 }
 const MONO = '"JetBrains Mono", monospace'
 const TARGET = 200
+// Lines holding less than this (at cost, latest snapshot) are hidden from the
+// whole dashboard — tiles, charts, categories and the table.
+const MIN_STOCK = 100
+const PAGE = 100
 
 const WINDOWS = [
   { key: 3, label: '3 mo' },
@@ -40,7 +48,8 @@ const WINDOWS = [
   { key: 12, label: '12 mo' },
 ]
 
-// Status buckets, in display order. `none` = no stock and no sales in the window.
+// Status buckets. Only the first three can occur on the page (lines need stock
+// and COGS to be shown); the others are kept so metricsOf stays total.
 const STATUS = {
   target: { label: 'On target', hue: C.green,   desc: `Ratio ≥ ${TARGET}` },
   below:  { label: 'Below',     hue: C.accent,  desc: `Ratio 100–${TARGET - 1}` },
@@ -48,6 +57,7 @@ const STATUS = {
   dead:   { label: 'No sales',  hue: '#a0a0a0', desc: 'Stock held, nothing sold in the window' },
   none:   { label: 'No stock',  hue: C.faint,   desc: 'Sold in the window, none on hand now' },
 }
+const SHOWN_STATUSES = ['target', 'below', 'poor']
 const ratioStatus = (ratio) => (ratio == null ? 'poor' : ratio >= TARGET ? 'target' : ratio >= 100 ? 'below' : 'poor')
 
 const fmt0 = new Intl.NumberFormat('en-AU', { maximumFractionDigits: 0 })
@@ -139,11 +149,12 @@ function Panel({ title, icon: Icon, right, children, style }) {
   )
 }
 
-function Tile({ label, value, sub, hue, children }) {
+function Tile({ label, value, sub, hue, children, style }) {
+  const isMobile = useIsMobile()
   return (
-    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: isMobile ? '12px 14px' : '14px 16px', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, ...style }}>
       <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted, fontFamily: MONO }}>{label}</span>
-      <span style={{ fontSize: 24, fontWeight: 600, color: hue ?? C.text, fontFamily: MONO, lineHeight: 1.15 }}>{value}</span>
+      <span style={{ fontSize: isMobile ? 21 : 24, fontWeight: 600, color: hue ?? C.text, fontFamily: MONO, lineHeight: 1.15 }}>{value}</span>
       {sub && <span style={{ fontSize: 11, color: C.faint, fontFamily: MONO }}>{sub}</span>}
       {children}
     </div>
@@ -154,7 +165,7 @@ function Tile({ label, value, sub, hue, children }) {
 // over-achievement still has room to show.
 function TargetBar({ ratio }) {
   const max = TARGET * 1.5
-  const v = ratio == null ? 0 : ratio === Infinity ? max : Math.min(ratio, max)
+  const v = ratio == null ? 0 : ratio === Infinity ? max : Math.max(0, Math.min(ratio, max))
   return (
     <div style={{ position: 'relative', height: 6, background: C.surface, borderRadius: 3, marginTop: 8 }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${(v / max) * 100}%`, background: STATUS[ratioStatus(ratio)].hue, borderRadius: 3, transition: 'width 300ms' }} />
@@ -210,10 +221,43 @@ function TrendTip({ active, payload, label }) {
   )
 }
 
-const PAGE = 100
-// Lines holding less than this (at cost, latest snapshot) are hidden from the
-// whole dashboard — tiles, charts, categories and the table.
-const MIN_STOCK = 100
+// Mobile sort options (desktop sorts by clicking column headers)
+const MOBILE_SORTS = [
+  { key: 'ratio', label: 'Ratio' },
+  { key: 'turn', label: 'Turn' },
+  { key: 'stockValue', label: 'Stock $' },
+  { key: 'cogs', label: 'COGS' },
+  { key: 'gp', label: 'GP' },
+  { key: 'sku', label: 'SKU' },
+]
+
+// One line as a phone-sized card: identity + status on top, four key figures below.
+function LineCard({ r }) {
+  const stat = (label, value, hue) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.07em', color: C.faint, fontFamily: MONO }}>{label}</span>
+      <span style={{ fontSize: 13, fontFamily: MONO, color: hue ?? C.text, whiteSpace: 'nowrap' }}>{value}</span>
+    </div>
+  )
+  return (
+    <div style={{ padding: '10px 0', borderBottom: `1px solid ${C.borderSoft}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{ fontFamily: MONO, fontSize: 12.5, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku}</span>
+          <span style={{ fontSize: 11, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name || '—'}</span>
+          <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>{r.category} · {num(r.onHand)} on hand · {num(r.qty)} sold</span>
+        </div>
+        <Pill status={r.status} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+        {stat('Stock $', money(r.stockValue))}
+        {stat('Turn', turnFmt(r.turn))}
+        {stat('GP', pct(r.gp), r.gp != null && r.gp < 0 ? C.red : undefined)}
+        {stat('Ratio', ratioFmt(r.ratio), STATUS[r.status].hue)}
+      </div>
+    </div>
+  )
+}
 
 export default function StockTurn() {
   const isMobile = useIsMobile()
@@ -232,26 +276,29 @@ export default function StockTurn() {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'sku' || key === 'category' ? 'asc' : 'desc' }))
   }
 
-  // Per-SKU rows with derived metrics
-  const rows = useMemo(() => (data?.rows ?? []).filter((r) => Number(r.stock_value) >= MIN_STOCK).map((r) => {
-    const base = {
-      id: r.product_id, sku: r.sku, name: r.name ?? '', category: r.category || 'Uncategorised', brand: r.brand ?? '', pstatus: r.status ?? '',
-      onHand: Number(r.on_hand), available: Number(r.available), onOrder: Number(r.on_order), avgCost: Number(r.avg_cost),
-      stockValue: Number(r.stock_value), avgStock: Number(r.avg_stock_value),
-      qty: Number(r.qty_sold), revenue: Number(r.revenue), cogs: Number(r.cogs),
-    }
-    return { ...base, ...metricsOf(base, months) }
-  }), [data, months])
+  // Per-SKU rows with derived metrics. A line needs units on hand, ≥ MIN_STOCK
+  // at cost and some COGS in the window to appear anywhere on the page.
+  const rows = useMemo(() => (data?.rows ?? [])
+    .filter((r) => Number(r.on_hand) > 0 && Number(r.stock_value) >= MIN_STOCK && Number(r.cogs) > 0)
+    .map((r) => {
+      const base = {
+        id: r.product_id, sku: r.sku, name: r.name ?? '', category: r.category || 'Uncategorised', brand: r.brand ?? '', pstatus: r.status ?? '',
+        onHand: Number(r.on_hand), available: Number(r.available), onOrder: Number(r.on_order), avgCost: Number(r.avg_cost),
+        stockValue: Number(r.stock_value), avgStock: Number(r.avg_stock_value),
+        qty: Number(r.qty_sold), revenue: Number(r.revenue), cogs: Number(r.cogs),
+      }
+      return { ...base, ...metricsOf(base, months) }
+    }), [data, months])
 
   const categories = useMemo(() => [...new Set(rows.map((r) => r.category))].sort(), [rows])
 
-  // Overall figures — every SKU, regardless of table filters
+  // Overall figures — every shown SKU, regardless of table filters
   const overall = useMemo(() => {
     const t = rows.reduce((a, r) => ({
       cogs: a.cogs + r.cogs, revenue: a.revenue + r.revenue, avgStock: a.avgStock + r.avgStock, stockValue: a.stockValue + r.stockValue,
-      inStock: a.inStock + (r.stockValue > 0 ? 1 : 0), dead: a.dead + (r.status === 'dead' ? r.stockValue : 0), deadN: a.deadN + (r.status === 'dead' ? 1 : 0),
-    }), { cogs: 0, revenue: 0, avgStock: 0, stockValue: 0, inStock: 0, dead: 0, deadN: 0 })
-    return { ...t, ...metricsOf(t, months) }
+      onTarget: a.onTarget + (r.status === 'target' ? 1 : 0),
+    }), { cogs: 0, revenue: 0, avgStock: 0, stockValue: 0, onTarget: 0 })
+    return { ...t, lines: rows.length, ...metricsOf(t, months) }
   }, [rows, months])
 
   // Category rollup, best ratio first
@@ -264,7 +311,6 @@ export default function StockTurn() {
     }
     const rank = (v) => (v == null ? -1 : v === Infinity ? 1e9 : v)
     return [...m.values()].map((c) => ({ ...c, ...metricsOf(c, months) }))
-      .filter((c) => c.stockValue > 0 || c.cogs > 0)
       .sort((a, b) => rank(b.ratio) - rank(a.ratio))
   }, [rows, months])
 
@@ -275,12 +321,12 @@ export default function StockTurn() {
       const cogs = Number(t.cogs), revenue = Number(t.revenue)
       const avgStock = t.avg_stock_value == null ? null : Number(t.avg_stock_value)
       const gp = revenue > 0 ? ((revenue - cogs) / revenue) * 100 : null
-      const turn = avgStock > 0 ? (cogs * 12) / avgStock : null
+      const turn = avgStock > 0 && cogs > 0 ? (cogs * 12) / avgStock : null
       const ratio = turn != null && gp != null ? turn * gp : null
       const key = toKey(String(t.period_month))
       return { key, label: monthLabel(key), cogs, revenue, gp, avgStock, turn, ratio }
-    }).filter((t) => t.key <= cur).slice(-18) // drop stray future-dated invoices
-  }, [data])
+    }).filter((t) => t.key <= cur).slice(isMobile ? -12 : -18) // drop stray future-dated invoices
+  }, [data, isMobile])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -311,45 +357,43 @@ export default function StockTurn() {
   if (error) return <Centered tone={C.red}>Failed to load: {error.message}</Centered>
 
   const win = data.window
-  const chartCategories = byCategory
   const windowLabel = `${monthLabel(win.fromKey)} – ${monthLabel(win.toKey)}`
   const snapshotDays = data.rows[0]?.snapshot_days ?? null
   const noSnapshot = !data.latestSnapshot
-  const noSales = rows.every((r) => r.cogs === 0 && r.revenue === 0)
+  const noSales = (data.rows ?? []).every((r) => Number(r.cogs) === 0 && Number(r.revenue) === 0)
 
   const grid = {
     display: 'grid',
-    gridTemplateColumns: isMobile
-      ? 'minmax(0, 2fr) repeat(3, minmax(0, 1fr)) 64px'
-      : 'minmax(0, 2.4fr) minmax(0, 1.1fr) repeat(8, minmax(0, 0.9fr)) 84px',
+    gridTemplateColumns: 'minmax(0, 2.4fr) minmax(0, 1.1fr) repeat(8, minmax(0, 0.9fr)) 84px',
     gap: 8, alignItems: 'center',
   }
   const th = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: C.muted, textAlign: 'right' }
   const cellR = { textAlign: 'right', fontFamily: MONO, fontSize: 12 }
-  const input = { background: C.panel, color: C.text, border: `1px solid ${C.border}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, fontFamily: MONO }
+  const input = { background: C.panel, color: C.text, border: `1px solid ${C.border}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, fontFamily: MONO, minWidth: 0 }
+  const segBtn = (active) => ({
+    border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: 5, fontSize: 11.5, fontFamily: MONO, flex: isMobile ? 1 : 'none',
+    background: active ? C.accent : 'transparent',
+    color: active ? C.bg : C.muted, fontWeight: active ? 600 : 400,
+    transition: 'background 120ms, color 120ms',
+  })
+  const catGrid = { display: 'grid', gridTemplateColumns: isMobile ? '1.8fr 1fr 1fr' : '1.6fr repeat(4, 1fr)', gap: 8 }
 
   return (
     <div style={{ height: '100%', overflow: 'auto', background: C.bg, padding: isMobile ? 12 : 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: isMobile ? 12 : 16 }}>
 
         {/* Header */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 18, fontWeight: 600, color: C.text, margin: 0 }}>Stock Turn</h1>
-            <span style={{ fontSize: 12, color: C.muted, fontFamily: MONO }}>
-              {windowLabel} · annualised · stock at Cin7 avg cost · lines with ≥ {money(MIN_STOCK)} stock · Ratio = turn × GP% (target {TARGET}+)
+            <span style={{ fontSize: isMobile ? 11 : 12, color: C.muted, fontFamily: MONO }}>
+              {windowLabel} · annualised · stock at Cin7 avg cost{isMobile ? '' : ` · lines with ≥ ${money(MIN_STOCK)} stock · Ratio = turn × GP% (target ${TARGET}+)`}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', background: C.panel, border: `1px solid ${C.border}`, borderRadius: 7, padding: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+            <div style={{ display: 'flex', background: C.panel, border: `1px solid ${C.border}`, borderRadius: 7, padding: 2, flex: isMobile ? 1 : 'none' }}>
               {WINDOWS.map((w) => (
-                <button key={w.key} onClick={() => { setMonths(w.key); setLimit(PAGE) }}
-                  style={{
-                    border: 'none', cursor: 'pointer', padding: '6px 12px', borderRadius: 5, fontSize: 11.5, fontFamily: MONO,
-                    background: months === w.key ? C.accent : 'transparent',
-                    color: months === w.key ? C.bg : C.muted, fontWeight: months === w.key ? 600 : 400,
-                    transition: 'background 120ms, color 120ms',
-                  }}>
+                <button key={w.key} onClick={() => { setMonths(w.key); setLimit(PAGE) }} style={segBtn(months === w.key)}>
                   {w.label}
                 </button>
               ))}
@@ -357,7 +401,7 @@ export default function StockTurn() {
             <button onClick={() => runSync(qc)} disabled={syncBusy}
               title="Sync Xero + Cin7 across all finance apps (includes a fresh stock snapshot)"
               style={{
-                display: 'flex', alignItems: 'center', gap: 6, cursor: syncBusy ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: syncBusy ? 'wait' : 'pointer',
                 background: C.panel, color: syncState === 'error' ? C.red : syncState === 'done' ? C.green : C.text,
                 border: `1px solid ${C.border}`, borderRadius: 7, padding: '7px 12px', fontSize: 11.5, fontFamily: MONO,
               }}>
@@ -374,7 +418,7 @@ export default function StockTurn() {
           </Notice>
         )}
         {noSnapshot && <Notice>No stock snapshot yet — press Sync all to take the first one.</Notice>}
-        {!noSnapshot && snapshotDays != null && snapshotDays < 28 && (
+        {!noSnapshot && snapshotDays != null && snapshotDays < 28 && !isMobile && (
           <Notice tone="info">
             Average stock value is based on {snapshotDays === 0 ? 'the latest snapshot only' : `${snapshotDays} daily snapshot${snapshotDays === 1 ? '' : 's'}`}
             {' '}(daily snapshots began {formatDate(data.latestSnapshot)}). It becomes a true average as history accumulates.
@@ -387,60 +431,62 @@ export default function StockTurn() {
         )}
 
         {rows.length === 0 ? (
-          <Centered>No data yet — press Sync all to pull Cin7 stock and sales.</Centered>
+          <Centered>{noSnapshot || noSales ? 'No data yet — press Sync all to pull Cin7 stock and sales.' : `No lines with units on hand, ≥ ${money(MIN_STOCK)} stock and sales in this window.`}</Centered>
         ) : (
           <>
-            {/* KPI tiles */}
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5, 1fr)', gap: 12 }}>
+            {/* KPI tiles — on phones the headline ratio spans the full width */}
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5, 1fr)', gap: isMobile ? 8 : 12 }}>
               <Tile label="Stock Turn Ratio" value={ratioFmt(overall.ratio)} hue={STATUS[ratioStatus(overall.ratio)].hue}
-                sub={overall.ratio == null ? 'needs sales + stock' : overall.ratio >= TARGET ? `on target (${TARGET}+)` : `${fmt0.format(TARGET - overall.ratio)} below target`}>
+                style={isMobile ? { gridColumn: '1 / -1' } : undefined}
+                sub={overall.ratio == null ? 'needs sales + stock' : overall.ratio >= TARGET ? `on target (${TARGET}+)` : `${fmt0.format(TARGET - overall.ratio)} below target ${TARGET}`}>
                 <TargetBar ratio={overall.ratio} />
               </Tile>
               <Tile label="Stock turn" value={turnFmt(overall.turn)} sub={overall.days ? `${fmt0.format(overall.days)} days of stock` : 'annualised'} />
               <Tile label="Gross profit" value={pct(overall.gp)} sub={`on ${compact(overall.revenue)} revenue`} />
-              <Tile label="Stock at cost" value={compact(overall.stockValue)} sub={`${fmt0.format(overall.inStock)} SKUs on hand · avg ${compact(overall.avgStock)}`} />
-              <Tile label="No-sales stock" value={compact(overall.dead)} hue={overall.dead > 0 ? C.red : undefined}
-                sub={`${fmt0.format(overall.deadN)} SKUs unsold in ${months} mo · COGS ${compact(overall.cogsAnn)}/yr`} />
+              <Tile label="Stock at cost" value={compact(overall.stockValue)} sub={`${fmt0.format(overall.lines)} lines · COGS ${compact(overall.cogsAnn)}/yr`} />
+              <Tile label="Lines on target" value={`${fmt0.format(overall.onTarget)} / ${fmt0.format(overall.lines)}`}
+                hue={overall.lines && overall.onTarget / overall.lines >= 0.5 ? C.green : undefined}
+                sub={overall.lines ? `${pct((overall.onTarget / overall.lines) * 100, 0)} of shown lines ≥ ${TARGET}` : '—'} />
             </div>
 
             {/* Charts */}
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 12 : 16 }}>
               <Panel title="Ratio by category" icon={ChartBarIcon}
                 right={<span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>dashed line = target {TARGET}</span>}>
-                <ResponsiveContainer width="100%" height={Math.max(180, chartCategories.length * 26 + 30)}>
+                <ResponsiveContainer width="100%" height={Math.max(160, byCategory.length * (isMobile ? 24 : 26) + 30)}>
                   {/* Bars are clamped to 0…3× target for display; the tooltip shows the true ratio */}
-                  <ComposedChart layout="vertical" data={chartCategories.map((c) => ({ ...c, value: c.ratio == null ? 0 : c.ratio === Infinity ? TARGET * 2 : Math.max(0, Math.min(c.ratio, TARGET * 3)) }))}
+                  <ComposedChart layout="vertical" data={byCategory.map((c) => ({ ...c, value: c.ratio == null ? 0 : c.ratio === Infinity ? TARGET * 2 : Math.max(0, Math.min(c.ratio, TARGET * 3)) }))}
                     margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
                     <CartesianGrid stroke={C.borderSoft} horizontal={false} />
                     <XAxis type="number" domain={[0, 'auto']} tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="name" width={isMobile ? 90 : 130} tick={{ fill: C.muted, fontSize: 10.5 }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" width={isMobile ? 96 : 130} tick={{ fill: C.muted, fontSize: 10.5 }} axisLine={false} tickLine={false} />
                     <Tooltip content={<CategoryTip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                     <ReferenceLine x={TARGET} stroke={C.text} strokeOpacity={0.6} strokeDasharray="3 3" />
                     <Bar dataKey="value" isAnimationActive={false} radius={[0, 2, 2, 0]} fillOpacity={0.85}>
-                      {chartCategories.map((c) => <Cell key={c.name} fill={STATUS[c.status].hue} />)}
+                      {byCategory.map((c) => <Cell key={c.name} fill={STATUS[c.status].hue} />)}
                     </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.6fr repeat(4, 1fr)', gap: 8, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ ...catGrid, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
                     <span style={{ ...th, textAlign: 'left' }}>Category</span>
                     <span style={th}>Stock $</span>
-                    <span style={th}>Turn</span>
-                    <span style={th}>GP</span>
+                    {!isMobile && <span style={th}>Turn</span>}
+                    {!isMobile && <span style={th}>GP</span>}
                     <span style={th}>Ratio</span>
                   </div>
                   {byCategory.map((c) => (
                     <div key={c.name} onClick={() => { setCategory(category === c.name ? '' : c.name); setLimit(PAGE) }}
-                      title="Click to filter the table"
-                      style={{ display: 'grid', gridTemplateColumns: '1.6fr repeat(4, 1fr)', gap: 8, padding: '6px 0', borderBottom: `1px solid ${C.borderSoft}`, cursor: 'pointer', background: category === c.name ? 'rgba(var(--brand-accent-rgb),0.06)' : 'transparent' }}>
+                      title="Tap to filter the table"
+                      style={{ ...catGrid, padding: '7px 0', borderBottom: `1px solid ${C.borderSoft}`, cursor: 'pointer', background: category === c.name ? 'rgba(var(--brand-accent-rgb),0.06)' : 'transparent' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: C.text, minWidth: 0 }}>
                         <span style={{ width: 8, height: 8, borderRadius: 2, background: STATUS[c.status].hue, flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
                         <span style={{ color: C.faint, fontSize: 10.5, fontFamily: MONO }}>{c.skus}</span>
                       </span>
                       <span style={{ ...cellR, color: C.muted }}>{money(c.stockValue)}</span>
-                      <span style={{ ...cellR, color: C.muted }}>{turnFmt(c.turn)}</span>
-                      <span style={{ ...cellR, color: C.muted }}>{pct(c.gp)}</span>
+                      {!isMobile && <span style={{ ...cellR, color: C.muted }}>{turnFmt(c.turn)}</span>}
+                      {!isMobile && <span style={{ ...cellR, color: C.muted }}>{pct(c.gp)}</span>}
                       <span style={{ ...cellR, color: STATUS[c.status].hue, fontWeight: 600 }}>{ratioFmt(c.ratio)}</span>
                     </div>
                   ))}
@@ -448,13 +494,13 @@ export default function StockTurn() {
               </Panel>
 
               <Panel title="Monthly trend" icon={ChartLineIcon}
-                right={<span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>bars = COGS · line = ratio (month annualised)</span>}>
-                <ResponsiveContainer width="100%" height={isMobile ? 200 : 250}>
-                  <ComposedChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                right={<span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>bars = COGS · line = ratio</span>}>
+                <ResponsiveContainer width="100%" height={isMobile ? 190 : 250}>
+                  <ComposedChart data={trend} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke={C.borderSoft} vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
-                    <YAxis yAxisId="cogs" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={44} />
-                    <YAxis yAxisId="ratio" orientation="right" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={36} domain={[0, (max) => Math.max(TARGET * 1.2, max || 0)]} />
+                    <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} interval={isMobile ? 2 : 'preserveStartEnd'} />
+                    <YAxis yAxisId="cogs" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={isMobile ? 40 : 44} />
+                    <YAxis yAxisId="ratio" orientation="right" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={isMobile ? 30 : 36} domain={[0, (max) => Math.max(TARGET * 1.2, max || 0)]} />
                     <Tooltip content={<TrendTip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                     <ReferenceLine yAxisId="ratio" y={TARGET} stroke={C.text} strokeOpacity={0.5} strokeDasharray="3 3" />
                     <Bar yAxisId="cogs" dataKey="cogs" name="COGS" fill={C.faint} fillOpacity={0.55} isAnimationActive={false} radius={[2, 2, 0, 0]} />
@@ -462,88 +508,120 @@ export default function StockTurn() {
                   </ComposedChart>
                 </ResponsiveContainer>
                 <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
-                  The ratio line only appears for months with a stock snapshot — history builds from {data.latestSnapshot ? formatDate(data.latestSnapshot) : 'the first snapshot'} onward.
+                  Each month annualised. The ratio line only appears for months with a stock snapshot — history builds from {data.latestSnapshot ? formatDate(data.latestSnapshot) : 'the first snapshot'} onward.
                 </span>
               </Panel>
             </div>
 
-            {/* Per-line table */}
+            {/* Per-line table (desktop) / cards (mobile) */}
             <Panel title="Stock turn by line" icon={StackIcon}
-              right={
+              right={!isMobile && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <input value={search} onChange={(e) => { setSearch(e.target.value); setLimit(PAGE) }} placeholder="Search SKU / name / brand" style={{ ...input, width: isMobile ? 150 : 210 }} />
+                  <input value={search} onChange={(e) => { setSearch(e.target.value); setLimit(PAGE) }} placeholder="Search SKU / name / brand" style={{ ...input, width: 210 }} />
                   <select value={category} onChange={(e) => { setCategory(e.target.value); setLimit(PAGE) }} style={{ ...input, cursor: 'pointer' }}>
                     <option value="">All categories</option>
                     {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setLimit(PAGE) }} style={{ ...input, cursor: 'pointer' }}>
                     <option value="">All statuses</option>
-                    {Object.entries(STATUS).filter(([k]) => k !== 'none').map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+                    {SHOWN_STATUSES.map((k) => <option key={k} value={k}>{STATUS[k].label}</option>)}
                   </select>
                 </div>
-              }>
+              )}>
+              {isMobile && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input value={search} onChange={(e) => { setSearch(e.target.value); setLimit(PAGE) }} placeholder="Search SKU / name / brand" style={{ ...input, width: '100%', boxSizing: 'border-box' }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                    <select value={category} onChange={(e) => { setCategory(e.target.value); setLimit(PAGE) }} style={{ ...input, cursor: 'pointer' }}>
+                      <option value="">All categories</option>
+                      {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setLimit(PAGE) }} style={{ ...input, cursor: 'pointer' }}>
+                      <option value="">All statuses</option>
+                      {SHOWN_STATUSES.map((k) => <option key={k} value={k}>{STATUS[k].label}</option>)}
+                    </select>
+                    <select value={`${sort.key}:${sort.dir}`} onChange={(e) => { const [key, dir] = e.target.value.split(':'); setSort({ key, dir }); setLimit(PAGE) }} style={{ ...input, cursor: 'pointer' }}>
+                      {MOBILE_SORTS.flatMap((s) => [
+                        <option key={`${s.key}:desc`} value={`${s.key}:desc`}>{s.label} ↓</option>,
+                        <option key={`${s.key}:asc`} value={`${s.key}:asc`}>{s.label} ↑</option>,
+                      ])}
+                    </select>
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {Object.entries(STATUS).filter(([k]) => k !== 'none').map(([k, s]) => (
-                  <span key={k} title={s.desc} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: C.muted, fontFamily: MONO }}>
-                    <span style={{ width: 9, height: 9, borderRadius: 2, background: s.hue, display: 'inline-block' }} />
-                    {s.label} <span style={{ color: C.faint }}>{fmt0.format(rows.filter((r) => r.status === k).length)}</span>
+                {SHOWN_STATUSES.map((k) => (
+                  <span key={k} title={STATUS[k].desc} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: C.muted, fontFamily: MONO }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 2, background: STATUS[k].hue, display: 'inline-block' }} />
+                    {STATUS[k].label} <span style={{ color: C.faint }}>{fmt0.format(rows.filter((r) => r.status === k).length)}</span>
                   </span>
                 ))}
               </div>
-              <div style={{ overflowX: 'auto' }}>
-                <div style={{ minWidth: isMobile ? 520 : 960, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ ...grid, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
-                    <SortHeader label="SKU / Product" colKey="sku" align="left" sort={sort} onSort={toggleSort} style={th} />
-                    {!isMobile && <SortHeader label="Category" colKey="category" align="left" sort={sort} onSort={toggleSort} style={th} />}
-                    {!isMobile && <SortHeader label="On hand" colKey="onHand" sort={sort} onSort={toggleSort} style={th} />}
-                    <SortHeader label="Stock $" colKey="stockValue" sort={sort} onSort={toggleSort} style={th} title="Latest on hand × avg cost" />
-                    {!isMobile && <SortHeader label="Sold" colKey="qty" sort={sort} onSort={toggleSort} style={th} title={`Units invoiced, ${windowLabel}`} />}
-                    {!isMobile && <SortHeader label="Revenue" colKey="revenue" sort={sort} onSort={toggleSort} style={th} />}
-                    {!isMobile && <SortHeader label="COGS" colKey="cogs" sort={sort} onSort={toggleSort} style={th} />}
-                    {!isMobile && <SortHeader label="GP" colKey="gp" sort={sort} onSort={toggleSort} style={th} />}
-                    <SortHeader label="Turn" colKey="turn" sort={sort} onSort={toggleSort} style={th} title="Annualised COGS ÷ average stock value" />
-                    {!isMobile && <SortHeader label="Days" colKey="days" sort={sort} onSort={toggleSort} style={th} title="365 ÷ stock turn" />}
-                    <SortHeader label="Ratio" colKey="ratio" sort={sort} onSort={toggleSort} style={th} title="Stock turn × GP%" />
-                    <span style={{ ...th, textAlign: 'left' }}>Status</span>
+
+              {isMobile ? (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ fontSize: 11, color: C.muted, fontFamily: MONO, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
+                    {fmt0.format(filtered.length)} lines · {money(filteredTotal.stockValue)} stock · {turnFmt(filteredTotal.turn)} · ratio{' '}
+                    <span style={{ color: STATUS[filteredTotal.status].hue, fontWeight: 600 }}>{ratioFmt(filteredTotal.ratio)}</span>
                   </div>
-                  {filtered.slice(0, limit).map((r) => (
-                    <div key={r.id} style={{ ...grid, padding: '7px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                      <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        <span style={{ fontFamily: MONO, fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku}</span>
-                        <span title={r.name} style={{ fontSize: 11, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name || '—'}</span>
-                      </span>
-                      {!isMobile && <span style={{ fontSize: 11.5, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</span>}
-                      {!isMobile && <span style={{ ...cellR, color: C.muted }} title={`Available ${num(r.available)} · on order ${num(r.onOrder)}`}>{num(r.onHand)}</span>}
-                      <span style={{ ...cellR, color: C.text }} title={`Avg over window ${money(r.avgStock)} · avg cost ${money(r.avgCost)}`}>{money(r.stockValue)}</span>
-                      {!isMobile && <span style={{ ...cellR, color: C.muted }}>{num(r.qty)}</span>}
-                      {!isMobile && <span style={{ ...cellR, color: C.muted }}>{money(r.revenue)}</span>}
-                      {!isMobile && <span style={{ ...cellR, color: C.muted }}>{money(r.cogs)}</span>}
-                      {!isMobile && <span style={{ ...cellR, color: r.gp == null ? C.faint : r.gp >= 0 ? C.muted : C.red }}>{pct(r.gp)}</span>}
-                      <span style={{ ...cellR, color: C.text }}>{turnFmt(r.turn)}</span>
-                      {!isMobile && <span style={{ ...cellR, color: C.muted }}>{num(r.days)}</span>}
-                      <span style={{ ...cellR, color: STATUS[r.status].hue, fontWeight: 600 }}>{ratioFmt(r.ratio)}</span>
-                      <span><Pill status={r.status} /></span>
+                  {filtered.slice(0, limit).map((r) => <LineCard key={r.id} r={r} />)}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <div style={{ minWidth: 960, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ ...grid, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+                      <SortHeader label="SKU / Product" colKey="sku" align="left" sort={sort} onSort={toggleSort} style={th} />
+                      <SortHeader label="Category" colKey="category" align="left" sort={sort} onSort={toggleSort} style={th} />
+                      <SortHeader label="On hand" colKey="onHand" sort={sort} onSort={toggleSort} style={th} />
+                      <SortHeader label="Stock $" colKey="stockValue" sort={sort} onSort={toggleSort} style={th} title="Latest on hand × avg cost" />
+                      <SortHeader label="Sold" colKey="qty" sort={sort} onSort={toggleSort} style={th} title={`Units invoiced, ${windowLabel}`} />
+                      <SortHeader label="Revenue" colKey="revenue" sort={sort} onSort={toggleSort} style={th} />
+                      <SortHeader label="COGS" colKey="cogs" sort={sort} onSort={toggleSort} style={th} />
+                      <SortHeader label="GP" colKey="gp" sort={sort} onSort={toggleSort} style={th} />
+                      <SortHeader label="Turn" colKey="turn" sort={sort} onSort={toggleSort} style={th} title="Annualised COGS ÷ average stock value" />
+                      <SortHeader label="Days" colKey="days" sort={sort} onSort={toggleSort} style={th} title="365 ÷ stock turn" />
+                      <SortHeader label="Ratio" colKey="ratio" sort={sort} onSort={toggleSort} style={th} title="Stock turn × GP%" />
+                      <span style={{ ...th, textAlign: 'left' }}>Status</span>
                     </div>
-                  ))}
-                  <div style={{ ...grid, padding: '9px 0 2px', fontWeight: 600 }}>
-                    <span style={{ fontSize: 12, color: C.text }}>{fmt0.format(filtered.length)} lines</span>
-                    {!isMobile && <span />}
-                    {!isMobile && <span style={{ ...cellR, color: C.muted }}>{num(filteredTotal.onHand)}</span>}
-                    <span style={{ ...cellR, color: C.text }}>{money(filteredTotal.stockValue)}</span>
-                    {!isMobile && <span style={{ ...cellR, color: C.muted }}>{num(filteredTotal.qty)}</span>}
-                    {!isMobile && <span style={{ ...cellR, color: C.muted }}>{money(filteredTotal.revenue)}</span>}
-                    {!isMobile && <span style={{ ...cellR, color: C.muted }}>{money(filteredTotal.cogs)}</span>}
-                    {!isMobile && <span style={{ ...cellR, color: C.muted }}>{pct(filteredTotal.gp)}</span>}
-                    <span style={{ ...cellR, color: C.text }}>{turnFmt(filteredTotal.turn)}</span>
-                    {!isMobile && <span style={{ ...cellR, color: C.muted }}>{num(filteredTotal.days)}</span>}
-                    <span style={{ ...cellR, color: STATUS[filteredTotal.status].hue }}>{ratioFmt(filteredTotal.ratio)}</span>
-                    <span />
+                    {filtered.slice(0, limit).map((r) => (
+                      <div key={r.id} style={{ ...grid, padding: '7px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
+                        <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <span style={{ fontFamily: MONO, fontSize: 12, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sku}</span>
+                          <span title={r.name} style={{ fontSize: 11, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name || '—'}</span>
+                        </span>
+                        <span style={{ fontSize: 11.5, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</span>
+                        <span style={{ ...cellR, color: C.muted }} title={`Available ${num(r.available)} · on order ${num(r.onOrder)}`}>{num(r.onHand)}</span>
+                        <span style={{ ...cellR, color: C.text }} title={`Avg over window ${money(r.avgStock)} · avg cost ${money(r.avgCost)}`}>{money(r.stockValue)}</span>
+                        <span style={{ ...cellR, color: C.muted }}>{num(r.qty)}</span>
+                        <span style={{ ...cellR, color: C.muted }}>{money(r.revenue)}</span>
+                        <span style={{ ...cellR, color: C.muted }}>{money(r.cogs)}</span>
+                        <span style={{ ...cellR, color: r.gp == null ? C.faint : r.gp >= 0 ? C.muted : C.red }}>{pct(r.gp)}</span>
+                        <span style={{ ...cellR, color: C.text }}>{turnFmt(r.turn)}</span>
+                        <span style={{ ...cellR, color: C.muted }}>{num(r.days)}</span>
+                        <span style={{ ...cellR, color: STATUS[r.status].hue, fontWeight: 600 }}>{ratioFmt(r.ratio)}</span>
+                        <span><Pill status={r.status} /></span>
+                      </div>
+                    ))}
+                    <div style={{ ...grid, padding: '9px 0 2px', fontWeight: 600 }}>
+                      <span style={{ fontSize: 12, color: C.text }}>{fmt0.format(filtered.length)} lines</span>
+                      <span />
+                      <span style={{ ...cellR, color: C.muted }}>{num(filteredTotal.onHand)}</span>
+                      <span style={{ ...cellR, color: C.text }}>{money(filteredTotal.stockValue)}</span>
+                      <span style={{ ...cellR, color: C.muted }}>{num(filteredTotal.qty)}</span>
+                      <span style={{ ...cellR, color: C.muted }}>{money(filteredTotal.revenue)}</span>
+                      <span style={{ ...cellR, color: C.muted }}>{money(filteredTotal.cogs)}</span>
+                      <span style={{ ...cellR, color: C.muted }}>{pct(filteredTotal.gp)}</span>
+                      <span style={{ ...cellR, color: C.text }}>{turnFmt(filteredTotal.turn)}</span>
+                      <span style={{ ...cellR, color: C.muted }}>{num(filteredTotal.days)}</span>
+                      <span style={{ ...cellR, color: STATUS[filteredTotal.status].hue }}>{ratioFmt(filteredTotal.ratio)}</span>
+                      <span />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
               {filtered.length > limit && (
                 <button onClick={() => setLimit((l) => l + PAGE)}
-                  style={{ alignSelf: 'center', background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 7, padding: '7px 14px', fontSize: 11.5, fontFamily: MONO, cursor: 'pointer' }}>
+                  style={{ alignSelf: 'center', background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 16px', fontSize: 11.5, fontFamily: MONO, cursor: 'pointer', width: isMobile ? '100%' : 'auto' }}>
                   Show {Math.min(PAGE, filtered.length - limit)} more of {fmt0.format(filtered.length - limit)}
                 </button>
               )}
@@ -551,8 +629,9 @@ export default function StockTurn() {
 
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Stock turn = COGS over the last {months} full months × {12 / months} ÷ average stock value (mean of daily snapshots in the window; latest snapshot until history exists).
-              Ratio = stock turn × GP% as a number (e.g. 5 turns × 40% = 200). ∞ = sold in the window with no stock on hand now.
-              Lines holding under {money(MIN_STOCK)} of stock are hidden everywhere. Product lines only (freight/charges excluded; drop-ship products left out entirely); credit notes subtracted in their month.{noSales ? ' Sales backfill has not reached this window yet.' : ''}
+              Ratio = stock turn × GP% as a number (e.g. 5 turns × 40% = 200).
+              Shown: stocked inventory items with units on hand, ≥ {money(MIN_STOCK)} at cost and sales in the window; drop-ship and non-inventory items are left out entirely.
+              Built-to-order assemblies count as sales of their components. Product lines only (freight/charges excluded); credit notes subtracted in their month.
             </span>
           </>
         )}
@@ -578,7 +657,7 @@ function Notice({ children, tone = 'warn' }) {
 
 function Centered({ children, tone = C.muted }) {
   return (
-    <div style={{ height: '100%', minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tone, fontSize: 13, background: C.bg, gap: 8 }}>
+    <div style={{ height: '100%', minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tone, fontSize: 13, background: C.bg, gap: 8, padding: 16, textAlign: 'center' }}>
       <RefreshIcon size={14} strokeWidth={1.5} /> {children}
     </div>
   )
