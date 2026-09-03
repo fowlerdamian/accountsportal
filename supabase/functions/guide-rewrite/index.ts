@@ -7,7 +7,7 @@
 // and the output is a short clause (3–8 words) summarising it, used to
 // auto-generate the step heading in the guide editor.
 import { resolveModel } from "../_shared/model.ts";
-import { requireStaff } from "../_shared/auth.ts";
+import { requireStaff, isStaffUser, forbidden } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const auth = await requireStaff(req, corsHeaders);
   if (!auth.ok) return auth.response;
+  if (!(await isStaffUser(auth.userId))) return forbidden(corsHeaders);
 
   try {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -66,6 +67,7 @@ Deno.serve(async (req) => {
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: AbortSignal.timeout(45_000),
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
         // Headings are tiny and fired on every description blur — use the fast tier.

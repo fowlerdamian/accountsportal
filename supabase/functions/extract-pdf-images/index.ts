@@ -1,4 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { requireStaff, isStaffUser, forbidden } from "../_shared/auth.ts";
+
+const MAX_PDF_BYTES = 30 * 1024 * 1024;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,6 +19,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
+  if (!(await isStaffUser(auth.userId))) return forbidden(corsHeaders);
 
   try {
     const serviceUrl = Deno.env.get("PDF_IMAGE_SERVICE_URL");
@@ -41,7 +47,13 @@ serve(async (req) => {
     if (!pdfFile || !(pdfFile instanceof File)) {
       return new Response(
         JSON.stringify({ success: false, error: "Body can not be decoded as form data", fallback: true }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (pdfFile.size > MAX_PDF_BYTES) {
+      return new Response(
+        JSON.stringify({ success: false, error: "PDF exceeds 30 MB", fallback: true, method: null, count: 0, images: [] }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -54,6 +66,7 @@ serve(async (req) => {
     const serviceRes = await fetch(`${serviceUrl}/extract`, {
       method: "POST",
       body: proxyForm,
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (!serviceRes.ok) {
@@ -68,7 +81,7 @@ serve(async (req) => {
           count: 0,
           images: [],
         }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -78,16 +91,17 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
+    console.error("extract-pdf-images:", err);
     return new Response(
       JSON.stringify({
         success: false,
-        error: err.message ?? "Image extraction failed",
+        error: (err as any)?.message ?? "Image extraction failed",
         fallback: true,
         method: null,
         count: 0,
         images: [],
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

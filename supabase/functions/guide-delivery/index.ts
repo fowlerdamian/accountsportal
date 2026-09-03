@@ -21,7 +21,7 @@
 // Deploy with --no-verify-jwt (Shopify cannot send a Supabase JWT).
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireStaff } from "../_shared/auth.ts";
+import { requireStaff, isStaffUser, forbidden } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -57,6 +57,7 @@ async function shopifyGet(path: string) {
   const { token, store } = shopifyEnv();
   const res = await fetch(`https://${store}/admin/api/${SHOPIFY_API}/${path}`, {
     headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error(`Shopify ${path} → ${res.status} ${await res.text()}`);
   return res.json();
@@ -178,17 +179,23 @@ const parseSkus = (code: string | null | undefined) =>
   [...new Set((code ?? "").toUpperCase().split(/[,;\s]+/).map((t) => t.trim()).filter(Boolean))];
 
 async function loadCatalog(db: SupabaseClient, brandId: string | null) {
-  const [{ data: brand }, { data: links }, { data: pubs }] = await Promise.all([
-    brandId
-      ? db.from("brands").select("id,key,name,domain,support_email,logo_url,primary_colour").eq("id", brandId).single()
-      : db.from("brands").select("id,key,name,domain,support_email,logo_url,primary_colour").eq("key", "trailbait").single(),
+  // Resolve the brand FIRST so the publication filter always uses a real brand id
+  // (the old `brandId ?? ""` produced an invalid-uuid error that was silently
+  // swallowed, leaving an empty catalogue and every SKU "unmatched").
+  const brandQ = brandId
+    ? db.from("brands").select("id,key,name,domain,support_email,logo_url,primary_colour").eq("id", brandId).single()
+    : db.from("brands").select("id,key,name,domain,support_email,logo_url,primary_colour").eq("key", "trailbait").single();
+  const { data: brand, error: brandErr } = await brandQ;
+  if (brandErr || !brand) throw new Error(`Delivery brand not found${brandErr ? `: ${brandErr.message}` : ""}`);
+  const [{ data: links, error: linksErr }, { data: pubs, error: pubsErr }] = await Promise.all([
     db.from("guide_product_links").select("sku,instruction_set_id"),
     db.from("guide_publications")
       .select("published_at, instruction_sets!inner(id,title,product_code,slug)")
       .eq("status", "published")
-      .eq("brand_id", brandId ?? ""),
+      .eq("brand_id", brand.id),
   ]);
-  if (!brand) throw new Error("Delivery brand not found");
+  if (linksErr) throw new Error(`guide_product_links: ${linksErr.message}`);
+  if (pubsErr) throw new Error(`guide_publications: ${pubsErr.message}`);
   const guides: GuideRow[] = (pubs ?? []).map((p: any) => ({ ...p.instruction_sets, codes: parseSkus(p.instruction_sets?.product_code), published_at: p.published_at }));
   const byId = new Map(guides.map((g) => [g.id, g]));
   const linkMap = new Map<string, string | null>();
@@ -303,6 +310,7 @@ async function sendResend(settings: Settings, brand: any, to: string, msg: { sub
   if (settings.bcc_email) body.bcc = [settings.bcc_email];
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` }, body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
   });
   const out = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Resend ${res.status}: ${JSON.stringify(out)}`);
@@ -323,7 +331,9 @@ function normaliseOrder(o: any) {
     .filter((li: LineItem) => li.quantity > 0);
   const fulfilments = (o.fulfillments ?? []).filter((f: any) => f.status === "success");
   const fulfilled_at: string | null = fulfilments.length
-    ? (fulfilments.map((f: any) => f.created_at as string).sort().at(-1) ?? null)
+    ? (fulfilments.map((f: any) => f.created_at as string)
+        .filter((t: string) => !Number.isNaN(Date.parse(t)))
+        .sort((a: string, b: string) => Date.parse(a) - Date.parse(b)).at(-1) ?? null)
     : null;
   const first = o.customer?.first_name ?? o.shipping_address?.first_name ?? o.billing_address?.first_name ?? "";
   const last = o.customer?.last_name ?? o.shipping_address?.last_name ?? o.billing_address?.last_name ?? "";
@@ -382,7 +392,25 @@ async function enqueue(db: SupabaseClient, o: any, source: string, settings: Set
   return data.id;
 }
 
+const MAX_ATTEMPTS = 5;
+
 async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<ReturnType<typeof loadCatalog>>, row: any, force = false) {
+  // Auto-delivery switched off: leave the row scheduled and untouched so it goes
+  // out when the switch is flipped back on (it used to be stamped "skipped" and lost).
+  if (!settings.enabled && !force) {
+    return { id: row.id, status: row.status, held: "Auto-delivery disabled" };
+  }
+  // Claim the row (compare-and-set) so the 15-min cron, "Sync now" and a manual
+  // resend can never send the same email twice. A crashed claim is released by
+  // processPending after 10 minutes.
+  const claim = await db.from("guide_deliveries")
+    .update({ status: "sending", updated_at: new Date().toISOString() })
+    .eq("id", row.id)
+    .in("status", force ? ["scheduled", "sending", "sent", "skipped", "failed", "pending"] : ["scheduled"])
+    .select("id");
+  if (claim.error) throw claim.error;
+  if (!claim.data?.length) return { id: row.id, status: row.status, skipped: "already being processed" };
+
   // Re-fetch the order NOW — items, email, name and refund/cancel state may have changed since scheduling.
   let fresh: ReturnType<typeof normaliseOrder> | null = null;
   try {
@@ -391,9 +419,10 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
   } catch (e) {
     const attempts = (row.attempts ?? 0) + 1;
     const detail = String((e as any)?.message ?? e);
-    await db.from("guide_deliveries").update({ attempts, error: `Refresh failed: ${detail}` }).eq("id", row.id);
-    await failAlert(row, attempts >= 5 ? "Could not re-fetch the order from Shopify — giving up after 5 attempts" : `Could not re-fetch the order from Shopify (attempt ${attempts}/5, will retry)`, detail);
-    return { id: row.id, status: "scheduled", error: "refresh failed — will retry" };
+    const giveUp = attempts >= MAX_ATTEMPTS;
+    await db.from("guide_deliveries").update({ attempts, status: giveUp ? "failed" : "scheduled", error: `Refresh failed: ${detail}` }).eq("id", row.id);
+    await failAlert(row, giveUp ? `Could not re-fetch the order from Shopify — giving up after ${MAX_ATTEMPTS} attempts` : `Could not re-fetch the order from Shopify (attempt ${attempts}/${MAX_ATTEMPTS}, will retry)`, detail);
+    return { id: row.id, status: giveUp ? "failed" : "scheduled", error: giveUp ? "refresh failed — gave up" : "refresh failed — will retry" };
   }
   if (fresh) {
     const { financial_status, fulfillment_status: _ff, cancelled, ...cols } = fresh;
@@ -439,10 +468,6 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
     await failAlert(row, unmatched.length ? `No guide matched: ${unmatched.join(", ")} — map them in SKU mapping` : "Order has no SKUs to match");
     return { id: row.id, status: "skipped" };
   }
-  if (!settings.enabled && !force) {
-    await db.from("guide_deliveries").update({ ...base, status: "skipped", error: "Auto-delivery disabled" }).eq("id", row.id);
-    return { id: row.id, status: "skipped" };
-  }
   const firstName = (row.customer_name ?? "").split(" ")[0] || "there";
   const msg = renderEmail({ brand: cat.brand, settings, firstName, orderName: row.order_name ?? `#${row.shopify_order_id}`, guides: matched });
   try {
@@ -460,12 +485,25 @@ async function processOne(db: SupabaseClient, settings: Settings, cat: Awaited<R
 async function processPending(db: SupabaseClient, ids?: string[], force = false) {
   const settings = await loadSettings(db);
   const cat = await loadCatalog(db, settings.brand_id);
+  // Release claims abandoned by a crashed/timed-out run (>10 min in "sending").
+  await db.from("guide_deliveries").update({ status: "scheduled" })
+    .eq("status", "sending").lt("updated_at", new Date(Date.now() - 10 * 60_000).toISOString());
   let q = db.from("guide_deliveries").select("*").order("created_at");
-  q = ids?.length ? q.in("id", ids) : q.eq("status", "scheduled").lte("send_after", new Date().toISOString()).lt("attempts", 5);
+  q = ids?.length ? q.in("id", ids) : q.eq("status", "scheduled").lte("send_after", new Date().toISOString()).lt("attempts", MAX_ATTEMPTS);
   const { data: rows, error } = await q;
   if (error) throw error;
   const results = [];
-  for (const row of rows ?? []) results.push(await processOne(db, settings, cat, row, force));
+  for (const row of rows ?? []) {
+    try {
+      results.push(await processOne(db, settings, cat, row, force));
+    } catch (e) {
+      // One bad order must not block the rest of the batch.
+      const detail = String((e as any)?.message ?? e);
+      console.error("processOne failed:", row.id, detail);
+      await db.from("guide_deliveries").update({ status: "failed", error: detail }).eq("id", row.id);
+      results.push({ id: row.id, status: "failed", error: detail });
+    }
+  }
   return results;
 }
 
@@ -475,11 +513,17 @@ async function poll(db: SupabaseClient) {
   const data = await shopifyGet(`orders.json?status=any&fulfillment_status=shipped&updated_at_min=${encodeURIComponent(since)}&limit=250&fields=id,name,email,contact_email,created_at,customer,line_items,refunds,fulfillments,financial_status,fulfillment_status,cancelled_at,shipping_address,billing_address`);
   const orders: any[] = data.orders ?? [];
   let enqueued = 0;
+  let errors = 0;
   for (const o of orders) {
     if (o.cancelled_at) continue;
-    if (await enqueue(db, o, "poll", settings)) enqueued++;
+    try {
+      if (await enqueue(db, o, "poll", settings)) enqueued++;
+    } catch (e) {
+      errors++;
+      console.error("enqueue failed for order", o?.name ?? o?.id, String((e as any)?.message ?? e));
+    }
   }
-  return { scanned: orders.length, enqueued };
+  return { scanned: orders.length, enqueued, errors };
 }
 
 // ── Webhook verification ─────────────────────────────────────────────────────
@@ -522,6 +566,7 @@ Deno.serve(async (req) => {
     // ── Staff / cron actions ──
     const auth = await requireStaff(req, corsHeaders);
     if (!auth.ok) return auth.response;
+    if (!(await isStaffUser(auth.userId))) return forbidden(corsHeaders);
     const body = await req.json().catch(() => ({}));
     const action = body.action as string;
 

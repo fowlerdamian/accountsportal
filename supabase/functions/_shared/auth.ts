@@ -30,6 +30,26 @@ async function postgrestAccepts(token: string): Promise<boolean> {
   } catch { return false; }
 }
 
+/**
+ * True when the auth user holds a staff role (user_roles admin/editor) — the same
+ * predicate as public.is_staff(). requireStaff() only proves the JWT is valid;
+ * functions that must be staff-only call this as a second step for user callers
+ * (service-role callers have no userId and are trusted).
+ */
+export async function isStaffUser(userId: string | undefined): Promise<boolean> {
+  if (!userId) return true; // service-role / cron caller
+  try {
+    const admin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    const { data } = await admin.from("user_roles").select("role").eq("user_id", userId).in("role", ["admin", "editor"]).limit(1);
+    return !!data?.length;
+  } catch { return false; }
+}
+
+export const forbidden = (corsHeaders: Record<string, string>) =>
+  new Response(JSON.stringify({ error: "Forbidden — staff only" }), {
+    status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 export async function requireStaff(
   req: Request,
   corsHeaders: Record<string, string>,

@@ -1,4 +1,11 @@
 import { resolveModel } from "../_shared/model.ts";
+import { requireStaff, isStaffUser, forbidden } from "../_shared/auth.ts";
+
+// Input caps — this function burns Anthropic tokens, so never accept unbounded bodies.
+const MAX_TEXT_CHARS   = 80_000;        // matches the client-side cap in PdfImportDialog
+const MAX_PDF_B64      = 30 * 1024 * 1024;
+const MAX_PAGE_IMAGES  = 40;
+const MAX_IMAGE_B64    = 6 * 1024 * 1024;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,6 +42,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+  // Staff only: this used to be callable with the public anon key.
+  const auth = await requireStaff(req, corsHeaders);
+  if (!auth.ok) return auth.response;
+  if (!(await isStaffUser(auth.userId))) return forbidden(corsHeaders);
 
   try {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -52,6 +63,17 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "No text, pdfBase64, or pageImages provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const tooBig =
+      (typeof text === "string" && text.length > MAX_TEXT_CHARS && `text exceeds ${MAX_TEXT_CHARS} characters`) ||
+      (typeof pdfBase64 === "string" && pdfBase64.length > MAX_PDF_B64 && "PDF exceeds 30 MB") ||
+      (Array.isArray(pageImages) && pageImages.length > MAX_PAGE_IMAGES && `more than ${MAX_PAGE_IMAGES} page images`) ||
+      (Array.isArray(pageImages) && pageImages.some((p: any) => String(p?.data ?? p ?? "").length > MAX_IMAGE_B64) && "a page image exceeds 6 MB");
+    if (tooBig) {
+      return new Response(
+        JSON.stringify({ error: `Input too large: ${tooBig}` }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

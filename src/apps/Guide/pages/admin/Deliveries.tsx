@@ -47,7 +47,7 @@ async function callFn(body: Record<string, unknown>) {
 }
 
 const statusVariant = (s: string) =>
-  s === "sent" ? "default" : s === "failed" ? "destructive" : s === "scheduled" || s === "pending" ? "secondary" : "outline";
+  s === "sent" ? "default" : s === "failed" ? "destructive" : s === "scheduled" || s === "pending" || s === "sending" ? "secondary" : "outline";
 
 export default function Deliveries() {
   const qc = useQueryClient();
