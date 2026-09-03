@@ -13,8 +13,8 @@
 // migration 20260903000001_stock_turn.sql (+ later stock_turn_* migrations).
 //
 // Scope (owner-specified): drop-ship products and non-inventory items (Cin7
-// product Type ≠ Stock) are excluded in SQL; built-to-order assemblies are
-// exploded to their components in SQL; lines with no units on hand, under $100
+// product Type ≠ Stock) are excluded in SQL; a built-to-order assembly's sale is
+// attributed to its main (highest-cost) component in SQL; lines with no units on hand, under $100
 // of stock, or with no COGS in the window are hidden here, everywhere on the page.
 
 import { useMemo, useState } from 'react'
@@ -631,7 +631,7 @@ export default function StockTurn() {
               Stock turn = COGS over the last {months} full months × {12 / months} ÷ average stock value (mean of daily snapshots in the window; latest snapshot until history exists).
               Ratio = stock turn × GP% as a number (e.g. 5 turns × 40% = 200).
               Shown: stocked inventory items with units on hand, ≥ {money(MIN_STOCK)} at cost and sales in the window; drop-ship and non-inventory items are left out entirely.
-              Built-to-order assemblies count as sales of their components. Product lines only (freight/charges excluded); credit notes subtracted in their month.
+              A built-to-order assembly's sale counts against its main (highest-cost) component. Product lines only (freight/charges excluded); credit notes subtracted in their month.
             </span>
           </>
         )}
