@@ -80,7 +80,8 @@ function windowFor(months, now = new Date()) {
 // Turn / GP / ratio for any bundle of {cogs, revenue, avgStock, stockValue} over `months`.
 function metricsOf({ cogs, revenue, avgStock, stockValue }, months) {
   const cogsAnn = cogs * (12 / months)
-  const turn = avgStock > 0 ? cogsAnn / avgStock : cogs > 0 ? Infinity : null
+  // Net credit in the window (cogs ≤ 0, e.g. a returned item) is not a turn — treat as no sales
+  const turn = cogs > 0 ? (avgStock > 0 ? cogsAnn / avgStock : Infinity) : null
   const gp = revenue > 0 ? ((revenue - cogs) / revenue) * 100 : null
   let ratio = null
   if (turn != null && gp != null) ratio = turn === Infinity ? (gp > 0 ? Infinity : null) : turn * gp
@@ -405,10 +406,11 @@ export default function StockTurn() {
               <Panel title="Ratio by category" icon={ChartBarIcon}
                 right={<span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>dashed line = target {TARGET}</span>}>
                 <ResponsiveContainer width="100%" height={Math.max(180, byCategory.length * 26 + 30)}>
-                  <ComposedChart layout="vertical" data={byCategory.map((c) => ({ ...c, value: c.ratio == null ? 0 : c.ratio === Infinity ? TARGET * 2 : Math.min(c.ratio, TARGET * 3) }))}
+                  {/* Bars are clamped to 0…3× target for display; the tooltip shows the true ratio */}
+                  <ComposedChart layout="vertical" data={byCategory.map((c) => ({ ...c, value: c.ratio == null ? 0 : c.ratio === Infinity ? TARGET * 2 : Math.max(0, Math.min(c.ratio, TARGET * 3)) }))}
                     margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
                     <CartesianGrid stroke={C.borderSoft} horizontal={false} />
-                    <XAxis type="number" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <XAxis type="number" domain={[0, 'auto']} tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
                     <YAxis type="category" dataKey="name" width={isMobile ? 90 : 130} tick={{ fill: C.muted, fontSize: 10.5 }} axisLine={false} tickLine={false} />
                     <Tooltip content={<CategoryTip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                     <ReferenceLine x={TARGET} stroke={C.text} strokeOpacity={0.6} strokeDasharray="3 3" />
