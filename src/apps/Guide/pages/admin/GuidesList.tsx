@@ -228,6 +228,7 @@ export default function GuidesList() {
                   <div className="flex items-center gap-3 mb-1">
                     <h3 className="font-semibold text-sm truncate">{guide.title}</h3>
                     <code className="text-xs bg-muted px-1.5 py-0.5 rounded shrink-0">{guide.product_code}</code>
+                    <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">Updated {new Date(guide.updated_at).toLocaleDateString()}</span>
                   </div>
                    {guideVehicles.length > 0 && (
                      <div className="flex flex-wrap gap-1.5 mt-2">
@@ -238,7 +239,6 @@ export default function GuidesList() {
                        ))}
                      </div>
                    )}
-                   <div className="mt-2 text-xs text-muted-foreground">Updated {new Date(guide.updated_at).toLocaleDateString()}</div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
