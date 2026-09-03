@@ -159,9 +159,15 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
   const [openNotice, setOpenNotice] = useState<number | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportMessage, setSupportMessage] = useState("");
-  // Optional contact details so we can actually reply. Remembered per device.
-  const [supportName, setSupportName] = useState(() => safeLocal.getJSON<{ name?: string; email?: string }>('guide-contact')?.name ?? "");
-  const [supportEmail, setSupportEmail] = useState(() => safeLocal.getJSON<{ name?: string; email?: string }>('guide-contact')?.email ?? "");
+  // Contact details are asked for AFTER the question is sent, so nothing stands
+  // between the customer and hitting Send. Remembered per device.
+  type Contact = { name?: string; email?: string; phone?: string };
+  const remembered = () => safeLocal.getJSON<Contact>('guide-contact') ?? {};
+  const [supportName, setSupportName] = useState(() => remembered().name ?? "");
+  const [supportEmail, setSupportEmail] = useState(() => remembered().email ?? "");
+  const [supportPhone, setSupportPhone] = useState(() => remembered().phone ?? "");
+  // id of the question just sent — while set, the sheet shows the contact step
+  const [supportSentId, setSupportSentId] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
@@ -486,8 +492,6 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
   const submitSupport = async () => {
     const trimmed = supportMessage.trim();
     if (!trimmed || !brand || submitting) return;
-    const email = supportEmail.trim();
-    if (email && !emailLooksValid(email)) { toast.error("That email address doesn't look right."); return; }
     setSubmitting('support');
     const questionId = crypto.randomUUID(); // no RETURNING for anon — see persistRating
     const { error } = await supabase.from("support_questions").insert({
@@ -498,16 +502,33 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
       step_number: displayStepNumber > 0 ? displayStepNumber : null,
       step_title: step && !isDivider ? (step.subtitle ?? null) : null,
       question: trimmed,
-      customer_name: supportName.trim() || null,
-      customer_email: email || null,
     });
     setSubmitting(null);
     if (error) { reportError('message'); return; }
     notifySupportQuestion(questionId);
-    safeLocal.set('guide-contact', JSON.stringify({ name: supportName.trim(), email }));
     setSupportMessage("");
+    setSupportSentId(questionId); // → contact step
+  };
+
+  // Step 2 of the sheet: attach an email or phone to the question just sent.
+  const submitSupportContact = async () => {
+    if (!supportSentId || submitting) return;
+    const email = supportEmail.trim(), phone = supportPhone.trim(), name = supportName.trim();
+    if (!email && !phone) { toast.error("Add an email or a phone number so we can reply."); return; }
+    if (email && !emailLooksValid(email)) { toast.error("That email address doesn't look right."); return; }
+    setSubmitting('support');
+    const { data: ok, error } = await supabase.rpc("set_support_contact", { p_id: supportSentId, p_email: email || null, p_phone: phone || null, p_name: name || null });
+    setSubmitting(null);
+    if (error || ok === false) { reportError('contact details'); return; }
+    safeLocal.set('guide-contact', JSON.stringify({ name, email, phone }));
+    setSupportSentId(null);
     setSupportOpen(false);
-    toast.success(email ? `Sent — we'll reply to ${email}.` : `Sent — we'll do our best to help.${brand.support_phone ? ` For anything urgent call ${brand.support_phone}.` : ""}`);
+    toast.success(email ? `Thanks — we'll reply to ${email}.` : `Thanks — we'll call you on ${phone}.`);
+  };
+  const skipSupportContact = () => {
+    setSupportSentId(null);
+    setSupportOpen(false);
+    toast.success(`Sent — we'll do our best to help.${brand?.support_phone ? ` For anything urgent call ${brand.support_phone}.` : ""}`);
   };
 
   const openLightbox = (src: string, alt: string) => setLightbox({ src, alt });
@@ -968,7 +989,7 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
 
       {/* Floating support button */}
       {!finished && chatEnabled && (
-        <Sheet open={supportOpen} onOpenChange={setSupportOpen}>
+        <Sheet open={supportOpen} onOpenChange={(v) => { setSupportOpen(v); if (!v && supportSentId) setSupportSentId(null); }}>
           <SheetTrigger asChild>
             <button
               type="button"
@@ -980,6 +1001,26 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
             </button>
           </SheetTrigger>
           <SheetContent side="bottom" className="sm:max-w-lg sm:mx-auto rounded-t-2xl">
+            {supportSentId ? (
+              <>
+                <SheetHeader>
+                  <SheetTitle>Message sent — how should we reply?</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 space-y-3">
+                  <p className="text-sm text-muted-foreground">Leave an email or phone number and we'll get back to you, usually the same business day.</p>
+                  <Input value={supportEmail} onChange={e => setSupportEmail(e.target.value)} placeholder="Email" type="email" inputMode="email" autoComplete="email" aria-label="Your email" className="h-11 text-base md:text-sm" />
+                  <Input value={supportPhone} onChange={e => setSupportPhone(e.target.value)} placeholder="Phone" type="tel" inputMode="tel" autoComplete="tel" aria-label="Your phone" className="h-11 text-base md:text-sm" />
+                  <Input value={supportName} onChange={e => setSupportName(e.target.value)} placeholder="Your name (optional)" autoComplete="name" aria-label="Your name" className="h-11 text-base md:text-sm" />
+                  <div className="flex gap-2">
+                    <Button className="flex-1 h-11" style={{ backgroundColor: brandColour }} onClick={submitSupportContact} disabled={submitting === 'support' || (!supportEmail.trim() && !supportPhone.trim())}>
+                      {submitting === 'support' ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : <><Check className="w-4 h-4 mr-2" /> Save contact details</>}
+                    </Button>
+                    <Button variant="outline" className="h-11" onClick={skipSupportContact}>No thanks</Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
             <SheetHeader>
               <SheetTitle>Need help?</SheetTitle>
             </SheetHeader>
@@ -993,13 +1034,8 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
                 value={supportMessage}
                 onChange={e => setSupportMessage(e.target.value)}
                 placeholder={step && !isDivider ? `I'm stuck on Step ${displayStepNumber} — ${step.subtitle}. Can you help?` : "How can we help?"}
-                rows={3}
+                rows={4}
               />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <Input value={supportName} onChange={e => setSupportName(e.target.value)} placeholder="Your name (optional)" autoComplete="name" aria-label="Your name" className="h-11 text-base md:text-sm" />
-                <Input value={supportEmail} onChange={e => setSupportEmail(e.target.value)} placeholder="Email — so we can reply" type="email" inputMode="email" autoComplete="email" aria-label="Your email" className="h-11 text-base md:text-sm" />
-              </div>
-              <p className="text-[11px] text-muted-foreground -mt-2">Leave your email and we'll reply there, usually the same business day.</p>
               <div className="flex gap-2">
                 <Button className="flex-1 h-11" style={{ backgroundColor: brandColour }} onClick={submitSupport} disabled={!supportMessage.trim() || submitting === 'support'}>
                   {submitting === 'support'
@@ -1019,6 +1055,8 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
                 </p>
               )}
             </div>
+              </>
+            )}
           </SheetContent>
         </Sheet>
       )}

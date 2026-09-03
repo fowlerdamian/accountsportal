@@ -15,12 +15,15 @@ import { Badge } from "@guide/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { supabase } from "@guide/integrations/supabase/client";
 import { cn } from "@guide/lib/utils";
+import { palette } from "@portal/lib/palette";
 
 // ── Brand palette ────────────────────────────────────────────────────────────
 type BrandKey = "aga" | "trailbait";
+// Trailbait takes the portal's brand accent (the orange/yellow used everywhere
+// else in the portal) so the report matches the rest of the UI.
 const BRAND: Record<BrandKey, { label: string; name: string; fill: string; ink: string }> = {
   aga:       { label: "AGA", name: "Automotive Group Australia", fill: "#6b7a90", ink: "#aeb9cc" },
-  trailbait: { label: "TB",  name: "Trailbait",                  fill: "#f3ca0f", ink: "#f3ca0f" },
+  trailbait: { label: "TB",  name: "Trailbait",                  fill: palette.accent, ink: palette.accent },
 };
 const BRAND_ORDER: BrandKey[] = ["aga", "trailbait"];
 const brandOf = (k: string) => BRAND[k as BrandKey] ?? { label: k.slice(0, 3).toUpperCase(), name: k, fill: "#8b8b8b", ink: "#bbbbbb" };
