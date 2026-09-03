@@ -21,6 +21,10 @@
 //   drain — pull sale details for queued sales until the time budget runs out,
 //           rewrite their stat lines, and report how many remain.
 //
+// The same drain also writes per-product invoice lines (cin7_sale_product_lines:
+// sale x month x product, qty/revenue/cost) for the Stock Turn tab, so one Cin7
+// sale fetch feeds both reports.
+//
 // POST body (all optional): { "backfill": true, "drainMs": 100000 }
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -117,6 +121,16 @@ interface StatRow {
   cost: number;
 }
 
+interface ProductRow {
+  sale_id: string;
+  invoice_month: string;
+  product_id: string;
+  sku: string | null;
+  qty: number;
+  revenue: number;
+  cost: number;
+}
+
 function monthOf(dateStr: unknown): string | null {
   const s = String(dateStr ?? "");
   if (!/^\d{4}-\d{2}/.test(s)) return null;
@@ -126,10 +140,16 @@ function monthOf(dateStr: unknown): string | null {
 
 const DOC_SKIP = new Set(["DRAFT", "VOIDED", "NOT AVAILABLE"]);
 
-function saleToRows(sale: Json, ctype: string, buckets: Map<string, string>): StatRow[] {
+function saleToRows(sale: Json, ctype: string, buckets: Map<string, string>): { stat: StatRow[]; product: ProductRow[] } {
   const saleId = String(sale.ID);
   const acc = new Map<string, StatRow>();
-  const add = (month: string, bucket: string, revenue: number, cost: number) => {
+  const prod = new Map<string, ProductRow>();
+  const add = (month: string, line: Json, sign: 1 | -1) => {
+    const qty = sign * (Number(line.Quantity) || 0);
+    const revenue = sign * (Number(line.Total) || 0);
+    const cost = qty * (Number(line.AverageCost) || 0);
+    const pid = String(line.ProductID ?? "");
+    const bucket = buckets.get(pid) ?? "Other";
     const key = `${month}|${bucket}`;
     let row = acc.get(key);
     if (!row) {
@@ -138,27 +158,33 @@ function saleToRows(sale: Json, ctype: string, buckets: Map<string, string>): St
     }
     row.revenue += revenue;
     row.cost += cost;
+    // Per-product line (Stock Turn) — lines without a product (services/charges) skipped
+    if (/^[0-9a-f-]{36}$/i.test(pid)) {
+      const pkey = `${month}|${pid}`;
+      let pr = prod.get(pkey);
+      if (!pr) {
+        pr = { sale_id: saleId, invoice_month: month, product_id: pid, sku: line.SKU ? String(line.SKU) : null, qty: 0, revenue: 0, cost: 0 };
+        prod.set(pkey, pr);
+      }
+      pr.qty += qty;
+      pr.revenue += revenue;
+      pr.cost += cost;
+    }
   };
   for (const inv of (sale.Invoices as Json[]) ?? []) {
     if (DOC_SKIP.has(String(inv.Status ?? "").toUpperCase())) continue;
     const month = monthOf(inv.InvoiceDate);
     if (!month) continue;
-    for (const l of (inv.Lines as Json[]) ?? []) {
-      const bucket = buckets.get(String(l.ProductID)) ?? "Other";
-      add(month, bucket, Number(l.Total) || 0, (Number(l.Quantity) || 0) * (Number(l.AverageCost) || 0));
-    }
+    for (const l of (inv.Lines as Json[]) ?? []) add(month, l, 1);
   }
   // Credit notes reverse revenue and (assuming restock) cost in their own month.
   for (const cn of (sale.CreditNotes as Json[]) ?? []) {
     if (DOC_SKIP.has(String(cn.Status ?? "").toUpperCase())) continue;
     const month = monthOf(cn.CreditNoteDate ?? cn.CreditNoteInvoiceDate ?? cn.InvoiceDate);
     if (!month) continue;
-    for (const l of (cn.Lines as Json[]) ?? []) {
-      const bucket = buckets.get(String(l.ProductID)) ?? "Other";
-      add(month, bucket, -(Number(l.Total) || 0), -((Number(l.Quantity) || 0) * (Number(l.AverageCost) || 0)));
-    }
+    for (const l of (cn.Lines as Json[]) ?? []) add(month, l, -1);
   }
-  return [...acc.values()];
+  return { stat: [...acc.values()], product: [...prod.values()] };
 }
 
 serve(async (req) => {
@@ -244,12 +270,15 @@ serve(async (req) => {
         if (!batch?.length) break;
         const doneIds: string[] = [];
         const rows: StatRow[] = [];
+        const prodRows: ProductRow[] = [];
         for (let i = 0; i < batch.length && Date.now() < deadline; i += 3) {
           const chunk = batch.slice(i, i + 3);
           const sales = await Promise.all(chunk.map(({ sale_id }) => cin7("/sale", { ID: sale_id })));
           for (const sale of sales) {
             const ctype = ctypes.get(String(sale.CustomerID)) ?? "Consumers";
-            rows.push(...saleToRows(sale, ctype, buckets));
+            const r = saleToRows(sale, ctype, buckets);
+            rows.push(...r.stat);
+            prodRows.push(...r.product);
             doneIds.push(String(sale.ID));
           }
         }
@@ -262,6 +291,13 @@ serve(async (req) => {
           const ins = await sc.from("cin7_sale_stat_lines")
             .upsert(rows, { onConflict: "sale_id,invoice_month,bucket" });
           if (ins.error) throw new Error(`lines upsert: ${ins.error.message}`);
+        }
+        const pdel = await sc.from("cin7_sale_product_lines").delete().in("sale_id", doneIds);
+        if (pdel.error) throw new Error(`product lines delete: ${pdel.error.message}`);
+        if (prodRows.length) {
+          const pins = await sc.from("cin7_sale_product_lines")
+            .upsert(prodRows, { onConflict: "sale_id,invoice_month,product_id" });
+          if (pins.error) throw new Error(`product lines upsert: ${pins.error.message}`);
         }
         const dq = await sc.from("cin7_stat_pending").delete().in("sale_id", doneIds);
         if (dq.error) throw new Error(`dequeue: ${dq.error.message}`);
