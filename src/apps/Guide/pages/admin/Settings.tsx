@@ -55,12 +55,12 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="brands" className="mt-6">
-          <BrandsTab />
+          <BrandsTab embedded />
         </TabsContent>
 
         {userRole === "admin" && (
           <TabsContent value="users" className="mt-6">
-            <UsersTab />
+            <UsersTab embedded />
           </TabsContent>
         )}
 
@@ -69,7 +69,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="categories" className="mt-6">
-          <CategoriesTab />
+          <CategoriesTab embedded />
         </TabsContent>
       </Tabs>
     </div>
@@ -111,7 +111,9 @@ function ProfileSettings() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [user]);
+    // Depend on the id, not the object: the user object's identity changes on
+    // every token refresh, which would refetch and clobber in-progress edits.
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveName = async () => {
     if (!user) return;
@@ -236,7 +238,12 @@ function GeneralSettings() {
     setSaving(true);
     const { error } = await (supabase.from("brands").update as any)({ chat_enabled: enabled }).neq("id", "");
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      // Revert the optimistic switch to the server value.
+      setLocalChat(null);
+      toast.error(error.message);
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ["brands"] });
     toast.success(enabled ? "Chat support enabled" : "Chat support disabled");
   };

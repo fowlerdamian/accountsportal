@@ -2,10 +2,12 @@ import { SidebarProvider, SidebarTrigger } from "@guide/components/ui/sidebar";
 import { AdminSidebar } from "./AdminSidebar";
 import { Outlet, Navigate } from "react-router-dom";
 import { useAuth } from "@guide/contexts/AuthContext";
-import { Loader2 } from "lucide-react";
+import { Toaster } from "@guide/components/ui/sonner";
+import { Button } from "@guide/components/ui/button";
+import { Loader2, RefreshCw } from "lucide-react";
 
 export function AdminLayout() {
-  const { user, userRole, loading } = useAuth();
+  const { user, userRole, loading, roleError, refetchRole } = useAuth();
 
   if (loading) {
     return (
@@ -16,6 +18,22 @@ export function AdminLayout() {
   }
 
   if (!user) return <Navigate to="/login" replace />;
+
+  // The role lookup failed (not "no role") — offer a retry rather than a
+  // misleading "Access denied".
+  if (roleError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <div className="text-center space-y-3 max-w-md px-4">
+          <h1 className="text-lg font-semibold">Couldn't load your role</h1>
+          <p className="text-sm text-muted-foreground">{roleError}</p>
+          <Button variant="outline" size="sm" onClick={() => refetchRole()}>
+            <RefreshCw className="w-4 h-4 mr-2" /> Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Only staff with an admin or editor role may enter the Guide admin area.
   if (userRole !== "admin" && userRole !== "editor") {
@@ -35,6 +53,9 @@ export function AdminLayout() {
 
   return (
     <SidebarProvider>
+      {/* Single sonner mount for the whole /guide/* admin tree — without it
+          every toast.* call in the admin pages is silently dropped. */}
+      <Toaster richColors position="top-right" />
       <div className="flex w-full" style={{ minHeight: "calc(100dvh - var(--task-dock-h, 0px))" }}>
         <AdminSidebar />
         <div className="flex-1 flex flex-col min-w-0">

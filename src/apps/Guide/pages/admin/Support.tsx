@@ -6,11 +6,12 @@ import { Badge } from "@guide/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { MessageCircleIcon, TriangleAlertIcon, CheckedIcon, ClockIcon } from "@portal/components/icons";
-import { useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@guide/components/ui/sheet";
+import { useState, type KeyboardEvent } from "react";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@guide/components/ui/sheet";
 import { Textarea } from "@guide/components/ui/textarea";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { brandShort } from "@guide/lib/utils";
 
 export default function Support() {
   const { data: questions = [], isLoading } = useSupportQuestions();
@@ -28,7 +29,9 @@ export default function Support() {
 
   const openCount = questions.filter((q: any) => !q.resolved).length;
   const escalatedCount = questions.filter((q: any) => q.escalated && !q.resolved).length;
-  const resolvedToday = questions.filter((q: any) => {
+  // support_questions has no resolved_at / updated_at column, so "resolved
+  // today" can only be judged by when the question was asked — label it so.
+  const resolvedAskedToday = questions.filter((q: any) => {
     if (!q.resolved) return false;
     const today = new Date().toDateString();
     return new Date(q.created_at).toDateString() === today;
@@ -42,7 +45,7 @@ export default function Support() {
     toast.success("Marked resolved");
   };
 
-  const sendReply = async () => {
+  const saveAnswer = async () => {
     if (!reply.trim() || !selected) return;
     setSending(true);
     const { error } = await supabase.from("support_questions").update({
@@ -54,7 +57,12 @@ export default function Support() {
     queryClient.invalidateQueries({ queryKey: ["support_questions"] });
     setReply("");
     setSelected(null);
-    toast.success("Reply sent & marked resolved");
+    toast.success("Answer saved & marked resolved");
+  };
+
+  const openRow = (q: any) => { setSelected(q); setReply(""); };
+  const rowKeyDown = (q: any) => (e: KeyboardEvent<HTMLTableRowElement>) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRow(q); }
   };
 
   if (isLoading) {
@@ -71,7 +79,7 @@ export default function Support() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard title="Open Questions" value={openCount} icon={<MessageCircleIcon className="w-5 h-5" />} />
         <StatsCard title="Escalated" value={escalatedCount} icon={<TriangleAlertIcon className="w-5 h-5" />} />
-        <StatsCard title="Resolved Today" value={resolvedToday} icon={<CheckedIcon className="w-5 h-5" />} />
+        <StatsCard title="Resolved (asked today)" value={resolvedAskedToday} icon={<CheckedIcon className="w-5 h-5" />} />
         <StatsCard title="Total" value={questions.length} icon={<ClockIcon className="w-5 h-5" />} />
       </div>
 
@@ -86,7 +94,7 @@ export default function Support() {
         </Select>
       </div>
 
-      <div className="bg-card rounded-lg border">
+      <div className="bg-card rounded-lg border overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b bg-muted/50">
@@ -101,10 +109,13 @@ export default function Support() {
           </thead>
           <tbody>
             {filtered.map((q: any) => (
-              <tr key={q.id} className="border-b hover:bg-muted/30 cursor-pointer" onClick={() => { setSelected(q); setReply(""); }}>
+              <tr key={q.id}
+                className="border-b hover:bg-muted/30 cursor-pointer focus-visible:outline-none focus-visible:bg-muted/40"
+                tabIndex={0} role="button" aria-label={`Open question for ${q.instruction_sets?.title ?? 'guide'}`}
+                onClick={() => openRow(q)} onKeyDown={rowKeyDown(q)}>
                 <td className="p-3 text-sm font-medium max-w-48 truncate">{q.instruction_sets?.title ?? '—'}</td>
                 <td className="p-3 text-center text-sm">{q.step_number || '—'}</td>
-                <td className="p-3 text-center"><Badge variant="secondary" className="text-xs">{q.brands?.key === 'trailbait' ? 'TB' : 'AGA'}</Badge></td>
+                <td className="p-3 text-center"><Badge variant="secondary" className="text-xs" title={q.brands?.name}>{brandShort(q.brands)}</Badge></td>
                 <td className="p-3 text-sm text-muted-foreground max-w-64 truncate">{q.question}</td>
                 <td className="p-3 text-center text-sm">{q.answer ? '✓' : '—'}</td>
                 <td className="p-3 text-center">
@@ -116,7 +127,7 @@ export default function Support() {
                     <Badge className="bg-warning text-warning-foreground text-xs">Open</Badge>
                   )}
                 </td>
-                <td className="p-3 text-right text-sm text-muted-foreground">{new Date(q.created_at).toLocaleDateString()}</td>
+                <td className="p-3 text-right text-sm text-muted-foreground whitespace-nowrap">{new Date(q.created_at).toLocaleDateString()}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
@@ -126,9 +137,12 @@ export default function Support() {
         </table>
       </div>
 
-      <Sheet open={!!selected} onOpenChange={() => setSelected(null)}>
+      <Sheet open={!!selected} onOpenChange={(v) => { if (!v) setSelected(null); }}>
         <SheetContent className="sm:max-w-lg">
-          <SheetHeader><SheetTitle>Support Conversation</SheetTitle></SheetHeader>
+          <SheetHeader>
+            <SheetTitle>Support Conversation</SheetTitle>
+            <SheetDescription>Question from a guide viewer</SheetDescription>
+          </SheetHeader>
           {selected && (
             <div className="mt-6 space-y-4">
               <div className="bg-muted rounded-lg p-3 text-xs text-muted-foreground space-y-1">
@@ -157,13 +171,16 @@ export default function Support() {
                 <Textarea
                   value={reply}
                   onChange={e => setReply(e.target.value)}
-                  placeholder="Type a reply..."
+                  placeholder="Type an answer..."
                   rows={3}
                 />
+                <p className="text-xs text-muted-foreground">
+                  The answer is stored against this question and marks it resolved. The customer is <strong>not</strong> emailed — contact them separately if they need a reply.
+                </p>
                 <div className="flex gap-2">
-                  <Button className="flex-1" onClick={sendReply} disabled={sending || !reply.trim()}>
+                  <Button className="flex-1" onClick={saveAnswer} disabled={sending || !reply.trim()}>
                     {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    Send Reply
+                    Save answer
                   </Button>
                   {!selected.resolved && (
                     <Button variant="outline" onClick={() => markResolved(selected.id)}>Mark Resolved</Button>

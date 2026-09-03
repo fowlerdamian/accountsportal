@@ -12,8 +12,8 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@guide/contexts/AuthContext";
 
-export default function Users() {
-  const { userRole, loading: authLoading } = useAuth();
+export default function Users({ embedded = false }: { embedded?: boolean }) {
+  const { user: currentUser, userRole, loading: authLoading } = useAuth();
   const { data: profiles = [], isLoading } = useProfiles();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -24,6 +24,17 @@ export default function Users() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const Heading = embedded ? "h2" : "h1";
+
+  const adminCount = profiles.filter((p: any) => p.role === "admin").length;
+  // Never allow deleting yourself, or the last remaining admin — either would
+  // lock the admin area.
+  const deleteBlockReason = (u: any): string | null => {
+    if (u.id === currentUser?.id) return "You can't delete your own account";
+    if (u.role === "admin" && adminCount <= 1) return "The last admin can't be deleted";
+    return null;
+  };
+
   const resetForm = () => {
     setFullName("");
     setEmail("");
@@ -31,6 +42,9 @@ export default function Users() {
   };
 
   const handleDelete = async (userId: string) => {
+    const target = profiles.find((p: any) => p.id === userId);
+    const blocked = target ? deleteBlockReason(target) : null;
+    if (blocked) { toast.error(blocked); setConfirmDeleteId(null); return; }
     setDeleting(true);
     try {
       const { data, error } = await supabase.functions.invoke("delete-user", {
@@ -88,9 +102,9 @@ export default function Users() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Users</h1>
+          <Heading className="text-2xl font-bold">Users</Heading>
           <p className="text-muted-foreground text-sm">Manage staff access to the Guide platform</p>
         </div>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
@@ -128,65 +142,76 @@ export default function Users() {
         </Dialog>
       </div>
 
-      <div className="bg-card rounded-lg border">
+      <div className="bg-card rounded-lg border overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b bg-muted/50">
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground uppercase">Name</th>
               <th className="text-center p-3 text-xs font-semibold text-muted-foreground uppercase">Role</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground uppercase">Joined</th>
-              <th className="p-3" />
+              <th className="p-3"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
-            {profiles.map((user: any) => (
-              <tr key={user.id} className="border-b hover:bg-muted/30 group">
-                <td className="p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
-                      {(user.full_name || '?').split(' ').map((n: string) => n[0]).join('').toUpperCase()}
+            {profiles.map((user: any) => {
+              const blocked = deleteBlockReason(user);
+              const isSelf = user.id === currentUser?.id;
+              return (
+                <tr key={user.id} className="border-b hover:bg-muted/30 group">
+                  <td className="p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
+                        {(user.full_name || '?').split(' ').map((n: string) => n[0]).join('').toUpperCase()}
+                      </div>
+                      <span className="font-medium text-sm">{user.full_name || '—'}</span>
+                      {isSelf && <Badge variant="outline" className="text-[10px]">You</Badge>}
                     </div>
-                    <span className="font-medium text-sm">{user.full_name || '—'}</span>
-                  </div>
-                </td>
-                <td className="p-3 text-center">
-                  {user.role ? (
-                    <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className={user.role === 'admin' ? 'bg-primary' : ''}>
-                      <Shield className="w-3 h-3 mr-1" />
-                      {user.role}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">No role</Badge>
-                  )}
-                </td>
-                <td className="p-3 text-sm text-muted-foreground">
-                  {new Date(user.created_at).toLocaleDateString()}
-                </td>
-                <td className="p-3 text-right">
-                  {confirmDeleteId === user.id ? (
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button size="sm" variant="destructive" className="h-7 px-2 text-xs"
-                        disabled={deleting}
-                        onClick={() => handleDelete(user.id)}>
-                        {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
+                  </td>
+                  <td className="p-3 text-center">
+                    {user.role ? (
+                      <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className={user.role === 'admin' ? 'bg-primary' : ''}>
+                        <Shield className="w-3 h-3 mr-1" />
+                        {user.role}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">No role</Badge>
+                    )}
+                  </td>
+                  <td className="p-3 text-sm text-muted-foreground whitespace-nowrap">
+                    {new Date(user.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="p-3 text-right">
+                    {blocked ? (
+                      <span className="text-xs text-muted-foreground whitespace-nowrap" title={blocked}>
+                        {isSelf ? "" : "Last admin"}
+                      </span>
+                    ) : confirmDeleteId === user.id ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button size="sm" variant="destructive" className="h-7 px-2 text-xs"
+                          disabled={deleting}
+                          onClick={() => handleDelete(user.id)}>
+                          {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                          onClick={() => setConfirmDeleteId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button size="sm" variant="ghost"
+                        aria-label={`Delete ${user.full_name || "user"}`}
+                        title="Delete user"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-[var(--brand-pink)] hover:bg-[rgba(var(--brand-pink-rgb),0.1)] sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                        onClick={() => setConfirmDeleteId(user.id)}>
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
-                        onClick={() => setConfirmDeleteId(null)}>
-                        Cancel
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button size="sm" variant="ghost"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-[var(--brand-pink)] hover:bg-[rgba(var(--brand-pink-rgb),0.1)] opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => setConfirmDeleteId(user.id)}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {profiles.length === 0 && (
-              <tr><td colSpan={3} className="p-8 text-center text-muted-foreground">No users found.</td></tr>
+              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No users found.</td></tr>
             )}
           </tbody>
         </table>

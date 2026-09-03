@@ -10,15 +10,22 @@ import { Label } from "@guide/components/ui/label";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
-export default function Categories() {
+export default function Categories({ embedded = false }: { embedded?: boolean }) {
   const { data: cats = [], isLoading } = useCategories();
-  const { data: guides = [] } = useInstructionSets();
+  // The "guides assigned" guard must not run against an empty placeholder
+  // while guides are still loading — deletes stay disabled until isSuccess.
+  const { data: guides = [], isSuccess: guidesReady } = useInstructionSets();
   const [newName, setNewName] = useState("");
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const queryClient = useQueryClient();
+
+  const Heading = embedded ? "h2" : "h1";
 
   const guideCount = (catId: string) => guides.filter((g: any) => g.category_id === catId).length;
 
@@ -44,19 +51,32 @@ export default function Categories() {
   };
 
   const deleteCategory = async (id: string) => {
+    if (!guidesReady) return;
     const count = guideCount(id);
     if (count > 0) {
-      toast.error(`Cannot delete — ${count} guide(s) assigned`);
+      const message = `Cannot delete — ${count} guide(s) assigned`;
+      setRowError({ id, message });
+      toast.error(message);
       return;
     }
+    setRowError(null);
+    setDeleteError(null);
     setDeleteConfirmId(id);
   };
 
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
+    setDeleting(true);
     const { error } = await supabase.from("categories").delete().eq("id", deleteConfirmId);
+    setDeleting(false);
+    if (error) {
+      // Keep the dialog open and show the failure inline (also on the row once closed).
+      setDeleteError(error.message);
+      setRowError({ id: deleteConfirmId, message: error.message });
+      toast.error(error.message);
+      return;
+    }
     setDeleteConfirmId(null);
-    if (error) { toast.error(error.message); return; }
     queryClient.invalidateQueries({ queryKey: ["categories"] });
     toast.success("Category deleted");
   };
@@ -68,9 +88,9 @@ export default function Categories() {
   return (
     <>
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Categories</h1>
+          <Heading className="text-2xl font-bold">Categories</Heading>
           <p className="text-muted-foreground text-sm">Organise guides by product category</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -90,7 +110,7 @@ export default function Categories() {
         </Dialog>
       </div>
 
-      <div className="bg-card rounded-lg border">
+      <div className="bg-card rounded-lg border overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b bg-muted/50">
@@ -113,21 +133,27 @@ export default function Categories() {
                         onKeyDown={e => e.key === 'Enter' && renameCategory(cat.id)}
                         autoFocus
                       />
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => renameCategory(cat.id)}><Check className="w-4 h-4 text-success" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingId(null)}><X className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Save name" onClick={() => renameCategory(cat.id)}><Check className="w-4 h-4 text-success" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Cancel rename" onClick={() => setEditingId(null)}><X className="w-4 h-4" /></Button>
                     </div>
                   ) : (
                     <span className="font-medium text-sm">{cat.name}</span>
                   )}
+                  {rowError?.id === cat.id && (
+                    <p className="text-xs text-destructive mt-1" role="alert">{rowError.message}</p>
+                  )}
                 </td>
                 <td className="p-3"><code className="text-xs bg-muted px-1.5 py-0.5 rounded">{cat.slug}</code></td>
-                <td className="p-3 text-center text-sm text-muted-foreground">{guideCount(cat.id)}</td>
+                <td className="p-3 text-center text-sm text-muted-foreground">{guidesReady ? guideCount(cat.id) : <Loader2 className="w-3 h-3 animate-spin inline" />}</td>
                 <td className="p-3 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingId(cat.id); setEditName(cat.name); }}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Rename ${cat.name}`} onClick={() => { setEditingId(cat.id); setEditName(cat.name); }}>
                       <Pencil className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteCategory(cat.id)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" aria-label={`Delete ${cat.name}`}
+                      title={guidesReady ? "Delete category" : "Checking guide assignments…"}
+                      disabled={!guidesReady}
+                      onClick={() => deleteCategory(cat.id)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -142,8 +168,7 @@ export default function Categories() {
       </div>
     </div>
 
-    <AlertDialog open={!!deleteConfirmId} onOpenChange={(v) => { if (!v) setDeleteConfirmId(null); }}>
-
+    <AlertDialog open={!!deleteConfirmId} onOpenChange={(v) => { if (!v) { setDeleteConfirmId(null); setDeleteError(null); } }}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete category?</AlertDialogTitle>
@@ -151,10 +176,14 @@ export default function Categories() {
             This will permanently delete the category. This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {deleteError && (
+          <p className="text-sm text-destructive" role="alert">{deleteError}</p>
+        )}
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-            Delete
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          {/* preventDefault keeps the dialog open so a failure can be shown inline */}
+          <AlertDialogAction disabled={deleting} onClick={(e) => { e.preventDefault(); confirmDelete(); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

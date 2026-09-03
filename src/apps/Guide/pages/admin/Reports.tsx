@@ -36,6 +36,41 @@ function useStepViews() {
   });
 }
 
+/** Local calendar date as YYYY-MM-DD — stable grouping key regardless of locale. */
+function isoDay(ts: string) {
+  const d = new Date(ts);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** CSV cell: always quoted, embedded quotes doubled. */
+const csvCell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+
+/**
+ * Session completion. The viewer logs a step 0 / completed:false "opened" row
+ * per session plus a completed:true row per step reached, so:
+ *  - a session is any row's session_id (per guide);
+ *  - a session is complete when it has a completed:true row whose step_number
+ *    reaches the highest step number seen for that guide in the window.
+ */
+function sessionCompletion(rows: Tables<"step_views">[]) {
+  const maxStep = new Map<string, number>();
+  for (const r of rows) {
+    if (r.step_number == null) continue;
+    maxStep.set(r.instruction_set_id, Math.max(maxStep.get(r.instruction_set_id) ?? 0, r.step_number));
+  }
+  const sessions = new Set<string>();
+  const completed = new Set<string>();
+  for (const r of rows) {
+    const key = `${r.instruction_set_id}:${r.session_id}`;
+    sessions.add(key);
+    const target = maxStep.get(r.instruction_set_id) ?? 0;
+    if (r.completed && target > 0 && (r.step_number ?? 0) >= target) completed.add(key);
+  }
+  return { sessions, completed, maxStep };
+}
+
 export default function Reports() {
   const { data: guides = [], isLoading } = useInstructionSets();
   const { data: brands = [] } = useBrands();
@@ -48,17 +83,15 @@ export default function Reports() {
     const daysAgo = parseInt(period);
     const cutoff = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
     const filtered = stepViews.filter(sv => new Date(sv.viewed_at) >= cutoff);
-    const sessions = new Set(filtered.map(sv => sv.session_id));
-    const completedSessions = new Set(
-      filtered.filter(sv => sv.completed).map(sv => sv.session_id)
-    );
-    const completionRate = sessions.size > 0 ? Math.round((completedSessions.size / sessions.size) * 100) : 0;
+
+    const overall = sessionCompletion(filtered);
+    const uniqueSessions = new Set(filtered.map(sv => sv.session_id));
+    const completionRate = overall.sessions.size > 0 ? Math.round((overall.completed.size / overall.sessions.size) * 100) : 0;
 
     // Per-guide stats
     const guideStats = guides.map((g: any) => {
       const gViews = filtered.filter(sv => sv.instruction_set_id === g.id);
-      const gSessions = new Set(gViews.map(sv => sv.session_id));
-      const gCompleted = new Set(gViews.filter(sv => sv.completed).map(sv => sv.session_id));
+      const gc = sessionCompletion(gViews);
       const gFeedback = feedbackItems.filter((f: any) => f.instruction_set_id === g.id);
       const ratings = gFeedback.filter((f: any) => f.rating);
       const avgRating = ratings.length > 0 ? (ratings.reduce((s: number, f: any) => s + f.rating, 0) / ratings.length).toFixed(1) : '—';
@@ -70,39 +103,45 @@ export default function Reports() {
 
       return {
         id: g.id,
-        title: g.title,
-        product_code: g.product_code,
+        title: g.title as string,
+        product_code: g.product_code as string,
         totalViews: gViews.length,
-        sessions: gSessions.size,
-        completionRate: gSessions.size > 0 ? Math.round((gCompleted.size / gSessions.size) * 100) : 0,
+        sessions: gc.sessions.size,
+        completionRate: gc.sessions.size > 0 ? Math.round((gc.completed.size / gc.sessions.size) * 100) : 0,
         reviews: gFeedback.length,
         avgRating,
         brandViews,
       };
     });
 
-    // Most viewed
-    const mostViewed = guideStats.sort((a, b) => b.totalViews - a.totalViews)[0];
+    // Most viewed — copy before sorting (useMemo must not mutate), and only
+    // report a guide that actually has views.
+    const byViews = [...guideStats].sort((a, b) => b.totalViews - a.totalViews);
+    const mostViewed = byViews[0] && byViews[0].totalViews > 0 ? byViews[0] : undefined;
 
     // Brand comparison data
-    const brandCompare = guideStats.filter(g => g.totalViews > 0).slice(0, 8).map(g => ({
+    const brandCompare = byViews.filter(g => g.totalViews > 0).slice(0, 8).map(g => ({
       guide: g.title.length > 20 ? g.title.substring(0, 20) + '…' : g.title,
       ...g.brandViews,
     }));
 
-    // Time series: group by date
+    // Time series: group by ISO day so ordering is chronological, then format
+    // the label for display.
     const byDate: Record<string, { views: number; completions: number }> = {};
     filtered.forEach(sv => {
-      const d = new Date(sv.viewed_at).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' });
+      const d = isoDay(sv.viewed_at);
       if (!byDate[d]) byDate[d] = { views: 0, completions: 0 };
       byDate[d].views++;
       if (sv.completed) byDate[d].completions++;
     });
-    const timeSeries = Object.entries(byDate).map(([date, v]) => ({ date, ...v }));
+    const timeSeries = Object.keys(byDate).sort().map((iso) => ({
+      date: new Date(`${iso}T00:00:00`).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' }),
+      ...byDate[iso],
+    }));
 
     return {
       totalViews: filtered.length,
-      sessions: sessions.size,
+      sessions: uniqueSessions.size,
       completionRate,
       mostViewed,
       guideStats,
@@ -114,7 +153,7 @@ export default function Reports() {
   const exportCSV = () => {
     const header = "Guide,Product Code,Total Views,Sessions,Completion %,Reviews,Avg Rating";
     const rows = stats.guideStats.map(g =>
-      `"${g.title}","${g.product_code}",${g.totalViews},${g.sessions},${g.completionRate}%,${g.reviews},${g.avgRating}`
+      [csvCell(g.title), csvCell(g.product_code), g.totalViews, g.sessions, `${g.completionRate}%`, g.reviews, g.avgRating].join(",")
     );
     const csv = [header, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -132,7 +171,7 @@ export default function Reports() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Reports</h1>
           <p className="text-muted-foreground text-sm">Guide engagement and performance analytics</p>
@@ -153,8 +192,8 @@ export default function Reports() {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatsCard title="Total Views" value={stats.totalViews} subtitle="Selected period" icon={<ChartBarIcon className="w-5 h-5" />} />
         <StatsCard title="Unique Sessions" value={stats.sessions} icon={<UsersIcon className="w-5 h-5" />} />
-        <StatsCard title="Avg Completion" value={`${stats.completionRate}%`} icon={<TargetIcon className="w-5 h-5" />} />
-        <StatsCard title="Most Viewed" value={stats.mostViewed?.title?.substring(0, 15) || '—'} subtitle={stats.mostViewed ? `${stats.mostViewed.totalViews} views` : ''} icon={<ChartLineIcon className="w-5 h-5" />} />
+        <StatsCard title="Avg Completion" value={`${stats.completionRate}%`} subtitle="Sessions reaching the last step" icon={<TargetIcon className="w-5 h-5" />} />
+        <StatsCard title="Most Viewed" value={stats.mostViewed?.title?.substring(0, 15) || '—'} subtitle={stats.mostViewed ? `${stats.mostViewed.totalViews} views` : 'No views yet'} icon={<ChartLineIcon className="w-5 h-5" />} />
         <StatsCard title="Guides" value={guides.length} icon={<TriangleAlertIcon className="w-5 h-5" />} />
       </div>
 
