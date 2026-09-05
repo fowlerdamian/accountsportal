@@ -14,6 +14,7 @@ import { Toaster } from "@guide/components/ui/sonner";
 import { toast } from "sonner";
 import { notifyGuideComment, notifyGuideFlag, notifySupportQuestion } from "@guide/lib/notifyGoogleChat";
 import { Input } from "@guide/components/ui/input";
+import { isBusinessHours, nextOpenLabel, HOURS_LABEL } from "@guide/lib/businessHours";
 import { safeLocal, safeSession } from "@guide/lib/safeStorage";
 import { GuideErrorBoundary } from "@guide/components/ui/GuideErrorBoundary";
 
@@ -312,6 +313,9 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
   }
 
   const brandColour = brand?.primary_colour ?? '#F59E0B';
+  // Support hours (Brisbane, Mon–Fri 8–5): outside them the help sheet says when we're back.
+  const afterHours = !isBusinessHours();
+  const backAt = nextOpenLabel();
   const chatEnabled = brand?.chat_enabled ?? true;
   const supportHint = brand?.support_phone ? ` If it keeps happening, call us on ${brand.support_phone}.` : '';
   const reportError = (what: string) => toast.error(`Couldn't send your ${what}.${supportHint}`);
@@ -523,12 +527,13 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
     safeLocal.set('guide-contact', JSON.stringify({ name, email, phone }));
     setSupportSentId(null);
     setSupportOpen(false);
-    toast.success(email ? `Thanks — we'll reply to ${email}.` : `Thanks — we'll call you on ${phone}.`);
+    const when = afterHours ? ` when we're back at ${backAt}` : '';
+    toast.success(email ? `Thanks — we'll reply to ${email}${when}.` : `Thanks — we'll call you on ${phone}${when}.`);
   };
   const skipSupportContact = () => {
     setSupportSentId(null);
     setSupportOpen(false);
-    toast.success(`Sent — we'll do our best to help.${brand?.support_phone ? ` For anything urgent call ${brand.support_phone}.` : ""}`);
+    toast.success(`Sent — ${afterHours ? `we'll pick this up when we're back at ${backAt}` : "we'll do our best to help"}.${brand?.support_phone ? ` For anything urgent call ${brand.support_phone}.` : ""}`);
   };
 
   const openLightbox = (src: string, alt: string) => setLightbox({ src, alt });
@@ -1007,7 +1012,11 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
                   <SheetTitle>Message sent — how should we reply?</SheetTitle>
                 </SheetHeader>
                 <div className="mt-4 space-y-3">
-                  <p className="text-sm text-muted-foreground">Leave an email or phone number and we'll get back to you, usually the same business day.</p>
+                  <p className="text-sm text-muted-foreground">
+                    {afterHours
+                      ? <>We're closed right now ({HOURS_LABEL}). Leave an email or phone number and we'll get back to you when we're back at <span className="font-medium text-foreground">{backAt}</span>.</>
+                      : <>Leave an email or phone number and we'll get back to you, usually the same business day.</>}
+                  </p>
                   <Input value={supportEmail} onChange={e => setSupportEmail(e.target.value)} placeholder="Email" type="email" inputMode="email" autoComplete="email" aria-label="Your email" className="h-11 text-base md:text-sm" />
                   <Input value={supportPhone} onChange={e => setSupportPhone(e.target.value)} placeholder="Phone" type="tel" inputMode="tel" autoComplete="tel" aria-label="Your phone" className="h-11 text-base md:text-sm" />
                   <Input value={supportName} onChange={e => setSupportName(e.target.value)} placeholder="Your name (optional)" autoComplete="name" aria-label="Your name" className="h-11 text-base md:text-sm" />
@@ -1036,6 +1045,11 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
                 placeholder={step && !isDivider ? `I'm stuck on Step ${displayStepNumber} — ${step.subtitle}. Can you help?` : "How can we help?"}
                 rows={4}
               />
+              {afterHours && (
+                <p className="text-xs rounded-lg border border-[rgba(var(--brand-accent-rgb),0.35)] bg-[rgba(var(--brand-accent-rgb),0.08)] p-3 text-foreground/90" role="status">
+                  <span className="font-medium">We're closed right now</span> ({HOURS_LABEL}). Send your question anyway — we'll reply when we're back at {backAt}.
+                </p>
+              )}
               <div className="flex gap-2">
                 <Button className="flex-1 h-11" style={{ backgroundColor: brandColour }} onClick={submitSupport} disabled={!supportMessage.trim() || submitting === 'support'}>
                   {submitting === 'support'
