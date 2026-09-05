@@ -159,7 +159,12 @@ async function dmAssignee(db: SupabaseClient, userId: string, taskId: string, ti
     if (!prof?.google_chat_webhook_url) return;
     const taskUrl = `${PORTAL_URL}/tasks?task=${encodeURIComponent(taskId)}`;
     const text = `📋 *<${taskUrl}|${title.replace(/[|<>]/g, " ")}>* — from Guide auto-delivery\n${summary}\nDue ${aestDatePlus(TASK_DUE_DAYS)} · Do`;
-    const r = await fetch(prof.google_chat_webhook_url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    // Personal DMs go through the notify-google-chat gate (business hours only).
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/notify-google-chat`, {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: key, Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ text, webhook_url: prof.google_chat_webhook_url, source: "guide-delivery" }), signal: AbortSignal.timeout(15_000),
+    });
     if (!r.ok) console.warn("task DM →", r.status, await r.text());
   } catch (e) {
     console.warn("task DM failed:", e);

@@ -33,15 +33,24 @@ async function refreshCurrentMonth() {
   return resp.json()
 }
 
-async function postChat(webhook, text) {
-  if (!webhook) return false
+// Route through the notify-google-chat gate (business-hours queueing). The
+// service key lets us target a personal webhook; off-hours messages are parked
+// in chat_outbox and flushed at 8am Brisbane on the next business day.
+async function postChat(webhookUrl, text, source = 'finance-mtd-digest') {
+  if (!webhookUrl) return false
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) { console.warn('[finance-mtd-digest] Supabase env missing; chat not sent'); return false }
   try {
-    const r = await fetch(webhook, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+    const r = await fetch(`${url}/functions/v1/notify-google-chat`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', apikey: key, Authorization: `Bearer ${key}` },
+      body:    JSON.stringify({ text, webhook_url: webhookUrl, source, policy: 'skip' }), // digest: stale by 8am, don't queue
     })
-    return r.ok
+    const out = await r.json().catch(() => ({}))
+    return r.ok && out.ok !== false
   } catch (err) {
-    console.warn('[finance-mtd-digest] chat post failed:', err.message)
+    console.warn('[finance-mtd-digest] chat gate failed:', err.message)
     return false
   }
 }

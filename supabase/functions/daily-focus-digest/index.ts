@@ -135,17 +135,27 @@ async function generateFocus(profile: Profile, data: FocusData): Promise<string>
   return (resp.content?.[0]?.text?.trim() as string) || `*Today's Focus — ${name}*`;
 }
 
-async function postToChat(webhook: string, text: string): Promise<boolean> {
-  const res = await fetch(webhook, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  });
-  if (!res.ok) {
-    console.error(`gchat post failed ${res.status}: ${(await res.text()).slice(0, 200)}`);
+// Route through the notify-google-chat gate (business-hours queueing) with the
+// service key so a personal webhook can be targeted.
+async function gateChat(webhookUrl: string, text: string, source: string): Promise<boolean> {
+  try {
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/notify-google-chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: key, Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ text, webhook_url: webhookUrl, source, policy: "skip" }), // digest: stale by 8am, don't queue
+      signal: AbortSignal.timeout(15_000),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || out.ok === false) { console.error("chat gate →", res.status, JSON.stringify(out).slice(0, 200)); return false; }
+    return true;
+  } catch (e) {
+    console.error("chat gate failed:", e);
     return false;
   }
-  return true;
+}
+async function postToChat(webhook: string, text: string): Promise<boolean> {
+  return gateChat(webhook, text, "daily-focus-digest");
 }
 
 serve(async (req) => {
