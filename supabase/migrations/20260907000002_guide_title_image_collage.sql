@@ -62,9 +62,12 @@ begin
       end if;
       -- Up to 4 title images; empty list → NULL (inherit the guide's images).
       if jsonb_typeof(v_variant->'product_image_urls') = 'array' then
+        -- Drop blanks first, then keep the first 4 in order.
         select array_agg(u order by ord) into v_images
-          from jsonb_array_elements_text(v_variant->'product_image_urls') with ordinality as x(u, ord)
-         where coalesce(u, '') <> '' and ord <= 4;
+          from (select u, ord
+                  from jsonb_array_elements_text(v_variant->'product_image_urls') with ordinality as x(u, ord)
+                 where coalesce(u, '') <> ''
+                 order by ord limit 4) q;
       else
         v_images := null;
       end if;
