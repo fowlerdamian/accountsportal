@@ -65,6 +65,13 @@ export interface GuideVariant {
   instruction_set_id: string;
   variant_label: string;
   slug: string;
+  /** Overview ("welcome screen") overrides — null/empty inherits the guide's value. */
+  title?: string | null;
+  product_code?: string | null;
+  short_description?: string | null;
+  product_image_url?: string | null;
+  estimated_time?: string | null;
+  tools_required?: string[] | null;
 }
 
 export interface SupportQuestion {

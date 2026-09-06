@@ -182,21 +182,39 @@ export type Database = {
       }
       guide_variants: {
         Row: {
+          estimated_time: string | null
           id: string
           instruction_set_id: string
+          product_code: string | null
+          product_image_url: string | null
+          short_description: string | null
           slug: string
+          title: string | null
+          tools_required: string[] | null
           variant_label: string
         }
         Insert: {
+          estimated_time?: string | null
           id?: string
           instruction_set_id: string
+          product_code?: string | null
+          product_image_url?: string | null
+          short_description?: string | null
           slug: string
+          title?: string | null
+          tools_required?: string[] | null
           variant_label: string
         }
         Update: {
+          estimated_time?: string | null
           id?: string
           instruction_set_id?: string
+          product_code?: string | null
+          product_image_url?: string | null
+          short_description?: string | null
           slug?: string
+          title?: string | null
+          tools_required?: string[] | null
           variant_label?: string
         }
         Relationships: [

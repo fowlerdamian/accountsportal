@@ -322,9 +322,22 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
 
   // When a guide has variants, make the customer pick one before the overview.
   const needsVariantChoice = variants.length > 0 && selectedVariantId === undefined;
+  const selectedVariant = selectedVariantId ? variants.find(v => v.id === selectedVariantId) : undefined;
   const selectedVariantLabel = selectedVariantId
-    ? variants.find(v => v.id === selectedVariantId)?.variant_label
+    ? selectedVariant?.variant_label
     : (guide.default_variant_label || 'Standard');
+  // Overview ("welcome screen") content follows the chosen variant; anything the
+  // variant leaves blank inherits from the guide.
+  const pick = <T,>(v: T | null | undefined, fallback: T): T =>
+    (v === null || v === undefined || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0)) ? fallback : v;
+  const overview = {
+    title: pick(selectedVariant?.title, guide.title),
+    product_code: pick(selectedVariant?.product_code, guide.product_code),
+    short_description: pick(selectedVariant?.short_description, guide.short_description),
+    product_image_url: pick(selectedVariant?.product_image_url, guide.product_image_url),
+    estimated_time: pick(selectedVariant?.estimated_time, guide.estimated_time),
+    tools_required: pick(selectedVariant?.tools_required, guide.tools_required ?? []),
+  };
 
   // Wiring-break dividers are not "real" steps — they sit between groups of
   // bracket-only and wiring instructions. They're excluded from the count, the
@@ -551,8 +564,8 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
 
   const productImage = (
     <div className="w-full rounded-xl bg-muted flex items-center justify-center overflow-hidden">
-      {guide.product_image_url ? (
-        <img src={guide.product_image_url} alt={guide.title} decoding="async" className="w-full max-h-64 sm:max-h-80 object-contain bg-white" />
+      {overview.product_image_url ? (
+        <img src={overview.product_image_url} alt={overview.title} decoding="async" className="w-full max-h-64 sm:max-h-80 object-contain bg-white" />
       ) : (
         <BookIcon className="w-12 h-12 text-muted-foreground/30 my-10" />
       )}
@@ -586,7 +599,7 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
               </div>
             )}
           </div>
-          <span className="text-xs text-muted-foreground">{guide.product_code}</span>
+          <span className="text-xs text-muted-foreground">{overview.product_code}</span>
         </div>
       </header>
 
@@ -661,9 +674,9 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
             {productImage}
 
             <div>
-              <h1 className="text-xl font-bold">{guide.title}</h1>
-              <code className="text-xs text-muted-foreground">{guide.product_code}</code>
-              {guide.short_description && <p className="text-base text-muted-foreground mt-2">{guide.short_description}</p>}
+              <h1 className="text-xl font-bold">{overview.title}</h1>
+              <code className="text-xs text-muted-foreground">{overview.product_code}</code>
+              {overview.short_description && <p className="text-base text-muted-foreground mt-2">{overview.short_description}</p>}
             </div>
 
             {/* Vehicle Fitment */}
@@ -688,18 +701,18 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
               </div>
             )}
 
-            {guide.estimated_time && (
+            {overview.estimated_time && (
               <Badge variant="secondary" className="gap-1.5 py-1 px-3">
                 <Clock className="w-3.5 h-3.5" />
-                {guide.estimated_time}
+                {overview.estimated_time}
               </Badge>
             )}
 
-            {guide.tools_required && guide.tools_required.length > 0 && (
+            {overview.tools_required.length > 0 && (
               <div className="space-y-2">
                 <h2 className="font-semibold text-sm">Tools Required</h2>
                 <ul className="space-y-1.5">
-                  {guide.tools_required.map((tool, i) => (
+                  {overview.tools_required.map((tool, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Wrench className="w-3.5 h-3.5 shrink-0" />
                       {tool}
@@ -909,7 +922,7 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
           <div className="text-center space-y-6 py-12 animate-fade-in">
             <div className="text-5xl">✅</div>
             <h1 className="text-2xl font-bold">Installation Complete!</h1>
-            <p className="text-muted-foreground text-base">Great work! Your {guide.title} has been installed successfully.</p>
+            <p className="text-muted-foreground text-base">Great work! Your {overview.title} has been installed successfully.</p>
 
             <div className="space-y-3">
               <p className="text-sm font-medium">How was this guide?</p>

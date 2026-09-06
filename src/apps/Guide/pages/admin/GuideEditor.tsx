@@ -447,7 +447,19 @@ export default function GuideEditor() {
     variant_label: string;
     slug: string;
     steps: StepDraft[];
+    // Overview overrides shown on the customer's welcome screen for this
+    // variant. Empty = inherit the guide's Product Details value.
+    title: string;
+    product_code: string;
+    short_description: string;
+    product_image_url: string | null;
+    estimated_time: string;
+    tools_required: string[];
   }
+  const blankVariantOverview = () => ({
+    title: "", product_code: "", short_description: "", product_image_url: null as string | null,
+    estimated_time: "", tools_required: [] as string[],
+  });
   const [variants, setVariants] = useState<VariantDraft[]>([]);
   // Name for the base (variant_id IS NULL) step sequence — only editable/shown once other variants exist
   const [defaultVariantLabel, setDefaultVariantLabel] = useState("");
@@ -642,6 +654,12 @@ export default function GuideEditor() {
           id: v.id,
           variant_label: v.variant_label,
           slug: v.slug,
+          title: v.title ?? "",
+          product_code: v.product_code ?? "",
+          short_description: v.short_description ?? "",
+          product_image_url: v.product_image_url ?? null,
+          estimated_time: v.estimated_time ?? "",
+          tools_required: Array.isArray(v.tools_required) ? v.tools_required : [],
           steps: (vSteps || []).map((s: any): StepDraft => ({
             key: newStepKey(),
             id: s.id, step_number: s.step_number, subtitle: s.subtitle,
@@ -809,6 +827,13 @@ export default function GuideEditor() {
           ...(v.id ? { id: v.id } : {}),
           variant_label: v.variant_label,
           slug: v.slug || generateSlug(),
+          title: v.title.trim() || null,
+          product_code: v.product_code.trim() || null,
+          short_description: v.short_description.trim() || null,
+          product_image_url: v.product_image_url || null,
+          estimated_time: v.estimated_time.trim() || null,
+          // Empty list = inherit the guide's tools (RPC stores NULL).
+          tools_required: v.tools_required.length > 0 ? v.tools_required : null,
           steps: v.steps.filter(stepHasContent).map(toStepJson),
         }));
 
@@ -1333,6 +1358,82 @@ export default function GuideEditor() {
                       />
                     </div>
 
+                    {/* Per-variant overview — what the customer sees on the welcome
+                        screen after picking this version. Blank = same as the guide. */}
+                    <div className="border rounded-lg p-3 space-y-3 bg-background">
+                      <div>
+                        <p className="text-sm font-medium">Welcome screen for this version</p>
+                        <p className="text-xs text-muted-foreground">Leave a field blank to show the guide's Product Details value.</p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Title</Label>
+                          <Input
+                            value={variant.title}
+                            placeholder={title || "Same as guide"}
+                            onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, title: value })); }}
+                            className="mt-1 h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">SKU</Label>
+                          <Input
+                            value={variant.product_code}
+                            placeholder={productCode || "Same as guide"}
+                            onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, product_code: value })); }}
+                            className="mt-1 h-8 text-sm font-mono"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Estimated Completion Time</Label>
+                          <Input
+                            value={variant.estimated_time}
+                            placeholder={estimatedTime || "Same as guide"}
+                            onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, estimated_time: value })); }}
+                            className="mt-1 h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Tools Required</Label>
+                          <Input
+                            value={variant.tools_required.join(", ")}
+                            placeholder={tools.length ? tools.join(", ") : "Same as guide"}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Keep a trailing empty token while typing so ", " isn't swallowed mid-edit.
+                              updateVariant(vIdx, v => ({ ...v, tools_required: value.split(",").map(t => t.trimStart()).filter((t, i, a) => t !== "" || i === a.length - 1) }));
+                            }}
+                            onBlur={() => updateVariant(vIdx, v => ({ ...v, tools_required: v.tools_required.map(t => t.trim()).filter(Boolean) }))}
+                            className="mt-1 h-8 text-sm"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">Comma-separated. Replaces the guide's list when set.</p>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Short Description</Label>
+                        <Textarea
+                          value={variant.short_description}
+                          placeholder={description || "Same as guide"}
+                          maxLength={300}
+                          rows={2}
+                          onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, short_description: value })); }}
+                          className="mt-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Product Image</Label>
+                        <div className="mt-1">
+                          <DropZone
+                            label={productImageUrl ? "Upload a different image for this version" : "Drag and drop or click to upload"}
+                            currentUrl={variant.product_image_url}
+                            onUpload={(url) => updateVariant(vIdx, v => ({ ...v, product_image_url: url }))}
+                            onClear={() => updateVariant(vIdx, v => ({ ...v, product_image_url: null }))}
+                            folder="products"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Variant steps */}
                     {variant.steps.map((step, sIdx) => (
                       <div key={step.key} className="border rounded-lg p-3 space-y-2 bg-background">
@@ -1437,7 +1538,7 @@ export default function GuideEditor() {
                         image2_original_url: s.image2_original_url,
                         is_divider: s.is_divider ?? false,
                       }));
-                      setVariants(prev => [...prev, { variant_label: label, slug: generateSlug(), steps: copied }]);
+                      setVariants(prev => [...prev, { variant_label: label, slug: generateSlug(), ...blankVariantOverview(), steps: copied }]);
                       setNewVariantLabel("");
                       setShowAddVariant(false);
                       toast.success("Variant added — steps copied from the base variant");
@@ -1451,7 +1552,7 @@ export default function GuideEditor() {
                     disabled={!newVariantLabel.trim()}
                     onClick={() => {
                       const label = newVariantLabel.trim();
-                      setVariants(prev => [...prev, { variant_label: label, slug: generateSlug(), steps: [blankStep(1)] }]);
+                      setVariants(prev => [...prev, { variant_label: label, slug: generateSlug(), ...blankVariantOverview(), steps: [blankStep(1)] }]);
                       setNewVariantLabel("");
                       setShowAddVariant(false);
                       toast.success("Variant added — start fresh");

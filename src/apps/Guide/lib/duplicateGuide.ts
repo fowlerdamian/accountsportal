@@ -33,7 +33,15 @@ export async function duplicateGuide(sourceId: string): Promise<string> {
   const variantMap = new Map<string, string>();
   for (const v of variants ?? []) {
     const { data: nv, error } = await supabase.from("guide_variants")
-      .insert({ instruction_set_id: newId, variant_label: v.variant_label, slug: randomSlug() })
+      .insert({
+        instruction_set_id: newId, variant_label: v.variant_label, slug: randomSlug(),
+        title: v.title ?? null,
+        product_code: v.product_code ? copyCode(v.product_code) : null,
+        short_description: v.short_description ?? null,
+        product_image_url: v.product_image_url ?? null,
+        estimated_time: v.estimated_time ?? null,
+        tools_required: v.tools_required ?? null,
+      })
       .select("id").single();
     if (error || !nv) throw error ?? new Error("Could not copy variant");
     variantMap.set(v.id, nv.id);
