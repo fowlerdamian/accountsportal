@@ -23,6 +23,8 @@ export interface InstructionSet {
   product_code: string;
   short_description: string;
   product_image_url: string;
+  /** Up to 4 title images shown as a collage; product_image_url mirrors the first. */
+  product_image_urls?: string[] | null;
   tools_required: string[];
   category_id: string;
   estimated_time: string;
@@ -70,6 +72,7 @@ export interface GuideVariant {
   product_code?: string | null;
   short_description?: string | null;
   product_image_url?: string | null;
+  product_image_urls?: string[] | null;
   estimated_time?: string | null;
   tools_required?: string[] | null;
 }

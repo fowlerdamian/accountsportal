@@ -34,6 +34,44 @@ function resolveBrand(brands: Brand[]): Brand | undefined {
   return brands.find(b => b.domain === host) ?? brands.find(b => b.key === 'aga') ?? brands[0];
 }
 
+/** Ordered title images: the list column when set, else the legacy single image. */
+function titleImagesOf(o: { product_image_urls?: string[] | null; product_image_url?: string | null } | null | undefined): string[] {
+  const list = (o?.product_image_urls ?? []).filter((u): u is string => typeof u === 'string' && u.trim() !== '');
+  if (list.length > 0) return list.slice(0, 4);
+  return o?.product_image_url ? [o.product_image_url] : [];
+}
+
+// Automatic collage for 2–4 title images: 2 → side by side, 3 → one tall tile
+// plus two stacked, 4 → 2×2. Fixed aspect ratios so the layout doesn't jump
+// while images load; every tile opens the lightbox.
+function ProductCollage({ images, alt, onOpen }: { images: string[]; alt: string; onOpen: (src: string, alt: string) => void }) {
+  const n = Math.min(images.length, 4);
+  const tile = (src: string, i: number, extra = "") => (
+    <button
+      key={`${i}-${src}`}
+      type="button"
+      onClick={() => onOpen(src, `${alt} — image ${i + 1}`)}
+      aria-label={`Enlarge image ${i + 1} of ${n}`}
+      className={`relative overflow-hidden bg-white hover:opacity-90 transition-opacity ${extra}`}
+    >
+      <img src={src} alt={`${alt} — image ${i + 1}`} decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+    </button>
+  );
+  if (n === 2) {
+    return <div className="grid grid-cols-2 gap-1 aspect-[2/1]">{images.slice(0, 2).map((s, i) => tile(s, i))}</div>;
+  }
+  if (n === 3) {
+    return (
+      <div className="grid grid-cols-2 grid-rows-2 gap-1 aspect-[4/3]">
+        {tile(images[0], 0, "row-span-2")}
+        {tile(images[1], 1)}
+        {tile(images[2], 2)}
+      </div>
+    );
+  }
+  return <div className="grid grid-cols-2 grid-rows-2 gap-1 aspect-square sm:aspect-[4/3]">{images.slice(0, 4).map((s, i) => tile(s, i))}</div>;
+}
+
 function brandInitials(name: string) {
   return name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase();
 }
@@ -334,7 +372,7 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
     title: pick(selectedVariant?.title, guide.title),
     product_code: pick(selectedVariant?.product_code, guide.product_code),
     short_description: pick(selectedVariant?.short_description, guide.short_description),
-    product_image_url: pick(selectedVariant?.product_image_url, guide.product_image_url),
+    product_images: pick(titleImagesOf(selectedVariant), titleImagesOf(guide)),
     estimated_time: pick(selectedVariant?.estimated_time, guide.estimated_time),
     tools_required: pick(selectedVariant?.tools_required, guide.tools_required ?? []),
   };
@@ -563,11 +601,13 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
   );
 
   const productImage = (
-    <div className="w-full rounded-xl bg-muted flex items-center justify-center overflow-hidden">
-      {overview.product_image_url ? (
-        <img src={overview.product_image_url} alt={overview.title} decoding="async" className="w-full max-h-64 sm:max-h-80 object-contain bg-white" />
+    <div className="w-full rounded-xl bg-muted overflow-hidden">
+      {overview.product_images.length === 0 ? (
+        <div className="flex items-center justify-center"><BookIcon className="w-12 h-12 text-muted-foreground/30 my-10" /></div>
+      ) : overview.product_images.length === 1 ? (
+        <img src={overview.product_images[0]} alt={overview.title} decoding="async" className="w-full max-h-64 sm:max-h-80 object-contain bg-white" />
       ) : (
-        <BookIcon className="w-12 h-12 text-muted-foreground/30 my-10" />
+        <ProductCollage images={overview.product_images} alt={overview.title} onOpen={openLightbox} />
       )}
     </div>
   );

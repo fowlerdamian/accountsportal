@@ -256,6 +256,47 @@ function DropZone({ label, currentUrl, onUpload, onClear, onEdit, folder, dragPa
   );
 }
 
+// --- Title images (up to 4, shown as a collage on the welcome screen) ---
+const MAX_TITLE_IMAGES = 4;
+
+/** Ordered title images from a row: the list column when set, else the legacy single image. */
+function imageList(urls: unknown, single: string | null | undefined): string[] {
+  const list = Array.isArray(urls) ? urls.filter((u): u is string => typeof u === 'string' && u.trim() !== '') : [];
+  if (list.length > 0) return list.slice(0, MAX_TITLE_IMAGES);
+  return single ? [single] : [];
+}
+
+interface ImageSlotsProps {
+  urls: string[];
+  onChange: (next: string[]) => void;
+  folder: string;
+  emptyLabel?: string;
+}
+
+/** Filled slots plus one empty slot until the cap; removing a slot closes the gap. */
+function ImageSlots({ urls, onChange, folder, emptyLabel }: ImageSlotsProps) {
+  const slots: (string | null)[] = urls.length < MAX_TITLE_IMAGES ? [...urls, null] : urls.slice(0, MAX_TITLE_IMAGES);
+  return (
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {slots.map((url, i) => (
+          <DropZone
+            key={url ? `${i}-${url}` : `empty-${i}`}
+            label={url ? `Image ${i + 1}` : (urls.length === 0 ? (emptyLabel ?? "Drag and drop or click to upload") : "Add another")}
+            currentUrl={url}
+            onUpload={(u) => onChange(url ? urls.map((x, j) => (j === i ? u : x)) : [...urls, u].slice(0, MAX_TITLE_IMAGES))}
+            onClear={url ? () => onChange(urls.filter((_, j) => j !== i)) : undefined}
+            folder={folder}
+          />
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Up to {MAX_TITLE_IMAGES} images. One shows on its own; two or more are arranged into a collage automatically. The first image is used for thumbnails.
+      </p>
+    </div>
+  );
+}
+
 // --- Sortable Step ---
 interface SortableStepProps {
   id: string;
@@ -429,7 +470,9 @@ export default function GuideEditor() {
   const [categoryId, setCategoryId] = useState("");
   const [estimatedTime, setEstimatedTime] = useState("");
   const [description, setDescription] = useState("");
-  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  const [productImageUrls, setProductImageUrls] = useState<string[]>([]);
+  // First title image — mirrored into product_image_url for thumbnails/emails.
+  const productImageUrl = productImageUrls[0] ?? null;
   const [tools, setTools] = useState<string[]>([]);
   const [toolInput, setToolInput] = useState("");
   const [saving, setSaving] = useState(false);
@@ -452,12 +495,12 @@ export default function GuideEditor() {
     title: string;
     product_code: string;
     short_description: string;
-    product_image_url: string | null;
+    product_image_urls: string[];
     estimated_time: string;
     tools_required: string[];
   }
   const blankVariantOverview = () => ({
-    title: "", product_code: "", short_description: "", product_image_url: null as string | null,
+    title: "", product_code: "", short_description: "", product_image_urls: [] as string[],
     estimated_time: "", tools_required: [] as string[],
   });
   const [variants, setVariants] = useState<VariantDraft[]>([]);
@@ -614,7 +657,7 @@ export default function GuideEditor() {
     setCategoryId(existingGuide.category_id ?? "");
     setEstimatedTime(existingGuide.estimated_time ?? "");
     setDescription(existingGuide.short_description ?? "");
-    setProductImageUrl(existingGuide.product_image_url ?? null);
+    setProductImageUrls(imageList((existingGuide as any).product_image_urls, existingGuide.product_image_url));
     setTools(existingGuide.tools_required ?? []);
     setDefaultVariantLabel(existingGuide.default_variant_label ?? "");
 
@@ -657,7 +700,7 @@ export default function GuideEditor() {
           title: v.title ?? "",
           product_code: v.product_code ?? "",
           short_description: v.short_description ?? "",
-          product_image_url: v.product_image_url ?? null,
+          product_image_urls: imageList(v.product_image_urls, v.product_image_url),
           estimated_time: v.estimated_time ?? "",
           tools_required: Array.isArray(v.tools_required) ? v.tools_required : [],
           steps: (vSteps || []).map((s: any): StepDraft => ({
@@ -681,12 +724,12 @@ export default function GuideEditor() {
   // baseline (set once the guide has loaded, or on a blank new guide, and
   // after every successful save); the form is dirty when they differ.
   const sigOf = (steps: StepDraft[], vars: VariantDraft[]) => JSON.stringify({
-    title, productCode, categoryId, estimatedTime, description, productImageUrl, tools, vehicles, defaultVariantLabel, steps, vars,
+    title, productCode, categoryId, estimatedTime, description, productImageUrls, tools, vehicles, defaultVariantLabel, steps, vars,
   });
   const currentSig = useMemo(
     () => sigOf(guideSteps, variants),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [title, productCode, categoryId, estimatedTime, description, productImageUrl, tools, vehicles, defaultVariantLabel, guideSteps, variants],
+    [title, productCode, categoryId, estimatedTime, description, productImageUrls, tools, vehicles, defaultVariantLabel, guideSteps, variants],
   );
   const [savedSig, setSavedSig] = useState<string | null>(null);
   useEffect(() => {
@@ -724,11 +767,12 @@ export default function GuideEditor() {
     // ObjectURL that would die the moment another browser loads the guide.
     // Refuse to persist them here regardless of how they got into state.
     const blobOffenders: string[] = [];
-    if (hasBlobUrl(productImageUrl)) blobOffenders.push('Product image');
+    if (hasBlobUrl(...productImageUrls)) blobOffenders.push('Product image');
     guideSteps.forEach((s, i) => {
       if (hasBlobUrl(s.image_url, s.image2_url)) blobOffenders.push(`Step ${i + 1}`);
     });
     variants.forEach((v, vi) => {
+      if (hasBlobUrl(...v.product_image_urls)) blobOffenders.push(`Variant ${vi + 1} image`);
       v.steps.forEach((s, i) => {
         if (hasBlobUrl(s.image_url, s.image2_url)) blobOffenders.push(`Variant ${vi + 1} step ${i + 1}`);
       });
@@ -753,6 +797,7 @@ export default function GuideEditor() {
         short_description: description || null,
         tools_required: tools,
         product_image_url: productImageUrl,
+        product_image_urls: productImageUrls,
         // The base steps only need a customer-facing name when other variants exist
         default_variant_label: variants.length > 0 ? (defaultVariantLabel.trim() || 'Standard') : null,
       };
@@ -830,7 +875,8 @@ export default function GuideEditor() {
           title: v.title.trim() || null,
           product_code: v.product_code.trim() || null,
           short_description: v.short_description.trim() || null,
-          product_image_url: v.product_image_url || null,
+          product_image_url: v.product_image_urls[0] ?? null,
+          product_image_urls: v.product_image_urls,
           estimated_time: v.estimated_time.trim() || null,
           // Empty list = inherit the guide's tools (RPC stores NULL).
           tools_required: v.tools_required.length > 0 ? v.tools_required : null,
@@ -1164,15 +1210,9 @@ export default function GuideEditor() {
               <p className="text-xs text-muted-foreground mt-1">{description.length}/300</p>
             </div>
             <div>
-              <Label>Product Image</Label>
+              <Label>Product Images</Label>
               <div className="mt-1.5">
-                <DropZone
-                  label="Drag and drop or click to upload"
-                  currentUrl={productImageUrl}
-                  onUpload={(url) => setProductImageUrl(url)}
-                  onClear={() => setProductImageUrl(null)}
-                  folder="products"
-                />
+                <ImageSlots urls={productImageUrls} onChange={setProductImageUrls} folder="products" />
               </div>
             </div>
 
@@ -1421,14 +1461,13 @@ export default function GuideEditor() {
                         />
                       </div>
                       <div>
-                        <Label className="text-xs">Product Image</Label>
+                        <Label className="text-xs">Product Images</Label>
                         <div className="mt-1">
-                          <DropZone
-                            label={productImageUrl ? "Upload a different image for this version" : "Drag and drop or click to upload"}
-                            currentUrl={variant.product_image_url}
-                            onUpload={(url) => updateVariant(vIdx, v => ({ ...v, product_image_url: url }))}
-                            onClear={() => updateVariant(vIdx, v => ({ ...v, product_image_url: null }))}
+                          <ImageSlots
+                            urls={variant.product_image_urls}
+                            onChange={(next) => updateVariant(vIdx, v => ({ ...v, product_image_urls: next }))}
                             folder="products"
+                            emptyLabel={productImageUrls.length ? "Upload different images for this version" : "Drag and drop or click to upload"}
                           />
                         </div>
                       </div>
@@ -1577,8 +1616,12 @@ export default function GuideEditor() {
           <div className="space-y-6">
             <h2 className="text-lg font-semibold">Review & Publish</h2>
             <div className="border rounded-lg p-4 space-y-2">
-              {productImageUrl && (
-                <img src={productImageUrl} alt="" className="w-full h-40 object-cover rounded mb-3" />
+              {productImageUrls.length > 0 && (
+                <div className={`grid gap-1 mb-3 ${productImageUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  {productImageUrls.map((u, i) => (
+                    <img key={`${i}-${u}`} src={u} alt="" className={`w-full object-cover rounded ${productImageUrls.length === 1 ? 'h-40' : 'h-24'}`} />
+                  ))}
+                </div>
               )}
               <h3 className="font-semibold">{title || 'Untitled Guide'}</h3>
               <p className="text-sm text-muted-foreground">{description || 'No description'}</p>

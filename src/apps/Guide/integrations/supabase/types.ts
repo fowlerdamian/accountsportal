@@ -187,6 +187,7 @@ export type Database = {
           instruction_set_id: string
           product_code: string | null
           product_image_url: string | null
+          product_image_urls: string[] | null
           short_description: string | null
           slug: string
           title: string | null
@@ -199,6 +200,7 @@ export type Database = {
           instruction_set_id: string
           product_code?: string | null
           product_image_url?: string | null
+          product_image_urls?: string[] | null
           short_description?: string | null
           slug: string
           title?: string | null
@@ -211,6 +213,7 @@ export type Database = {
           instruction_set_id?: string
           product_code?: string | null
           product_image_url?: string | null
+          product_image_urls?: string[] | null
           short_description?: string | null
           slug?: string
           title?: string | null
@@ -315,6 +318,7 @@ export type Database = {
           notice_text: string | null
           product_code: string
           product_image_url: string | null
+          product_image_urls: string[] | null
           short_description: string | null
           slug: string
           title: string
@@ -331,6 +335,7 @@ export type Database = {
           notice_text?: string | null
           product_code: string
           product_image_url?: string | null
+          product_image_urls?: string[] | null
           short_description?: string | null
           slug: string
           title: string
@@ -347,6 +352,7 @@ export type Database = {
           notice_text?: string | null
           product_code?: string
           product_image_url?: string | null
+          product_image_urls?: string[] | null
           short_description?: string | null
           slug?: string
           title?: string

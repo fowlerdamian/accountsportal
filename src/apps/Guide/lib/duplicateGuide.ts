@@ -22,6 +22,7 @@ export async function duplicateGuide(sourceId: string): Promise<string> {
     short_description: src.short_description,
     tools_required: src.tools_required,
     product_image_url: src.product_image_url,
+    product_image_urls: (src as any).product_image_urls ?? null,
     notice_text: src.notice_text,
     default_variant_label: (src as any).default_variant_label ?? null,
   }).select("id").single();
@@ -39,6 +40,7 @@ export async function duplicateGuide(sourceId: string): Promise<string> {
         product_code: v.product_code ? copyCode(v.product_code) : null,
         short_description: v.short_description ?? null,
         product_image_url: v.product_image_url ?? null,
+        product_image_urls: v.product_image_urls ?? null,
         estimated_time: v.estimated_time ?? null,
         tools_required: v.tools_required ?? null,
       })

@@ -183,6 +183,7 @@ export interface PublicGuideVariant {
   product_code: string | null;
   short_description: string | null;
   product_image_url: string | null;
+  product_image_urls: string[] | null;
   estimated_time: string | null;
   tools_required: string[] | null;
 }
