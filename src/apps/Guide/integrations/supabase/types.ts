@@ -236,6 +236,8 @@ export type Database = {
           instruction_set_id: string
           make: string
           model: string
+          variant_id: string | null
+          variant_scope: string
           year_from: number
           year_to: number
         }
@@ -244,6 +246,8 @@ export type Database = {
           instruction_set_id: string
           make: string
           model: string
+          variant_id?: string | null
+          variant_scope?: string
           year_from: number
           year_to: number
         }
@@ -252,6 +256,8 @@ export type Database = {
           instruction_set_id?: string
           make?: string
           model?: string
+          variant_id?: string | null
+          variant_scope?: string
           year_from?: number
           year_to?: number
         }

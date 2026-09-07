@@ -478,7 +478,10 @@ export default function GuideEditor() {
   const [saving, setSaving] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pdfImportOpen, setPdfImportOpen] = useState(false);
-  const [vehicles, setVehicles] = useState<{ make: string; model: string; year_from: string; year_to: string }[]>([]);
+  // variant: 'all' (every version), 'base' (base steps only) or a variant key
+  // (its id when saved, else its slug) — resolved back to an id by the RPC.
+  type VehicleDraft = { make: string; model: string; year_from: string; year_to: string; variant: string };
+  const [vehicles, setVehicles] = useState<VehicleDraft[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorTarget, setEditorTarget] = useState<{ stepIndex: number; field: 'image_url' | 'image2_url'; variantIdx?: number | null } | null>(null);
   const [editorImageUrl, setEditorImageUrl] = useState("");
@@ -565,6 +568,7 @@ export default function GuideEditor() {
         model: v.model || '',
         year_from: String(v.year_from || ''),
         year_to: v.year_to ? String(v.year_to) : '',
+        variant: 'all',
       }));
       setVehicles(prev => (mode === 'append' ? [...prev, ...imported] : imported));
     }
@@ -684,6 +688,7 @@ export default function GuideEditor() {
       year_from: String(v.year_from),
       // 0 / null is stored for "current" — show it as blank, not the literal "0".
       year_to: v.year_to ? String(v.year_to) : '',
+      variant: v.variant_scope === 'variant' && v.variant_id ? v.variant_id : v.variant_scope === 'base' ? 'base' : 'all',
     })));
 
     // Load variants and their steps, then mark initialized. If the route
@@ -883,6 +888,15 @@ export default function GuideEditor() {
           steps: v.steps.filter(stepHasContent).map(toStepJson),
         }));
 
+        // Which version each vehicle applies to. Variants are referenced by id
+        // (already saved) or slug (created in this save) so the RPC can resolve
+        // either; anything unresolvable is stored as "all versions".
+        const vehicleScope = (key: string) => {
+          if (variants.length === 0 || key === 'all') return { variant_scope: 'all' };
+          if (key === 'base') return { variant_scope: 'base' };
+          const vd = variants.find(x => x.id === key || x.slug === key);
+          return vd ? { variant_scope: 'variant', variant_id: vd.id ?? null, variant_slug: vd.slug } : { variant_scope: 'all' };
+        };
         const vehiclesJson = vehicles
           .filter(v => v.make && v.model && v.year_from)
           .map(v => ({
@@ -890,6 +904,7 @@ export default function GuideEditor() {
             model: v.model,
             year_from: v.year_from,
             year_to: v.year_to || '',
+            ...vehicleScope(v.variant || 'all'),
           }));
 
         const { error: rpcErr } = await supabase.rpc('replace_guide_content', {
@@ -1029,6 +1044,12 @@ export default function GuideEditor() {
   const removeStep = (index: number) => {
     setGuideSteps(prev => (prev.length <= 1 ? prev : renumber(prev.filter((_, i) => i !== index))));
   };
+
+  // Vehicles tied to a version key ('base' or a variant's id/slug) — for the
+  // "Suits" summaries on the Variants tab.
+  const variantKeyOf = (v: VariantDraft) => v.id ?? v.slug;
+  const vehiclesForKey = (key: string) => vehicles.filter(v => v.make && v.model && (v.variant || 'all') === key);
+  const vehicleText = (v: VehicleDraft) => `${v.make} ${v.model} ${v.year_from}${v.year_to ? `–${v.year_to}` : '+'}`.trim();
 
   /** Functional update of one variant by index. */
   const updateVariant = (vIdx: number, fn: (v: VariantDraft) => VariantDraft) => {
@@ -1221,9 +1242,11 @@ export default function GuideEditor() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="flex items-center gap-1.5"><Car className="w-4 h-4" /> Vehicle Fitment</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Which vehicles does this product suit?</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Which vehicles does this product suit?{variants.length > 0 ? " Pick which version each vehicle applies to — customers see it on the version picker." : ""}
+                  </p>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => setVehicles([...vehicles, { make: '', model: '', year_from: '', year_to: '' }])}>
+                <Button type="button" variant="outline" size="sm" onClick={() => setVehicles([...vehicles, { make: '', model: '', year_from: '', year_to: '', variant: 'all' }])}>
                   <Plus className="w-4 h-4 mr-1" /> Add Vehicle
                 </Button>
               </div>
@@ -1245,6 +1268,21 @@ export default function GuideEditor() {
                     <Label className="text-xs">To (blank = current)</Label>
                     <Input type="number" value={v.year_to} onChange={e => { const u = [...vehicles]; u[i] = { ...u[i], year_to: e.target.value }; setVehicles(u); }} placeholder="Current" className="mt-1" />
                   </div>
+                  {variants.length > 0 && (
+                    <div className="w-full sm:w-48">
+                      <Label className="text-xs">Version</Label>
+                      <Select value={v.variant || 'all'} onValueChange={(val) => { const u = [...vehicles]; u[i] = { ...u[i], variant: val }; setVehicles(u); }}>
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All versions</SelectItem>
+                          <SelectItem value="base">{defaultVariantLabel.trim() || 'Standard'} only</SelectItem>
+                          {variants.map(vr => (
+                            <SelectItem key={variantKeyOf(vr)} value={variantKeyOf(vr)}>{vr.variant_label || 'Untitled variant'} only</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <Button type="button" variant="ghost" size="icon" aria-label={`Remove vehicle ${i + 1}`} className="shrink-0 h-9 w-9 text-destructive" onClick={() => setVehicles(prev => prev.filter((_, j) => j !== i))}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -1327,6 +1365,7 @@ export default function GuideEditor() {
             <h2 className="text-lg font-semibold">Variants</h2>
             <p className="text-sm text-muted-foreground">
               Variants allow you to create alternative step sequences for different product configurations (e.g. different vehicle models).
+              Tie vehicles to a version under Product Details → Vehicle Fitment so customers can see which one suits their car.
             </p>
 
             {/* Base variant (always present) — namable only once another variant exists */}
@@ -1341,6 +1380,10 @@ export default function GuideEditor() {
                   />
                   <p className="text-xs text-muted-foreground">
                     Customers pick between this and the variant{variants.length !== 1 ? 's' : ''} below — name it after what makes these {guideSteps.length} step{guideSteps.length !== 1 ? 's' : ''} (from the Installation Steps tab) different.
+                  </p>
+                  <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                    <Car className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>{vehiclesForKey('base').length > 0 ? `Suits: ${vehiclesForKey('base').map(vehicleText).join(', ')}` : 'No vehicles tied to this version yet.'}</span>
                   </p>
                 </div>
               ) : (
@@ -1362,7 +1405,10 @@ export default function GuideEditor() {
                 >
                   <div>
                     <p className="font-medium text-sm">{variant.variant_label}</p>
-                    <p className="text-xs text-muted-foreground">{variant.steps.length} step{variant.steps.length !== 1 ? 's' : ''}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {variant.steps.length} step{variant.steps.length !== 1 ? 's' : ''}
+                      {vehiclesForKey(variantKeyOf(variant)).length > 0 && ` · Suits ${vehiclesForKey(variantKeyOf(variant)).map(vehicleText).join(', ')}`}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button

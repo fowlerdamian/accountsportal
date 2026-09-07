@@ -73,7 +73,15 @@ export async function duplicateGuide(sourceId: string): Promise<string> {
   const { data: vehicles } = await supabase.from("guide_vehicles").select("*").eq("instruction_set_id", sourceId);
   if (vehicles?.length) {
     const { error } = await supabase.from("guide_vehicles").insert(
-      vehicles.map((v: any) => ({ instruction_set_id: newId, make: v.make, model: v.model, year_from: v.year_from, year_to: v.year_to })),
+      vehicles.map((v: any) => {
+        // Re-point version-specific vehicles at the copied variant; fall back to "all" if it's gone.
+        const mapped = v.variant_id ? (variantMap.get(v.variant_id) ?? null) : null;
+        return {
+          instruction_set_id: newId, make: v.make, model: v.model, year_from: v.year_from, year_to: v.year_to,
+          variant_scope: v.variant_scope === 'variant' ? (mapped ? 'variant' : 'all') : (v.variant_scope ?? 'all'),
+          variant_id: mapped,
+        };
+      }),
     );
     if (error) throw error;
   }

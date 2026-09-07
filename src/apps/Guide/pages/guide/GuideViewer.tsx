@@ -41,6 +41,26 @@ function titleImagesOf(o: { product_image_urls?: string[] | null; product_image_
   return o?.product_image_url ? [o.product_image_url] : [];
 }
 
+type VehicleRow = { id: string; make: string; model: string; year_from: number; year_to: number; variant_scope?: string | null; variant_id?: string | null };
+
+/**
+ * Vehicles that apply to a version — null = base steps, string = variant id.
+ * Rows scoped to 'all' apply everywhere unless specificOnly is set (used by the
+ * picker, which only wants to show what makes each option different).
+ */
+function vehiclesForChoice(vehicles: VehicleRow[], choice: string | null, specificOnly = false): VehicleRow[] {
+  return vehicles.filter(v => {
+    const scope = v.variant_scope ?? 'all';
+    if (scope === 'all') return !specificOnly;
+    if (choice === null) return scope === 'base';
+    return scope === 'variant' && v.variant_id === choice;
+  });
+}
+
+function vehicleLabel(v: VehicleRow) {
+  return `${v.make} ${v.model} (${v.year_from}–${v.year_to === 0 || !v.year_to ? 'Current' : v.year_to})`;
+}
+
 // Automatic collage for 2–4 title images: 2 → side by side, 3 → one tall tile
 // plus two stacked, 4 → 2×2. Fixed aspect ratios so the layout doesn't jump
 // while images load; every tile opens the lightbox.
@@ -376,6 +396,8 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
     estimated_time: pick(selectedVariant?.estimated_time, guide.estimated_time),
     tools_required: pick(selectedVariant?.tools_required, guide.tools_required ?? []),
   };
+  // "Suits" for the chosen version (base when nothing/Standard is chosen).
+  const suits = vehiclesForChoice(vehicles, selectedVariantId ?? null);
 
   // Wiring-break dividers are not "real" steps — they sit between groups of
   // bracket-only and wiring instructions. They're excluded from the count, the
@@ -674,7 +696,12 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
                 onClick={() => setSelectedVariantId(null)}
                 className="w-full flex items-center justify-between gap-3 rounded-xl border p-4 text-left hover:border-primary hover:bg-muted/40 transition-colors"
               >
-                <p className="font-semibold text-sm">{guide.default_variant_label || 'Standard'}</p>
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm">{guide.default_variant_label || 'Standard'}</p>
+                  {vehiclesForChoice(vehicles, null, true).length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-0.5">Suits {vehiclesForChoice(vehicles, null, true).map(vehicleLabel).join(', ')}</p>
+                  )}
+                </div>
                 <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
               </button>
 
@@ -685,7 +712,12 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
                   onClick={() => setSelectedVariantId(v.id)}
                   className="w-full flex items-center justify-between gap-3 rounded-xl border p-4 text-left hover:border-primary hover:bg-muted/40 transition-colors"
                 >
-                  <p className="font-semibold text-sm">{v.variant_label}</p>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm">{v.variant_label}</p>
+                    {vehiclesForChoice(vehicles, v.id, true).length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-0.5">Suits {vehiclesForChoice(vehicles, v.id, true).map(vehicleLabel).join(', ')}</p>
+                    )}
+                  </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
                 </button>
               ))}
@@ -720,15 +752,15 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
             </div>
 
             {/* Vehicle Fitment */}
-            {vehicles.length > 0 && (
+            {suits.length > 0 && (
               <div className="bg-muted/50 rounded-lg p-4 space-y-2">
                 <h2 className="font-semibold text-sm flex items-center gap-1.5">
                   <Car className="w-4 h-4" /> Suits
                 </h2>
                 <div className="flex flex-wrap gap-2">
-                  {vehicles.map((v) => (
+                  {suits.map((v) => (
                     <Badge key={v.id} variant="secondary" className="text-sm font-medium py-1.5 px-3">
-                      {v.make} {v.model} ({v.year_from}–{v.year_to === 0 || !v.year_to ? 'Current' : v.year_to})
+                      {vehicleLabel(v)}
                     </Badge>
                   ))}
                 </div>

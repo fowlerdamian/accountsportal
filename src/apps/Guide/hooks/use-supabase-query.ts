@@ -211,6 +211,9 @@ export interface GuideVehicle {
   model: string;
   year_from: number;
   year_to: number;
+  /** Which version this vehicle applies to: every version, the base steps, or one variant. */
+  variant_scope: 'all' | 'base' | 'variant';
+  variant_id: string | null;
 }
 
 export function useGuideVehicles(instructionSetId: string | undefined) {
