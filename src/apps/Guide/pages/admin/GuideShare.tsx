@@ -9,6 +9,7 @@ import { useState, useRef, useCallback } from "react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { buildDymoLabelXml, dymoLabelFileContents, escapeXml, fetchLogoAsPngBase64 } from "@guide/lib/dymoLabel";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -58,13 +59,6 @@ export default function GuideShare() {
     a.click();
   };
 
-  const escapeXml = (value: string) => value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-
   const downloadQRPdf = (brandKey: string, brandName: string, guideUrl: string) => {
     const wrapper = qrRefs.current[brandKey];
     const canvas = wrapper?.querySelector('canvas');
@@ -78,334 +72,33 @@ export default function GuideShare() {
        <script>setTimeout(()=>{window.print();window.close()},500)</script></body></html>`);
   };
 
-  const fetchImageAsBase64 = async (url: string): Promise<string | null> => {
+  const downloadDymoLabel = async (
+    brand: { key: string; logo_url?: string | null; dymo_label_size?: string | null },
+    guideUrl: string,
+  ) => {
     try {
-      const resp = await fetch(url);
-      if (!resp.ok) return null;
-      const blob = await resp.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          const base64 = result.split(',')[1] || '';
-          resolve(base64);
-        };
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(blob);
+      // Re-encode the logo as PNG through a canvas so any source format works in DYMO Connect.
+      const logoBase64 = brand.logo_url ? await fetchLogoAsPngBase64(brand.logo_url) : null;
+      if (brand.logo_url && !logoBase64) toast.warning("Logo couldn't be loaded — label generated without it");
+      const xml = buildDymoLabelXml({
+        size: brand.dymo_label_size,
+        url: guideUrl,
+        productCode: guide.product_code || guide.slug,
+        title: guide.title,
+        logoBase64,
       });
-    } catch {
-      return null;
+      const blob = new Blob([dymoLabelFileContents(xml)], { type: "application/octet-stream" });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${guide.product_code || guide.slug}-${brand.key}.dymo`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      toast.error("Couldn't build the DYMO label", { description: err?.message });
     }
-  };
-
-  const getQrBase64 = (brandKey: string): string | null => {
-    const wrapper = qrRefs.current[brandKey];
-    const canvas = wrapper?.querySelector('canvas');
-    if (!canvas) return null;
-    const dataUrl = canvas.toDataURL('image/png');
-    return dataUrl.split(',')[1] || null;
-  };
-
-  const downloadDymoLabel = async (_brandKey: string, brand: any, guideUrl: string) => {
-    const qrBase64 = getQrBase64(_brandKey);
-    if (!qrBase64) {
-      toast.error("QR code not ready — try again");
-      return;
-    }
-
-    const logoBase64 = brand.logo_url ? await fetchImageAsBase64(brand.logo_url) : null;
-    const productCode = escapeXml(guide.product_code || '');
-    const productTitle = escapeXml((guide.title || '').slice(0, 50));
-
-    const logoBlock = logoBase64 ? `
-    <ImageObject>
-      <n>IImageObject0</n>
-      <Brushes>
-        <BackgroundBrush>
-          <SolidColorBrush>
-            <Color A="0" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </BackgroundBrush>
-        <BorderBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </BorderBrush>
-        <StrokeBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </StrokeBrush>
-        <FillBrush>
-          <SolidColorBrush>
-            <Color A="0" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </FillBrush>
-      </Brushes>
-      <Rotation>Rotation0</Rotation>
-      <OutlineThickness>1</OutlineThickness>
-      <IsOutlined>False</IsOutlined>
-      <BorderStyle>SolidLine</BorderStyle>
-      <Margin>
-        <DYMOThickness Left="0" Top="0" Right="0" Bottom="0" />
-      </Margin>
-      <Data>${logoBase64}</Data>
-      <ScaleMode>Uniform</ScaleMode>
-      <HorizontalAlignment>Center</HorizontalAlignment>
-      <VerticalAlignment>Middle</VerticalAlignment>
-      <ObjectLayout>
-        <DYMOPoint>
-          <X>0.23</X>
-          <Y>0.06</Y>
-        </DYMOPoint>
-        <Size>
-          <Width>1</Width>
-          <Height>0.4</Height>
-        </Size>
-      </ObjectLayout>
-    </ImageObject>` : '';
-
-    const xml = `<?xml version="1.0" encoding="utf-8"?>
-<DesktopLabel Version="1">
-  <DYMOLabel Version="4">
-    <Description>DYMO Label</Description>
-    <Orientation>Landscape</Orientation>
-    <LabelName>LargeAddressS0722400</LabelName>
-    <InitialLength>0</InitialLength>
-    <BorderStyle>SolidLine</BorderStyle>
-    <DYMORect>
-      <DYMOPoint>
-        <X>0.23</X>
-        <Y>0.06</Y>
-      </DYMOPoint>
-      <Size>
-        <Width>3.21</Width>
-        <Height>1.29</Height>
-      </Size>
-    </DYMORect>
-    <BorderColor>
-      <SolidColorBrush>
-        <Color A="1" R="0" G="0" B="0"></Color>
-      </SolidColorBrush>
-    </BorderColor>
-    <BorderThickness>1</BorderThickness>
-    <Show_Border>False</Show_Border>
-    <HasFixedLength>False</HasFixedLength>
-    <FixedLengthValue>0</FixedLengthValue>
-    <DynamicLayoutManager>
-      <RotationBehavior>ClearObjects</RotationBehavior>
-      <LabelObjects>
-    <TextObject>
-      <n>ITextObject2</n>
-      <Brushes>
-        <BackgroundBrush>
-          <SolidColorBrush>
-            <Color A="0" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </BackgroundBrush>
-        <BorderBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </BorderBrush>
-        <StrokeBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </StrokeBrush>
-        <FillBrush>
-          <SolidColorBrush>
-            <Color A="0" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </FillBrush>
-      </Brushes>
-      <Rotation>Rotation0</Rotation>
-      <OutlineThickness>1</OutlineThickness>
-      <IsOutlined>False</IsOutlined>
-      <BorderStyle>SolidLine</BorderStyle>
-      <Margin>
-        <DYMOThickness Left="0" Top="0" Right="0" Bottom="0" />
-      </Margin>
-      <HorizontalAlignment>Right</HorizontalAlignment>
-      <VerticalAlignment>Middle</VerticalAlignment>
-      <FitMode>AlwaysFit</FitMode>
-      <IsVertical>False</IsVertical>
-      <FormattedText>
-        <FitMode>AlwaysFit</FitMode>
-        <HorizontalAlignment>Right</HorizontalAlignment>
-        <VerticalAlignment>Middle</VerticalAlignment>
-        <IsVertical>False</IsVertical>
-        <LineTextSpan>
-          <TextSpan>
-            <Text>SCAN HERE FOR\r\nINSTRUCTIONS</Text>
-            <FontInfo>
-              <FontName>Arial</FontName>
-              <FontSize>14</FontSize>
-              <IsBold>True</IsBold>
-              <IsItalic>False</IsItalic>
-              <IsUnderline>False</IsUnderline>
-              <FontBrush>
-                <SolidColorBrush>
-                  <Color A="1" R="0" G="0" B="0"></Color>
-                </SolidColorBrush>
-              </FontBrush>
-            </FontInfo>
-          </TextSpan>
-        </LineTextSpan>
-      </FormattedText>
-      <ObjectLayout>
-        <DYMOPoint>
-          <X>0.23</X>
-          <Y>0.06</Y>
-        </DYMOPoint>
-        <Size>
-          <Width>1.58</Width>
-          <Height>0.54</Height>
-        </Size>
-      </ObjectLayout>
-    </TextObject>
-    <TextObject>
-      <n>TextObject1</n>
-      <Brushes>
-        <BackgroundBrush>
-          <SolidColorBrush>
-            <Color A="0" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </BackgroundBrush>
-        <BorderBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </BorderBrush>
-        <StrokeBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </StrokeBrush>
-        <FillBrush>
-          <SolidColorBrush>
-            <Color A="0" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </FillBrush>
-      </Brushes>
-      <Rotation>Rotation0</Rotation>
-      <OutlineThickness>1</OutlineThickness>
-      <IsOutlined>False</IsOutlined>
-      <BorderStyle>SolidLine</BorderStyle>
-      <Margin>
-        <DYMOThickness Left="0" Top="0" Right="0" Bottom="0" />
-      </Margin>
-      <HorizontalAlignment>Right</HorizontalAlignment>
-      <VerticalAlignment>Middle</VerticalAlignment>
-      <FitMode>AlwaysFit</FitMode>
-      <IsVertical>False</IsVertical>
-      <FormattedText>
-        <FitMode>AlwaysFit</FitMode>
-        <HorizontalAlignment>Right</HorizontalAlignment>
-        <VerticalAlignment>Middle</VerticalAlignment>
-        <IsVertical>False</IsVertical>
-        <LineTextSpan>
-          <TextSpan>
-            <Text>${productCode}</Text>
-            <FontInfo>
-              <FontName>Courier New</FontName>
-              <FontSize>8</FontSize>
-              <IsBold>False</IsBold>
-              <IsItalic>False</IsItalic>
-              <IsUnderline>False</IsUnderline>
-              <FontBrush>
-                <SolidColorBrush>
-                  <Color A="1" R="0" G="0" B="0"></Color>
-                </SolidColorBrush>
-              </FontBrush>
-            </FontInfo>
-          </TextSpan>
-        </LineTextSpan>
-      </FormattedText>
-      <ObjectLayout>
-        <DYMOPoint>
-          <X>0.22333345</X>
-          <Y>0.9266666</Y>
-        </DYMOPoint>
-        <Size>
-          <Width>1.58</Width>
-          <Height>0.4</Height>
-        </Size>
-      </ObjectLayout>
-    </TextObject>${logoBlock}
-    <QRCodeObject>
-      <n>QRCodeObject0</n>
-      <Brushes>
-        <BackgroundBrush>
-          <SolidColorBrush>
-            <Color A="1" R="1" G="1" B="1"></Color>
-          </SolidColorBrush>
-        </BackgroundBrush>
-        <BorderBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </BorderBrush>
-        <StrokeBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </StrokeBrush>
-        <FillBrush>
-          <SolidColorBrush>
-            <Color A="1" R="0" G="0" B="0"></Color>
-          </SolidColorBrush>
-        </FillBrush>
-      </Brushes>
-      <Rotation>Rotation0</Rotation>
-      <OutlineThickness>1</OutlineThickness>
-      <IsOutlined>False</IsOutlined>
-      <BorderStyle>SolidLine</BorderStyle>
-      <Margin>
-        <DYMOThickness Left="0" Top="0" Right="0" Bottom="0" />
-      </Margin>
-      <ErrorCorrectionLevel>Medium</ErrorCorrectionLevel>
-      <DataString>URL:${escapeXml(guideUrl)}</DataString>
-      <EQRCodeType>QRCodeWebPage</EQRCodeType>
-      <WebAddressDataHolder>
-        <MultiDataString>
-          <DataString></DataString>
-          <DataString></DataString>
-          <DataString></DataString>
-          <DataString></DataString>
-          <DataString>${escapeXml(guideUrl)}</DataString>
-        </MultiDataString>
-      </WebAddressDataHolder>
-      <ObjectLayout>
-        <DYMOPoint>
-          <X>1.97</X>
-          <Y>0.06</Y>
-        </DYMOPoint>
-        <Size>
-          <Width>1.47</Width>
-          <Height>1.29</Height>
-        </Size>
-      </ObjectLayout>
-    </QRCodeObject>
-      </LabelObjects>
-    </DynamicLayoutManager>
-  </DYMOLabel>
-  <LabelApplication>Blank</LabelApplication>
-  <DataTable>
-    <Columns></Columns>
-    <Rows></Rows>
-  </DataTable>
-</DesktopLabel>`;
-
-    const blob = new Blob([('\uFEFF' + xml).replace(/\n/g, '\r\n')], { type: 'application/octet-stream' });
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = `${guide.product_code}.dymo`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
   };
 
   const publishToBrand = async (brandId: string) => {
@@ -490,7 +183,7 @@ export default function GuideShare() {
                         <div className="flex gap-2 flex-wrap justify-center">
                           <Button variant="outline" size="sm" onClick={() => downloadQRPng(brand.key)}><Download className="w-4 h-4 mr-2" /> PNG</Button>
                           <Button variant="outline" size="sm" onClick={() => downloadQRPdf(brand.key, brand.name, url)}><Download className="w-4 h-4 mr-2" /> Print PDF</Button>
-                          <Button variant="outline" size="sm" onClick={() => downloadDymoLabel(brand.key, brand, url)}><Printer className="w-4 h-4 mr-2" /> Download .dymo</Button>
+                          <Button variant="outline" size="sm" onClick={() => downloadDymoLabel(brand, url)}><Printer className="w-4 h-4 mr-2" /> Download .dymo</Button>
                           <Button variant="outline" size="sm" onClick={() => setFullscreen(brand.key)}><Maximize2 className="w-4 h-4 mr-2" /> Fullscreen</Button>
                         </div>
                         <Button
