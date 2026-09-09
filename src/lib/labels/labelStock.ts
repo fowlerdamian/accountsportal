@@ -67,7 +67,7 @@ export const LABEL_STOCK = {
     layout: "wide",
     fonts: { scan: 7, code: 6.5, title: 0 },
   },
-  /** Square — QR only, no room for a barcode. */
+  /** Square — QR with the code underneath. */
   "30332": {
     name: "30332 — Square (25×25mm)",
     width: 25.4, height: 25.4, // driver form "30332 1 in x 1 in"
@@ -102,24 +102,14 @@ export interface LabelLayout {
   scan?: Box;
   /** Product code (+ title where the stock has a title font). */
   code: Box;
-  /** Code 128 of the product code; absent where the column is too narrow to print cleanly. */
-  barcode?: Box;
   qr: Box;
 }
 
 /** Gap between the text column and the QR, and between rows, in mm. */
 const COL_GAP = 2;
 const ROW_GAP = 0.6;
-/**
- * A 300 dpi head prints 0.0847mm per dot. Code 128 needs ≥2 dots per module
- * to scan reliably; below that the barcode is dropped rather than printed
- * unreadable.
- */
-const MIN_MODULE_MM = 0.17;
-/** Modules a Code 128 symbol needs: 11 per char, +2 chars (start/check), +13 (stop + quiet zones ×2 approx). */
-export const code128Modules = (text: string) => 11 * (text.length + 2) + 13 + 2 * 10;
 
-export function computeLabelLayout(stockIn: string | null | undefined, hasLogo: boolean, barcodeText = ""): LabelLayout {
+export function computeLabelLayout(stockIn: string | null | undefined, hasLogo: boolean): LabelLayout {
   const stock = resolveLabelStock(stockIn);
   const spec = LABEL_STOCK[stock];
   const { inset } = spec;
@@ -134,28 +124,22 @@ export function computeLabelLayout(stockIn: string | null | undefined, hasLogo: 
     };
   }
 
-  // QR fills the height, but never more than ~45% of the width so the text column keeps room for a barcode.
-  const qrSide = Math.min(inner.h, inner.w * 0.45);
-  const qr: Box = { x: inner.x + inner.w - qrSide, y: inner.y + (inner.h - qrSide) / 2, w: qrSide, h: qrSide };
+  // QR fills the height; the text column takes what is left.
+  const qrSide = inner.h;
+  const qr: Box = { x: inner.x + inner.w - qrSide, y: inner.y, w: qrSide, h: qrSide };
   const col = { x: inner.x, w: qr.x - COL_GAP - inner.x };
   const H = inner.h;
 
-  const wantBarcode = barcodeText.length > 0 && col.w / code128Modules(barcodeText) >= MIN_MODULE_MM;
-  // Row height shares of the column, summing to 1 with the gaps taken off first.
-  const shares = {
-    logo: hasLogo ? 0.22 : 0,
-    scan: hasLogo ? 0.26 : 0.40,
-    code: spec.fonts.title > 0 ? 0.24 : 0.20,
-    barcode: wantBarcode ? 0.28 : 0,
-  };
-  const total = shares.logo + shares.scan + shares.code + shares.barcode;
-  const rows = [hasLogo, true, true, wantBarcode].filter(Boolean).length;
+  // Row height shares of the column (same proportions as the .dymo builder).
+  const shares = hasLogo
+    ? { logo: 0.28, scan: 0.40, code: 0.32 }
+    : { logo: 0, scan: 0.62, code: 0.38 };
+  const rows = hasLogo ? 3 : 2;
   const usable = H - ROW_GAP * (rows - 1);
-  const rowH = (share: number) => (usable * share) / total;
 
   let y = inner.y;
   const next = (share: number): Box => {
-    const box = { x: col.x, y, w: col.w, h: rowH(share) };
+    const box = { x: col.x, y, w: col.w, h: usable * share };
     y += box.h + ROW_GAP;
     return box;
   };
@@ -164,7 +148,6 @@ export function computeLabelLayout(stockIn: string | null | undefined, hasLogo: 
   if (hasLogo) out.logo = next(shares.logo);
   out.scan = next(shares.scan);
   out.code = next(shares.code);
-  if (wantBarcode) out.barcode = next(shares.barcode);
   return out;
 }
 

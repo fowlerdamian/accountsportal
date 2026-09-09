@@ -4,16 +4,16 @@
  * Chrome-free label render route for the browser print pipeline. Outputs only
  * label markup: `@page` sized to the DYMO stock with zero margin, one label per
  * printed page, absolute millimetre positioning, system fonts only, no shadows.
+ * The QR is an inline SVG (qrcode.react) so it stays crisp on the 300dpi head.
  *
  * Normally loaded inside the hidden iframe that `printLabels()` creates; it
- * posts `labels:ready` to the parent once every barcode, QR and logo has
+ * posts `labels:ready` to the parent once every QR and logo has
  * rendered so the parent can call print(). Opened directly it prints itself,
  * unless `preview=1` is set.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import JsBarcode from "jsbarcode";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { labelLogoUrl, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
@@ -65,37 +65,6 @@ body > :not(#root), #root > :not([data-labels]) { display: none !important; }
 `;
 }
 
-function Barcode({ value, box }: { value: string; box: Box }) {
-  const ref = useRef<SVGSVGElement>(null);
-  const [ok, setOk] = useState(true);
-  useLayoutEffect(() => {
-    const svg = ref.current;
-    if (!svg) return;
-    try {
-      // width:1 → 1 SVG unit per module, so the viewBox is in modules and the
-      // CSS box stretches it uniformly in x; bar ratios stay exact.
-      JsBarcode(svg, value, {
-        format: "CODE128",
-        displayValue: false,
-        width: 1,
-        height: 40,
-        margin: 0,
-        marginLeft: 10,
-        marginRight: 10,
-        background: "#ffffff",
-        lineColor: "#000000",
-        valid: (v) => setOk(v),
-      });
-      svg.setAttribute("preserveAspectRatio", "none");
-      svg.setAttribute("shape-rendering", "crispEdges");
-    } catch {
-      setOk(false);
-    }
-  }, [value]);
-  if (!ok) return null;
-  return <svg ref={ref} data-barcode={value} style={{ ...abs(box), display: "block" }} />;
-}
-
 /** Shrink any `[data-fit]` text that overflows its box, down to a 4pt floor. */
 function fitTexts(root: HTMLElement) {
   root.querySelectorAll<HTMLElement>("[data-fit]").forEach(el => {
@@ -110,7 +79,7 @@ function fitTexts(root: HTMLElement) {
 }
 
 export function Label({ data, stock }: { data: LabelData; stock: LabelStockKey }) {
-  const lay = computeLabelLayout(stock, !!data.logoSrc, data.productCode);
+  const lay = computeLabelLayout(stock, !!data.logoSrc);
   const lines = codeLines(stock, data.productCode, data.title);
   const pt = (p: number) => `${p}pt`;
   const ref = useRef<HTMLDivElement>(null);
@@ -133,7 +102,6 @@ export function Label({ data, stock }: { data: LabelData; stock: LabelStockKey }
           <span key={i} className="fit" data-fit style={{ maxWidth: "100%", fontSize: pt(l.size), fontWeight: l.bold ? 700 : 400 }}>{l.text}</span>
         ))}
       </div>
-      {lay.barcode && <Barcode value={data.productCode} box={lay.barcode} />}
       <div style={abs(lay.qr)}>
         <QRCodeSVG value={data.url} size={256} level="M" marginSize={0} fgColor="#000000" bgColor="#ffffff" style={{ width: "100%", height: "100%", display: "block" }} shapeRendering="crispEdges" />
       </div>
