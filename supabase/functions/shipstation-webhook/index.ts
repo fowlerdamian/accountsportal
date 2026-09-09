@@ -69,7 +69,17 @@ type Shipment = {
   shipmentId: number; orderId: number; orderNumber: string; orderKey?: string; trackingNumber: string | null;
   carrierCode: string | null; serviceCode?: string | null; shipDate: string | null; voided?: boolean;
   shipmentItems?: { sku: string | null; name: string | null; quantity: number }[] | null;
+  shipTo?: { name?: string | null; company?: string | null; city?: string | null; state?: string | null; postalCode?: string | null; country?: string | null } | null;
+  customerEmail?: string | null;
 };
+
+/** "Jane Smith (Acme Pty Ltd)" / "Brisbane QLD 4000" for the station's confirm dialog. */
+function whoFor(sh: Shipment): { customer_name: string | null; ship_to: string | null } {
+  const t = sh.shipTo ?? {};
+  const name = [t.name, t.company ? `(${t.company})` : null].filter(Boolean).join(" ").trim() || sh.customerEmail || null;
+  const place = [t.city, t.state, t.postalCode].filter(Boolean).join(" ").trim() || null;
+  return { customer_name: name, ship_to: place };
+}
 
 /** Ask ShipStation for the shipments WITH their line items (the webhook's resource_url says includeShipmentItems=False). */
 function withItems(resourceUrl: string): string {
@@ -78,7 +88,7 @@ function withItems(resourceUrl: string): string {
 }
 
 /** Queue DYMO guide labels for a shipment's lines. SKU→guide matching lives in guide-delivery. */
-async function queueGuideLabels(sh: Shipment): Promise<unknown> {
+async function queueGuideLabels(db: SupabaseClient, sh: Shipment): Promise<unknown> {
   const items = (sh.shipmentItems ?? []).filter((i) => i.sku).map((i) => ({ sku: i.sku, title: i.name ?? "", quantity: i.quantity ?? 1 }));
   if (!items.length) return "no items";
   try {
@@ -90,6 +100,12 @@ async function queueGuideLabels(sh: Shipment): Promise<unknown> {
     });
     const out = await res.json().catch(() => ({}));
     if (!res.ok) console.error("queue-labels failed:", sh.orderNumber, res.status, out);
+    // Stamp who the order is for (the station's confirm dialog shows it). Done here
+    // rather than in queue-labels so guide-delivery stays a pure SKU matcher.
+    if (res.ok && out?.queued) {
+      await db.from("label_print_jobs").update(whoFor(sh))
+        .eq("shipstation_shipment_id", String(sh.shipmentId)).is("customer_name", null);
+    }
     return out;
   } catch (e) {
     console.error("queue-labels error:", sh.orderNumber, e);
@@ -189,7 +205,7 @@ Deno.serve(async (req) => {
       const results = [];
       const labels = [];
       for (const sh of shipments) {
-        if (!sh.voided) labels.push({ order: sh.orderNumber, result: await queueGuideLabels(sh) });
+        if (!sh.voided) labels.push({ order: sh.orderNumber, result: await queueGuideLabels(db, sh) });
         if (!/^SUPPORT-/i.test(sh.orderNumber ?? "") && !(sh.orderKey ?? "").startsWith("support-")) continue;
         results.push({ order: sh.orderNumber, result: await applyShipment(db, sh) });
       }
