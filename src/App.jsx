@@ -68,6 +68,7 @@ const GuideDeliveries = lazy(() => import('./apps/Guide/pages/admin/Deliveries')
 const GuideViewer = lazy(() => import('./apps/Guide/pages/guide/GuideViewer'))
 // Chrome-free DYMO label render route, loaded in a hidden iframe by printLabels().
 const LabelPrint = lazy(() => import('./pages/LabelPrint'))
+const LabelStation = lazy(() => import('./pages/LabelStation'))
 
 // Shown while a route chunk downloads (first visit to an app only).
 function RouteFallback() {
@@ -211,6 +212,8 @@ export default function App() {
 
             {/* DYMO label print route — label markup only; see src/lib/labels/printLabels.ts */}
             <Route path="/labels/print" element={<ProtectedRoute><LabelPrint /></ProtectedRoute>} />
+            {/* Print station — kept open in kiosk Chrome next to the LabelWriter; see tools/label-station.cmd */}
+            <Route path="/labels/station" element={<ProtectedRoute><LabelStation /></ProtectedRoute>} />
 
             {/* Redirect old /guide/view/:slug viewer URLs → new public /:slug route */}
             <Route path="/guide/view/:slug" element={<SlugRedirect />} />

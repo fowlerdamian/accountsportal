@@ -16,6 +16,9 @@
 //   { action: "test", to }          — send a sample email to an address
 //   { action: "unmatched-backfill" } — create "map this SKU" tasks for every delivery that
 //                                      already has unmatched SKUs but no task (one-off / repair)
+//   { action: "queue-labels", items[], order_number, shipstation_shipment_id }
+//                                    — ship-time DYMO labels: match each line to a guide and queue
+//                                      label_print_jobs (copies = qty) for /labels/station
 //
 // Non-webhook actions require a staff JWT or the service-role key (cron).
 // Deploy with --no-verify-jwt (Shopify cannot send a Supabase JWT).
@@ -666,6 +669,52 @@ Deno.serve(async (req) => {
         });
         const out = await res.json();
         return json({ ok: res.ok, removed, webhook: out.webhook ?? out }, res.ok ? 200 : 500);
+      }
+      case "queue-labels": {
+        // Ship-time DYMO labels. shipstation-webhook (service key) posts the shipped
+        // lines; each guide-matched line becomes one label_print_jobs row with
+        // copies = shipped quantity, which the /labels/station page prints.
+        // Matching is the same link/auto/pattern logic as guide deliveries.
+        const items: LineItem[] = (Array.isArray(body.items) ? body.items : []).map((i: any) => ({
+          sku: i?.sku ? String(i.sku) : null, title: String(i?.title ?? i?.name ?? ""), quantity: Math.max(1, Number(i?.quantity) || 1), variant_title: null,
+        }));
+        const settings = await loadSettings(db);
+        let brandId = settings.brand_id;
+        if (body.brand_key) {
+          const { data: b } = await db.from("brands").select("id").eq("key", String(body.brand_key)).maybeSingle();
+          if (b) brandId = b.id;
+        }
+        const cat = await loadCatalog(db, brandId);
+        const perLine = new Map<string, { guide_id: string; sku: string; copies: number }>();
+        const unmatched: string[] = [], ignored: string[] = [];
+        for (const li of items) {
+          // One item at a time so the same guide on two lines gets both quantities.
+          const r = matchLineItems([li], cat, settings.auto_match, settings.sku_patterns, settings.sku_exclude_patterns);
+          unmatched.push(...r.unmatched); ignored.push(...r.ignored);
+          const m = r.matched[0];
+          if (!m) continue;
+          const key = `${m.instruction_set_id}|${m.sku.toUpperCase()}`;
+          const cur = perLine.get(key) ?? { guide_id: m.instruction_set_id, sku: m.sku.toUpperCase(), copies: 0 };
+          cur.copies += li.quantity;
+          perLine.set(key, cur);
+        }
+        const rows = [...perLine.values()].map((v) => ({
+          source: String(body.source ?? "shipstation"),
+          order_number: body.order_number ? String(body.order_number) : null,
+          shipstation_shipment_id: body.shipstation_shipment_id ? String(body.shipstation_shipment_id) : null,
+          sku: v.sku, guide_id: v.guide_id, brand_key: cat.brand.key, copies: Math.min(50, v.copies),
+        }));
+        let queued = 0;
+        if (rows.length) {
+          // ignoreDuplicates → repeated SHIP_NOTIFY deliveries never double-print.
+          const { data, error } = await db.from("label_print_jobs")
+            .upsert(rows, { onConflict: "shipstation_shipment_id,guide_id,sku", ignoreDuplicates: true })
+            .select("id");
+          if (error) throw new Error(`label_print_jobs: ${error.message}`);
+          queued = data?.length ?? 0;
+        }
+        if (unmatched.length) console.warn("queue-labels unmatched SKUs:", body.order_number, [...new Set(unmatched)]);
+        return json({ ok: true, queued, lines: rows.length, unmatched: [...new Set(unmatched)], ignored: [...new Set(ignored)] });
       }
       case "unmatched-backfill": {
         // One-off / repair: every delivery that already has unmatched SKUs but no task.

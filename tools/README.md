@@ -73,3 +73,15 @@ the next page load shows the thumbnail in the file list.
   "Always keep on this device."
 - **Service-role key has full DB access.** Keep it out of git, scripts, and
   shared shells. Set as user-level env var or Windows Credential Manager.
+
+## label-station.cmd — DYMO label print station
+
+Runs on the PC connected to the LabelWriter 550 (the shared queue host). Opens
+`https://app.automotivegroup.com.au/labels/station` in its own Chrome profile with
+`--kiosk-printing`, so every label prints to the Windows **default printer** with no
+dialog. Set the LabelWriter as the default printer on that PC, run the .cmd, sign in
+once, and drop a shortcut in `shell:startup`.
+
+Flow: ShipStation label created → `shipstation-webhook` (SHIP_NOTIFY, re-fetched with
+items) → `guide-delivery` `queue-labels` (SKU → guide, copies = qty) → `label_print_jobs`
+→ station prints via `/labels/print`. Reprint / Cancel / Test print live on the station page.

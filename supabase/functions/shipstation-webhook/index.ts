@@ -1,9 +1,11 @@
 // shipstation-webhook — INBOUND: ShipStation → Support Hub.
 //
-// When a label is created for a SUPPORT-<case> order, ShipStation POSTs a SHIP_NOTIFY event
-// ({ resource_url, resource_type }). We never trust the payload: we fetch resource_url (which
-// must be on ssapi.shipstation.com) with our own credentials, then for every shipment that
-// matches a replacement pick:
+// When a label is created, ShipStation POSTs a SHIP_NOTIFY event ({ resource_url,
+// resource_type }). We never trust the payload: we fetch resource_url (which must be on
+// ssapi.shipstation.com) with our own credentials — WITH shipment items — then:
+//   • EVERY shipment: shipped lines (SKU + qty) go to guide-delivery `queue-labels`, which
+//     matches them to guides and queues DYMO labels for the /labels/station page.
+//   • SUPPORT-<case> shipments additionally close the replacement pick:
 //   • action_items: dispatched_at, status=done, shipstation_shipment_id, tracking
 //   • cases: replacement_tracking_number / carrier / ship_date  (DB trigger → In hand)
 //   • case_updates system note + Google Chat notification
@@ -66,7 +68,34 @@ async function notifyChat(text: string) {
 type Shipment = {
   shipmentId: number; orderId: number; orderNumber: string; orderKey?: string; trackingNumber: string | null;
   carrierCode: string | null; serviceCode?: string | null; shipDate: string | null; voided?: boolean;
+  shipmentItems?: { sku: string | null; name: string | null; quantity: number }[] | null;
 };
+
+/** Ask ShipStation for the shipments WITH their line items (the webhook's resource_url says includeShipmentItems=False). */
+function withItems(resourceUrl: string): string {
+  if (/includeShipmentItems=/i.test(resourceUrl)) return resourceUrl.replace(/includeShipmentItems=[^&]*/i, "includeShipmentItems=True");
+  return `${resourceUrl}${resourceUrl.includes("?") ? "&" : "?"}includeShipmentItems=True`;
+}
+
+/** Queue DYMO guide labels for a shipment's lines. SKU→guide matching lives in guide-delivery. */
+async function queueGuideLabels(sh: Shipment): Promise<unknown> {
+  const items = (sh.shipmentItems ?? []).filter((i) => i.sku).map((i) => ({ sku: i.sku, title: i.name ?? "", quantity: i.quantity ?? 1 }));
+  if (!items.length) return "no items";
+  try {
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/guide-delivery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: key, Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ action: "queue-labels", source: "shipstation", order_number: sh.orderNumber, shipstation_shipment_id: String(sh.shipmentId), items }),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) console.error("queue-labels failed:", sh.orderNumber, res.status, out);
+    return out;
+  } catch (e) {
+    console.error("queue-labels error:", sh.orderNumber, e);
+    return { error: String(e) };
+  }
+}
 
 /** Apply one ShipStation shipment to its replacement pick. Returns what happened. */
 async function applyShipment(db: SupabaseClient, sh: Shipment): Promise<string> {
@@ -155,14 +184,16 @@ Deno.serve(async (req) => {
     // ── ShipStation webhook ──
     if (body?.resource_url && body?.resource_type) {
       if (!["SHIP_NOTIFY", "ITEM_SHIP_NOTIFY"].includes(body.resource_type)) return json({ ok: true, ignored: body.resource_type });
-      const data = await ssGet(String(body.resource_url)); // authenticated re-fetch; rejects foreign hosts
+      const data = await ssGet(withItems(String(body.resource_url))); // authenticated re-fetch; rejects foreign hosts
       const shipments: Shipment[] = data.shipments ?? [];
       const results = [];
+      const labels = [];
       for (const sh of shipments) {
+        if (!sh.voided) labels.push({ order: sh.orderNumber, result: await queueGuideLabels(sh) });
         if (!/^SUPPORT-/i.test(sh.orderNumber ?? "") && !(sh.orderKey ?? "").startsWith("support-")) continue;
         results.push({ order: sh.orderNumber, result: await applyShipment(db, sh) });
       }
-      return json({ ok: true, shipments: shipments.length, results });
+      return json({ ok: true, shipments: shipments.length, results, labels });
     }
 
     // ── Staff / cron actions ──
