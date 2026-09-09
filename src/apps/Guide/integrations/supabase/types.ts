@@ -21,6 +21,7 @@ export type Database = {
           dymo_label_size: string
           id: string
           key: string
+          label_logo: string
           logo_url: string | null
           name: string
           primary_colour: string
@@ -33,6 +34,7 @@ export type Database = {
           dymo_label_size?: string
           id?: string
           key: string
+          label_logo?: string
           logo_url?: string | null
           name: string
           primary_colour?: string
@@ -45,6 +47,7 @@ export type Database = {
           dymo_label_size?: string
           id?: string
           key?: string
+          label_logo?: string
           logo_url?: string | null
           name?: string
           primary_colour?: string

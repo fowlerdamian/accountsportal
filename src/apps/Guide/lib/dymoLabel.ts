@@ -7,36 +7,169 @@
  * renders it at print resolution. Validated against the DYMO Connect Web
  * Service RenderLabel endpoint for all three supported label sizes.
  *
+ * `computeLabelLayout` is the single source of truth for where things sit on
+ * the label; both the XML here and the on-screen preview
+ * (components/LabelPreview.tsx) are drawn from it so they always match.
+ *
  * Coordinates are inches, origin top-left of the label.
  */
 
 export type DymoLabelSize = "99012" | "30332" | "30334";
 
-interface Box { x: number; y: number; w: number; h: number }
+export interface Box { x: number; y: number; w: number; h: number }
 
 interface SizeSpec {
+  /** Human name shown in settings. */
+  name: string;
   /** LabelName DYMO Connect uses for this paper. */
   labelName: string;
+  /** Physical label size. */
+  label: { w: number; h: number };
   /** Printable area DYMO Connect reports for the paper. */
   rect: Box;
   /** wide = logo + text on the left, QR on the right. square = QR with code underneath. */
   layout: "wide" | "square";
+  /** Font sizes in points. 0 = element not shown on this size. */
+  fonts: { scan: number; code: number; title: number };
 }
 
 export const DYMO_LABEL_SPECS: Record<DymoLabelSize, SizeSpec> = {
   // 99012 / S0722400 Large Address 36×89mm — the default.
-  "99012": { labelName: "LargeAddressS0722400", rect: { x: 0.2233, y: 0.06, w: 3.2033, h: 1.3067 }, layout: "wide" },
+  "99012": {
+    name: "99012 — Large Address (36×89mm)",
+    labelName: "LargeAddressS0722400",
+    label: { w: 3.5, h: 1.4 },
+    rect: { x: 0.2233, y: 0.06, w: 3.2033, h: 1.3067 },
+    layout: "wide",
+    fonts: { scan: 9, code: 7, title: 5.5 },
+  },
   // 30334 Multi-Purpose 57×32mm.
-  "30334": { labelName: "Small30334", rect: { x: 0.12, y: 0.12, w: 2.01, h: 1.01 }, layout: "wide" },
+  "30334": {
+    name: "30334 — Multi-Purpose (57×32mm)",
+    labelName: "Small30334",
+    label: { w: 2.25, h: 1.25 },
+    rect: { x: 0.12, y: 0.12, w: 2.01, h: 1.01 },
+    layout: "wide",
+    fonts: { scan: 7, code: 6, title: 0 },
+  },
   // 30332 Square 25×25mm.
-  "30332": { labelName: "Small30332", rect: { x: 0.08, y: 0.08, w: 0.84, h: 0.84 }, layout: "square" },
+  "30332": {
+    name: "30332 — Square (25×25mm)",
+    labelName: "Small30332",
+    label: { w: 1, h: 1 },
+    rect: { x: 0.08, y: 0.08, w: 0.84, h: 0.84 },
+    layout: "square",
+    fonts: { scan: 0, code: 5.5, title: 0 },
+  },
 };
+
+export const DYMO_LABEL_SIZES = (Object.keys(DYMO_LABEL_SPECS) as DymoLabelSize[]).map(value => ({ value, label: DYMO_LABEL_SPECS[value].name }));
 
 export const DEFAULT_DYMO_LABEL_SIZE: DymoLabelSize = "99012";
 
 export function resolveDymoLabelSize(size: string | null | undefined): DymoLabelSize {
   return size && size in DYMO_LABEL_SPECS ? (size as DymoLabelSize) : DEFAULT_DYMO_LABEL_SIZE;
 }
+
+// ---------------------------------------------------------------------------
+// Logos
+
+/** Logos selectable on the label. Files live in public/label-logos (same origin, so canvas re-encoding is never tainted). */
+export interface LabelLogo { key: string; name: string; url: string }
+
+export const LABEL_LOGOS: LabelLogo[] = [
+  { key: "trailbait", name: "TrailBait", url: "/label-logos/trailbait.png" },
+  { key: "aga", name: "Automotive Group Australia", url: "/label-logos/aga.png" },
+  { key: "fleetcraft", name: "FleetCraft", url: "/label-logos/fleetcraft.png" },
+  { key: "ultravision", name: "Ultra Vision", url: "/label-logos/ultravision.png" },
+];
+
+export const NO_LOGO = "none";
+export const DEFAULT_LABEL_LOGO = "trailbait";
+
+/** Normalise a stored/selected logo key: unknown values fall back to the TrailBait default. */
+export function resolveLabelLogoKey(key: string | null | undefined): string {
+  if (key === NO_LOGO) return NO_LOGO;
+  return key && LABEL_LOGOS.some(l => l.key === key) ? key : DEFAULT_LABEL_LOGO;
+}
+
+export function labelLogoUrl(key: string | null | undefined): string | null {
+  return LABEL_LOGOS.find(l => l.key === key)?.url ?? null;
+}
+
+export function labelLogoName(key: string | null | undefined): string {
+  return LABEL_LOGOS.find(l => l.key === key)?.name ?? "No logo";
+}
+
+// ---------------------------------------------------------------------------
+// Layout
+
+export interface LabelLayout {
+  size: DymoLabelSize;
+  spec: SizeSpec;
+  /** Logo box, absent when no logo or the size has no room for one. */
+  logo?: Box;
+  /** "SCAN HERE FOR INSTRUCTIONS" box, absent on the square label. */
+  scan?: Box;
+  /** Product code (+ title on the large label). */
+  code: Box;
+  qr: Box;
+}
+
+/** Breathing room inside the printable area, and between the text column and the QR. */
+const PAD = 0.07;
+const GAP = 0.12;
+const ROW_GAP = 0.04;
+
+export function computeLabelLayout(sizeIn: string | null | undefined, hasLogo: boolean): LabelLayout {
+  const size = resolveDymoLabelSize(sizeIn);
+  const spec = DYMO_LABEL_SPECS[size];
+  const r = spec.rect;
+  const inner: Box = { x: r.x + PAD, y: r.y + PAD, w: r.w - 2 * PAD, h: r.h - 2 * PAD };
+
+  if (spec.layout === "square") {
+    const qrSide = inner.h * 0.76;
+    return {
+      size, spec,
+      qr: { x: inner.x + (inner.w - qrSide) / 2, y: inner.y, w: qrSide, h: qrSide },
+      code: { x: inner.x, y: inner.y + qrSide + ROW_GAP, w: inner.w, h: inner.h - qrSide - ROW_GAP },
+    };
+  }
+
+  const qrSide = inner.h;
+  const qr: Box = { x: inner.x + inner.w - qrSide, y: inner.y, w: qrSide, h: qrSide };
+  const col = { x: inner.x, w: qr.x - GAP - inner.x };
+  const H = inner.h;
+  if (hasLogo) {
+    const logoH = H * 0.28, scanH = H * 0.40, codeH = H - logoH - scanH - 2 * ROW_GAP;
+    return {
+      size, spec, qr,
+      logo: { x: col.x, y: inner.y, w: col.w, h: logoH },
+      scan: { x: col.x, y: inner.y + logoH + ROW_GAP, w: col.w, h: scanH },
+      code: { x: col.x, y: inner.y + logoH + scanH + 2 * ROW_GAP, w: col.w, h: codeH },
+    };
+  }
+  const scanH = H * 0.62, codeH = H - scanH - ROW_GAP;
+  return {
+    size, spec, qr,
+    scan: { x: col.x, y: inner.y, w: col.w, h: scanH },
+    code: { x: col.x, y: inner.y + scanH + ROW_GAP, w: col.w, h: codeH },
+  };
+}
+
+export const SCAN_LINES = ["SCAN HERE FOR", "INSTRUCTIONS"];
+
+/** Text lines for the product-code block, given the size's font budget. */
+export function codeLines(sizeIn: string | null | undefined, productCode: string, title?: string | null): { text: string; size: number; bold: boolean }[] {
+  const spec = DYMO_LABEL_SPECS[resolveDymoLabelSize(sizeIn)];
+  const lines = [{ text: productCode.trim(), size: spec.fonts.code, bold: true }];
+  const t = (title ?? "").trim();
+  if (t && spec.fonts.title > 0) lines.push({ text: t.length > 44 ? `${t.slice(0, 43)}…` : t, size: spec.fonts.title, bold: false });
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
+// XML
 
 export interface DymoLabelInput {
   /** Brand's configured label size (brands.dymo_label_size). Unknown values fall back to 99012. */
@@ -45,7 +178,7 @@ export interface DymoLabelInput {
   url: string;
   productCode: string;
   title?: string | null;
-  /** Base64-encoded PNG of the brand logo (no data: prefix). Omitted on the square label. */
+  /** Base64-encoded PNG of the logo (no data: prefix). Omitted on the square label. */
   logoBase64?: string | null;
 }
 
@@ -76,7 +209,7 @@ const brushes = (opaque: boolean) => `<Brushes>
         <DYMOThickness Left="0" Top="0" Right="0" Bottom="0" />
       </Margin>`;
 
-const layout = (b: Box) => `<ObjectLayout>
+const layoutXml = (b: Box) => `<ObjectLayout>
         <DYMOPoint>
           <X>${num(b.x)}</X>
           <Y>${num(b.y)}</Y>
@@ -87,26 +220,27 @@ const layout = (b: Box) => `<ObjectLayout>
         </Size>
       </ObjectLayout>`;
 
-interface TextLine { text: string; font?: string; size: number; bold?: boolean }
+interface TextLine { text: string; size: number; bold?: boolean }
 
-const textObject = (name: string, lines: TextLine[], box: Box, align: "Left" | "Center" | "Right") => `
+/** ShrinkToFit keeps the requested point size and only shrinks if a line would overflow. */
+const textObject = (name: string, lines: TextLine[], box: Box) => `
     <TextObject>
       <Name>${name}</Name>
       ${brushes(false)}
-      <HorizontalAlignment>${align}</HorizontalAlignment>
+      <HorizontalAlignment>Center</HorizontalAlignment>
       <VerticalAlignment>Middle</VerticalAlignment>
-      <FitMode>AlwaysFit</FitMode>
+      <FitMode>ShrinkToFit</FitMode>
       <IsVertical>False</IsVertical>
       <FormattedText>
-        <FitMode>AlwaysFit</FitMode>
-        <HorizontalAlignment>${align}</HorizontalAlignment>
+        <FitMode>ShrinkToFit</FitMode>
+        <HorizontalAlignment>Center</HorizontalAlignment>
         <VerticalAlignment>Middle</VerticalAlignment>
         <IsVertical>False</IsVertical>${lines.map(l => `
         <LineTextSpan>
           <TextSpan>
             <Text>${escapeXml(l.text)}</Text>
             <FontInfo>
-              <FontName>${l.font ?? "Arial"}</FontName>
+              <FontName>Arial</FontName>
               <FontSize>${l.size}</FontSize>
               <IsBold>${l.bold ? "True" : "False"}</IsBold>
               <IsItalic>False</IsItalic>
@@ -116,7 +250,7 @@ const textObject = (name: string, lines: TextLine[], box: Box, align: "Left" | "
           </TextSpan>
         </LineTextSpan>`).join("")}
       </FormattedText>
-      ${layout(box)}
+      ${layoutXml(box)}
     </TextObject>`;
 
 const imageObject = (name: string, pngBase64: string, box: Box) => `
@@ -127,7 +261,7 @@ const imageObject = (name: string, pngBase64: string, box: Box) => `
       <ScaleMode>Uniform</ScaleMode>
       <HorizontalAlignment>Center</HorizontalAlignment>
       <VerticalAlignment>Middle</VerticalAlignment>
-      ${layout(box)}
+      ${layoutXml(box)}
     </ImageObject>`;
 
 const qrObject = (name: string, url: string, box: Box) => `
@@ -145,53 +279,20 @@ const qrObject = (name: string, url: string, box: Box) => `
       <TextDataHolder>
         <Value>${escapeXml(url)}</Value>
       </TextDataHolder>
-      ${layout(box)}
+      ${layoutXml(box)}
     </QRCodeObject>`;
-
-function wideLayout(rect: Box, input: DymoLabelInput, codeLines: TextLine[]): string {
-  const gap = 0.08;
-  const qrSide = rect.h;
-  const qr: Box = { x: rect.x + rect.w - qrSide, y: rect.y, w: qrSide, h: qrSide };
-  const col = { x: rect.x, w: rect.w - qrSide - gap };
-  const scanLines: TextLine[] = [
-    { text: "SCAN HERE FOR", size: 14, bold: true },
-    { text: "INSTRUCTIONS", size: 14, bold: true },
-  ];
-  const parts: string[] = [];
-  if (input.logoBase64) {
-    parts.push(imageObject("Logo", input.logoBase64, { x: col.x, y: rect.y, w: col.w, h: rect.h * 0.30 }));
-    parts.push(textObject("ScanText", scanLines, { x: col.x, y: rect.y + rect.h * 0.32, w: col.w, h: rect.h * 0.40 }, "Center"));
-    parts.push(textObject("ProductCode", codeLines, { x: col.x, y: rect.y + rect.h * 0.74, w: col.w, h: rect.h * 0.26 }, "Center"));
-  } else {
-    parts.push(textObject("ScanText", scanLines, { x: col.x, y: rect.y, w: col.w, h: rect.h * 0.68 }, "Center"));
-    parts.push(textObject("ProductCode", codeLines, { x: col.x, y: rect.y + rect.h * 0.70, w: col.w, h: rect.h * 0.30 }, "Center"));
-  }
-  parts.push(qrObject("QRCode", input.url, qr));
-  return parts.join("");
-}
-
-function squareLayout(rect: Box, input: DymoLabelInput, codeLines: TextLine[]): string {
-  const qrSide = rect.h * 0.78;
-  const qr: Box = { x: rect.x + (rect.w - qrSide) / 2, y: rect.y, w: qrSide, h: qrSide };
-  return [
-    qrObject("QRCode", input.url, qr),
-    // Only the product code fits legibly on a 25mm label.
-    textObject("ProductCode", codeLines.slice(0, 1), { x: rect.x, y: rect.y + rect.h * 0.80, w: rect.w, h: rect.h * 0.20 }, "Center"),
-  ].join("");
-}
 
 /** Build the .dymo XML document (no BOM, LF line endings). */
 export function buildDymoLabelXml(input: DymoLabelInput): string {
-  const size = resolveDymoLabelSize(input.size);
-  const spec = DYMO_LABEL_SPECS[size];
+  const lay = computeLabelLayout(input.size, !!input.logoBase64);
+  const { spec } = lay;
   const { rect } = spec;
 
-  const codeLines: TextLine[] = [{ text: input.productCode.trim(), font: "Arial", size: 9, bold: true }];
-  const title = (input.title ?? "").trim();
-  // Only the large label has room for a title line without shrinking the code illegibly.
-  if (title && size === "99012") codeLines.push({ text: title.length > 40 ? `${title.slice(0, 39)}…` : title, size: 7 });
-
-  const objects = spec.layout === "wide" ? wideLayout(rect, input, codeLines) : squareLayout(rect, input, codeLines);
+  const parts: string[] = [];
+  if (lay.logo && input.logoBase64) parts.push(imageObject("Logo", input.logoBase64, lay.logo));
+  if (lay.scan) parts.push(textObject("ScanText", SCAN_LINES.map(text => ({ text, size: spec.fonts.scan, bold: true })), lay.scan));
+  parts.push(textObject("ProductCode", codeLines(lay.size, input.productCode, input.title), lay.code));
+  parts.push(qrObject("QRCode", input.url, lay.qr));
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <DesktopLabel Version="1">
@@ -216,7 +317,7 @@ export function buildDymoLabelXml(input: DymoLabelInput): string {
     <Show_Border>False</Show_Border>
     <DynamicLayoutManager>
       <RotationBehavior>ClearObjects</RotationBehavior>
-      <LabelObjects>${objects}
+      <LabelObjects>${parts.join("")}
       </LabelObjects>
     </DynamicLayoutManager>
   </DYMOLabel>

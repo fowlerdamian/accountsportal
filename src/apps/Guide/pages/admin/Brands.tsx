@@ -3,7 +3,6 @@ import { supabase } from "@guide/integrations/supabase/client";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 
 import { Pencil, ExternalLink, Loader2, Upload, X } from "lucide-react";
 import { useState, useRef } from "react";
@@ -24,7 +23,6 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
   const [formPhone, setFormPhone] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formColour, setFormColour] = useState("");
-  const [formDymo, setFormDymo] = useState("");
   const [formLogoUrl, setFormLogoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -34,7 +32,6 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
     setFormPhone(b.support_phone ?? "");
     setFormEmail(b.support_email ?? "");
     setFormColour(b.primary_colour);
-    setFormDymo(b.dymo_label_size);
     setFormLogoUrl(b.logo_url);
   };
 
@@ -57,7 +54,6 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
       support_phone: formPhone || null,
       support_email: formEmail || null,
       primary_colour: formColour,
-      dymo_label_size: formDymo,
       logo_url: formLogoUrl,
     }).eq("id", editBrand.id);
     if (error) { toast.error(error.message); return; }
@@ -100,7 +96,6 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-3">
                   <span>Phone: {b.support_phone ?? '—'}</span>
                   <span>Email: {b.support_email ?? '—'}</span>
-                  <span>Dymo: {b.dymo_label_size}</span>
                 </div>
                 <div className="flex items-center gap-2 mt-2">
                   <span className="text-xs text-muted-foreground">Primary colour:</span>
@@ -160,17 +155,6 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
                   <Input value={formColour} onChange={e => setFormColour(e.target.value)} />
                   <input type="color" value={formColour} onChange={e => setFormColour(e.target.value)} className="w-10 h-10 rounded border cursor-pointer" />
                 </div>
-              </div>
-              <div>
-                <Label>Dymo Label Size</Label>
-                <Select value={formDymo} onValueChange={setFormDymo}>
-                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="99012">99012 — Large Address (36×89mm) ★ Default</SelectItem>
-                    <SelectItem value="30332">30332 — Square (25×25mm)</SelectItem>
-                    <SelectItem value="30334">30334 — Multi-Purpose (57×32mm)</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
               <Button className="w-full" onClick={saveChanges}>Save Changes</Button>
             </div>

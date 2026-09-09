@@ -3,13 +3,14 @@ import { Button } from "@guide/components/ui/button";
 import { Badge } from "@guide/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@guide/components/ui/tabs";
 import { useInstructionSet, usePublications, useBrands } from "@guide/hooks/use-supabase-query";
-import { ChevronLeft, Copy, Download, ExternalLink, Loader2, Maximize2, Printer, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, Copy, Download, ExternalLink, Loader2, Maximize2, Printer, X } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { useState, useRef, useCallback } from "react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { buildDymoLabelXml, dymoLabelFileContents, escapeXml, fetchLogoAsPngBase64 } from "@guide/lib/dymoLabel";
+import { LABEL_LOGOS, NO_LOGO, buildDymoLabelXml, dymoLabelFileContents, escapeXml, fetchLogoAsPngBase64, labelLogoName, labelLogoUrl, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@guide/components/ui/dropdown-menu";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -23,6 +24,8 @@ export default function GuideShare() {
   const { data: brands = [] } = useBrands();
   const [copied, setCopied] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState<string | null>(null);
+  // Logo chosen for the DYMO label, per brand tab (defaults to the brand's configured label logo).
+  const [labelLogo, setLabelLogo] = useState<Record<string, string>>({});
   // Brand whose publication is pending a "revert to draft" confirmation.
   const [revertTarget, setRevertTarget] = useState<{ pubId: string; brandName: string } | null>(null);
   const [reverting, setReverting] = useState(false);
@@ -73,13 +76,14 @@ export default function GuideShare() {
   };
 
   const downloadDymoLabel = async (
-    brand: { key: string; logo_url?: string | null; dymo_label_size?: string | null },
+    brand: { key: string; dymo_label_size?: string | null; label_logo?: string | null },
     guideUrl: string,
   ) => {
     try {
+      const logoUrl = labelLogoUrl(resolveLabelLogoKey(labelLogo[brand.key] ?? brand.label_logo));
       // Re-encode the logo as PNG through a canvas so any source format works in DYMO Connect.
-      const logoBase64 = brand.logo_url ? await fetchLogoAsPngBase64(brand.logo_url) : null;
-      if (brand.logo_url && !logoBase64) toast.warning("Logo couldn't be loaded — label generated without it");
+      const logoBase64 = logoUrl ? await fetchLogoAsPngBase64(logoUrl) : null;
+      if (logoUrl && !logoBase64) toast.warning("Logo couldn't be loaded — label generated without it");
       const xml = buildDymoLabelXml({
         size: brand.dymo_label_size,
         url: guideUrl,
@@ -152,6 +156,7 @@ export default function GuideShare() {
             const pub = publications.find((p: any) => p.brand_id === brand.id);
             const url = `https://${brand.domain}/${guide.slug}`;
             const isPublished = pub?.status === 'published';
+            const currentLogo = resolveLabelLogoKey(labelLogo[brand.key] ?? (brand as any).label_logo);
             return (
               <TabsContent key={brand.key} value={brand.key} className="space-y-6">
                 <div className="bg-card rounded-lg border p-6">
@@ -183,7 +188,22 @@ export default function GuideShare() {
                         <div className="flex gap-2 flex-wrap justify-center">
                           <Button variant="outline" size="sm" onClick={() => downloadQRPng(brand.key)}><Download className="w-4 h-4 mr-2" /> PNG</Button>
                           <Button variant="outline" size="sm" onClick={() => downloadQRPdf(brand.key, brand.name, url)}><Download className="w-4 h-4 mr-2" /> Print PDF</Button>
-                          <Button variant="outline" size="sm" onClick={() => downloadDymoLabel(brand, url)}><Printer className="w-4 h-4 mr-2" /> Download .dymo</Button>
+                          <div className="flex items-center">
+                            <Button variant="outline" size="sm" onClick={() => downloadDymoLabel(brand, url)}><Printer className="w-4 h-4 mr-2" /> Download .dymo</Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="ml-1 px-2 text-xs text-muted-foreground" aria-label="Label logo">
+                                  {labelLogoName(currentLogo)} <ChevronDown className="w-3 h-3 ml-1" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuRadioGroup value={currentLogo} onValueChange={(v) => setLabelLogo(prev => ({ ...prev, [brand.key]: v }))}>
+                                  {LABEL_LOGOS.map(l => <DropdownMenuRadioItem key={l.key} value={l.key}>{l.name}</DropdownMenuRadioItem>)}
+                                  <DropdownMenuRadioItem value={NO_LOGO}>No logo</DropdownMenuRadioItem>
+                                </DropdownMenuRadioGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                           <Button variant="outline" size="sm" onClick={() => setFullscreen(brand.key)}><Maximize2 className="w-4 h-4 mr-2" /> Fullscreen</Button>
                         </div>
                         <Button
