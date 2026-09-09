@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Filter, Loader2, Trash2, QrCode, Link2 } from "lucide-react";
+import { Plus, Search, Filter, Loader2, Trash2, QrCode, Link2, Printer } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { BookIcon, MessageCircleIcon, FileDescriptionIcon, TriangleAlertIcon } from "@portal/components/icons";
 import { StatsCard } from "@guide/components/admin/StatsCard";
@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Checkbox } from "@guide/components/ui/checkbox";
 import { Label } from "@guide/components/ui/label";
 import { brandShort } from "@guide/lib/utils";
+import { printLabels } from "@portal/lib/labels/printLabels";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -119,6 +120,22 @@ export default function GuidesList() {
   const [qrJob, setQrJob] = useState<{ guide: any; url: string; published: boolean } | null>(null);
   const qrHost = useRef<HTMLDivElement | null>(null);
   const copyQr = (guide: any) => setQrJob({ guide, ...shareTarget(guide) });
+
+  // Print: one DYMO label for the guide on the brand it is published on, via
+  // the browser print pipeline (hidden iframe on /labels/print).
+  const [printingId, setPrintingId] = useState<string | null>(null);
+  const printLabel = async (guide: any) => {
+    const { published } = shareTarget(guide);
+    if (!published) toast.message("Guide is not published yet — label QR will point at the first brand", { action: shareAction(guide) });
+    setPrintingId(guide.id);
+    try {
+      await printLabels({ ids: [guide.id] });
+    } catch (err: any) {
+      toast.error("Couldn't print the label", { description: err?.message, action: shareAction(guide) });
+    } finally {
+      setPrintingId(null);
+    }
+  };
   useEffect(() => {
     if (!qrJob) return;
     const { guide, url, published } = qrJob;
@@ -273,6 +290,9 @@ export default function GuidesList() {
                     </Button>
                     {copied?.id === guide.id && copied.kind === "qr" && <CopiedTip>QR code copied to clipboard</CopiedTip>}
                   </span>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => printLabel(guide)} disabled={printingId === guide.id} title="Print DYMO label" aria-label="Print DYMO label">
+                    {printingId === guide.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                  </Button>
                   <DeleteGuideDialog guide={guide} onDelete={deleteGuide} />
                 </div>
               </div>

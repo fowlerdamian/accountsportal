@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { LABEL_LOGOS, NO_LOGO, buildDymoLabelXml, dymoLabelFileContents, escapeXml, fetchLogoAsPngBase64, labelLogoName, labelLogoUrl, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@guide/components/ui/dropdown-menu";
+import { printLabels } from "@portal/lib/labels/printLabels";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -29,6 +30,8 @@ export default function GuideShare() {
   // Brand whose publication is pending a "revert to draft" confirmation.
   const [revertTarget, setRevertTarget] = useState<{ pubId: string; brandName: string } | null>(null);
   const [reverting, setReverting] = useState(false);
+  // Brand key whose label is currently in the browser print flow.
+  const [printing, setPrinting] = useState<string | null>(null);
   const qrRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const queryClient = useQueryClient();
 
@@ -102,6 +105,20 @@ export default function GuideShare() {
       URL.revokeObjectURL(blobUrl);
     } catch (err: any) {
       toast.error("Couldn't build the DYMO label", { description: err?.message });
+    }
+  };
+
+  // Print straight to the LabelWriter queue through the browser print pipeline
+  // (hidden iframe on /labels/print) — no DYMO Connect needed.
+  const printLabel = async (brand: { key: string }) => {
+    if (!id) return;
+    setPrinting(brand.key);
+    try {
+      await printLabels({ ids: [id], brand: brand.key, logo: resolveLabelLogoKey(labelLogo[brand.key] ?? (brand as any).label_logo) });
+    } catch (err: any) {
+      toast.error("Couldn't print the label", { description: err?.message });
+    } finally {
+      setPrinting(null);
     }
   };
 
@@ -189,7 +206,10 @@ export default function GuideShare() {
                           <Button variant="outline" size="sm" onClick={() => downloadQRPng(brand.key)}><Download className="w-4 h-4 mr-2" /> PNG</Button>
                           <Button variant="outline" size="sm" onClick={() => downloadQRPdf(brand.key, brand.name, url)}><Download className="w-4 h-4 mr-2" /> Print PDF</Button>
                           <div className="flex items-center">
-                            <Button variant="outline" size="sm" onClick={() => downloadDymoLabel(brand, url)}><Printer className="w-4 h-4 mr-2" /> Download .dymo</Button>
+                            <Button variant="outline" size="sm" onClick={() => printLabel(brand)} disabled={printing === brand.key}>
+                              {printing === brand.key ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Printer className="w-4 h-4 mr-2" />} Print label
+                            </Button>
+                            <Button variant="outline" size="sm" className="ml-2" onClick={() => downloadDymoLabel(brand, url)}><Download className="w-4 h-4 mr-2" /> .dymo</Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="sm" className="ml-1 px-2 text-xs text-muted-foreground" aria-label="Label logo">

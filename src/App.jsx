@@ -66,6 +66,8 @@ const GuideBrands = lazy(() => import('./apps/Guide/pages/admin/Brands'))
 const GuideUsers = lazy(() => import('./apps/Guide/pages/admin/Users'))
 const GuideDeliveries = lazy(() => import('./apps/Guide/pages/admin/Deliveries'))
 const GuideViewer = lazy(() => import('./apps/Guide/pages/guide/GuideViewer'))
+// Chrome-free DYMO label render route, loaded in a hidden iframe by printLabels().
+const LabelPrint = lazy(() => import('./pages/LabelPrint'))
 
 // Shown while a route chunk downloads (first visit to an app only).
 function RouteFallback() {
@@ -151,6 +153,7 @@ const PATH_TITLES = [
   ['/projects',              'Projects'],
   ['/tasks',                 'Tasks'],
   ['/guide',                 'Guide Portal'],
+  ['/labels',                'Labels'],
   ['/dashboard/settings',    'Tile Settings'],
   ['/dashboard',             'Dashboard'],
   ['/settings',              'Settings'],
@@ -175,7 +178,8 @@ function DocumentTitle() {
 function PortalChrome() {
   const { pathname } = useLocation()
   const { user } = useAuth()
-  const isWidget = pathname === '/tasks/widget'
+  // Chrome-free routes: the pinned task widget and the label print frame.
+  const isWidget = pathname === '/tasks/widget' || pathname.startsWith('/labels/')
   const isGuideHost = typeof window !== 'undefined' && window.location.hostname.startsWith('guide.')
   if (!user || isGuideHost) return null
   return (
@@ -204,6 +208,9 @@ export default function App() {
 
             {/* Support Hub */}
             <Route path="/support/*" element={<ProtectedRoute><SupportApp /></ProtectedRoute>} />
+
+            {/* DYMO label print route — label markup only; see src/lib/labels/printLabels.ts */}
+            <Route path="/labels/print" element={<ProtectedRoute><LabelPrint /></ProtectedRoute>} />
 
             {/* Redirect old /guide/view/:slug viewer URLs → new public /:slug route */}
             <Route path="/guide/view/:slug" element={<SlugRedirect />} />
