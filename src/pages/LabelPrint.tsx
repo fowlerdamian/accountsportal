@@ -36,15 +36,27 @@ const mm = (n: number) => `${n.toFixed(3)}mm`;
 const abs = (b: Box): CSSProperties => ({ position: "absolute", left: mm(b.x), top: mm(b.y), width: mm(b.w), height: mm(b.h) });
 
 /** Page + label CSS for one stock. Everything else on the page is inline so nothing from the portal shell leaks in. */
+/**
+ * The label box is a hair smaller than the page so px rounding of the mm
+ * values can never overflow the page box and feed a blank label.
+ */
+const PAGE_SLACK_MM = 0.3;
+
 export function stockCss(stock: LabelStockKey): string {
   const { width, height } = LABEL_STOCK[stock];
   return `
 @page { size: ${mm(width)} ${mm(height)}; margin: 0; }
 html, body, #root { margin: 0; padding: 0; height: auto; min-height: 0; background: #fff; color: #000; }
 body { font-family: Arial, Helvetica, sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.label { position: relative; width: ${mm(width)}; height: ${mm(height)}; overflow: hidden; background: #fff; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; }
+.label { position: relative; width: ${mm(width - PAGE_SLACK_MM)}; height: ${mm(height - PAGE_SLACK_MM)}; overflow: hidden; background: #fff; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; }
 .label:last-child { page-break-after: auto; break-after: auto; }
 .label * { box-sizing: border-box; }
+/* Only the label sheet may reach the page box: portal chrome that mounts on
+   every route (mention/shortcut helpers, toast + dialog portals appended to
+   body) would otherwise lay out as flow content after the last label and
+   push a blank page onto the roll. */
+body > :not(#root), #root > :not([data-labels]) { display: none !important; }
+[data-labels] { display: block; }
 .fit { white-space: nowrap; overflow: hidden; line-height: 1.15; }
 @media screen {
   body { background: #d4d4d4; padding: 8mm; }
@@ -227,7 +239,7 @@ export default function LabelPrint() {
   return (
     <>
       <style>{stockCss(built.stock)}</style>
-      <div ref={rootRef} data-stock={built.stock} data-count={built.labels.length}>
+      <div ref={rootRef} data-labels data-stock={built.stock} data-count={built.labels.length}>
         {built.labels.map(l => <Label key={l.key} data={l} stock={built.stock} />)}
       </div>
     </>

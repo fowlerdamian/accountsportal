@@ -7,6 +7,12 @@
  * the layout and the on-screen preview all read from this map.
  *
  * Key = DYMO part number as printed on the roll.
+ *
+ * Sizes are the DYMO Windows driver's paper forms (inch-based), NOT the nominal
+ * roll size: a CSS page even 0.2mm larger than the paper overflows at 100%
+ * scale and Chrome pushes a blank second page onto the roll. Read them with
+ * System.Drawing.Printing.PrinterSettings.PaperSizes on a PC that has the
+ * queue installed.
  */
 
 export interface Inset { top: number; right: number; bottom: number; left: number }
@@ -14,7 +20,7 @@ export interface Inset { top: number; right: number; bottom: number; left: numbe
 export interface LabelStock {
   /** Human name shown in settings / pickers. */
   name: string;
-  /** Physical label size in mm — becomes the @page size. */
+  /** Driver paper size in mm — becomes the @page size. */
   width: number;
   height: number;
   /**
@@ -32,7 +38,7 @@ export const LABEL_STOCK = {
   /** S0722400 Large Address. */
   "99012": {
     name: "99012 — Large Address (89×36mm)",
-    width: 89, height: 36,
+    width: 88.39, height: 35.81, // driver form "99012 Large Address"
     inset: { top: 2, right: 2, bottom: 2, left: 4 },
     layout: "wide",
     fonts: { scan: 9, code: 8, title: 5.5 },
@@ -40,7 +46,7 @@ export const LABEL_STOCK = {
   /** S0722370 Standard Address. */
   "99010": {
     name: "99010 — Standard Address (89×28mm)",
-    width: 89, height: 28,
+    width: 88.9, height: 27.69, // driver form "99010 Standard Address"
     inset: { top: 1.5, right: 2, bottom: 1.5, left: 4 },
     layout: "wide",
     fonts: { scan: 8, code: 7, title: 0 },
@@ -48,7 +54,7 @@ export const LABEL_STOCK = {
   /** S0722540 Multi-Purpose. */
   "11354": {
     name: "11354 — Multi-Purpose (57×32mm)",
-    width: 57, height: 32,
+    width: 57.15, height: 31.75, // driver form "11354 Multi-Purpose"
     inset: { top: 1.5, right: 1.5, bottom: 1.5, left: 3 },
     layout: "wide",
     fonts: { scan: 7, code: 6.5, title: 0 },
@@ -56,7 +62,7 @@ export const LABEL_STOCK = {
   /** US part number for the same 57×32 roll — brands.dymo_label_size may hold either. */
   "30334": {
     name: "30334 — Multi-Purpose (57×32mm)",
-    width: 57, height: 32,
+    width: 57.15, height: 31.75, // driver form "30334 2-1/4 in x 1-1/4 in"
     inset: { top: 1.5, right: 1.5, bottom: 1.5, left: 3 },
     layout: "wide",
     fonts: { scan: 7, code: 6.5, title: 0 },
@@ -64,7 +70,7 @@ export const LABEL_STOCK = {
   /** Square — QR only, no room for a barcode. */
   "30332": {
     name: "30332 — Square (25×25mm)",
-    width: 25, height: 25,
+    width: 25.4, height: 25.4, // driver form "30332 1 in x 1 in"
     inset: { top: 1.5, right: 1.5, bottom: 1.5, left: 2.5 },
     layout: "square",
     fonts: { scan: 0, code: 5.5, title: 0 },
