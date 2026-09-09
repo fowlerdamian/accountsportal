@@ -20,8 +20,8 @@ import { labelLogoUrl, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
 import { LABEL_STOCK, SCAN_LINES, codeLines, computeLabelLayout, resolveLabelStock, type Box, type LabelStockKey } from "@portal/lib/labels/labelStock";
 import type { LabelPrintMessage } from "@portal/lib/labels/printLabels";
 
-interface GuideRow { id: string; title: string; product_code: string | null; slug: string }
-interface BrandRow { id: string; key: string; name: string; domain: string; dymo_label_size: string | null; label_logo?: string | null }
+interface GuideRow { id: string; title: string; product_code: string | null; slug: string; label_logo: string | null }
+interface BrandRow { id: string; key: string; name: string; domain: string; dymo_label_size: string | null }
 interface PubRow { instruction_set_id: string; brand_id: string; status: string }
 
 export interface LabelData {
@@ -136,7 +136,7 @@ export default function LabelPrint() {
     enabled: ids.length > 0,
     queryFn: async () => {
       const [guides, brands, pubs] = await Promise.all([
-        supabase.from("instruction_sets").select("id, title, product_code, slug").in("id", ids),
+        supabase.from("instruction_sets").select("id, title, product_code, slug, label_logo").in("id", ids),
         supabase.from("brands").select("*").order("name"),
         supabase.from("guide_publications").select("instruction_set_id, brand_id, status").in("instruction_set_id", ids),
       ]);
@@ -160,7 +160,8 @@ export default function LabelPrint() {
       const brand = forced ?? brands.find(b => b.id === published?.brand_id) ?? brands[0];
       if (!brand) continue;
       stock ??= resolveLabelStock(brand.dymo_label_size);
-      const logoKey = resolveLabelLogoKey(logoParam ?? brand.label_logo);
+      // Logo is set per guide in the editor; `logo=` only overrides it for this job.
+      const logoKey = resolveLabelLogoKey(logoParam ?? g.label_logo);
       const base: LabelData = {
         key: `${g.id}-${brand.key}`,
         url: `https://${brand.domain}/${g.slug}`,

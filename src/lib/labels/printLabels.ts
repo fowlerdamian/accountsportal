@@ -14,7 +14,7 @@ export interface PrintLabelsOptions {
   ids: string[];
   /** Brand key whose domain the QR should point at; defaults to the first brand each guide is published on. */
   brand?: string | null;
-  /** Logo key from LABEL_LOGOS or "none"; defaults to the brand's configured label logo. */
+  /** Logo key from LABEL_LOGOS or "none"; overrides each guide's own label logo (instruction_sets.label_logo) for this job. */
   logo?: string | null;
   /** DYMO part number from LABEL_STOCK; defaults to the brand's dymo_label_size. */
   stock?: string | null;

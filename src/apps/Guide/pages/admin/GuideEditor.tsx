@@ -7,6 +7,7 @@ import { Label } from "@guide/components/ui/label";
 import { Textarea } from "@guide/components/ui/textarea";
 import { Badge } from "@guide/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
+import { LABEL_LOGOS, NO_LOGO, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
 import { useCategories, useInstructionSet, useInstructionSteps, usePublications, useBrands, useGuideVehicles } from "@guide/hooks/use-supabase-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import {
@@ -469,6 +470,8 @@ export default function GuideEditor() {
   }, [productCode, id]);
   const [categoryId, setCategoryId] = useState("");
   const [estimatedTime, setEstimatedTime] = useState("");
+  // Logo printed on this guide's DYMO QR label (LABEL_LOGOS key or "none").
+  const [labelLogo, setLabelLogo] = useState<string>(resolveLabelLogoKey(null));
   const [description, setDescription] = useState("");
   const [productImageUrls, setProductImageUrls] = useState<string[]>([]);
   // First title image — mirrored into product_image_url for thumbnails/emails.
@@ -660,6 +663,7 @@ export default function GuideEditor() {
     setProductCode(existingGuide.product_code);
     setCategoryId(existingGuide.category_id ?? "");
     setEstimatedTime(existingGuide.estimated_time ?? "");
+    setLabelLogo(resolveLabelLogoKey((existingGuide as any).label_logo));
     setDescription(existingGuide.short_description ?? "");
     setProductImageUrls(imageList((existingGuide as any).product_image_urls, existingGuide.product_image_url));
     setTools(existingGuide.tools_required ?? []);
@@ -729,12 +733,12 @@ export default function GuideEditor() {
   // baseline (set once the guide has loaded, or on a blank new guide, and
   // after every successful save); the form is dirty when they differ.
   const sigOf = (steps: StepDraft[], vars: VariantDraft[]) => JSON.stringify({
-    title, productCode, categoryId, estimatedTime, description, productImageUrls, tools, vehicles, defaultVariantLabel, steps, vars,
+    title, productCode, categoryId, estimatedTime, labelLogo, description, productImageUrls, tools, vehicles, defaultVariantLabel, steps, vars,
   });
   const currentSig = useMemo(
     () => sigOf(guideSteps, variants),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [title, productCode, categoryId, estimatedTime, description, productImageUrls, tools, vehicles, defaultVariantLabel, guideSteps, variants],
+    [title, productCode, categoryId, estimatedTime, labelLogo, description, productImageUrls, tools, vehicles, defaultVariantLabel, guideSteps, variants],
   );
   const [savedSig, setSavedSig] = useState<string | null>(null);
   useEffect(() => {
@@ -799,6 +803,7 @@ export default function GuideEditor() {
         slug,
         category_id: categoryId || null,
         estimated_time: estimatedTime || null,
+        label_logo: labelLogo,
         short_description: description || null,
         tools_required: tools,
         product_image_url: productImageUrl,
@@ -1221,6 +1226,17 @@ export default function GuideEditor() {
               <div>
                 <Label>Estimated Completion Time</Label>
                 <Input value={estimatedTime} onChange={e => setEstimatedTime(e.target.value)} placeholder="e.g. 2–3 hours" className="mt-1.5" />
+              </div>
+              <div>
+                <Label>Label Logo</Label>
+                <Select value={labelLogo} onValueChange={setLabelLogo}>
+                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {LABEL_LOGOS.map(l => <SelectItem key={l.key} value={l.key}>{l.name}</SelectItem>)}
+                    <SelectItem value={NO_LOGO}>No logo</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">Printed on this guide's DYMO QR label.</p>
               </div>
             </div>
             <div>

@@ -15,7 +15,7 @@ import { MessageCircleIcon } from "@portal/components/icons";
 import { useState } from "react";
 import { toast } from "sonner";
 import LabelPreview from "@guide/LabelPreview";
-import { DYMO_LABEL_SIZES, LABEL_LOGOS, NO_LOGO, resolveDymoLabelSize, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
+import { DEFAULT_LABEL_LOGO, DYMO_LABEL_SIZES, resolveDymoLabelSize } from "@guide/lib/dymoLabel";
 
 const TABS = new Set(["brands", "labels", "categories", "delivery"]);
 
@@ -120,7 +120,7 @@ function ChatSupportSetting() {
 
 // --- Label templates ---
 
-interface LabelDraft { size: string; logo: string }
+interface LabelDraft { size: string }
 
 function LabelsSettings() {
   const { data: brands = [], isLoading } = useBrands();
@@ -134,19 +134,15 @@ function LabelsSettings() {
 
   const current = (brand: any): LabelDraft => ({
     size: drafts[brand.id]?.size ?? resolveDymoLabelSize(brand.dymo_label_size),
-    logo: drafts[brand.id]?.logo ?? resolveLabelLogoKey(brand.label_logo),
   });
-  const isDirty = (brand: any) => {
-    const c = current(brand);
-    return c.size !== resolveDymoLabelSize(brand.dymo_label_size) || c.logo !== resolveLabelLogoKey(brand.label_logo);
-  };
+  const isDirty = (brand: any) => current(brand).size !== resolveDymoLabelSize(brand.dymo_label_size);
   const setDraft = (brandId: string, patch: Partial<LabelDraft>) =>
     setDrafts(prev => ({ ...prev, [brandId]: { ...prev[brandId], ...patch } }));
 
   const save = async (brand: any) => {
     const c = current(brand);
     setSaving(brand.id);
-    const { error } = await (supabase.from("brands").update as any)({ dymo_label_size: c.size, label_logo: c.logo }).eq("id", brand.id);
+    const { error } = await (supabase.from("brands").update as any)({ dymo_label_size: c.size }).eq("id", brand.id);
     setSaving(null);
     if (error) { toast.error(error.message); return; }
     setDrafts(prev => { const next = { ...prev }; delete next[brand.id]; return next; });
@@ -159,7 +155,7 @@ function LabelsSettings() {
       <div>
         <h2 className="text-lg font-semibold">Label Templates</h2>
         <p className="text-muted-foreground text-sm">
-          The DYMO QR label downloaded from a guide's Share page. Pick the paper size and default logo for each brand; the logo can still be swapped per download.
+          The DYMO QR label printed from a guide's Share page. Pick the paper size loaded in the LabelWriter for each brand. The logo on the label is chosen per guide, in the guide editor.
         </p>
       </div>
 
@@ -190,17 +186,7 @@ function LabelsSettings() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label className="text-sm">Default logo</Label>
-                    <Select value={c.logo} onValueChange={v => setDraft(brand.id, { logo: v })}>
-                      <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {LABEL_LOGOS.map(l => <SelectItem key={l.key} value={l.key}>{l.name}</SelectItem>)}
-                        <SelectItem value={NO_LOGO}>No logo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {c.size === "30332" && <p className="text-xs text-muted-foreground mt-1.5">The square label only has room for the QR code and product code.</p>}
-                  </div>
+                  {c.size === "30332" && <p className="text-xs text-muted-foreground">The square label only has room for the QR code and product code.</p>}
                   <Button size="sm" disabled={!isDirty(brand) || saving === brand.id} onClick={() => save(brand)}>
                     {saving === brand.id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
                     Save
@@ -211,7 +197,7 @@ function LabelsSettings() {
                   <p className="text-xs text-muted-foreground mb-3">Preview — actual size</p>
                   <LabelPreview
                     size={c.size}
-                    logo={c.logo}
+                    logo={DEFAULT_LABEL_LOGO}
                     url={`https://${brand.domain}/example-guide`}
                     productCode="BGLBTP1"
                     title="Behind Grille Light Bar — Toyota Prado 150"

@@ -25,6 +25,7 @@ export async function duplicateGuide(sourceId: string): Promise<string> {
     product_image_urls: (src as any).product_image_urls ?? null,
     notice_text: src.notice_text,
     default_variant_label: (src as any).default_variant_label ?? null,
+    label_logo: (src as any).label_logo ?? null,
   }).select("id").single();
   if (insErr || !created) throw insErr ?? new Error("Could not create copy");
   const newId = created.id as string;
