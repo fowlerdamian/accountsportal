@@ -1,6 +1,7 @@
 {
   "functions": {
     "api/cin7-lookup.js":            { "maxDuration": 60 },
+    "api/cin7-product.js":           { "maxDuration": 10 },
     "api/sales-sync-cin7.js":        { "maxDuration": 10 },
     "api/sales-sync-research.js":    { "maxDuration": 10 },
     "api/sales-sync-list.js":        { "maxDuration": 10 },

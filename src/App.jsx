@@ -69,8 +69,8 @@ const GuideViewer = lazy(() => import('./apps/Guide/pages/guide/GuideViewer'))
 // Chrome-free DYMO label render route, loaded in a hidden iframe by printLabels().
 const LabelPrint = lazy(() => import('./pages/LabelPrint'))
 const LabelStation = lazy(() => import('./pages/LabelStation'))
-// Text-in, PDF-out TrailBait product barcode labels (EAN-13).
-const BarcodeLabels = lazy(() => import('./pages/BarcodeLabels'))
+// Warehouse — barcode labels (Cin7 lookup, PDF / DYMO) and future stock tools.
+const Warehouse = lazy(() => import('./apps/Warehouse/index.jsx'))
 
 // Shown while a route chunk downloads (first visit to an app only).
 function RouteFallback() {
@@ -156,7 +156,7 @@ const PATH_TITLES = [
   ['/projects',              'Projects'],
   ['/tasks',                 'Tasks'],
   ['/guide',                 'Guide Portal'],
-  ['/labels/barcode',        'Barcode Labels'],
+  ['/warehouse',             'Warehouse'],
   ['/labels',                'Labels'],
   ['/dashboard/settings',    'Tile Settings'],
   ['/dashboard',             'Dashboard'],
@@ -302,7 +302,9 @@ export default function App() {
               <Route path="logistics/disputes" element={<Disputes />} />
               <Route path="logistics/manual-label" element={<ManualLabel />} />
               <Route path="logistics/tracking" element={<TrackingLookup />} />
-              <Route path="labels/barcode" element={<BarcodeLabels />} />
+              <Route path="warehouse/*" element={<Warehouse />} />
+              {/* Old direct link to the barcode tool. */}
+              <Route path="labels/barcode" element={<Navigate to="/warehouse/barcodes" replace />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
               <Route path="opportunities" element={<OpportunityPressure />} />
