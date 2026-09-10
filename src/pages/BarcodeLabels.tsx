@@ -2,24 +2,29 @@
  * /labels/barcode — TrailBait product barcode labels as PDF.
  *
  * Text in, PDF out. The layout is fixed (see src/lib/labels/barcodeLabelPdf.ts):
- * logo, product name, optional subtitle, SKU, EAN-13. The preview on the right
- * is the actual PDF, so what you see is what the print shop gets.
+ * logo, product name, optional subtitle, SKU, EAN-13 — scaled to the chosen
+ * stock size. The preview on the right is the actual PDF, so what you see is
+ * what the print shop gets.
  */
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
-  buildBarcodeLabelPdf, barcodeLabelFileName, validateBarcodeLabel,
-  LABEL_W, LABEL_H,
-  type BarcodeLabelInput, type LabelOutput,
+  buildBarcodeLabelPdf, barcodeLabelFileName, validateBarcodeLabel, pageSize,
+  LABEL_SIZES, LABEL_SIZE_OPTIONS, DEFAULT_LABEL_SIZE, resolveLabelSize,
+  type BarcodeLabelInput, type LabelOutput, type LabelSizeKey,
 } from "@portal/lib/labels/barcodeLabelPdf";
 import { normaliseEan13 } from "@portal/lib/labels/ean13";
 
 const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: "" };
 const PREVIEW_DEBOUNCE_MS = 250;
 
-const OUTPUTS: { key: LabelOutput; label: string; hint: string }[] = [
-  { key: "proof", label: "Proof with crop marks", hint: `${LABEL_W} × ${LABEL_H} mm label centred on a 90 × 80 mm page` },
-  { key: "trim",  label: "Trimmed",               hint: `${LABEL_W} × ${LABEL_H} mm page, no marks` },
+const OUTPUTS: { key: LabelOutput; label: string }[] = [
+  { key: "proof", label: "Proof with crop marks" },
+  { key: "trim",  label: "Trimmed" },
 ];
+
+const LABEL_SIZE_KEY = "barcode-labels:size";
+const readSize = (): LabelSizeKey => { try { return resolveLabelSize(localStorage.getItem(LABEL_SIZE_KEY)); } catch { return DEFAULT_LABEL_SIZE; } };
+const writeSize = (v: LabelSizeKey) => { try { localStorage.setItem(LABEL_SIZE_KEY, v); } catch { /* private window */ } };
 
 // ─── Styles (match the Logistics design language) ────────────────────────────
 const inputStyle: CSSProperties = {
@@ -28,6 +33,7 @@ const inputStyle: CSSProperties = {
   fontFamily: "inherit", width: "100%", boxSizing: "border-box",
 };
 const inputErrorStyle: CSSProperties = { ...inputStyle, borderColor: "rgba(158,42,43,0.7)" };
+const selectStyle: CSSProperties = { ...inputStyle, cursor: "pointer", appearance: "auto" };
 const labelStyle: CSSProperties = {
   fontSize: "11px", fontFamily: '"JetBrains Mono", monospace', color: "#a0a0a0",
   textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px",
@@ -55,7 +61,9 @@ function Field({ label, error, hint, children }: { label: string; error?: string
 export default function BarcodeLabels() {
   const [input, setInput] = useState<BarcodeLabelInput>(EMPTY);
   const [output, setOutput] = useState<LabelOutput>("proof");
+  const [size, setSize] = useState<LabelSizeKey>(readSize);
   const [copies, setCopies] = useState("1");
+  useEffect(() => { writeSize(size); }, [size]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -76,7 +84,7 @@ export default function BarcodeLabels() {
     let url: string | null = null;
     const t = window.setTimeout(() => {
       try {
-        const doc = buildBarcodeLabelPdf(input, { output, copies: 1 });
+        const doc = buildBarcodeLabelPdf(input, { output, size, copies: 1 });
         url = URL.createObjectURL(doc.output("blob"));
         setPreviewUrl(url);
         setPreviewError(null);
@@ -89,15 +97,19 @@ export default function BarcodeLabels() {
       window.clearTimeout(t);
       if (url) URL.revokeObjectURL(url);
     };
-  }, [input, output, valid]);
+  }, [input, output, size, valid]);
 
   const download = () => {
     setTouched({ title: true, subtitle: true, sku: true, barcode: true });
     if (!valid) return;
-    buildBarcodeLabelPdf(input, { output, copies: copiesN }).save(barcodeLabelFileName(input));
+    buildBarcodeLabelPdf(input, { output, size, copies: copiesN }).save(barcodeLabelFileName(input));
   };
 
-  const [pw, ph] = output === "proof" ? [90, 80] : [LABEL_W, LABEL_H];
+  const stock = LABEL_SIZES[size];
+  const [pw, ph] = pageSize(output, size);
+  const outputHint = output === "proof"
+    ? `${stock.w} × ${stock.h} mm label centred on a ${pw} × ${ph} mm page with crop marks`
+    : `${stock.w} × ${stock.h} mm page, no marks`;
 
   return (
     <div style={{ flex: 1, overflowY: "auto", width: "100%" }}>
@@ -105,7 +117,7 @@ export default function BarcodeLabels() {
         <div style={{ marginBottom: "24px" }}>
           <h1 style={{ fontSize: "18px", fontWeight: 600, color: "#ffffff", margin: 0, letterSpacing: "-0.01em" }}>Barcode Labels</h1>
           <p style={{ fontSize: "12px", color: "#a0a0a0", margin: "4px 0 0", fontFamily: '"JetBrains Mono", monospace' }}>
-            TrailBait {LABEL_W} × {LABEL_H} mm product label · EAN-13 · PDF
+            TrailBait product label · EAN-13 · PDF
           </p>
         </div>
 
@@ -144,7 +156,12 @@ export default function BarcodeLabels() {
             </Field>
 
             <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              <Field label="Output" hint={OUTPUTS.find(o => o.key === output)?.hint}>
+              <Field label="Label size" hint="The design scales to fit; proportions stay the same">
+                <select style={selectStyle} value={size} onChange={e => setSize(resolveLabelSize(e.target.value))}>
+                  {LABEL_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Output" hint={outputHint}>
                 <div style={{ display: "inline-flex", border: "1px solid #222222", borderRadius: "8px", overflow: "hidden" }}>
                   {OUTPUTS.map(o => {
                     const active = o.key === output;

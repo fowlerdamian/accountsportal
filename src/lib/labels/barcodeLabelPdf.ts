@@ -1,5 +1,5 @@
 /**
- * TrailBait product barcode label — the fixed 50 × 40 mm format:
+ * TrailBait product barcode label — the fixed format, designed at 50 × 40 mm:
  *
  *   ┌──────────────────────────┐
  *   │        [TrailBait]       │  logo, centred
@@ -10,10 +10,12 @@
  *   │      9 360281 002218     │  human-readable digits
  *   └──────────────────────────┘
  *
- * Every dimension is in millimetres from the label's top-left corner. The
- * "proof" output centres the label on a larger page with crop marks (the
- * artwork the print shop expects); "trim" outputs a page the exact label size.
- * Nothing here is user-adjustable except the text — that is the point.
+ * Every dimension is in millimetres from the label's top-left corner at the
+ * 50 × 40 design size. Other stock sizes scale the whole design uniformly to
+ * fit and centre it, so proportions never change. The "proof" output centres
+ * the label on a larger page with crop marks (the artwork the print shop
+ * expects); "trim" outputs a page the exact label size. Nothing here is
+ * user-adjustable except the text and the stock size — that is the point.
  *
  * Type is League Spartan: Medium for the product name and the "SKU" word,
  * Light for everything else.
@@ -38,14 +40,38 @@ export type LabelOutput = "proof" | "trim";
 
 export interface BarcodeLabelOptions {
   output: LabelOutput;
+  /** Stock size from LABEL_SIZES. */
+  size: LabelSizeKey;
   /** Pages in the PDF — one label per page. */
   copies: number;
 }
 
-// ─── Geometry (mm) ───────────────────────────────────────────────────────────
+// ─── Label stock sizes (mm) ──────────────────────────────────────────────────
 
-export const LABEL_W = 50;
-export const LABEL_H = 40;
+export interface LabelSize { name: string; w: number; h: number }
+
+export const LABEL_SIZES = {
+  "50x40":  { name: "50 × 40 mm (standard)", w: 50,  h: 40 },
+  "40x30":  { name: "40 × 30 mm",            w: 40,  h: 30 },
+  "60x40":  { name: "60 × 40 mm",            w: 60,  h: 40 },
+  "70x50":  { name: "70 × 50 mm",            w: 70,  h: 50 },
+  "100x50": { name: "100 × 50 mm",           w: 100, h: 50 },
+  "100x70": { name: "100 × 70 mm",           w: 100, h: 70 },
+} as const satisfies Record<string, LabelSize>;
+
+export type LabelSizeKey = keyof typeof LABEL_SIZES;
+export const DEFAULT_LABEL_SIZE: LabelSizeKey = "50x40";
+export const LABEL_SIZE_OPTIONS = (Object.keys(LABEL_SIZES) as LabelSizeKey[]).map(value => ({ value, label: LABEL_SIZES[value].name }));
+
+export function resolveLabelSize(key: string | null | undefined): LabelSizeKey {
+  return key && key in LABEL_SIZES ? (key as LabelSizeKey) : DEFAULT_LABEL_SIZE;
+}
+
+// ─── Geometry (mm, at the 50 × 40 design size) ───────────────────────────────
+
+/** The design size — every constant below is relative to this box. */
+const BASE_W = 50;
+const BASE_H = 40;
 
 /** Proof page: label + this margin each side, crop marks in the margin. */
 const PROOF_MARGIN = 20;
@@ -100,57 +126,63 @@ function fitFontSize(doc: jsPDF, text: string, startPt: number, maxW: number, fl
   return pt;
 }
 
-function drawLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput, code: string) {
-  const cx = ox + LABEL_W / 2;
-  const maxTextW = LABEL_W - SIDE_PAD * 2;
+function drawLabel(doc: jsPDF, ox: number, oy: number, size: LabelSize, input: BarcodeLabelInput, code: string) {
+  // Uniform scale so the 50 × 40 design fits the stock, centred in it.
+  const k = Math.min(size.w / BASE_W, size.h / BASE_H);
+  const S = (mm: number) => mm * k;
+  const x0 = ox + (size.w - BASE_W * k) / 2;
+  const y0 = oy + (size.h - BASE_H * k) / 2;
+  const cx = x0 + S(BASE_W) / 2;
+  const maxTextW = S(BASE_W - SIDE_PAD * 2);
 
   doc.setTextColor(0);
   doc.setFillColor(0);
 
   // Logo — fixed width, aspect preserved, centred.
-  const logoH = LOGO.w * (TRAILBAIT_LOGO.h / TRAILBAIT_LOGO.w);
-  doc.addImage(TRAILBAIT_LOGO.dataUri, "PNG", cx - LOGO.w / 2, oy + LOGO.top, LOGO.w, logoH);
+  const logoW = S(LOGO.w);
+  const logoH = logoW * (TRAILBAIT_LOGO.h / TRAILBAIT_LOGO.w);
+  doc.addImage(TRAILBAIT_LOGO.dataUri, "PNG", cx - logoW / 2, y0 + S(LOGO.top), logoW, logoH);
 
   // Product name.
   const title = input.title.trim().toUpperCase();
-  setFont(doc, "medium", TITLE.pt);
-  fitFontSize(doc, title, TITLE.pt, maxTextW, 6);
-  doc.text(title, cx, oy + TITLE.baseline, { align: "center" });
+  setFont(doc, "medium", TITLE.pt * k);
+  fitFontSize(doc, title, TITLE.pt * k, maxTextW, 6 * k);
+  doc.text(title, cx, y0 + S(TITLE.baseline), { align: "center" });
 
   // Subtitle.
   const subtitle = input.subtitle.trim().toUpperCase();
   if (subtitle) {
-    setFont(doc, "light", SUBTITLE.pt);
-    fitFontSize(doc, subtitle, SUBTITLE.pt, maxTextW, 4);
-    doc.text(subtitle, cx, oy + SUBTITLE.baseline, { align: "center" });
+    setFont(doc, "light", SUBTITLE.pt * k);
+    fitFontSize(doc, subtitle, SUBTITLE.pt * k, maxTextW, 4 * k);
+    doc.text(subtitle, cx, y0 + S(SUBTITLE.baseline), { align: "center" });
   }
 
   // "SKU" + code, centred as one line.
   const sku = input.sku.trim();
-  setFont(doc, "medium", SKU.pt);
+  setFont(doc, "medium", SKU.pt * k);
   const labelW = doc.getTextWidth("SKU ");
-  setFont(doc, "light", SKU.pt);
+  setFont(doc, "light", SKU.pt * k);
   const codeW = doc.getTextWidth(sku);
   const skuX = cx - (labelW + codeW) / 2;
-  setFont(doc, "medium", SKU.pt);
-  doc.text("SKU ", skuX, oy + SKU.baseline);
-  setFont(doc, "light", SKU.pt);
-  doc.text(sku, skuX + labelW, oy + SKU.baseline);
+  setFont(doc, "medium", SKU.pt * k);
+  doc.text("SKU ", skuX, y0 + S(SKU.baseline));
+  setFont(doc, "light", SKU.pt * k);
+  doc.text(sku, skuX + labelW, y0 + S(SKU.baseline));
 
   // EAN-13 bars. Guard patterns run taller, into the digit row.
-  const module = BARCODE.w / EAN13_MODULES;
-  const bx = cx - BARCODE.w / 2;
-  const by = oy + BARCODE.top;
+  const module = S(BARCODE.w) / EAN13_MODULES;
+  const bx = cx - S(BARCODE.w) / 2;
+  const by = y0 + S(BARCODE.top);
   for (const [start, width] of ean13Bars(code)) {
-    const h = isGuardModule(start) ? BARCODE.guardH : BARCODE.barH;
+    const h = isGuardModule(start) ? S(BARCODE.guardH) : S(BARCODE.barH);
     doc.rect(bx + start * module, by, width * module, h, "F");
   }
 
   // Human-readable digits: lead digit in the left quiet zone, then each digit
   // centred under its own 7-module cell so the groups read as in the example.
   const { lead, left, right } = ean13Groups(code);
-  setFont(doc, "light", BARCODE.digitPt);
-  const dy = oy + BARCODE.digitBaseline;
+  setFont(doc, "light", BARCODE.digitPt * k);
+  const dy = y0 + S(BARCODE.digitBaseline);
   doc.text(lead, bx - module * 1.5, dy, { align: "right" });
   for (let i = 0; i < 6; i++) {
     doc.text(left[i], bx + (3 + 7 * i + 3.5) * module, dy, { align: "center" });
@@ -158,25 +190,24 @@ function drawLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput,
   }
 }
 
-function drawCropMarks(doc: jsPDF, ox: number, oy: number) {
+function drawCropMarks(doc: jsPDF, ox: number, oy: number, size: LabelSize) {
   doc.setDrawColor(0);
   doc.setLineWidth(CROP_LINE);
-  const xs = [ox, ox + LABEL_W];
-  const ys = [oy, oy + LABEL_H];
-  for (const x of xs) {
-    doc.line(x, oy - CROP_GAP, x, oy - CROP_GAP - CROP_LEN);                       // above
-    doc.line(x, oy + LABEL_H + CROP_GAP, x, oy + LABEL_H + CROP_GAP + CROP_LEN);   // below
+  const { w, h } = size;
+  for (const x of [ox, ox + w]) {
+    doc.line(x, oy - CROP_GAP, x, oy - CROP_GAP - CROP_LEN);               // above
+    doc.line(x, oy + h + CROP_GAP, x, oy + h + CROP_GAP + CROP_LEN);       // below
   }
-  for (const y of ys) {
-    doc.line(ox - CROP_GAP, y, ox - CROP_GAP - CROP_LEN, y);                       // left
-    doc.line(ox + LABEL_W + CROP_GAP, y, ox + LABEL_W + CROP_GAP + CROP_LEN, y);   // right
+  for (const y of [oy, oy + h]) {
+    doc.line(ox - CROP_GAP, y, ox - CROP_GAP - CROP_LEN, y);               // left
+    doc.line(ox + w + CROP_GAP, y, ox + w + CROP_GAP + CROP_LEN, y);       // right
   }
 }
 
-export function pageSize(output: LabelOutput): [number, number] {
-  return output === "proof"
-    ? [LABEL_W + PROOF_MARGIN * 2, LABEL_H + PROOF_MARGIN * 2]
-    : [LABEL_W, LABEL_H];
+/** PDF page size in mm for an output style and stock size. */
+export function pageSize(output: LabelOutput, sizeKey: LabelSizeKey): [number, number] {
+  const { w, h } = LABEL_SIZES[sizeKey];
+  return output === "proof" ? [w + PROOF_MARGIN * 2, h + PROOF_MARGIN * 2] : [w, h];
 }
 
 /**
@@ -190,17 +221,19 @@ export function buildBarcodeLabelPdf(input: BarcodeLabelInput, opts: BarcodeLabe
   const ean = normaliseEan13(input.barcode);
   if (!ean.ok) throw new Error(ean.error);
 
-  const [pw, ph] = pageSize(opts.output);
-  const ox = (pw - LABEL_W) / 2;
-  const oy = (ph - LABEL_H) / 2;
+  const sizeKey = resolveLabelSize(opts.size);
+  const size = LABEL_SIZES[sizeKey];
+  const [pw, ph] = pageSize(opts.output, sizeKey);
+  const ox = (pw - size.w) / 2;
+  const oy = (ph - size.h) / 2;
   const copies = Math.max(1, Math.min(500, Math.floor(opts.copies) || 1));
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [pw, ph], compress: true });
   registerFonts(doc);
   for (let i = 0; i < copies; i++) {
     if (i > 0) doc.addPage([pw, ph], "landscape");
-    if (opts.output === "proof") drawCropMarks(doc, ox, oy);
-    drawLabel(doc, ox, oy, input, ean.code);
+    if (opts.output === "proof") drawCropMarks(doc, ox, oy, size);
+    drawLabel(doc, ox, oy, size, input, ean.code);
   }
   return doc;
 }
