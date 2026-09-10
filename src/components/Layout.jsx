@@ -16,6 +16,7 @@ const ROUTE_LABELS = {
   '/opportunities':           'Opportunities',
   '/marketing':               'Marketing',
   '/compliance':              'Compliance',
+  '/labels/barcode':          'Barcode Labels',
   '/settings':                'Settings',
 }
 

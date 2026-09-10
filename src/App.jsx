@@ -69,6 +69,8 @@ const GuideViewer = lazy(() => import('./apps/Guide/pages/guide/GuideViewer'))
 // Chrome-free DYMO label render route, loaded in a hidden iframe by printLabels().
 const LabelPrint = lazy(() => import('./pages/LabelPrint'))
 const LabelStation = lazy(() => import('./pages/LabelStation'))
+// Text-in, PDF-out TrailBait product barcode labels (EAN-13).
+const BarcodeLabels = lazy(() => import('./pages/BarcodeLabels'))
 
 // Shown while a route chunk downloads (first visit to an app only).
 function RouteFallback() {
@@ -154,6 +156,7 @@ const PATH_TITLES = [
   ['/projects',              'Projects'],
   ['/tasks',                 'Tasks'],
   ['/guide',                 'Guide Portal'],
+  ['/labels/barcode',        'Barcode Labels'],
   ['/labels',                'Labels'],
   ['/dashboard/settings',    'Tile Settings'],
   ['/dashboard',             'Dashboard'],
@@ -179,8 +182,8 @@ function DocumentTitle() {
 function PortalChrome() {
   const { pathname } = useLocation()
   const { user } = useAuth()
-  // Chrome-free routes: the pinned task widget and the label print frame.
-  const isWidget = pathname === '/tasks/widget' || pathname.startsWith('/labels/')
+  // Chrome-free routes: the pinned task widget, the label print frame and the print station.
+  const isWidget = pathname === '/tasks/widget' || pathname === '/labels/print' || pathname === '/labels/station'
   const isGuideHost = typeof window !== 'undefined' && window.location.hostname.startsWith('guide.')
   if (!user || isGuideHost) return null
   return (
@@ -299,6 +302,7 @@ export default function App() {
               <Route path="logistics/disputes" element={<Disputes />} />
               <Route path="logistics/manual-label" element={<ManualLabel />} />
               <Route path="logistics/tracking" element={<TrackingLookup />} />
+              <Route path="labels/barcode" element={<BarcodeLabels />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
               <Route path="sales-support/*" element={<SalesSupport />} />
               <Route path="opportunities" element={<OpportunityPressure />} />
