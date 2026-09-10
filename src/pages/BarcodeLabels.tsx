@@ -8,13 +8,12 @@
  */
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
-  buildBarcodeLabelPdf, barcodeLabelFileName, validateBarcodeLabel, pageSize,
+  buildBarcodeLabelPdf, barcodeLabelFileName, validateBarcodeLabel, barcodeValue, pageSize,
   LABEL_SIZES, LABEL_SIZE_OPTIONS, DEFAULT_LABEL_SIZE, resolveLabelSize,
   type BarcodeLabelInput, type LabelOutput, type LabelSizeKey,
 } from "@portal/lib/labels/barcodeLabelPdf";
-import { normaliseEan13 } from "@portal/lib/labels/ean13";
 
-const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: "" };
+const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: "", notes: "" };
 const PREVIEW_DEBOUNCE_MS = 250;
 
 const OUTPUTS: { key: LabelOutput; label: string }[] = [
@@ -63,17 +62,18 @@ export default function BarcodeLabels() {
   const [output, setOutput] = useState<LabelOutput>("proof");
   const [size, setSize] = useState<LabelSizeKey>(readSize);
   const [copies, setCopies] = useState("1");
+  const isDymo = LABEL_SIZES[size].layout === "dymo";
   useEffect(() => { writeSize(size); }, [size]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
-  const errors = useMemo(() => validateBarcodeLabel(input), [input]);
+  const errors = useMemo(() => validateBarcodeLabel(input, size), [input, size]);
   const valid = Object.keys(errors).length === 0;
-  const ean = useMemo(() => normaliseEan13(input.barcode), [input.barcode]);
+  const encoded = useMemo(() => barcodeValue(input, size), [input, size]);
   const copiesN = Math.max(1, Math.min(500, parseInt(copies, 10) || 1));
 
-  const upd = (field: keyof BarcodeLabelInput) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const upd = (field: keyof BarcodeLabelInput) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setInput(v => ({ ...v, [field]: e.target.value }));
   const touch = (field: string) => () => setTouched(t => ({ ...t, [field]: true }));
   const showError = (field: string) => (touched[field] ? errors[field] : undefined);
@@ -102,7 +102,7 @@ export default function BarcodeLabels() {
   const download = () => {
     setTouched({ title: true, subtitle: true, sku: true, barcode: true });
     if (!valid) return;
-    buildBarcodeLabelPdf(input, { output, size, copies: copiesN }).save(barcodeLabelFileName(input));
+    buildBarcodeLabelPdf(input, { output, size, copies: copiesN }).save(barcodeLabelFileName(input, size));
   };
 
   const stock = LABEL_SIZES[size];
@@ -124,39 +124,49 @@ export default function BarcodeLabels() {
         <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 400px) 1fr", gap: "20px", alignItems: "start" }}>
           {/* ── Inputs ─────────────────────────────────────────────────── */}
           <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "16px" }}>
-            <Field label="Product name" error={showError("title")} hint="Printed bold in capitals">
+            <Field label="Product name" error={showError("title")} hint={isDymo ? "Printed bold, top left" : "Printed bold in capitals"}>
               <input
                 style={showError("title") ? inputErrorStyle : inputStyle}
                 value={input.title} onChange={upd("title")} onBlur={touch("title")}
-                placeholder="Cross Bar Z Bracket" autoFocus
+                placeholder={isDymo ? "Bonnet Aerial Mount" : "Cross Bar Z Bracket"} autoFocus
               />
             </Field>
-            <Field label="Subtitle (optional)" hint="Small line under the name, e.g. (PAIR)">
-              <input style={inputStyle} value={input.subtitle} onChange={upd("subtitle")} placeholder="(Pair)" />
+            <Field label={isDymo ? "Second line (optional)" : "Subtitle (optional)"} hint={isDymo ? "Under the name, e.g. the vehicle fit" : "Small line under the name, e.g. (PAIR)"}>
+              <input style={inputStyle} value={input.subtitle} onChange={upd("subtitle")} placeholder={isDymo ? "Hilux N90 2025.5+" : "(Pair)"} />
             </Field>
+            {isDymo && (
+              <Field label="Notes (optional)" hint="One per line, printed above the SKU">
+                <textarea
+                  style={{ ...inputStyle, resize: "vertical", minHeight: "58px" }} rows={2}
+                  value={input.notes ?? ""} onChange={upd("notes")} placeholder={"Passenger Side"}
+                />
+              </Field>
+            )}
             <Field label="SKU" error={showError("sku")}>
               <input
                 style={showError("sku") ? inputErrorStyle : inputStyle}
                 value={input.sku} onChange={upd("sku")} onBlur={touch("sku")}
-                placeholder="TCZP"
+                placeholder={isDymo ? "AMBHX2" : "TCZP"}
               />
             </Field>
             <Field
-              label="Barcode (EAN-13)"
+              label={isDymo ? "Barcode (Code 128)" : "Barcode (EAN-13)"}
               error={showError("barcode")}
-              hint={ean.ok
-                ? `Encodes ${ean.code}${input.barcode.replace(/[\s-]/g, "").length === 12 ? " (check digit added)" : ""}`
-                : "13 digits, or 12 and the check digit is added"}
+              hint={isDymo
+                ? "Printed exactly as typed"
+                : encoded
+                  ? `Encodes ${encoded}${input.barcode.replace(/[\s-]/g, "").length === 12 ? " (check digit added)" : ""}`
+                  : "13 digits, or 12 and the check digit is added"}
             >
               <input
                 style={showError("barcode") ? inputErrorStyle : inputStyle}
                 value={input.barcode} onChange={upd("barcode")} onBlur={touch("barcode")}
-                placeholder="9360281002218" inputMode="numeric"
+                placeholder={isDymo ? "897451681111" : "9360281002218"} inputMode={isDymo ? "text" : "numeric"}
               />
             </Field>
 
             <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              <Field label="Label size" hint="The design scales to fit; proportions stay the same">
+              <Field label="Label size" hint={isDymo ? "Warehouse DYMO template — prints 1:1 on the LabelWriter" : "The design scales to fit; proportions stay the same"}>
                 <select style={selectStyle} value={size} onChange={e => setSize(resolveLabelSize(e.target.value))}>
                   {LABEL_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
