@@ -14,9 +14,13 @@
  * "proof" output centres the label on a larger page with crop marks (the
  * artwork the print shop expects); "trim" outputs a page the exact label size.
  * Nothing here is user-adjustable except the text — that is the point.
+ *
+ * Type is League Spartan: Medium for the product name and the "SKU" word,
+ * Light for everything else.
  */
 import { jsPDF } from "jspdf";
 import { TRAILBAIT_LOGO } from "@portal/apps/Logistics/utils/labelLogos.js";
+import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "./leagueSpartanFonts";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule, normaliseEan13 } from "./ean13";
 
 export interface BarcodeLabelInput {
@@ -52,12 +56,28 @@ const CROP_LINE = 0.15;
 const SIDE_PAD = 3;    // text may not come closer than this to the label edge
 
 const LOGO = { w: 17, top: 5.2 };
-const TITLE = { pt: 10, baseline: 15.6 };
+const TITLE = { pt: 11, baseline: 15.6 };
 const SUBTITLE = { pt: 5, baseline: 18.3 };
 const SKU = { pt: 6, baseline: 23.7 };
-const BARCODE = { w: 24.3, top: 27, barH: 8.1, guardH: 9.9, digitPt: 4.6, digitBaseline: 37.0 };
+const BARCODE = { w: 24.3, top: 27, barH: 8.1, guardH: 9.9, digitPt: 5.2, digitBaseline: 37.0 };
 
-const PT_TO_MM = 25.4 / 72;
+// ─── Fonts ───────────────────────────────────────────────────────────────────
+
+const FONT = "LeagueSpartan";
+type Weight = "light" | "medium";
+
+/** Register the embedded League Spartan faces on a fresh document. */
+function registerFonts(doc: jsPDF) {
+  doc.addFileToVFS("LeagueSpartan-Light.ttf", LEAGUE_SPARTAN_LIGHT);
+  doc.addFont("LeagueSpartan-Light.ttf", FONT, "light");
+  doc.addFileToVFS("LeagueSpartan-Medium.ttf", LEAGUE_SPARTAN_MEDIUM);
+  doc.addFont("LeagueSpartan-Medium.ttf", FONT, "medium");
+}
+
+const setFont = (doc: jsPDF, weight: Weight, pt: number) => {
+  doc.setFont(FONT, weight);
+  doc.setFontSize(pt);
+};
 
 /** Pure validation, shared by the form and the builder. */
 export function validateBarcodeLabel(input: BarcodeLabelInput): Record<string, string> {
@@ -93,29 +113,28 @@ function drawLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput,
 
   // Product name.
   const title = input.title.trim().toUpperCase();
-  doc.setFont("helvetica", "bold");
+  setFont(doc, "medium", TITLE.pt);
   fitFontSize(doc, title, TITLE.pt, maxTextW, 6);
   doc.text(title, cx, oy + TITLE.baseline, { align: "center" });
 
   // Subtitle.
   const subtitle = input.subtitle.trim().toUpperCase();
   if (subtitle) {
-    doc.setFont("helvetica", "normal");
+    setFont(doc, "light", SUBTITLE.pt);
     fitFontSize(doc, subtitle, SUBTITLE.pt, maxTextW, 4);
     doc.text(subtitle, cx, oy + SUBTITLE.baseline, { align: "center" });
   }
 
   // "SKU" + code, centred as one line.
   const sku = input.sku.trim();
-  doc.setFontSize(SKU.pt);
-  doc.setFont("helvetica", "bold");
+  setFont(doc, "medium", SKU.pt);
   const labelW = doc.getTextWidth("SKU ");
-  doc.setFont("helvetica", "normal");
+  setFont(doc, "light", SKU.pt);
   const codeW = doc.getTextWidth(sku);
   const skuX = cx - (labelW + codeW) / 2;
-  doc.setFont("helvetica", "bold");
+  setFont(doc, "medium", SKU.pt);
   doc.text("SKU ", skuX, oy + SKU.baseline);
-  doc.setFont("helvetica", "normal");
+  setFont(doc, "light", SKU.pt);
   doc.text(sku, skuX + labelW, oy + SKU.baseline);
 
   // EAN-13 bars. Guard patterns run taller, into the digit row.
@@ -130,8 +149,7 @@ function drawLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput,
   // Human-readable digits: lead digit in the left quiet zone, then each digit
   // centred under its own 7-module cell so the groups read as in the example.
   const { lead, left, right } = ean13Groups(code);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(BARCODE.digitPt);
+  setFont(doc, "light", BARCODE.digitPt);
   const dy = oy + BARCODE.digitBaseline;
   doc.text(lead, bx - module * 1.5, dy, { align: "right" });
   for (let i = 0; i < 6; i++) {
@@ -178,6 +196,7 @@ export function buildBarcodeLabelPdf(input: BarcodeLabelInput, opts: BarcodeLabe
   const copies = Math.max(1, Math.min(500, Math.floor(opts.copies) || 1));
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [pw, ph], compress: true });
+  registerFonts(doc);
   for (let i = 0; i < copies; i++) {
     if (i > 0) doc.addPage([pw, ph], "landscape");
     if (opts.output === "proof") drawCropMarks(doc, ox, oy);
