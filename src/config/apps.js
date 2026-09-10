@@ -94,6 +94,14 @@ export const APPS = [
     external:    false,
   },
   {
+    name:        'Barcode Labels',
+    description: 'TrailBait product barcode labels — type the name, SKU and EAN-13, download a print-ready PDF',
+    route:       '/labels/barcode',
+    icon:        'Package',
+    status:      'live',
+    external:    false,
+  },
+  {
     name:        'Settings',
     description: 'Account details, login links, and user role & tile access management',
     route:       '/settings',
