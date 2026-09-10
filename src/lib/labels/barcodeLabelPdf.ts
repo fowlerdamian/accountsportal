@@ -22,7 +22,7 @@
  *
  * The DYMO 99012 Large Address stock uses a second layout, copied from the
  * warehouse .dymo template (AMBHX2.dymo): title top-left, variant line under
- * it, notes + "SKU:" bottom-left, Code 128 with its text bottom-right, no
+ * it, notes + "SKU:" bottom-left, EAN-13 with its digits bottom-right, no
  * logo. Its page is the DYMO driver's paper form so it prints 1:1 on a
  * LabelWriter.
  */
@@ -30,7 +30,6 @@ import { jsPDF } from "jspdf";
 import { TRAILBAIT_LOGO } from "@portal/apps/Logistics/utils/labelLogos.js";
 import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "./leagueSpartanFonts";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule, normaliseEan13 } from "./ean13";
-import { CODE128_QUIET, code128Bars, normaliseCode128 } from "./code128";
 
 export interface BarcodeLabelInput {
   /** Product name — printed bold, upper-cased. */
@@ -39,9 +38,9 @@ export interface BarcodeLabelInput {
   subtitle: string;
   /** Product SKU — printed after a bold "SKU". */
   sku: string;
-  /** Product layout: EAN-13 (13 digits) or 12 digits without the check digit. DYMO layout: Code 128 text, printed as typed. */
+  /** EAN-13 (13 digits) or 12 digits without the check digit. */
   barcode: string;
-  /** DYMO layout only: extra lines printed above the SKU, one per line. */
+  /** DYMO layout and .dymo file only: extra lines printed above the SKU, one per line. */
   notes?: string;
 }
 
@@ -119,22 +118,18 @@ const setFont = (doc: jsPDF, weight: Weight, pt: number) => {
   doc.setFontSize(pt);
 };
 
-/** Pure validation, shared by the form and the builder. The barcode rule depends on the stock's layout. */
-export function validateBarcodeLabel(input: BarcodeLabelInput, sizeKey: LabelSizeKey = DEFAULT_LABEL_SIZE): Record<string, string> {
+/** Pure validation, shared by the form and the builder. */
+export function validateBarcodeLabel(input: BarcodeLabelInput): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!input.title.trim()) errors.title = "Enter the product name";
   if (!input.sku.trim()) errors.sku = "Enter the SKU";
-  const code = LABEL_SIZES[resolveLabelSize(sizeKey)].layout === "dymo" ? normaliseCode128(input.barcode) : normaliseEan13(input.barcode);
-  if (!code.ok) errors.barcode = code.error;
+  const ean = normaliseEan13(input.barcode);
+  if (!ean.ok) errors.barcode = ean.error;
   return errors;
 }
 
-/** Text the barcode will encode for this stock, or null when the input is invalid. */
-export function barcodeValue(input: BarcodeLabelInput, sizeKey: LabelSizeKey): string | null {
-  if (LABEL_SIZES[resolveLabelSize(sizeKey)].layout === "dymo") {
-    const r = normaliseCode128(input.barcode);
-    return r.ok ? r.text : null;
-  }
+/** The 13-digit code the barcode will encode, or null when the input is invalid. */
+export function barcodeValue(input: BarcodeLabelInput): string | null {
   const r = normaliseEan13(input.barcode);
   return r.ok ? r.code : null;
 }
@@ -221,7 +216,8 @@ const DYMO = {
   subtitle: { x: 5.67, y: 10.22, w: 80.5, h: 7.76,  pt: 16, floorPt: 8 },
   /** Notes + SKU lines, bottom-anchored beside the barcode. */
   notes:    { x: 5.85, y: 15.35, w: 26.1, h: 16.6,  pt: 10, floorPt: 6, lineH: 4.2 },
-  barcode:  { x: 33.5, y: 21.56, w: 48.8, h: 11.03, textPt: 8, textGap: 0.6, maxModule: 0.33 },
+  /** EAN-13 centred in the template's barcode box; bars, then guard bars reaching into the digit row. */
+  barcode:  { x: 33.5, y: 21.56, w: 48.8, h: 11.03, barH: 7.8, guardH: 9.4, digitPt: 7, digitBaseline: 10.5, maxModule: 0.33 },
 };
 
 /** Baseline that vertically centres capitals of `pt` in a box. */
@@ -262,17 +258,22 @@ function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelIn
     y -= N.lineH;
   }
 
-  // Code 128, centred in its box, text underneath.
+  // EAN-13, centred in its box, digits underneath as on the product label.
   const C = DYMO.barcode;
-  const { bars, modules } = code128Bars(code);
-  const textH = C.textPt * PT_MM;
-  const barH = C.h - textH - C.textGap;
-  const module = Math.min(C.maxModule, C.w / (modules + CODE128_QUIET * 2));
-  const bx = ox + C.x + (C.w - modules * module) / 2;
+  const module = Math.min(C.maxModule, C.w / (EAN13_MODULES + 18));
+  const bx = ox + C.x + (C.w - EAN13_MODULES * module) / 2;
   const by = oy + C.y;
-  for (const [start, width] of bars) doc.rect(bx + start * module, by, width * module, barH, "F");
-  setFont(doc, "light", C.textPt);
-  doc.text(code, bx + (modules * module) / 2, by + barH + C.textGap + textH * 0.75, { align: "center" });
+  for (const [start, width] of ean13Bars(code)) {
+    doc.rect(bx + start * module, by, width * module, isGuardModule(start) ? C.guardH : C.barH, "F");
+  }
+  const { lead, left, right } = ean13Groups(code);
+  setFont(doc, "light", C.digitPt);
+  const dy = by + C.digitBaseline;
+  doc.text(lead, bx - module * 1.5, dy, { align: "right" });
+  for (let i = 0; i < 6; i++) {
+    doc.text(left[i], bx + (3 + 7 * i + 3.5) * module, dy, { align: "center" });
+    doc.text(right[i], bx + (50 + 7 * i + 3.5) * module, dy, { align: "center" });
+  }
 }
 
 function drawCropMarks(doc: jsPDF, ox: number, oy: number, size: LabelSize) {
@@ -302,10 +303,10 @@ export function pageSize(output: LabelOutput, sizeKey: LabelSizeKey): [number, n
 export function buildBarcodeLabelPdf(input: BarcodeLabelInput, opts: BarcodeLabelOptions): jsPDF {
   const sizeKey = resolveLabelSize(opts.size);
   const size = LABEL_SIZES[sizeKey];
-  const errors = validateBarcodeLabel(input, sizeKey);
+  const errors = validateBarcodeLabel(input);
   const firstError = Object.values(errors)[0];
   if (firstError) throw new Error(firstError);
-  const code = barcodeValue(input, sizeKey);
+  const code = barcodeValue(input);
   if (code === null) throw new Error("Invalid barcode");
 
   const [pw, ph] = pageSize(opts.output, sizeKey);
@@ -325,9 +326,7 @@ export function buildBarcodeLabelPdf(input: BarcodeLabelInput, opts: BarcodeLabe
 }
 
 /** File name like `label-TCZP-9360281002218.pdf`. */
-export function barcodeLabelFileName(input: BarcodeLabelInput, sizeKey: LabelSizeKey = DEFAULT_LABEL_SIZE): string {
-  const clean = (v: string) => v.trim().replace(/[^\w-]+/g, "_");
-  const sku = clean(input.sku) || "label";
-  const code = barcodeValue(input, sizeKey);
-  return `label-${sku}-${code ? clean(code) : "barcode"}.pdf`;
+export function barcodeLabelFileName(input: BarcodeLabelInput): string {
+  const sku = input.sku.trim().replace(/[^\w-]+/g, "_") || "label";
+  return `label-${sku}-${barcodeValue(input) ?? "barcode"}.pdf`;
 }
