@@ -1,5 +1,5 @@
 /**
- * /labels/barcode — TrailBait product barcode labels.
+ * /warehouse/barcodes — TrailBait product barcode labels (Warehouse sub-app).
  *
  * Type a SKU to pull the product name and EAN-13 from Cin7 Core (or fill the
  * fields by hand), then download the label as a PDF in the chosen stock size
@@ -187,15 +187,10 @@ export default function BarcodeLabels() {
     : `${stock.w} × ${stock.h} mm page, no marks`;
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", width: "100%" }}>
-      <div style={{ padding: "32px 24px", maxWidth: "1100px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-        <div style={{ marginBottom: "24px" }}>
-          <h1 style={{ fontSize: "18px", fontWeight: 600, color: "#ffffff", margin: 0, letterSpacing: "-0.01em" }}>Barcode Labels</h1>
-          <p style={{ fontSize: "12px", color: "#a0a0a0", margin: "4px 0 0", fontFamily: '"JetBrains Mono", monospace' }}>
-            TrailBait product label · EAN-13 · PDF or DYMO
-          </p>
-        </div>
-
+    <>
+      <p style={{ ...hintStyle, marginTop: 0, marginBottom: "16px" }}>
+        Look a SKU up in Cin7 or fill the fields in, then download the label as a PDF or a DYMO file. EAN-13, League Spartan, TrailBait logo.
+      </p>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 400px) 1fr", gap: "20px", alignItems: "start" }}>
           {/* ── Inputs ─────────────────────────────────────────────────── */}
           <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -318,7 +313,6 @@ export default function BarcodeLabels() {
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </>
   );
 }

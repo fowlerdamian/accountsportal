@@ -94,9 +94,9 @@ export const APPS = [
     external:    false,
   },
   {
-    name:        'Barcode Labels',
-    description: 'TrailBait product barcode labels — type the name, SKU and EAN-13, download a print-ready PDF',
-    route:       '/labels/barcode',
+    name:        'Warehouse',
+    description: 'Barcode labels from Cin7 SKUs as PDF or DYMO, and other warehouse tools',
+    route:       '/warehouse',
     icon:        'Package',
     status:      'live',
     external:    false,
