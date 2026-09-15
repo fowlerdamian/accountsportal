@@ -9,7 +9,8 @@
     "api/task-reminders.js":         { "maxDuration": 30 },
     "api/finance-snapshot.js":       { "maxDuration": 60 },
     "api/finance-mtd-digest.js":     { "maxDuration": 60 },
-    "api/opportunity-sync.js":       { "maxDuration": 10 }
+    "api/opportunity-sync.js":       { "maxDuration": 10 },
+    "api/dialpad-mcp.js":            { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/sales-sync-cin7",      "schedule": "0 12 * * 1-5" },
