@@ -5,8 +5,8 @@
 //   → 404 { error: "No product with SKU …" }
 //   → 503 { error: "Cin7 is not configured" }
 //
-// Cin7 Core's product endpoint filters by SKU; the first exact (case-insensitive)
-// match wins, otherwise the first result — Cin7 treats the filter as a prefix.
+// Cin7 Core's product endpoint treats the Sku filter as a prefix; only an exact
+// (case-insensitive) match is returned, so a partial SKU never pulls up a product.
 
 const CIN7_BASE = 'https://inventory.dearsystems.com/ExternalApi/v2'
 
@@ -32,10 +32,15 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: `Cin7 request failed: ${e?.message ?? e}` })
   }
 
+  // Cin7 treats the Sku filter as a prefix, so only an exact (case-insensitive)
+  // match counts — a partial SKU must not pull up whichever product sorts first.
   const products = Array.isArray(data?.Products) ? data.Products : []
-  const exact = products.find(p => String(p?.SKU ?? '').toLowerCase() === sku.toLowerCase())
-  const product = exact ?? products[0]
-  if (!product) return res.status(404).json({ error: `No product with SKU ${sku} in Cin7` })
+  const product = products.find(p => String(p?.SKU ?? '').toLowerCase() === sku.toLowerCase())
+  if (!product) {
+    const near = products.map(p => String(p?.SKU ?? '')).filter(Boolean).slice(0, 5)
+    const hint = near.length ? ` — enter the full SKU (did you mean ${near.join(', ')}?)` : ''
+    return res.status(404).json({ error: `No product with SKU ${sku} in Cin7${hint}` })
+  }
 
   return res.status(200).json({
     product: {
