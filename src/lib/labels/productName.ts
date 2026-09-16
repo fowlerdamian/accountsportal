@@ -59,6 +59,11 @@ function isStart(tok: string): boolean {
 function isContinuation(tok: string): boolean {
   const n = norm(tok);
   if (!n) return false;
+  // Slash-joined alternatives ("D-MAX/MU-X", "NAV/PAT/PATH") count when every part is a vehicle word.
+  if (n.includes("/") && n !== "/") {
+    const parts = tok.split("/").filter(Boolean);
+    if (parts.length > 1 && parts.every(p => isStart(p) || isContinuation(p))) return true;
+  }
   // Bare model numbers ("Shark 6", "Prado 250", "LandCruiser 70") stay with the vehicle.
   if (MAKES_AND_MODELS.includes(n) || CONTINUATION.has(n) || YEAR.test(tok) || /^\d{1,4}$/.test(tok)) return true;
   const u = tok.replace(/[(),]/g, "").toUpperCase();
