@@ -23,6 +23,8 @@ const SERVER_INFO = { name: 'dialpad-mcp', version: '1.0.0' }
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 100
 const MAX_SCAN_PAGES = 10 // upper bound for client-side call filtering
+// Dialpad rejects any started_after..started_before span of 30 days or more.
+const MAX_WINDOW_MS = 30 * 86400e3 - 60e3
 
 // ─── Dialpad client ───────────────────────────────────────────────────────────
 
@@ -93,6 +95,18 @@ function digits(raw) {
 function phoneKey(raw) {
   const d = digits(raw)
   return d.length >= 8 ? d.slice(-9) : null
+}
+
+/** Split [after, before) into Dialpad-sized slices, newest first. */
+function windowSlices(after, before) {
+  const slices = []
+  let hi = before
+  while (hi > after) {
+    const lo = Math.max(after, hi - MAX_WINDOW_MS)
+    slices.push({ started_after: lo, started_before: hi })
+    hi = lo
+  }
+  return slices
 }
 
 function clampLimit(limit) {
@@ -191,17 +205,20 @@ function transcriptView(t) {
 
 async function scanCalls(apiKey, { started_after, started_before, target_type, target_id, match, max }) {
   const out = []
-  let cursor
-  for (let page = 0; page < MAX_SCAN_PAGES; page++) {
-    const data = await dp('GET', '/call', { apiKey, query: { started_after, started_before, target_type, target_id, cursor, limit: MAX_LIMIT } })
-    for (const c of data.items ?? []) {
-      if (match(c)) out.push(summariseCall(c))
-      if (out.length >= max) return { calls: out, truncated: true }
-    }
-    cursor = data.cursor
-    if (!cursor) break
+  let pages = 0
+  for (const slice of windowSlices(started_after, started_before)) {
+    let cursor
+    do {
+      if (pages++ >= MAX_SCAN_PAGES) return { calls: out, truncated: true }
+      const data = await dp('GET', '/call', { apiKey, query: { ...slice, target_type, target_id, cursor, limit: MAX_LIMIT } })
+      for (const c of data.items ?? []) {
+        if (match(c)) out.push(summariseCall(c))
+        if (out.length >= max) return { calls: out, truncated: true }
+      }
+      cursor = data.cursor
+    } while (cursor)
   }
-  return { calls: out, truncated: Boolean(cursor) }
+  return { calls: out, truncated: false }
 }
 
 // ─── Tools ────────────────────────────────────────────────────────────────────
@@ -215,7 +232,7 @@ const TOOLS = [
       properties: {
         name: { type: 'string', description: 'Name filter (prefix/contains match on display name)' },
         owner_id: { type: 'string', description: 'Dialpad user ID — restrict to that user\'s local contacts' },
-        include_local: { type: 'boolean', description: 'Include company local contacts (default false)' },
+        include_local: { type: 'boolean', description: 'Include per-user local contacts (default true)' },
         cursor: { type: 'string', description: 'Pagination cursor from a previous response' },
         limit: { type: 'integer', description: `Max results per page (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT})` },
       },
@@ -278,7 +295,7 @@ const TOOLS = [
   },
   {
     name: 'dialpad_list_calls',
-    description: 'List concluded Dialpad calls in a date window (newest first). Filter to one user/department/office/call centre with target_type + target_id. Times are ISO-8601 or epoch ms; defaults to the last 7 days. Returns compact call summaries with recording IDs.',
+    description: 'List concluded Dialpad calls in a date window (newest first). Filter to one user/department/office/call centre with target_type + target_id. Times are ISO-8601 or epoch ms; defaults to the last 7 days; one query covers at most 30 days (wider windows are clamped to the newest 30). Returns compact call summaries with recording IDs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -295,7 +312,7 @@ const TOOLS = [
   },
   {
     name: 'dialpad_calls_for_contact',
-    description: 'Call history with a specific person: pass a phone number (any format) and/or a Dialpad contact ID. Scans the date window (default last 30 days) and returns matching calls newest first.',
+    description: 'Call history with a specific person: pass a phone number (any format) and/or a Dialpad contact ID. Scans the date window (default last 30 days; wider windows are split into 30-day slices) and returns matching calls newest first.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -385,7 +402,7 @@ const TOOLS = [
 
 const HANDLERS = {
   async dialpad_search_contacts(a, k) {
-    const data = await dp('GET', '/contacts', { apiKey: k, query: { name: a.name, owner_id: a.owner_id, include_local: a.include_local, cursor: a.cursor, limit: clampLimit(a.limit) } })
+    const data = await dp('GET', '/contacts', { apiKey: k, query: { name: a.name, owner_id: a.owner_id, include_local: a.include_local ?? true, cursor: a.cursor, limit: clampLimit(a.limit) } })
     return { contacts: (data.items ?? []).map(summariseContact), cursor: data.cursor ?? null }
   },
 
@@ -431,11 +448,21 @@ const HANDLERS = {
     const now = Date.now()
     const started_after = toEpochMs(a.started_after, 'started_after') ?? now - 7 * 86400e3
     const started_before = toEpochMs(a.started_before, 'started_before') ?? now
-    const data = await dp('GET', '/call', { apiKey: k, query: { started_after, started_before, target_type: a.target_type, target_id: a.target_id, cursor: a.cursor, limit: clampLimit(a.limit) } })
+    // One request = one Dialpad window (<30 days). Wider asks are clamped to the newest 30 days;
+    // use dialpad_calls_for_contact for multi-window scans.
+    const clamped = started_before - started_after > MAX_WINDOW_MS
+    const effective_after = clamped ? started_before - MAX_WINDOW_MS : started_after
+    const data = await dp('GET', '/call', { apiKey: k, query: { started_after: effective_after, started_before, target_type: a.target_type, target_id: a.target_id, cursor: a.cursor, limit: clampLimit(a.limit) } })
     let calls = (data.items ?? []).map(summariseCall)
     if (a.direction) calls = calls.filter((c) => c.direction === a.direction)
     if (a.status) calls = calls.filter((c) => c.status === a.status)
-    return { window: { started_after: toIso(started_after), started_before: toIso(started_before) }, count: calls.length, calls, cursor: data.cursor ?? null }
+    return {
+      window: { started_after: toIso(effective_after), started_before: toIso(started_before) },
+      ...(clamped ? { note: 'Dialpad limits one query to <30 days; window clamped to the newest 30 days. Pass an earlier started_before to page back.' } : {}),
+      count: calls.length,
+      calls,
+      cursor: data.cursor ?? null,
+    }
   },
 
   async dialpad_calls_for_contact(a, k) {
