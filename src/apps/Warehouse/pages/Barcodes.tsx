@@ -22,8 +22,8 @@ const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: ""
 const PREVIEW_DEBOUNCE_MS = 250;
 
 const OUTPUTS: { key: LabelOutput; label: string }[] = [
-  { key: "proof", label: "Proof with crop marks" },
   { key: "trim",  label: "Trimmed" },
+  { key: "proof", label: "Proof with crop marks" },
 ];
 
 const LABEL_SIZE_KEY = "barcode-labels:size";
@@ -93,7 +93,7 @@ function Button({ kind, onClick, children }: { kind: "primary" | "ghost" | "disa
 
 export default function BarcodeLabels() {
   const [input, setInput] = useState<BarcodeLabelInput>(() => ({ ...EMPTY, logo: readLogo() }));
-  const [output, setOutput] = useState<LabelOutput>("proof");
+  const [output, setOutput] = useState<LabelOutput>("trim");
   const [size, setSize] = useState<LabelSizeKey>(readSize);
   const [copies, setCopies] = useState("1");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
