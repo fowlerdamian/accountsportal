@@ -216,6 +216,21 @@ export default function BarcodeLabels() {
     ? `${stock.w} × ${stock.h} mm label centred on a ${pw} × ${ph} mm page with crop marks`
     : `${stock.w} × ${stock.h} mm page, no marks`;
 
+  // Everything except the Cin7 lookup and the logo stays collapsed until the
+  // user opens it — or a validation error (e.g. no barcode in Cin7) needs a
+  // field filled in, in which case the details open and stay open.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const hasError = Object.keys(touched).length > 0 && !valid;
+  useEffect(() => { if (hasError) setDetailsOpen(true); }, [hasError]);
+  const showDetails = detailsOpen || hasError;
+  const summary = [input.title.trim(), input.subtitle.trim(), input.sku.trim(), encoded, stock.name.split(" (")[0], `${copiesN} ${copiesN === 1 ? "copy" : "copies"}`]
+    .filter(Boolean).join(" · ");
+
+  const toggleStyle: CSSProperties = {
+    display: "flex", alignItems: "center", gap: "8px", width: "100%", textAlign: "left", cursor: "pointer",
+    background: "transparent", border: "none", padding: 0, fontFamily: "inherit", color: "#a0a0a0",
+  };
+
   return (
     <>
       <p style={{ ...hintStyle, marginTop: 0, marginBottom: "16px" }}>
@@ -236,108 +251,125 @@ export default function BarcodeLabels() {
               {searchMsg && <div style={searchMsg.kind === "ok" ? okStyle : errorStyle}>{searchMsg.text}</div>}
             </Field>
 
-            <div style={{ borderTop: "1px solid #1e1e1e" }} />
-
             <Field label="Logo" hint={isDymo ? "Top-left of the DYMO label, text beside it, barcode underneath" : "Centred above the product name; with no logo the text sits higher"}>
               <select style={selectStyle} value={logoKey} onChange={e => setInput(v => ({ ...v, logo: resolveBarcodeLogo(e.target.value) }))}>
                 {BARCODE_LOGO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </Field>
-            <Field label="Product" error={showError("title")} hint={isDymo ? "Printed bold, top left — filled from the Cin7 name with the vehicle split off" : "Printed bold in capitals — filled from the Cin7 name with the vehicle split off"}>
-              <input
-                style={showError("title") ? inputErrorStyle : inputStyle}
-                value={input.title} onChange={upd("title")} onBlur={touch("title")}
-                placeholder={isDymo ? "Bonnet Aerial Mount" : "Behind Grille Light Bar"}
-              />
-            </Field>
-            <Field label="Vehicle (optional)" hint={isDymo ? "Under the product, e.g. the vehicle fit" : "Small line under the product name"}>
-              <input style={inputStyle} value={input.subtitle} onChange={upd("subtitle")} placeholder={isDymo ? "Hilux N90 2025.5+" : "Isuzu D-Max 2020+"} />
-            </Field>
-            <Field label="SKU" error={showError("sku")}>
-              <input
-                style={showError("sku") ? inputErrorStyle : inputStyle}
-                value={input.sku} onChange={upd("sku")} onBlur={touch("sku")}
-                placeholder={isDymo ? "AMBHX2" : "TCZP"}
-              />
-            </Field>
-            <Field
-              label="Barcode (EAN-13)"
-              error={showError("barcode")}
-              hint={encoded
-                ? `Encodes ${encoded}${input.barcode.replace(/[\s-]/g, "").length === 12 ? " (check digit added)" : ""}`
-                : "13 digits, or 12 and the check digit is added"}
+
+            <div style={{ borderTop: "1px solid #1e1e1e" }} />
+
+            {/* ── Details (collapsed unless opened or an error needs fixing) ── */}
+            <button
+              type="button" style={toggleStyle} aria-expanded={showDetails}
+              onClick={() => { if (!hasError) setDetailsOpen(o => !o); }}
+              title={hasError ? "Fix the highlighted fields to collapse" : showDetails ? "Collapse" : "Expand"}
             >
-              <input
-                style={showError("barcode") ? inputErrorStyle : inputStyle}
-                value={input.barcode} onChange={upd("barcode")} onBlur={touch("barcode")}
-                placeholder="9360281002218" inputMode="numeric"
-              />
-            </Field>
-            <Field label="Notes (optional)" hint="DYMO layout only — one per line, printed above the SKU">
-              <textarea
-                style={{ ...inputStyle, resize: "vertical", minHeight: "58px" }} rows={2}
-                value={input.notes ?? ""} onChange={upd("notes")} placeholder="Passenger Side"
-              />
-            </Field>
+              <span style={{ ...labelStyle, marginBottom: 0, color: hasError ? "#e07070" : "#a0a0a0" }}>
+                {showDetails ? "▾" : "▸"} Details{hasError ? " — needs attention" : ""}
+              </span>
+              {!showDetails && summary && (
+                <span style={{ fontSize: "11px", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{summary}</span>
+              )}
+            </button>
 
-            <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              <Field label="Label size" hint={isDymo ? "Warehouse DYMO template — prints 1:1 on the LabelWriter" : "The design scales to fit; proportions stay the same"}>
-                <select style={selectStyle} value={size} onChange={e => setSize(resolveLabelSize(e.target.value))}>
-                  {LABEL_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </Field>
-              <Field label="PDF output" hint={outputHint}>
-                <div style={{ display: "inline-flex", border: "1px solid #222222", borderRadius: "8px", overflow: "hidden" }}>
-                  {OUTPUTS.map(o => {
-                    const active = o.key === output;
-                    return (
-                      <button
-                        key={o.key} type="button" onClick={() => setOutput(o.key)}
-                        style={{
-                          padding: "8px 14px", fontSize: "12px", fontWeight: 500, cursor: "pointer", border: "none", fontFamily: "inherit",
-                          background: active ? "rgba(var(--brand-accent-rgb),0.1)" : "transparent",
-                          color: active ? "var(--brand-accent)" : "#666", transition: "color 120ms, background 120ms",
-                        }}
-                      >
-                        {o.label}
-                      </button>
-                    );
-                  })}
+            {showDetails && (
+              <>
+                <Field label="Product" error={showError("title")} hint={isDymo ? "Printed bold, top left — filled from the Cin7 name with the vehicle split off" : "Printed bold in capitals — filled from the Cin7 name with the vehicle split off"}>
+                  <input
+                    style={showError("title") ? inputErrorStyle : inputStyle}
+                    value={input.title} onChange={upd("title")} onBlur={touch("title")}
+                    placeholder={isDymo ? "Bonnet Aerial Mount" : "Behind Grille Light Bar"}
+                  />
+                </Field>
+                <Field label="Vehicle (optional)" hint={isDymo ? "Under the product, e.g. the vehicle fit" : "Small line under the product name"}>
+                  <input style={inputStyle} value={input.subtitle} onChange={upd("subtitle")} placeholder={isDymo ? "Hilux N90 2025.5+" : "Isuzu D-Max 2020+"} />
+                </Field>
+                <Field label="SKU" error={showError("sku")}>
+                  <input
+                    style={showError("sku") ? inputErrorStyle : inputStyle}
+                    value={input.sku} onChange={upd("sku")} onBlur={touch("sku")}
+                    placeholder={isDymo ? "AMBHX2" : "TCZP"}
+                  />
+                </Field>
+                <Field
+                  label="Barcode (EAN-13)"
+                  error={showError("barcode")}
+                  hint={encoded
+                    ? `Encodes ${encoded}${input.barcode.replace(/[\s-]/g, "").length === 12 ? " (check digit added)" : ""}`
+                    : "13 digits, or 12 and the check digit is added"}
+                >
+                  <input
+                    style={showError("barcode") ? inputErrorStyle : inputStyle}
+                    value={input.barcode} onChange={upd("barcode")} onBlur={touch("barcode")}
+                    placeholder="9360281002218" inputMode="numeric"
+                  />
+                </Field>
+                <Field label="Notes (optional)" hint="DYMO layout only — one per line, printed above the SKU">
+                  <textarea
+                    style={{ ...inputStyle, resize: "vertical", minHeight: "58px" }} rows={2}
+                    value={input.notes ?? ""} onChange={upd("notes")} placeholder="Passenger Side"
+                  />
+                </Field>
+
+                <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <Field label="Label size" hint={isDymo ? "Warehouse DYMO template — prints 1:1 on the LabelWriter" : "The design scales to fit; proportions stay the same"}>
+                    <select style={selectStyle} value={size} onChange={e => setSize(resolveLabelSize(e.target.value))}>
+                      {LABEL_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="PDF output" hint={outputHint}>
+                    <div style={{ display: "inline-flex", border: "1px solid #222222", borderRadius: "8px", overflow: "hidden" }}>
+                      {OUTPUTS.map(o => {
+                        const active = o.key === output;
+                        return (
+                          <button
+                            key={o.key} type="button" onClick={() => setOutput(o.key)}
+                            style={{
+                              padding: "8px 14px", fontSize: "12px", fontWeight: 500, cursor: "pointer", border: "none", fontFamily: "inherit",
+                              background: active ? "rgba(var(--brand-accent-rgb),0.1)" : "transparent",
+                              color: active ? "var(--brand-accent)" : "#666", transition: "color 120ms, background 120ms",
+                            }}
+                          >
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
+                  <Field label="Copies" hint="Pages in the PDF, or labels sent to the DYMO">
+                    <input
+                      style={{ ...inputStyle, width: "90px" }} value={copies} inputMode="numeric"
+                      onChange={e => setCopies(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                      onBlur={() => setCopies(String(copiesN))}
+                    />
+                  </Field>
                 </div>
-              </Field>
-              <Field label="Copies" hint="Pages in the PDF, or labels sent to the DYMO">
-                <input
-                  style={{ ...inputStyle, width: "90px" }} value={copies} inputMode="numeric"
-                  onChange={e => setCopies(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                  onBlur={() => setCopies(String(copiesN))}
-                />
-              </Field>
-            </div>
-
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", paddingTop: "4px" }}>
-              <Button kind={valid ? "primary" : "disabled"} onClick={downloadPdf}>
-                Download PDF{copiesN > 1 ? ` (${copiesN} pages)` : ""}
-              </Button>
-              <Button kind={!valid || printing ? "disabled" : isDymo ? "primary" : "ghost"} onClick={printDymo}>
-                {printing ? "Printing…" : `Print to DYMO${copiesN > 1 ? ` (${copiesN})` : ""}`}
-              </Button>
-              {!valid && <span style={{ fontSize: "11px", color: "#666" }}>Fill in the fields above</span>}
-            </div>
-            {printError
-              ? <div style={{ ...errorStyle, marginTop: "-8px" }}>Couldn't print: {printError}</div>
-              : (
-                <div style={{ ...hintStyle, marginTop: "-8px" }}>
+                <div style={hintStyle}>
                   Print to DYMO uses the Large Address (99012) layout whatever size is picked above — pick the LabelWriter in Chrome's print dialog, scale 100%, margins none.
                 </div>
-              )}
+              </>
+            )}
           </div>
 
-          {/* ── Preview ────────────────────────────────────────────────── */}
+          {/* ── Preview (actions in its header) ─────────────────────────── */}
           <div style={{ ...cardStyle, minHeight: "420px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={labelStyle}>PDF preview</span>
-              <span style={{ ...hintStyle, marginTop: 0 }}>{pw} × {ph} mm page</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                <span style={{ ...labelStyle, marginBottom: 0 }}>PDF preview</span>
+                <span style={{ ...hintStyle, marginTop: 0 }}>{pw} × {ph} mm page</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                {!valid && <span style={{ fontSize: "11px", color: "#666" }}>Fill in the details to enable</span>}
+                <Button kind={!valid || printing ? "disabled" : isDymo ? "primary" : "ghost"} onClick={printDymo}>
+                  {printing ? "Printing…" : `Print to DYMO${copiesN > 1 ? ` (${copiesN})` : ""}`}
+                </Button>
+                <Button kind={valid ? "primary" : "disabled"} onClick={downloadPdf}>
+                  Download PDF{copiesN > 1 ? ` (${copiesN} pages)` : ""}
+                </Button>
+              </div>
             </div>
+            {printError && <div style={{ ...errorStyle, marginTop: 0 }}>Couldn't print: {printError}</div>}
             {previewUrl ? (
               <iframe
                 title="Label preview"
@@ -349,7 +381,7 @@ export default function BarcodeLabels() {
                 flex: 1, minHeight: "380px", display: "flex", alignItems: "center", justifyContent: "center",
                 border: "1px dashed #222", borderRadius: "6px", color: "#555", fontSize: "12px", textAlign: "center", padding: "20px",
               }}>
-                {previewError ?? "The label appears here once the product name, SKU and barcode are filled in."}
+                {previewError ?? "The label appears here once the product, SKU and barcode are filled in."}
               </div>
             )}
           </div>
