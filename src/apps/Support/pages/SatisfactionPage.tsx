@@ -46,6 +46,7 @@ interface CallRow {
 }
 
 type Range = '7d' | '30d' | '90d';
+type Scope = 'customers' | 'all';
 type SyncState = 'idle' | 'syncing' | 'done' | 'error';
 
 const RANGE_DAYS: Record<Range, number> = { '7d': 7, '30d': 30, '90d': 90 };
@@ -60,6 +61,8 @@ const FLAG_LABELS: Record<string, string> = {
   praise: 'Praise',
 };
 const ATTENTION_FLAGS = new Set(['complaint', 'escalation_risk', 'churn_risk', 'unresolved']);
+// Purposes that aren't customer conversations — excluded from CSAT when scope = customers.
+const NON_CUSTOMER_PURPOSES = new Set(['Supplier / parts sourcing', 'Internal']);
 
 // Surface + chrome tokens (Support Hub cards are #161616 on a #0a0a0a page)
 const SURFACE = '#161616';
@@ -94,8 +97,9 @@ function fmtDelta(cur: number | null, prev: number | null, digits = 1, suffix = 
   return `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(digits)}${suffix}`;
 }
 
-/** Graded customer calls — excludes internal/skipped rows and ungraded ones. */
-const isGraded = (c: CallRow) => c.ai_csat !== null && c.ai_skip_reason !== 'internal';
+/** Graded calls — excludes internal/skipped rows and ungraded ones; in customer scope also supplier calls. */
+const gradedIn = (scope: Scope) => (c: CallRow) =>
+  c.ai_csat !== null && c.ai_skip_reason !== 'internal' && (scope === 'all' || !NON_CUSTOMER_PURPOSES.has(c.ai_purpose ?? ''));
 
 // ── Small components ─────────────────────────────────────────────────────────
 
@@ -201,6 +205,7 @@ function CsatDots({ value }: { value: number | null }) {
 export default function SatisfactionPage() {
   const qc = useQueryClient();
   const [range, setRange] = useState<Range>('30d');
+  const [scope, setScope] = useState<Scope>('customers');
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [syncNote, setSyncNote] = useState<string>('');
   const syncedOnce = useRef(false);
@@ -269,6 +274,8 @@ export default function SatisfactionPage() {
   const period = useMemo(() => rows.filter((r) => new Date(r.started_at) >= start), [rows, start]);
   const previous = useMemo(() => rows.filter((r) => { const d = new Date(r.started_at); return d >= prevStart && d < start; }), [rows, prevStart, start]);
 
+  const isGraded = useMemo(() => gradedIn(scope), [scope]);
+
   const stats = useMemo(() => {
     const build = (xs: CallRow[]) => {
       const graded = xs.filter(isGraded);
@@ -295,7 +302,7 @@ export default function SatisfactionPage() {
       };
     };
     return { cur: build(period), prev: build(previous) };
-  }, [period, previous]);
+  }, [period, previous, isGraded]);
 
   // ── Chart series ──────────────────────────────────────────────────────────
   const buckets = useMemo(() => {
@@ -318,7 +325,7 @@ export default function SatisfactionPage() {
         missed: xs.filter((c) => c.direction === 'inbound' && c.status !== 'answered').length,
       };
     });
-  }, [period, start, now, weekly]);
+  }, [period, start, now, weekly, isGraded]);
 
   const purposes = useMemo(() => {
     const m = new Map<string, { count: number; csat: number[] }>();
@@ -328,13 +335,13 @@ export default function SatisfactionPage() {
       e.count++; e.csat.push(c.ai_csat as number); m.set(k, e);
     }
     return [...m.entries()].map(([name, e]) => ({ name, count: e.count, csat: mean(e.csat) })).sort((a, b) => b.count - a.count).slice(0, 8);
-  }, [period]);
+  }, [period, isGraded]);
 
   const flags = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of period.filter(isGraded)) for (const f of c.ai_flags) m.set(f, (m.get(f) ?? 0) + 1);
     return Object.keys(FLAG_LABELS).map((f) => ({ flag: f, name: FLAG_LABELS[f], count: m.get(f) ?? 0 })).filter((x) => x.count > 0);
-  }, [period]);
+  }, [period, isGraded]);
 
   const agents = useMemo(() => {
     const m = new Map<string, CallRow[]>();
@@ -356,13 +363,13 @@ export default function SatisfactionPage() {
         negative: graded.filter((c) => c.ai_sentiment === 'negative').length,
       };
     }).sort((a, b) => b.calls - a.calls);
-  }, [period]);
+  }, [period, isGraded]);
 
   const attention = useMemo(
     () => period.filter(isGraded).filter((c) => (c.ai_csat ?? 5) <= 2 || c.ai_flags.some((f) => ATTENTION_FLAGS.has(f))).slice(0, 25),
-    [period],
+    [period, isGraded],
   );
-  const recentGraded = useMemo(() => period.filter(isGraded).slice(0, 12), [period]);
+  const recentGraded = useMemo(() => period.filter(isGraded).slice(0, 12), [period, isGraded]);
 
   const ungraded = period.filter((c) => c.status === 'answered' && c.ai_graded_at === null && c.ai_skip_reason === null).length;
   const dimmed = isFetching && !isLoading;
@@ -375,7 +382,7 @@ export default function SatisfactionPage() {
         <div>
           <h2 className="text-lg font-heading">SATISFACTION</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Customer sentiment and call metrics from Dialpad. CSAT is Claude's 1–5 read of each transcript; Dialpad surveys aren't enabled.
+            Customer sentiment and call metrics from Dialpad. CSAT is Claude's 1–5 read of each transcript (Dialpad surveys aren't enabled); call volume and answer rates always count every call.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -388,6 +395,19 @@ export default function SatisfactionPage() {
                 className={cn('px-3 py-1.5 text-xs font-heading tracking-wide transition-colors', range === r ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground')}
               >
                 {r === '7d' ? 'Last 7 days' : r === '30d' ? 'Last 30 days' : 'Last 90 days'}
+              </button>
+            ))}
+          </div>
+          <div className="flex border border-border" role="group" aria-label="Call scope">
+            {([['customers', 'Customers only'], ['all', 'All calls']] as [Scope, string][]).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setScope(k)}
+                title={k === 'customers' ? 'Excludes supplier and internal calls from CSAT, sentiment and purposes' : 'Include supplier and internal calls'}
+                className={cn('px-3 py-1.5 text-xs font-heading tracking-wide transition-colors', scope === k ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground')}
+              >
+                {label}
               </button>
             ))}
           </div>
