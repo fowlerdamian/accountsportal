@@ -24,7 +24,6 @@ const InvoiceList = lazy(() => import('./apps/Logistics/components/InvoiceList.j
 const InvoiceDetail = lazy(() => import('./apps/Logistics/components/InvoiceDetail.jsx'))
 const Carriers = lazy(() => import('./apps/Logistics/components/Carriers.jsx'))
 const Disputes = lazy(() => import('./apps/Logistics/components/Disputes.jsx'))
-const ManualLabel = lazy(() => import('./apps/Logistics/components/ManualLabel.jsx'))
 const TrackingLookup = lazy(() => import('./apps/Logistics/components/TrackingLookup.jsx'))
 const SupportApp = lazy(() => import('./apps/Support/SupportApp'))
 const SalesSupport = lazy(() => import('./apps/SalesSupport/index.jsx'))
@@ -70,7 +69,7 @@ const GuideViewer = lazy(() => import('./apps/Guide/pages/guide/GuideViewer'))
 const LabelPrint = lazy(() => import('./pages/LabelPrint'))
 const BarcodeLabelPrint = lazy(() => import('./pages/BarcodeLabelPrint'))
 const LabelStation = lazy(() => import('./pages/LabelStation'))
-// Warehouse — barcode labels (Cin7 lookup, PDF / DYMO) and future stock tools.
+// Warehouse — barcode labels (Cin7 lookup, PDF / DYMO), manual shipping labels and future stock tools.
 const Warehouse = lazy(() => import('./apps/Warehouse/index.jsx'))
 
 // Shown while a route chunk downloads (first visit to an app only).
@@ -145,7 +144,6 @@ const PATH_TITLES = [
   ['/logistics/invoices',    'Invoices'],
   ['/logistics/settings',    'Settings'],
   ['/logistics/disputes',    'Disputes'],
-  ['/logistics/manual-label','Manual Label'],
   ['/logistics/tracking',    'Tracking Lookup'],
   ['/logistics',             'Logistics'],
   ['/purchase-orders',       'Purchasing'],
@@ -303,7 +301,8 @@ export default function App() {
               <Route path="logistics/settings" element={<Carriers />} />
               <Route path="logistics/carriers" element={<Navigate to="/logistics/settings" replace />} />
               <Route path="logistics/disputes" element={<Disputes />} />
-              <Route path="logistics/manual-label" element={<ManualLabel />} />
+              {/* Manual shipping label moved to the Warehouse tile (2026-09-16). */}
+              <Route path="logistics/manual-label" element={<Navigate to="/warehouse/manual-label" replace />} />
               <Route path="logistics/tracking" element={<TrackingLookup />} />
               <Route path="warehouse/*" element={<Warehouse />} />
               {/* Old direct link to the barcode tool. */}

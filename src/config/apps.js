@@ -95,7 +95,7 @@ export const APPS = [
   },
   {
     name:        'Warehouse',
-    description: 'Barcode labels from Cin7 SKUs as PDF or DYMO, and other warehouse tools',
+    description: 'Barcode labels from Cin7 SKUs as PDF or DYMO, manual shipping labels, and other warehouse tools',
     route:       '/warehouse',
     icon:        'Package',
     status:      'live',

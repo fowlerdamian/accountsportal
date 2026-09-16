@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import { supabase } from '@portal/lib/supabase'
-import LogisticsNav from './LogisticsNav.jsx'
 import AddressAutocomplete from '@portal/components/AddressAutocomplete.jsx'
 import SavedAddressPicker from '@portal/components/SavedAddressPicker.jsx'
-import { AGA_LOGO, TRAILBAIT_LOGO } from '../utils/labelLogos.js'
+import { AGA_LOGO, TRAILBAIT_LOGO } from '@portal/apps/Logistics/utils/labelLogos.js'
 
 const BRAND_LOGO = { AGA: AGA_LOGO, TrailBait: TRAILBAIT_LOGO }
 
@@ -21,6 +20,7 @@ const TRAILBAIT_FROM_DEFAULT = {
   postcode: '2350',
   phone:    '',
 }
+// Key kept from when this page lived under Logistics so saved addresses carry over.
 const TRAILBAIT_FROM_KEY = 'logistics.trailbait_from'
 
 const BRANDS = [
@@ -220,7 +220,7 @@ export default function ManualLabel() {
     flash('ok', `${size === '4x6' ? '4×6"' : 'A4'} ${brand} label generated`)
   }
 
-  // ─── Styles (match Logistics design language) ──────────────────────────────
+  // ─── Styles (match the Logistics / Warehouse design language) ──────────────────────────────
   const inputStyle = {
     background: '#0a0a0a', border: '1px solid #222222', borderRadius: '6px',
     color: '#ffffff', fontSize: '13px', padding: '7px 10px', outline: 'none',
@@ -263,18 +263,10 @@ export default function ManualLabel() {
   )
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: '1200px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
-          Manual Shipping Label
-        </h1>
-        <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
-          Generate an AGA or TrailBait shipping label as a 4×6" or A4 PDF
-        </p>
-      </div>
-
-      <LogisticsNav />
+    <>
+      <p style={{ fontSize: '11px', color: '#666', margin: '0 0 16px', lineHeight: 1.4 }}>
+        Generate an AGA or TrailBait shipping label as a 4×6" or A4 PDF.
+      </p>
 
       {/* Flash message */}
       {msg && (
@@ -423,6 +415,6 @@ export default function ManualLabel() {
           </button>
         </div>
       </div>
-    </div>
+    </>
   )
 }
