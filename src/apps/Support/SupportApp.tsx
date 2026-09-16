@@ -9,6 +9,7 @@ import CaseDetailPage from '@/pages/CaseDetailPage';
 import NewCasePage from '@/pages/NewCasePage';
 import TeamSettingsPage from '@/pages/TeamSettingsPage';
 import AnalyticsPage from '@/pages/AnalyticsPage';
+import SatisfactionPage from '@/pages/SatisfactionPage';
 import ActionItemsPage from '@/pages/ActionItemsPage';
 import WarehouseDashboard from '@/pages/WarehouseDashboard';
 import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
@@ -31,6 +32,7 @@ export default function SupportApp() {
             <Route path="actions" element={<ActionItemsPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="reports" element={<AnalyticsPage />} />
+            <Route path="satisfaction" element={<SatisfactionPage />} />
             <Route path="settings/team" element={<TeamSettingsPage />} />
             <Route path="settings/profile" element={<ProfileSettingsPage />} />
             <Route path="warehouse" element={<WarehouseDashboard />} />

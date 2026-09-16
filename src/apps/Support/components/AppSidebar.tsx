@@ -1,4 +1,4 @@
-import { PlusCircle, ClipboardList, Package } from 'lucide-react';
+import { PlusCircle, ClipboardList, Package, Smile } from 'lucide-react';
 import { LayoutDashboardIcon, ChartBarIcon, GearIcon, LogoutIcon } from '@portal/components/icons';
 import { NavLink, Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ const navItems = [
   { label: 'New Case', icon: PlusCircle, path: '/support/cases/new' },
   { label: 'Warehouse', icon: Package, path: '/support/warehouse' },
   { label: 'Analytics', icon: ChartBarIcon, path: '/support/analytics' },
+  { label: 'Satisfaction', icon: Smile, path: '/support/satisfaction' },
 ];
 
 interface AppSidebarProps {
