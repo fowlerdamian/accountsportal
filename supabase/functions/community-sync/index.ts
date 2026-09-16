@@ -392,7 +392,7 @@ async function syncEmails(sb: SupabaseClient, deadline: number) {
           processed++;
         }
         pageToken = data.nextPageToken;
-      } while (pageToken && pages < 3 && Date.now() < deadline);
+      } while (pageToken && pages < 2 && Date.now() < deadline); // ≤120 messages per mailbox per run so every mailbox gets a turn
       for (const id of touched) await sb.rpc("community_recompute_stats", { p_contact: id });
       if (maxSeen > sinceMs && !pageToken) await setState(sb, `gmail:${mailbox}`, { internal_date_ms: maxSeen });
       else if (maxSeen > sinceMs) await setState(sb, `gmail:${mailbox}`, { internal_date_ms: sinceMs, partial_max: maxSeen }); // more pages next run
@@ -449,12 +449,13 @@ Deno.serve(async (req) => {
   const t0 = Date.now();
   const budget = Math.min(Number(body.budget_ms) || 120e3, 140e3);
   const out: Record<string, unknown> = {};
-  const slice = (share: number) => Math.min(t0 + budget, Date.now() + budget * share);
+  // Absolute per-phase deadlines so the later phases always get their share.
+  const at = (share: number) => t0 + Math.floor(budget * share);
   try {
-    if (phases.includes("orders")) out.orders = await syncOrders(sb, slice(0.3)).catch((e) => ({ error: (e as Error).message }));
-    if (phases.includes("calls")) out.calls = await syncCalls(sb, slice(0.35)).catch((e) => ({ error: (e as Error).message }));
-    if (phases.includes("emails")) out.emails = await syncEmails(sb, slice(0.6)).catch((e) => ({ error: (e as Error).message }));
-    if (phases.includes("profiles")) out.profiles = await syncProfiles(sb, t0 + budget - 5e3).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("orders")) out.orders = await syncOrders(sb, at(0.22)).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("calls")) out.calls = await syncCalls(sb, at(0.5)).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("emails")) out.emails = await syncEmails(sb, at(0.82)).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("profiles")) out.profiles = await syncProfiles(sb, t0 + budget - 3e3).catch((e) => ({ error: (e as Error).message }));
     await setState(sb, "last_run", { at: new Date().toISOString(), elapsed_ms: Date.now() - t0, result: out });
     return json({ ok: true, elapsed_ms: Date.now() - t0, ...out });
   } catch (e) {
