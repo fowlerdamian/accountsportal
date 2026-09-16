@@ -409,12 +409,12 @@ async function syncEmails(sb: SupabaseClient, deadline: number) {
 async function syncProfiles(sb: SupabaseClient, deadline: number) {
   const { data: contacts } = await sb.from("community_contacts")
     .select("id,first_name,last_name,company_name,ai_summary_at,last_seen,nb_orders,nb_calls,nb_emails,total_spent")
-    .or("ai_summary_at.is.null,ai_summary_at.lt.last_seen")
-    .order("last_seen", { ascending: false }).limit(12);
+    .order("last_seen", { ascending: false }).limit(60);
+  // PostgREST can't compare two columns, so pick the stale ones here.
+  const due = (contacts ?? []).filter((c) => !c.ai_summary_at || c.ai_summary_at < c.last_seen).slice(0, 12);
   let written = 0;
-  for (const c of contacts ?? []) {
+  for (const c of due) {
     if (Date.now() > deadline) break;
-    if (c.ai_summary_at && c.ai_summary_at >= c.last_seen) continue;
     const { data: notes } = await sb.from("community_notes").select("kind,date,text").eq("contact_id", c.id).order("date", { ascending: false }).limit(14);
     if (!notes?.length) continue;
     const feed = notes.map((n) => `[${n.date.slice(0, 10)} ${n.kind}] ${n.text.slice(0, 500)}`).join("\n");
