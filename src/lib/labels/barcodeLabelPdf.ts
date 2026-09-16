@@ -32,7 +32,7 @@
  * product layout shifts its content up so it stays centred on the label.
  */
 import { jsPDF } from "jspdf";
-import { isWideBarcodeLogo, type LoadedLogo } from "./barcodeLogos";
+import { barcodeLogoScale, isWideBarcodeLogo, type LoadedLogo } from "./barcodeLogos";
 import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "./leagueSpartanFonts";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule, normaliseEan13 } from "./ean13";
 
@@ -158,9 +158,9 @@ function fitFontSize(doc: jsPDF, text: string, startPt: number, maxW: number, fl
   return pt;
 }
 
-/** Size of `logo` fitted inside a w × h box, aspect preserved. */
-function fitLogo(logo: LoadedLogo, w: number, h: number): { w: number; h: number } {
-  const k = Math.min(w / logo.w, h / logo.h);
+/** Size of `logo` fitted inside a w × h box, aspect preserved, shrunk by the logo's own scale (barcodeLogos.ts). */
+function fitLogo(logo: LoadedLogo, w: number, h: number, logoKey?: string): { w: number; h: number } {
+  const k = Math.min(w / logo.w, h / logo.h) * barcodeLogoScale(logoKey);
   return { w: logo.w * k, h: logo.h * k };
 }
 
@@ -180,7 +180,7 @@ function drawLabel(doc: jsPDF, ox: number, oy: number, size: LabelSize, input: B
   // Logo — fitted in its box, centred both ways.
   if (logo) {
     const box = { w: S(LOGO.w), h: S(LOGO.h) };
-    const fit = fitLogo(logo, box.w, box.h);
+    const fit = fitLogo(logo, box.w, box.h, input.logo);
     doc.addImage(logo.dataUri, "PNG", cx - fit.w / 2, y0 + S(LOGO.top) + (box.h - fit.h) / 2, fit.w, fit.h);
   }
 
@@ -395,7 +395,7 @@ function drawDymoLogoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLab
 
   const layout = dymoLogoLayoutFor(input.logo);
   const L = layout.logo;
-  const fit = fitLogo(logo, L.w, L.h);
+  const fit = fitLogo(logo, L.w, L.h, input.logo);
   doc.addImage(logo.dataUri, "PNG", ox + L.x + (L.w - fit.w) / 2, oy + L.y + (L.h - fit.h) / 2, fit.w, fit.h);
 
   // Text block — lines stacked and centred vertically in the box, each shrunk to fit its width.

@@ -14,6 +14,8 @@ export interface BarcodeLogo {
   url: string;
   /** Very wide wordmarks (≈12:1) get the wide-logo framing: a full-width band instead of a box. */
   wide?: boolean;
+  /** Fraction of the logo box the image may fill (default 1). Heavier marks sit better with some air around them. */
+  scale?: number;
 }
 
 export const NO_BARCODE_LOGO = "none";
@@ -22,7 +24,7 @@ export const DEFAULT_BARCODE_LOGO = NO_BARCODE_LOGO;
 export const BARCODE_LOGOS: BarcodeLogo[] = [
   { key: "trailbait",   name: "TrailBait",    url: "/label-logos/trailbait.png" },
   { key: "fleetcraft",  name: "FleetCraft",   url: "/label-logos/fleetcraft.png", wide: true },
-  { key: "ultravision", name: "Ultra Vision", url: "/label-logos/ultravision.png" },
+  { key: "ultravision", name: "Ultra Vision", url: "/label-logos/ultravision.png", scale: 0.72 },
 ];
 
 export const BARCODE_LOGO_OPTIONS = [
@@ -37,6 +39,11 @@ export function resolveBarcodeLogo(key: string | null | undefined): string {
 
 export function barcodeLogoUrl(key: string | null | undefined): string | null {
   return BARCODE_LOGOS.find(l => l.key === key)?.url ?? null;
+}
+
+/** How much of its box a logo may fill (1 = edge to edge). */
+export function barcodeLogoScale(key: string | null | undefined): number {
+  return BARCODE_LOGOS.find(l => l.key === key)?.scale ?? 1;
 }
 
 /** True for long, skinny wordmarks that need the wide-logo layout. */

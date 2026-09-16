@@ -21,7 +21,7 @@ import {
   DYMO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoLogoLayoutFor, dymoLogoTextLayout, dymoNoteLines, validateBarcodeLabel,
   type BarcodeLabelInput, type DymoBarcodeBox,
 } from "@portal/lib/labels/barcodeLabelPdf";
-import { barcodeLogoUrl } from "@portal/lib/labels/barcodeLogos";
+import { barcodeLogoScale, barcodeLogoUrl } from "@portal/lib/labels/barcodeLogos";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule } from "@portal/lib/labels/ean13";
 import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "@portal/lib/labels/leagueSpartanFonts";
 import { abs, fitTexts, inPrintFrame, mm, nextPaint, postToOpener as post, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
@@ -78,7 +78,7 @@ function DymoLogoLabel({ input, code, logoSrc }: { input: BarcodeLabelInput; cod
   return (
     <>
       <div style={{ ...abs(L), display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <img src={logoSrc} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
+        <img src={logoSrc} alt="" style={{ maxWidth: `${barcodeLogoScale(input.logo) * 100}%`, maxHeight: `${barcodeLogoScale(input.logo) * 100}%`, objectFit: "contain", display: "block" }} />
       </div>
       <div style={{ ...abs(X), display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {lines.map((l, i) => (
