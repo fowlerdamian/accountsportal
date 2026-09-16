@@ -42,6 +42,12 @@ interface CallRow {
   ai_flags: string[];
   ai_graded_at: string | null;
   ai_skip_reason: string | null;
+  followup_status: 'resolved' | 'in_progress' | 'awaiting_customer' | 'no_follow_up' | 'unclear' | null;
+  followup_note: string | null;
+  followup_next_action: string | null;
+  followup_evidence: { thread_id: string; subject: string; date: string | null; from: string | null; mailbox: string }[];
+  followup_checked_at: string | null;
+  followup_error: string | null;
   synced_at: string;
 }
 
@@ -59,6 +65,13 @@ const FLAG_LABELS: Record<string, string> = {
   unresolved: 'Unresolved',
   callback_promised: 'Callback promised',
   praise: 'Praise',
+};
+const FOLLOWUP_LABELS: Record<string, string> = {
+  resolved: 'Resolved by email',
+  in_progress: 'In progress',
+  awaiting_customer: 'Awaiting customer',
+  no_follow_up: 'No follow-up found',
+  unclear: 'Unclear',
 };
 const ATTENTION_FLAGS = new Set(['complaint', 'escalation_risk', 'churn_risk', 'unresolved']);
 // Purposes that aren't customer conversations — excluded from CSAT when scope = customers.
@@ -186,6 +199,36 @@ function FlagChip({ flag }: { flag: string }) {
   );
 }
 
+function FollowupChip({ c }: { c: CallRow }) {
+  if (c.followup_error && !c.followup_status) {
+    return <span className="text-[10px] text-muted-foreground" title={c.followup_error}>Email check failed</span>;
+  }
+  if (!c.followup_status) return <span className="text-[10px] text-muted-foreground">Email check pending</span>;
+  const good = c.followup_status === 'resolved';
+  const bad = c.followup_status === 'no_follow_up' || c.followup_status === 'unclear';
+  const evidence = c.followup_evidence ?? [];
+  return (
+    <span className="inline-flex items-center gap-1.5 flex-wrap">
+      <span
+        className="inline-block text-[10px] px-1.5 py-0.5 rounded-sm border font-medium"
+        style={{
+          color: good ? '#b9d6dc' : bad ? '#f2b8b8' : '#e9d1a8',
+          borderColor: good ? 'rgba(var(--brand-aqua-rgb),0.6)' : bad ? 'rgba(var(--brand-pink-rgb),0.5)' : 'rgba(var(--brand-accent-rgb),0.5)',
+          background: good ? 'rgba(var(--brand-aqua-rgb),0.15)' : bad ? 'rgba(var(--brand-pink-rgb),0.12)' : 'rgba(var(--brand-accent-rgb),0.12)',
+        }}
+        title={c.followup_checked_at ? `Checked ${format(new Date(c.followup_checked_at), 'd MMM HH:mm')}` : undefined}
+      >
+        ✉ {FOLLOWUP_LABELS[c.followup_status] ?? c.followup_status}
+      </span>
+      {evidence.slice(0, 2).map((e) => (
+        <span key={e.thread_id} className="text-[10px] text-muted-foreground truncate max-w-[220px]" title={`${e.subject} — ${e.from ?? ''}`}>
+          “{e.subject || '(no subject)'}”
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function CsatDots({ value }: { value: number | null }) {
   if (value === null) return <span className="text-muted-foreground">—</span>;
   return (
@@ -222,7 +265,7 @@ export default function SatisfactionPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('dialpad_calls')
-        .select('call_id,started_at,direction,status,duration_seconds,ring_seconds,external_number,contact_name,agent_id,agent_name,is_transferred,mos_score,positive_moments,negative_moments,ai_csat,ai_sentiment,ai_resolved,ai_purpose,ai_summary,ai_flags,ai_graded_at,ai_skip_reason,synced_at')
+        .select('call_id,started_at,direction,status,duration_seconds,ring_seconds,external_number,contact_name,agent_id,agent_name,is_transferred,mos_score,positive_moments,negative_moments,ai_csat,ai_sentiment,ai_resolved,ai_purpose,ai_summary,ai_flags,ai_graded_at,ai_skip_reason,followup_status,followup_note,followup_next_action,followup_evidence,followup_checked_at,followup_error,synced_at')
         .gte('started_at', prevStart.toISOString())
         .order('started_at', { ascending: false })
         .limit(5000);
@@ -365,10 +408,22 @@ export default function SatisfactionPage() {
     }).sort((a, b) => b.calls - a.calls);
   }, [period, isGraded]);
 
-  const attention = useMemo(
-    () => period.filter(isGraded).filter((c) => (c.ai_csat ?? 5) <= 2 || c.ai_flags.some((f) => ATTENTION_FLAGS.has(f))).slice(0, 25),
-    [period, isGraded],
-  );
+  const attention = useMemo(() => {
+    const rank = (c: CallRow) => (c.followup_status === 'resolved' ? 3 : c.followup_status === 'in_progress' || c.followup_status === 'awaiting_customer' ? 1 : c.followup_status ? 0 : 2);
+    return period
+      .filter(isGraded)
+      .filter((c) => (c.ai_csat ?? 5) <= 2 || c.ai_resolved === false || c.ai_flags.some((f) => ATTENTION_FLAGS.has(f) || f === 'callback_promised'))
+      .sort((a, b) => rank(a) - rank(b) || (a.started_at < b.started_at ? 1 : -1))
+      .slice(0, 40);
+  }, [period, isGraded]);
+
+  const followup = useMemo(() => {
+    const checked = attention.filter((c) => c.followup_status);
+    const resolved = checked.filter((c) => c.followup_status === 'resolved').length;
+    const open = checked.filter((c) => c.followup_status !== 'resolved').length;
+    const noEmail = checked.filter((c) => c.followup_status === 'no_follow_up').length;
+    return { checked: checked.length, resolved, open, noEmail, pending: attention.length - checked.length };
+  }, [attention]);
   const recentGraded = useMemo(() => period.filter(isGraded).slice(0, 12), [period, isGraded]);
 
   const ungraded = period.filter((c) => c.status === 'answered' && c.ai_graded_at === null && c.ai_skip_reason === null).length;
@@ -465,11 +520,10 @@ export default function SatisfactionPage() {
               deltaGood={stats.cur.resolvedPct !== null && stats.prev.resolvedPct !== null ? stats.cur.resolvedPct >= stats.prev.resolvedPct : null}
             />
             <StatTile
-              label="Needs attention"
-              value={String(stats.cur.attention)}
-              delta={fmtDelta(stats.cur.attention, stats.prev.attention, 0)}
-              deltaGood={stats.cur.attention <= stats.prev.attention}
-              hint="CSAT ≤ 2 or flagged"
+              label="Resolved by email"
+              value={followup.checked ? fmtPct(pct(followup.resolved, followup.checked)) : '—'}
+              deltaGood={null}
+              hint={followup.checked ? `${followup.resolved} of ${followup.checked} flagged calls · ${followup.open} still open · ${followup.noEmail} no email trail` : `${followup.pending} flagged calls awaiting the email check`}
             />
             <StatTile
               label="Inbound answer rate"
@@ -633,12 +687,12 @@ export default function SatisfactionPage() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             <div className="bg-card border border-border p-4">
               <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-1">NEEDS ATTENTION</h3>
-              <p className="text-[11px] text-muted-foreground/80 mb-3">Low CSAT or flagged as complaint, escalation, churn risk, or unresolved</p>
+              <p className="text-[11px] text-muted-foreground/80 mb-3">Calls that promised a callback or ended unresolved, complaints, escalation or churn risk, low CSAT. Each is checked against the agent's mailbox for follow-through; open items sort first.</p>
               {attention.length === 0 ? (
                 <div className="text-xs text-muted-foreground py-6 text-center">Nothing flagged in this period</div>
               ) : (
                 <ul className="divide-y divide-border/50">
-                  {attention.map((c) => <CallItem key={c.call_id} c={c} />)}
+                  {attention.map((c) => <CallItem key={c.call_id} c={c} showFollowup />)}
                 </ul>
               )}
             </div>
@@ -660,7 +714,7 @@ export default function SatisfactionPage() {
   );
 }
 
-function CallItem({ c }: { c: CallRow }) {
+function CallItem({ c, showFollowup = false }: { c: CallRow; showFollowup?: boolean }) {
   return (
     <li className="py-2.5">
       <div className="flex items-start justify-between gap-3">
@@ -671,6 +725,15 @@ function CallItem({ c }: { c: CallRow }) {
           </div>
           {c.ai_summary && <div className="text-[11px] text-muted-foreground mt-0.5">{c.ai_summary}</div>}
           {c.ai_flags.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{c.ai_flags.map((f) => <FlagChip key={f} flag={f} />)}</div>}
+          {showFollowup && (
+            <div className="mt-1.5 space-y-0.5">
+              <FollowupChip c={c} />
+              {c.followup_note && <div className="text-[11px] text-muted-foreground">{c.followup_note}</div>}
+              {c.followup_next_action && c.followup_status !== 'resolved' && (
+                <div className="text-[11px]" style={{ color: '#e9d1a8' }}>Next: {c.followup_next_action}</div>
+              )}
+            </div>
+          )}
         </div>
         <div className="text-right shrink-0">
           <CsatDots value={c.ai_csat} />
