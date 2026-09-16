@@ -2,7 +2,7 @@
  * TrailBait product barcode label — the fixed format, designed at 50 × 40 mm:
  *
  *   ┌──────────────────────────┐
- *   │        [TrailBait]       │  logo, centred
+ *   │        [TrailBait]       │  optional logo, centred (see barcodeLogos.ts)
  *   │    CROSS BAR Z BRACKET   │  product name, bold caps
  *   │          (PAIR)          │  optional subtitle, small caps
  *   │         SKU TCZP         │  "SKU" bold + code
@@ -23,11 +23,16 @@
  * The DYMO 99012 Large Address stock uses a second layout, copied from the
  * warehouse .dymo template (AMBHX2.dymo): title top-left, variant line under
  * it, notes + "SKU:" bottom-left, EAN-13 with its digits bottom-right, no
- * logo. Its page is the DYMO driver's paper form so it prints 1:1 on a
- * LabelWriter.
+ * logo in the template; when one is picked it sits top-right and the title
+ * shortens to make room. Its page is the DYMO driver's paper form so it
+ * prints 1:1 on a LabelWriter.
+ *
+ * Logos are optional (default none) and come in as pixel data via
+ * `BarcodeLabelOptions.logoImage` — see barcodeLogos.ts. With no logo the
+ * product layout shifts its content up so it stays centred on the label.
  */
 import { jsPDF } from "jspdf";
-import { TRAILBAIT_LOGO } from "@portal/apps/Logistics/utils/labelLogos.js";
+import type { LoadedLogo } from "./barcodeLogos";
 import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "./leagueSpartanFonts";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule, normaliseEan13 } from "./ean13";
 
@@ -40,8 +45,10 @@ export interface BarcodeLabelInput {
   sku: string;
   /** EAN-13 (13 digits) or 12 digits without the check digit. */
   barcode: string;
-  /** DYMO layout and .dymo file only: extra lines printed above the SKU, one per line. */
+  /** DYMO layout only: extra lines printed above the SKU, one per line. */
   notes?: string;
+  /** Logo key from BARCODE_LOGOS, or "none" / undefined for no logo. */
+  logo?: string;
 }
 
 export type LabelOutput = "proof" | "trim";
@@ -52,6 +59,8 @@ export interface BarcodeLabelOptions {
   size: LabelSizeKey;
   /** Pages in the PDF — one label per page. */
   copies: number;
+  /** Pixel data for `input.logo`, from loadBarcodeLogo(); null / undefined prints no logo. */
+  logoImage?: LoadedLogo | null;
 }
 
 // ─── Label stock sizes (mm) ──────────────────────────────────────────────────
@@ -62,18 +71,15 @@ export type LabelLayout = "product" | "dymo";
 export interface LabelSize { name: string; w: number; h: number; layout: LabelLayout }
 
 export const LABEL_SIZES = {
-  "50x40":      { name: "50 × 40 mm (standard)",                 w: 50,    h: 40,    layout: "product" },
-  "40x30":      { name: "40 × 30 mm",                            w: 40,    h: 30,    layout: "product" },
-  "60x40":      { name: "60 × 40 mm",                            w: 60,    h: 40,    layout: "product" },
-  "70x50":      { name: "70 × 50 mm",                            w: 70,    h: 50,    layout: "product" },
-  "100x50":     { name: "100 × 50 mm",                           w: 100,   h: 50,    layout: "product" },
-  "100x70":     { name: "100 × 70 mm",                           w: 100,   h: 70,    layout: "product" },
   /** DYMO driver form "99012 Large Address" (see labelStock.ts) — nominal 89 × 36 mm. */
   "dymo-99012": { name: "DYMO 99012 Large Address (89 × 36 mm)", w: 88.39, h: 35.81, layout: "dymo" },
+  "50x40":      { name: "50 × 40 mm",                            w: 50,    h: 40,    layout: "product" },
+  /** Portrait — the 50 × 40 design sits centred with room above and below. */
+  "50x70":      { name: "50 × 70 mm",                            w: 50,    h: 70,    layout: "product" },
 } as const satisfies Record<string, LabelSize>;
 
 export type LabelSizeKey = keyof typeof LABEL_SIZES;
-export const DEFAULT_LABEL_SIZE: LabelSizeKey = "50x40";
+export const DEFAULT_LABEL_SIZE: LabelSizeKey = "dymo-99012";
 export const LABEL_SIZE_OPTIONS = (Object.keys(LABEL_SIZES) as LabelSizeKey[]).map(value => ({ value, label: LABEL_SIZES[value].name }));
 
 export function resolveLabelSize(key: string | null | undefined): LabelSizeKey {
@@ -94,7 +100,10 @@ const CROP_LINE = 0.15;
 
 const SIDE_PAD = 3;    // text may not come closer than this to the label edge
 
-const LOGO = { w: 17, top: 5.2 };
+/** Logo fits inside this box (aspect preserved), centred horizontally. */
+const LOGO = { w: 24, h: 5, top: 5.2 };
+/** With no logo the text + barcode block moves up this much so it sits centred. */
+const NO_LOGO_SHIFT = -5;
 const TITLE = { pt: 11, baseline: 15.6 };
 const SUBTITLE = { pt: 5, baseline: 18.3 };
 const SKU = { pt: 6, baseline: 23.7 };
@@ -145,22 +154,31 @@ function fitFontSize(doc: jsPDF, text: string, startPt: number, maxW: number, fl
   return pt;
 }
 
-function drawLabel(doc: jsPDF, ox: number, oy: number, size: LabelSize, input: BarcodeLabelInput, code: string) {
+/** Size of `logo` fitted inside a w × h box, aspect preserved. */
+function fitLogo(logo: LoadedLogo, w: number, h: number): { w: number; h: number } {
+  const k = Math.min(w / logo.w, h / logo.h);
+  return { w: logo.w * k, h: logo.h * k };
+}
+
+function drawLabel(doc: jsPDF, ox: number, oy: number, size: LabelSize, input: BarcodeLabelInput, code: string, logo: LoadedLogo | null) {
   // Uniform scale so the 50 × 40 design fits the stock, centred in it.
   const k = Math.min(size.w / BASE_W, size.h / BASE_H);
   const S = (mm: number) => mm * k;
   const x0 = ox + (size.w - BASE_W * k) / 2;
-  const y0 = oy + (size.h - BASE_H * k) / 2;
+  // Everything below the logo slot moves up when there is no logo.
+  const y0 = oy + (size.h - BASE_H * k) / 2 + (logo ? 0 : S(NO_LOGO_SHIFT));
   const cx = x0 + S(BASE_W) / 2;
   const maxTextW = S(BASE_W - SIDE_PAD * 2);
 
   doc.setTextColor(0);
   doc.setFillColor(0);
 
-  // Logo — fixed width, aspect preserved, centred.
-  const logoW = S(LOGO.w);
-  const logoH = logoW * (TRAILBAIT_LOGO.h / TRAILBAIT_LOGO.w);
-  doc.addImage(TRAILBAIT_LOGO.dataUri, "PNG", cx - logoW / 2, y0 + S(LOGO.top), logoW, logoH);
+  // Logo — fitted in its box, centred both ways.
+  if (logo) {
+    const box = { w: S(LOGO.w), h: S(LOGO.h) };
+    const fit = fitLogo(logo, box.w, box.h);
+    doc.addImage(logo.dataUri, "PNG", cx - fit.w / 2, y0 + S(LOGO.top) + (box.h - fit.h) / 2, fit.w, fit.h);
+  }
 
   // Product name.
   const title = input.title.trim().toUpperCase();
@@ -219,8 +237,16 @@ export const DYMO_LAYOUT = {
   notes:    { x: 5.85, y: 15.35, w: 26.1, h: 16.6,  pt: 10, floorPt: 6, lineH: 4.2 },
   /** EAN-13 centred in the template's barcode box; bars, then guard bars reaching into the digit row. */
   barcode:  { x: 33.5, y: 21.56, w: 48.8, h: 11.03, barH: 7.8, guardH: 9.4, digitPt: 7, digitBaseline: 10.5, maxModule: 0.33 },
+  /** Optional logo, top-right; the title and subtitle boxes stop `gap` short of it. */
+  logo:     { x: 62.3, y: 2.2, w: 20, h: 8.5, gap: 2 },
 };
 const DYMO = DYMO_LAYOUT;
+
+/** Width of the DYMO title / subtitle rows, shortened when a logo sits top-right. */
+export function dymoTitleWidth(row: { x: number; w: number }, hasLogo: boolean): number {
+  const L = DYMO_LAYOUT.logo;
+  return hasLogo ? Math.min(row.w, L.x - L.gap - row.x) : row.w;
+}
 
 /** Lines printed in the DYMO notes block: the notes that fit, then "SKU: code" last. */
 export function dymoNoteLines(input: BarcodeLabelInput): string[] {
@@ -241,15 +267,22 @@ export function dymoBarcodeModule(): number {
 const middleBaseline = (y: number, h: number, pt: number) => y + h / 2 + (pt * PT_MM * 0.7) / 2;
 const PT_MM = 25.4 / 72;
 
-function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput, code: string) {
+function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput, code: string, logo: LoadedLogo | null) {
   doc.setTextColor(0);
   doc.setFillColor(0);
+
+  // Logo — top-right, fitted in its box and right-aligned.
+  if (logo) {
+    const L = DYMO.logo;
+    const fit = fitLogo(logo, L.w, L.h);
+    doc.addImage(logo.dataUri, "PNG", ox + L.x + L.w - fit.w, oy + L.y + (L.h - fit.h) / 2, fit.w, fit.h);
+  }
 
   // Title — bold, left, top.
   const title = input.title.trim();
   const T = DYMO.title;
   setFont(doc, "medium", T.pt);
-  const titlePt = fitFontSize(doc, title, T.pt, T.w, T.floorPt);
+  const titlePt = fitFontSize(doc, title, T.pt, dymoTitleWidth(T, !!logo), T.floorPt);
   doc.text(title, ox + T.x, oy + middleBaseline(T.y, T.h, titlePt));
 
   // Variant line under it — light, shrinks to fit.
@@ -257,7 +290,7 @@ function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelIn
   if (subtitle) {
     const B = DYMO.subtitle;
     setFont(doc, "light", B.pt);
-    const pt = fitFontSize(doc, subtitle, B.pt, B.w, B.floorPt);
+    const pt = fitFontSize(doc, subtitle, B.pt, dymoTitleWidth(B, !!logo), B.floorPt);
     doc.text(subtitle, ox + B.x, oy + middleBaseline(B.y, B.h, pt));
   }
 
@@ -328,13 +361,15 @@ export function buildBarcodeLabelPdf(input: BarcodeLabelInput, opts: BarcodeLabe
   const oy = (ph - size.h) / 2;
   const copies = Math.max(1, Math.min(500, Math.floor(opts.copies) || 1));
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [pw, ph], compress: true });
+  // jsPDF swaps the format to match the orientation, so it must follow the page shape (50 × 70 is portrait).
+  const orientation = pw >= ph ? "landscape" : "portrait";
+  const doc = new jsPDF({ orientation, unit: "mm", format: [pw, ph], compress: true });
   registerFonts(doc);
   for (let i = 0; i < copies; i++) {
-    if (i > 0) doc.addPage([pw, ph], "landscape");
+    if (i > 0) doc.addPage([pw, ph], orientation);
     if (opts.output === "proof") drawCropMarks(doc, ox, oy, size);
-    if (size.layout === "dymo") drawDymoLabel(doc, ox, oy, input, code);
-    else drawLabel(doc, ox, oy, size, input, code);
+    if (size.layout === "dymo") drawDymoLabel(doc, ox, oy, input, code, opts.logoImage ?? null);
+    else drawLabel(doc, ox, oy, size, input, code, opts.logoImage ?? null);
   }
   return doc;
 }

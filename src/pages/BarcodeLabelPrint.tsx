@@ -6,8 +6,9 @@
  * app uses (see src/lib/labels/printLabels.ts). `@page` is the DYMO driver's
  * paper form with zero margin, one label per printed page, absolute
  * millimetre positioning from DYMO_LAYOUT (the layout the PDF preview is
- * drawn with), League Spartan embedded so the print matches the preview, and
- * the EAN-13 as an inline SVG so it stays crisp on the 300dpi head.
+ * drawn with), League Spartan embedded so the print matches the preview, the
+ * EAN-13 as an inline SVG so it stays crisp on the 300dpi head, and the
+ * optional logo (`logo=` key from barcodeLogos.ts) as an <img> top-right.
  *
  * Normally loaded inside the hidden iframe that `printBarcodeLabel()`
  * creates; it posts `labels:ready` to the parent once fonts are in and text
@@ -17,11 +18,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  DYMO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoNoteLines, validateBarcodeLabel, type BarcodeLabelInput,
+  DYMO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoNoteLines, dymoTitleWidth, validateBarcodeLabel, type BarcodeLabelInput,
 } from "@portal/lib/labels/barcodeLabelPdf";
+import { barcodeLogoUrl } from "@portal/lib/labels/barcodeLogos";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule } from "@portal/lib/labels/ean13";
 import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "@portal/lib/labels/leagueSpartanFonts";
-import { abs, fitTexts, inPrintFrame, mm, nextPaint, postToOpener as post, stockCss } from "@portal/lib/labels/labelPrintDom";
+import { abs, fitTexts, inPrintFrame, mm, nextPaint, postToOpener as post, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
 import { barcodeLabelFromParams } from "@portal/lib/labels/printLabels";
 import type { LabelStockKey } from "@portal/lib/labels/labelStock";
 
@@ -69,19 +71,26 @@ function Ean13({ code }: { code: string }) {
 const row: CSSProperties = { display: "flex", alignItems: "center" };
 
 export function DymoBarcodeLabel({ input, code }: { input: BarcodeLabelInput; code: string }) {
-  const { title: T, subtitle: B, notes: N, barcode: C } = DYMO_LAYOUT;
+  const { title: T, subtitle: B, notes: N, barcode: C, logo: L } = DYMO_LAYOUT;
   const subtitle = input.subtitle.trim();
   const lines = dymoNoteLines(input);
+  const logoSrc = barcodeLogoUrl(input.logo);
+  const hasLogo = !!logoSrc;
   const ref = useRef<HTMLDivElement>(null);
   // Shrink overflowing text before first paint so the label is print-ready as soon as it is in the DOM.
   useLayoutEffect(() => { if (ref.current) fitTexts(ref.current); }, [input, code]);
   return (
     <div ref={ref} className="label" data-label={code}>
-      <div style={{ ...abs(T), ...row }}>
+      {logoSrc && (
+        <div style={{ ...abs(L), display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+          <img src={logoSrc} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
+        </div>
+      )}
+      <div style={{ ...abs({ ...T, w: dymoTitleWidth(T, hasLogo) }), ...row }}>
         <span className="fit" data-fit style={{ maxWidth: "100%", fontSize: pt(T.pt), fontWeight: MEDIUM }}>{input.title.trim()}</span>
       </div>
       {subtitle && (
-        <div style={{ ...abs(B), ...row }}>
+        <div style={{ ...abs({ ...B, w: dymoTitleWidth(B, hasLogo) }), ...row }}>
           <span className="fit" data-fit style={{ maxWidth: "100%", fontSize: pt(B.pt), fontWeight: LIGHT }}>{subtitle}</span>
         </div>
       )}
@@ -119,6 +128,7 @@ export default function BarcodeLabelPrint() {
     let cancelled = false;
     (async () => {
       fitTexts(root);
+      await whenImagesSettled(root);
       const fonts = document.fonts;
       if (fonts) {
         await Promise.all([fonts.load(`${MEDIUM} 16pt "${FONT}"`), fonts.load(`${LIGHT} 10pt "${FONT}"`)]).catch(() => undefined);

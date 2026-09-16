@@ -13,6 +13,7 @@
  *   /labels/print-barcode  — warehouse product barcode label (printBarcodeLabel)
  */
 import type { BarcodeLabelInput } from "./barcodeLabelPdf";
+import { NO_BARCODE_LOGO, resolveBarcodeLogo } from "./barcodeLogos";
 
 export interface PrintLabelsOptions {
   /** instruction_sets ids to print, one label per id. */
@@ -57,6 +58,8 @@ export function barcodeLabelPrintUrl(input: BarcodeLabelInput, opts: PrintBarcod
   q.set("sku", input.sku.trim());
   q.set("barcode", input.barcode.trim());
   if (input.notes?.trim()) q.set("notes", input.notes.trim());
+  const logo = resolveBarcodeLogo(input.logo);
+  if (logo !== NO_BARCODE_LOGO) q.set("logo", logo);
   if (opts.copies && opts.copies > 1) q.set("copies", String(opts.copies));
   return `${BARCODE_LABEL_PRINT_PATH}?${q.toString()}`;
 }
@@ -68,6 +71,7 @@ export function barcodeLabelFromParams(params: URLSearchParams): BarcodeLabelInp
     sku: params.get("sku") ?? "",
     barcode: params.get("barcode") ?? "",
     notes: params.get("notes") ?? "",
+    logo: resolveBarcodeLogo(params.get("logo")),
   };
 }
 

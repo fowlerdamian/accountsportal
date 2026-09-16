@@ -2,8 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 
 // Sub-apps of the Warehouse tile. Add a row here and a <Route> in ../index.jsx.
 export const WAREHOUSE_TABS = [
-  { label: 'Barcodes', to: '/warehouse/barcodes', description: 'Product barcode labels from Cin7 — PDF or DYMO' },
-  { label: 'Manual Label', to: '/warehouse/manual-label', description: 'AGA / TrailBait shipping label as a 4×6" or A4 PDF' },
+  { label: 'Barcode Labels', to: '/warehouse/barcodes', description: 'Product barcode labels from Cin7 — PDF or DYMO' },
+  { label: 'Freight Labels', to: '/warehouse/manual-label', description: 'AGA / TrailBait shipping label as a 4×6" or A4 PDF' },
 ]
 
 export default function WarehouseNav() {

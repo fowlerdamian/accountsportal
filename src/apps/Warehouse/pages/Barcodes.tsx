@@ -16,8 +16,9 @@ import {
   type BarcodeLabelInput, type LabelOutput, type LabelSizeKey,
 } from "@portal/lib/labels/barcodeLabelPdf";
 import { printBarcodeLabel } from "@portal/lib/labels/printLabels";
+import { BARCODE_LOGO_OPTIONS, DEFAULT_BARCODE_LOGO, loadBarcodeLogo, resolveBarcodeLogo, type LoadedLogo } from "@portal/lib/labels/barcodeLogos";
 
-const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: "", notes: "" };
+const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: "", notes: "", logo: DEFAULT_BARCODE_LOGO };
 const PREVIEW_DEBOUNCE_MS = 250;
 
 const OUTPUTS: { key: LabelOutput; label: string }[] = [
@@ -28,6 +29,9 @@ const OUTPUTS: { key: LabelOutput; label: string }[] = [
 const LABEL_SIZE_KEY = "barcode-labels:size";
 const readSize = (): LabelSizeKey => { try { return resolveLabelSize(localStorage.getItem(LABEL_SIZE_KEY)); } catch { return DEFAULT_LABEL_SIZE; } };
 const writeSize = (v: LabelSizeKey) => { try { localStorage.setItem(LABEL_SIZE_KEY, v); } catch { /* private window */ } };
+const LABEL_LOGO_KEY = "barcode-labels:logo";
+const readLogo = (): string => { try { return resolveBarcodeLogo(localStorage.getItem(LABEL_LOGO_KEY)); } catch { return DEFAULT_BARCODE_LOGO; } };
+const writeLogo = (v: string) => { try { localStorage.setItem(LABEL_LOGO_KEY, v); } catch { /* private window */ } };
 
 interface Cin7Product { sku: string; name: string; barcode: string }
 
@@ -88,7 +92,7 @@ function Button({ kind, onClick, children }: { kind: "primary" | "ghost" | "disa
 }
 
 export default function BarcodeLabels() {
-  const [input, setInput] = useState<BarcodeLabelInput>(EMPTY);
+  const [input, setInput] = useState<BarcodeLabelInput>(() => ({ ...EMPTY, logo: readLogo() }));
   const [output, setOutput] = useState<LabelOutput>("proof");
   const [size, setSize] = useState<LabelSizeKey>(readSize);
   const [copies, setCopies] = useState("1");
@@ -104,6 +108,16 @@ export default function BarcodeLabels() {
 
   const isDymo = LABEL_SIZES[size].layout === "dymo";
   useEffect(() => { writeSize(size); }, [size]);
+
+  // Logo pixel data for the PDF (the DYMO print route loads the PNG itself).
+  const logoKey = resolveBarcodeLogo(input.logo);
+  const [logoImage, setLogoImage] = useState<LoadedLogo | null>(null);
+  useEffect(() => {
+    writeLogo(logoKey);
+    let live = true;
+    loadBarcodeLogo(logoKey).then(img => { if (live) setLogoImage(img); });
+    return () => { live = false; };
+  }, [logoKey]);
 
   const errors = useMemo(() => validateBarcodeLabel(input), [input]);
   const valid = Object.keys(errors).length === 0;
@@ -143,7 +157,7 @@ export default function BarcodeLabels() {
     let url: string | null = null;
     const t = window.setTimeout(() => {
       try {
-        const doc = buildBarcodeLabelPdf(input, { output, size, copies: 1 });
+        const doc = buildBarcodeLabelPdf(input, { output, size, copies: 1, logoImage });
         url = URL.createObjectURL(doc.output("blob"));
         setPreviewUrl(url);
         setPreviewError(null);
@@ -156,14 +170,16 @@ export default function BarcodeLabels() {
       window.clearTimeout(t);
       if (url) URL.revokeObjectURL(url);
     };
-  }, [input, output, size, valid]);
+  }, [input, output, size, valid, logoImage]);
 
   const touchAll = () => setTouched({ title: true, subtitle: true, sku: true, barcode: true });
 
-  const downloadPdf = () => {
+  const downloadPdf = async () => {
     touchAll();
     if (!valid) return;
-    buildBarcodeLabelPdf(input, { output, size, copies: copiesN }).save(barcodeLabelFileName(input));
+    // Use the loaded logo, or fetch it now if the preview has not caught up yet.
+    const img = logoImage ?? await loadBarcodeLogo(logoKey);
+    buildBarcodeLabelPdf(input, { output, size, copies: copiesN, logoImage: img }).save(barcodeLabelFileName(input));
   };
 
   // Print straight to the LabelWriter: hidden iframe on /labels/print-barcode,
@@ -193,7 +209,7 @@ export default function BarcodeLabels() {
   return (
     <>
       <p style={{ ...hintStyle, marginTop: 0, marginBottom: "16px" }}>
-        Look a SKU up in Cin7 or fill the fields in, then download the label as a PDF or print it straight to the DYMO. EAN-13, League Spartan, TrailBait logo.
+        Look a SKU up in Cin7 or fill the fields in, then download the label as a PDF or print it straight to the DYMO. EAN-13, League Spartan, optional brand logo.
       </p>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 400px) 1fr", gap: "20px", alignItems: "start" }}>
           {/* ── Inputs ─────────────────────────────────────────────────── */}
@@ -250,6 +266,11 @@ export default function BarcodeLabels() {
             </Field>
 
             <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              <Field label="Logo" hint={isDymo ? "Top-right of the DYMO label; the title shortens to make room" : "Centred above the product name; with no logo the text sits higher"}>
+                <select style={selectStyle} value={logoKey} onChange={e => setInput(v => ({ ...v, logo: resolveBarcodeLogo(e.target.value) }))}>
+                  {BARCODE_LOGO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
               <Field label="Label size" hint={isDymo ? "Warehouse DYMO template — prints 1:1 on the LabelWriter" : "The design scales to fit; proportions stay the same"}>
                 <select style={selectStyle} value={size} onChange={e => setSize(resolveLabelSize(e.target.value))}>
                   {LABEL_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
