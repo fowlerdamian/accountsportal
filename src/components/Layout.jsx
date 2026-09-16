@@ -15,6 +15,7 @@ const ROUTE_LABELS = {
   '/sales-support':           'Sales Support',
   '/opportunities':           'Opportunities',
   '/marketing':               'Marketing',
+  '/community':               'Community',
   '/compliance':              'Compliance',
   '/warehouse':               'Warehouse',
   '/warehouse/barcodes':      'Warehouse / Barcodes',

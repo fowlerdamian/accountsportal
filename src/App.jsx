@@ -29,6 +29,7 @@ const SupportApp = lazy(() => import('./apps/Support/SupportApp'))
 const SalesSupport = lazy(() => import('./apps/SalesSupport/index.jsx'))
 const OpportunityPressure = lazy(() => import('./apps/Opportunities/OpportunityPressure'))
 const Marketing = lazy(() => import('./apps/Marketing/index.jsx'))
+const Community = lazy(() => import('./apps/Community/index'))
 const ComplianceApp = lazy(() => import('./apps/Compliance/index'))
 const XeroChat = lazy(() => import('./apps/Xero/index'))
 const Cin7Chat = lazy(() => import('./apps/Cin7/index'))
@@ -150,6 +151,7 @@ const PATH_TITLES = [
   ['/sales-support',         'Sales Support'],
   ['/opportunities',         'Opportunities'],
   ['/marketing',             'Marketing'],
+  ['/community',             'Community'],
   ['/compliance',            'Compliance'],
   ['/support',               'Customer Service'],
   ['/projects',              'Projects'],
@@ -311,6 +313,7 @@ export default function App() {
               <Route path="sales-support/*" element={<SalesSupport />} />
               <Route path="opportunities" element={<OpportunityPressure />} />
               <Route path="marketing/*" element={<Marketing />} />
+              <Route path="community/*" element={<Community />} />
               <Route path="compliance/*" element={<GuideAuthProvider><ComplianceApp /></GuideAuthProvider>} />
             </Route>
 
