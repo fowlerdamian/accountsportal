@@ -450,7 +450,7 @@ export function buildBarcodeLabelPdf(input: BarcodeLabelInput, opts: BarcodeLabe
   const oy = (ph - size.h) / 2;
   const copies = Math.max(1, Math.min(500, Math.floor(opts.copies) || 1));
 
-  // jsPDF swaps the format to match the orientation, so it must follow the page shape (50 × 70 is portrait).
+  // jsPDF swaps the format to match the orientation, so it must follow the page shape.
   const orientation = pw >= ph ? "landscape" : "portrait";
   const doc = new jsPDF({ orientation, unit: "mm", format: [pw, ph], compress: true });
   registerFonts(doc);
