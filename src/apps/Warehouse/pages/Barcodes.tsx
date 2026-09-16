@@ -16,6 +16,7 @@ import {
   type BarcodeLabelInput, type LabelOutput, type LabelSizeKey,
 } from "@portal/lib/labels/barcodeLabelPdf";
 import { printBarcodeLabel } from "@portal/lib/labels/printLabels";
+import { splitProductName } from "@portal/lib/labels/productName";
 import { BARCODE_LOGO_OPTIONS, DEFAULT_BARCODE_LOGO, loadBarcodeLogo, resolveBarcodeLogo, type LoadedLogo } from "@portal/lib/labels/barcodeLogos";
 
 const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: "", notes: "", logo: DEFAULT_BARCODE_LOGO };
@@ -138,7 +139,16 @@ export default function BarcodeLabels() {
     try {
       const p = await lookupCin7(sku);
       if (gen !== searchGen.current) return;
-      setInput(v => ({ ...v, title: p.name || v.title, sku: p.sku || sku, barcode: p.barcode || "" }));
+      // Cin7 names run product and vehicle together ("Behind Grille Light Bar Isuzu D-MAX"); split them into the two lines.
+      const split = splitProductName(p.name || "");
+      setInput(v => ({
+        ...v,
+        title: split.product || p.name || v.title,
+        subtitle: split.vehicle,
+        notes: split.extra,
+        sku: p.sku || sku,
+        barcode: p.barcode || "",
+      }));
       setTouched({ title: true, sku: true, barcode: true });
       setSearchMsg(p.barcode
         ? { kind: "ok", text: `Found ${p.sku} — ${p.name}` }
@@ -233,15 +243,15 @@ export default function BarcodeLabels() {
                 {BARCODE_LOGO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </Field>
-            <Field label="Product name" error={showError("title")} hint={isDymo ? "Printed bold, top left" : "Printed bold in capitals"}>
+            <Field label="Product" error={showError("title")} hint={isDymo ? "Printed bold, top left — filled from the Cin7 name with the vehicle split off" : "Printed bold in capitals — filled from the Cin7 name with the vehicle split off"}>
               <input
                 style={showError("title") ? inputErrorStyle : inputStyle}
                 value={input.title} onChange={upd("title")} onBlur={touch("title")}
-                placeholder={isDymo ? "Bonnet Aerial Mount" : "Cross Bar Z Bracket"}
+                placeholder={isDymo ? "Bonnet Aerial Mount" : "Behind Grille Light Bar"}
               />
             </Field>
-            <Field label={isDymo ? "Second line (optional)" : "Subtitle (optional)"} hint={isDymo ? "Under the name, e.g. the vehicle fit" : "Small line under the name, e.g. (PAIR)"}>
-              <input style={inputStyle} value={input.subtitle} onChange={upd("subtitle")} placeholder={isDymo ? "Hilux N90 2025.5+" : "(Pair)"} />
+            <Field label="Vehicle (optional)" hint={isDymo ? "Under the product, e.g. the vehicle fit" : "Small line under the product name"}>
+              <input style={inputStyle} value={input.subtitle} onChange={upd("subtitle")} placeholder={isDymo ? "Hilux N90 2025.5+" : "Isuzu D-Max 2020+"} />
             </Field>
             <Field label="SKU" error={showError("sku")}>
               <input
