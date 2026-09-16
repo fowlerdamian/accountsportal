@@ -237,15 +237,36 @@ export const DYMO_LAYOUT = {
   notes:    { x: 5.85, y: 15.35, w: 26.1, h: 16.6,  pt: 10, floorPt: 6, lineH: 4.2 },
   /** EAN-13 centred in the template's barcode box; bars, then guard bars reaching into the digit row. */
   barcode:  { x: 33.5, y: 21.56, w: 48.8, h: 11.03, barH: 7.8, guardH: 9.4, digitPt: 7, digitBaseline: 10.5, maxModule: 0.33 },
-  /** Optional logo, top-right; the title and subtitle boxes stop `gap` short of it. */
-  logo:     { x: 62.3, y: 2.2, w: 20, h: 8.5, gap: 2 },
 };
 const DYMO = DYMO_LAYOUT;
 
-/** Width of the DYMO title / subtitle rows, shortened when a logo sits top-right. */
-export function dymoTitleWidth(row: { x: number; w: number }, hasLogo: boolean): number {
-  const L = DYMO_LAYOUT.logo;
-  return hasLogo ? Math.min(row.w, L.x - L.gap - row.x) : row.w;
+export type DymoBarcodeBox = typeof DYMO_LAYOUT.barcode;
+
+/**
+ * DYMO layout used when a logo is picked — the warehouse BGLBDM.dymo
+ * template (inches × 25.4): logo top-left, text block top-right, barcode
+ * across the bottom.
+ */
+export const DYMO_LOGO_LAYOUT = {
+  /** Logo box; the image is fitted uniformly and centred in it. */
+  logo:    { x: 5.67, y: 3.38, w: 35.66, h: 13.68 },
+  /** Title, subtitle, notes and "SKU:" lines, left-aligned, vertically centred. */
+  text:    { x: 44.2, y: 3.91, w: 36.45, h: 12.36, titlePt: 9, pt: 8, floorPt: 5.5, lineH: 3.7 },
+  /** Barcode across the bottom (the template's ITF-14 box, EAN-13 centred in it). */
+  barcode: { x: 10.26, y: 17.91, w: 67.88, h: 16.33, barH: 10.6, guardH: 12.4, digitPt: 8, digitBaseline: 15.1, maxModule: 0.5 } as DymoBarcodeBox,
+};
+
+/** Text lines for the logo layout: title, subtitle (if any), notes that fit, then "SKU: code". */
+export function dymoLogoTextLines(input: BarcodeLabelInput): { text: string; bold: boolean }[] {
+  const X = DYMO_LOGO_LAYOUT.text;
+  const maxLines = Math.floor(X.h / X.lineH);
+  const notes = (input.notes ?? "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const head = [{ text: input.title.trim(), bold: true }];
+  const subtitle = input.subtitle.trim();
+  if (subtitle) head.push({ text: subtitle, bold: false });
+  const tail = { text: `SKU: ${input.sku.trim()}`, bold: false };
+  const room = Math.max(0, maxLines - head.length - 1);
+  return [...head, ...notes.slice(0, room).map(text => ({ text, bold: false })), tail];
 }
 
 /** Lines printed in the DYMO notes block: the notes that fit, then "SKU: code" last. */
@@ -257,9 +278,8 @@ export function dymoNoteLines(input: BarcodeLabelInput): string[] {
   return [...notes.slice(0, maxLines - 1), `SKU: ${input.sku.trim()}`];
 }
 
-/** EAN-13 module width (mm) in the DYMO barcode box. */
-export function dymoBarcodeModule(): number {
-  const C = DYMO_LAYOUT.barcode;
+/** EAN-13 module width (mm) in a DYMO barcode box. */
+export function dymoBarcodeModule(C: DymoBarcodeBox = DYMO_LAYOUT.barcode): number {
   return Math.min(C.maxModule, C.w / (EAN13_MODULES + 18));
 }
 
@@ -267,22 +287,34 @@ export function dymoBarcodeModule(): number {
 const middleBaseline = (y: number, h: number, pt: number) => y + h / 2 + (pt * PT_MM * 0.7) / 2;
 const PT_MM = 25.4 / 72;
 
-function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput, code: string, logo: LoadedLogo | null) {
+/** EAN-13 centred in a DYMO barcode box, digits underneath as on the product label. */
+function drawDymoBarcode(doc: jsPDF, ox: number, oy: number, C: DymoBarcodeBox, code: string) {
+  const module = dymoBarcodeModule(C);
+  const bx = ox + C.x + (C.w - EAN13_MODULES * module) / 2;
+  const by = oy + C.y;
+  for (const [start, width] of ean13Bars(code)) {
+    doc.rect(bx + start * module, by, width * module, isGuardModule(start) ? C.guardH : C.barH, "F");
+  }
+  const { lead, left, right } = ean13Groups(code);
+  setFont(doc, "light", C.digitPt);
+  const dy = by + C.digitBaseline;
+  doc.text(lead, bx - module * 1.5, dy, { align: "right" });
+  for (let i = 0; i < 6; i++) {
+    doc.text(left[i], bx + (3 + 7 * i + 3.5) * module, dy, { align: "center" });
+    doc.text(right[i], bx + (50 + 7 * i + 3.5) * module, dy, { align: "center" });
+  }
+}
+
+/** AMBHX2 arrangement — no logo: title / subtitle across the top, notes + SKU bottom-left, barcode bottom-right. */
+function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput, code: string) {
   doc.setTextColor(0);
   doc.setFillColor(0);
-
-  // Logo — top-right, fitted in its box and right-aligned.
-  if (logo) {
-    const L = DYMO.logo;
-    const fit = fitLogo(logo, L.w, L.h);
-    doc.addImage(logo.dataUri, "PNG", ox + L.x + L.w - fit.w, oy + L.y + (L.h - fit.h) / 2, fit.w, fit.h);
-  }
 
   // Title — bold, left, top.
   const title = input.title.trim();
   const T = DYMO.title;
   setFont(doc, "medium", T.pt);
-  const titlePt = fitFontSize(doc, title, T.pt, dymoTitleWidth(T, !!logo), T.floorPt);
+  const titlePt = fitFontSize(doc, title, T.pt, T.w, T.floorPt);
   doc.text(title, ox + T.x, oy + middleBaseline(T.y, T.h, titlePt));
 
   // Variant line under it — light, shrinks to fit.
@@ -290,7 +322,7 @@ function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelIn
   if (subtitle) {
     const B = DYMO.subtitle;
     setFont(doc, "light", B.pt);
-    const pt = fitFontSize(doc, subtitle, B.pt, dymoTitleWidth(B, !!logo), B.floorPt);
+    const pt = fitFontSize(doc, subtitle, B.pt, B.w, B.floorPt);
     doc.text(subtitle, ox + B.x, oy + middleBaseline(B.y, B.h, pt));
   }
 
@@ -305,22 +337,32 @@ function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelIn
     y -= N.lineH;
   }
 
-  // EAN-13, centred in its box, digits underneath as on the product label.
-  const C = DYMO.barcode;
-  const module = dymoBarcodeModule();
-  const bx = ox + C.x + (C.w - EAN13_MODULES * module) / 2;
-  const by = oy + C.y;
-  for (const [start, width] of ean13Bars(code)) {
-    doc.rect(bx + start * module, by, width * module, isGuardModule(start) ? C.guardH : C.barH, "F");
+  drawDymoBarcode(doc, ox, oy, DYMO.barcode, code);
+}
+
+/** BGLBDM arrangement — with a logo: logo top-left, text block top-right, barcode across the bottom. */
+function drawDymoLogoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelInput, code: string, logo: LoadedLogo) {
+  doc.setTextColor(0);
+  doc.setFillColor(0);
+
+  const L = DYMO_LOGO_LAYOUT.logo;
+  const fit = fitLogo(logo, L.w, L.h);
+  doc.addImage(logo.dataUri, "PNG", ox + L.x + (L.w - fit.w) / 2, oy + L.y + (L.h - fit.h) / 2, fit.w, fit.h);
+
+  // Text block — lines stacked and centred vertically in the box, each shrunk to fit its width.
+  const X = DYMO_LOGO_LAYOUT.text;
+  const lines = dymoLogoTextLines(input);
+  const lineH = Math.min(X.lineH, X.h / lines.length);
+  let y = oy + X.y + (X.h - lineH * lines.length) / 2;
+  for (const line of lines) {
+    const startPt = line.bold ? X.titlePt : X.pt;
+    setFont(doc, line.bold ? "medium" : "light", startPt);
+    const pt = fitFontSize(doc, line.text, startPt, X.w, X.floorPt);
+    doc.text(line.text, ox + X.x, middleBaseline(y, lineH, pt));
+    y += lineH;
   }
-  const { lead, left, right } = ean13Groups(code);
-  setFont(doc, "light", C.digitPt);
-  const dy = by + C.digitBaseline;
-  doc.text(lead, bx - module * 1.5, dy, { align: "right" });
-  for (let i = 0; i < 6; i++) {
-    doc.text(left[i], bx + (3 + 7 * i + 3.5) * module, dy, { align: "center" });
-    doc.text(right[i], bx + (50 + 7 * i + 3.5) * module, dy, { align: "center" });
-  }
+
+  drawDymoBarcode(doc, ox, oy, DYMO_LOGO_LAYOUT.barcode, code);
 }
 
 function drawCropMarks(doc: jsPDF, ox: number, oy: number, size: LabelSize) {
@@ -368,8 +410,10 @@ export function buildBarcodeLabelPdf(input: BarcodeLabelInput, opts: BarcodeLabe
   for (let i = 0; i < copies; i++) {
     if (i > 0) doc.addPage([pw, ph], orientation);
     if (opts.output === "proof") drawCropMarks(doc, ox, oy, size);
-    if (size.layout === "dymo") drawDymoLabel(doc, ox, oy, input, code, opts.logoImage ?? null);
-    else drawLabel(doc, ox, oy, size, input, code, opts.logoImage ?? null);
+    const logo = opts.logoImage ?? null;
+    if (size.layout !== "dymo") drawLabel(doc, ox, oy, size, input, code, logo);
+    else if (logo) drawDymoLogoLabel(doc, ox, oy, input, code, logo);
+    else drawDymoLabel(doc, ox, oy, input, code);
   }
   return doc;
 }

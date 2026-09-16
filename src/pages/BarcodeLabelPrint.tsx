@@ -18,7 +18,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  DYMO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoNoteLines, dymoTitleWidth, validateBarcodeLabel, type BarcodeLabelInput,
+  DYMO_LAYOUT, DYMO_LOGO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoLogoTextLines, dymoNoteLines, validateBarcodeLabel,
+  type BarcodeLabelInput, type DymoBarcodeBox,
 } from "@portal/lib/labels/barcodeLabelPdf";
 import { barcodeLogoUrl } from "@portal/lib/labels/barcodeLogos";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule } from "@portal/lib/labels/ean13";
@@ -46,9 +47,8 @@ const fontCss = `
 const pt = (p: number) => `${p}pt`;
 
 /** EAN-13 drawn in millimetre units inside the DYMO barcode box: bars, taller guards, digits underneath. */
-function Ean13({ code }: { code: string }) {
-  const C = DYMO_LAYOUT.barcode;
-  const module = dymoBarcodeModule();
+function Ean13({ code, box: C }: { code: string; box: DymoBarcodeBox }) {
+  const module = dymoBarcodeModule(C);
   const bx = (C.w - EAN13_MODULES * module) / 2;
   const { lead, left, right } = ean13Groups(code);
   const dy = C.digitBaseline;
@@ -70,27 +70,40 @@ function Ean13({ code }: { code: string }) {
 
 const row: CSSProperties = { display: "flex", alignItems: "center" };
 
-export function DymoBarcodeLabel({ input, code }: { input: BarcodeLabelInput; code: string }) {
-  const { title: T, subtitle: B, notes: N, barcode: C, logo: L } = DYMO_LAYOUT;
+/** BGLBDM arrangement — logo top-left, text block top-right, barcode across the bottom. */
+function DymoLogoLabel({ input, code, logoSrc }: { input: BarcodeLabelInput; code: string; logoSrc: string }) {
+  const { logo: L, text: X, barcode: C } = DYMO_LOGO_LAYOUT;
+  const lines = dymoLogoTextLines(input);
+  const lineH = Math.min(X.lineH, X.h / lines.length);
+  return (
+    <>
+      <div style={{ ...abs(L), display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <img src={logoSrc} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
+      </div>
+      <div style={{ ...abs(X), display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        {lines.map((l, i) => (
+          <span key={i} className="fit" data-fit style={{ maxWidth: "100%", height: mm(lineH), lineHeight: mm(lineH), fontSize: pt(l.bold ? X.titlePt : X.pt), fontWeight: l.bold ? MEDIUM : LIGHT }}>{l.text}</span>
+        ))}
+      </div>
+      <div style={abs(C)}>
+        <Ean13 code={code} box={C} />
+      </div>
+    </>
+  );
+}
+
+/** AMBHX2 arrangement — no logo: title / subtitle across the top, notes + SKU bottom-left, barcode bottom-right. */
+function DymoPlainLabel({ input, code }: { input: BarcodeLabelInput; code: string }) {
+  const { title: T, subtitle: B, notes: N, barcode: C } = DYMO_LAYOUT;
   const subtitle = input.subtitle.trim();
   const lines = dymoNoteLines(input);
-  const logoSrc = barcodeLogoUrl(input.logo);
-  const hasLogo = !!logoSrc;
-  const ref = useRef<HTMLDivElement>(null);
-  // Shrink overflowing text before first paint so the label is print-ready as soon as it is in the DOM.
-  useLayoutEffect(() => { if (ref.current) fitTexts(ref.current); }, [input, code]);
   return (
-    <div ref={ref} className="label" data-label={code}>
-      {logoSrc && (
-        <div style={{ ...abs(L), display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
-          <img src={logoSrc} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
-        </div>
-      )}
-      <div style={{ ...abs({ ...T, w: dymoTitleWidth(T, hasLogo) }), ...row }}>
+    <>
+      <div style={{ ...abs(T), ...row }}>
         <span className="fit" data-fit style={{ maxWidth: "100%", fontSize: pt(T.pt), fontWeight: MEDIUM }}>{input.title.trim()}</span>
       </div>
       {subtitle && (
-        <div style={{ ...abs({ ...B, w: dymoTitleWidth(B, hasLogo) }), ...row }}>
+        <div style={{ ...abs(B), ...row }}>
           <span className="fit" data-fit style={{ maxWidth: "100%", fontSize: pt(B.pt), fontWeight: LIGHT }}>{subtitle}</span>
         </div>
       )}
@@ -100,8 +113,20 @@ export function DymoBarcodeLabel({ input, code }: { input: BarcodeLabelInput; co
         ))}
       </div>
       <div style={abs(C)}>
-        <Ean13 code={code} />
+        <Ean13 code={code} box={C} />
       </div>
+    </>
+  );
+}
+
+export function DymoBarcodeLabel({ input, code }: { input: BarcodeLabelInput; code: string }) {
+  const logoSrc = barcodeLogoUrl(input.logo);
+  const ref = useRef<HTMLDivElement>(null);
+  // Shrink overflowing text before first paint so the label is print-ready as soon as it is in the DOM.
+  useLayoutEffect(() => { if (ref.current) fitTexts(ref.current); }, [input, code]);
+  return (
+    <div ref={ref} className="label" data-label={code}>
+      {logoSrc ? <DymoLogoLabel input={input} code={code} logoSrc={logoSrc} /> : <DymoPlainLabel input={input} code={code} />}
     </div>
   );
 }
