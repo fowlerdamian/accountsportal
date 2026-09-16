@@ -228,6 +228,11 @@ export default function BarcodeLabels() {
 
             <div style={{ borderTop: "1px solid #1e1e1e" }} />
 
+            <Field label="Logo" hint={isDymo ? "Top-left of the DYMO label, text beside it, barcode underneath" : "Centred above the product name; with no logo the text sits higher"}>
+              <select style={selectStyle} value={logoKey} onChange={e => setInput(v => ({ ...v, logo: resolveBarcodeLogo(e.target.value) }))}>
+                {BARCODE_LOGO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Field>
             <Field label="Product name" error={showError("title")} hint={isDymo ? "Printed bold, top left" : "Printed bold in capitals"}>
               <input
                 style={showError("title") ? inputErrorStyle : inputStyle}
@@ -266,11 +271,6 @@ export default function BarcodeLabels() {
             </Field>
 
             <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              <Field label="Logo" hint={isDymo ? "Top-right of the DYMO label; the title shortens to make room" : "Centred above the product name; with no logo the text sits higher"}>
-                <select style={selectStyle} value={logoKey} onChange={e => setInput(v => ({ ...v, logo: resolveBarcodeLogo(e.target.value) }))}>
-                  {BARCODE_LOGO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </Field>
               <Field label="Label size" hint={isDymo ? "Warehouse DYMO template — prints 1:1 on the LabelWriter" : "The design scales to fit; proportions stay the same"}>
                 <select style={selectStyle} value={size} onChange={e => setSize(resolveLabelSize(e.target.value))}>
                   {LABEL_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
