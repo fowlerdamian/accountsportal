@@ -21,7 +21,8 @@ const DIALPAD_BASE = 'https://dialpad.com/api/v2'
 const PROTOCOL_VERSION = '2025-06-18'
 const SERVER_INFO = { name: 'dialpad-mcp', version: '1.0.0' }
 const DEFAULT_LIMIT = 50
-const MAX_LIMIT = 100
+const MAX_LIMIT = 100 // contacts/users
+const CALL_PAGE_LIMIT = 50 // Dialpad: "Limit cannot be greater than 50" on /call
 const MAX_SCAN_PAGES = 10 // upper bound for client-side call filtering
 // Dialpad rejects any started_after..started_before span of 30 days or more.
 const MAX_WINDOW_MS = 30 * 86400e3 - 60e3
@@ -210,7 +211,7 @@ async function scanCalls(apiKey, { started_after, started_before, target_type, t
     let cursor
     do {
       if (pages++ >= MAX_SCAN_PAGES) return { calls: out, truncated: true }
-      const data = await dp('GET', '/call', { apiKey, query: { ...slice, target_type, target_id, cursor, limit: MAX_LIMIT } })
+      const data = await dp('GET', '/call', { apiKey, query: { ...slice, target_type, target_id, cursor, limit: CALL_PAGE_LIMIT } })
       for (const c of data.items ?? []) {
         if (match(c)) out.push(summariseCall(c))
         if (out.length >= max) return { calls: out, truncated: true }
@@ -306,7 +307,7 @@ const TOOLS = [
         direction: { type: 'string', enum: ['inbound', 'outbound'], description: 'Optional client-side direction filter' },
         status: { type: 'string', enum: ['answered', 'missed', 'voicemail'], description: 'Optional client-side status filter' },
         cursor: { type: 'string' },
-        limit: { type: 'integer', description: `Per page (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT})` },
+        limit: { type: 'integer', description: `Per page (default ${DEFAULT_LIMIT}, max ${CALL_PAGE_LIMIT})` },
       },
     },
   },
@@ -452,7 +453,7 @@ const HANDLERS = {
     // use dialpad_calls_for_contact for multi-window scans.
     const clamped = started_before - started_after > MAX_WINDOW_MS
     const effective_after = clamped ? started_before - MAX_WINDOW_MS : started_after
-    const data = await dp('GET', '/call', { apiKey: k, query: { started_after: effective_after, started_before, target_type: a.target_type, target_id: a.target_id, cursor: a.cursor, limit: clampLimit(a.limit) } })
+    const data = await dp('GET', '/call', { apiKey: k, query: { started_after: effective_after, started_before, target_type: a.target_type, target_id: a.target_id, cursor: a.cursor, limit: Math.min(clampLimit(a.limit), CALL_PAGE_LIMIT) } })
     let calls = (data.items ?? []).map(summariseCall)
     if (a.direction) calls = calls.filter((c) => c.direction === a.direction)
     if (a.status) calls = calls.filter((c) => c.status === a.status)

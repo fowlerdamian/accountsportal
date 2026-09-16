@@ -44,7 +44,11 @@ Run that from bash (Git Bash), not PowerShell, so the `--header` value survives.
 All timestamps leave the server as ISO-8601 and durations as integer seconds
 (Dialpad natively uses epoch milliseconds for both).
 
-## Dialpad rate limits worth knowing
+## Dialpad limits worth knowing
+
+- Any `started_after`..`started_before` span must be **under 30 days**. `dialpad_list_calls` clamps wider asks to the newest 30 days; `dialpad_calls_for_contact` slices wider windows automatically.
+- `/call` pages are capped at **50** items; contacts and users at 100.
+- Shared company contacts are empty for AGA; everything lives as per-user local contacts, so contact search includes local by default.
 
 - `GET /call` (list) and `/transcripts` — 1200/min
 - `GET /call/{id}` — **10/min** (so `dialpad_calls_for_contact` scans the list endpoint instead)
