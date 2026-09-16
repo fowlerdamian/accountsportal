@@ -18,7 +18,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  DYMO_LAYOUT, DYMO_LOGO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoLogoTextLines, dymoNoteLines, validateBarcodeLabel,
+  DYMO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoLogoLayoutFor, dymoLogoTextLines, dymoNoteLines, validateBarcodeLabel,
   type BarcodeLabelInput, type DymoBarcodeBox,
 } from "@portal/lib/labels/barcodeLabelPdf";
 import { barcodeLogoUrl } from "@portal/lib/labels/barcodeLogos";
@@ -70,10 +70,11 @@ function Ean13({ code, box: C }: { code: string; box: DymoBarcodeBox }) {
 
 const row: CSSProperties = { display: "flex", alignItems: "center" };
 
-/** BGLBDM arrangement — logo top-left, text block top-right, barcode across the bottom. */
+/** BGLBDM arrangement — logo top-left, text block top-right, barcode across the bottom (wide wordmarks: logo band on top, text under it). */
 function DymoLogoLabel({ input, code, logoSrc }: { input: BarcodeLabelInput; code: string; logoSrc: string }) {
-  const { logo: L, text: X, barcode: C } = DYMO_LOGO_LAYOUT;
-  const lines = dymoLogoTextLines(input);
+  const layout = dymoLogoLayoutFor(input.logo);
+  const { logo: L, text: X, barcode: C } = layout;
+  const lines = dymoLogoTextLines(input, layout);
   const lineH = Math.min(X.lineH, X.h / lines.length);
   return (
     <>

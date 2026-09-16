@@ -8,14 +8,20 @@
  * route just uses the URL in an <img>.
  */
 
-export interface BarcodeLogo { key: string; name: string; url: string }
+export interface BarcodeLogo {
+  key: string;
+  name: string;
+  url: string;
+  /** Very wide wordmarks (≈12:1) get the wide-logo framing: a full-width band instead of a box. */
+  wide?: boolean;
+}
 
 export const NO_BARCODE_LOGO = "none";
 export const DEFAULT_BARCODE_LOGO = NO_BARCODE_LOGO;
 
 export const BARCODE_LOGOS: BarcodeLogo[] = [
   { key: "trailbait",   name: "TrailBait",    url: "/label-logos/trailbait.png" },
-  { key: "fleetcraft",  name: "FleetCraft",   url: "/label-logos/fleetcraft.png" },
+  { key: "fleetcraft",  name: "FleetCraft",   url: "/label-logos/fleetcraft.png", wide: true },
   { key: "ultravision", name: "Ultra Vision", url: "/label-logos/ultravision.png" },
 ];
 
@@ -31,6 +37,11 @@ export function resolveBarcodeLogo(key: string | null | undefined): string {
 
 export function barcodeLogoUrl(key: string | null | undefined): string | null {
   return BARCODE_LOGOS.find(l => l.key === key)?.url ?? null;
+}
+
+/** True for long, skinny wordmarks that need the wide-logo layout. */
+export function isWideBarcodeLogo(key: string | null | undefined): boolean {
+  return !!BARCODE_LOGOS.find(l => l.key === key)?.wide;
 }
 
 /** PNG data URI plus pixel size, ready for jsPDF addImage. */

@@ -32,7 +32,7 @@
  * product layout shifts its content up so it stays centred on the label.
  */
 import { jsPDF } from "jspdf";
-import type { LoadedLogo } from "./barcodeLogos";
+import { isWideBarcodeLogo, type LoadedLogo } from "./barcodeLogos";
 import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "./leagueSpartanFonts";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule, normaliseEan13 } from "./ean13";
 
@@ -100,8 +100,12 @@ const CROP_LINE = 0.15;
 
 const SIDE_PAD = 3;    // text may not come closer than this to the label edge
 
-/** Logo fits inside this box (aspect preserved), centred horizontally. */
-const LOGO = { w: 24, h: 5, top: 5.2 };
+/**
+ * Logo fits inside this box (aspect preserved), centred horizontally. The box
+ * is wide so a long wordmark (FleetCraft, ≈12:1) still gets a readable
+ * height; squarer logos are limited by the height and come out narrower.
+ */
+const LOGO = { w: 40, h: 5, top: 5.2 };
 /** With no logo the text + barcode block moves up this much so it sits centred. */
 const NO_LOGO_SHIFT = -5;
 const TITLE = { pt: 11, baseline: 15.6 };
@@ -256,9 +260,27 @@ export const DYMO_LOGO_LAYOUT = {
   barcode: { x: 10.26, y: 17.91, w: 67.88, h: 16.33, barH: 10.6, guardH: 12.4, digitPt: 8, digitBaseline: 15.1, maxModule: 0.5 } as DymoBarcodeBox,
 };
 
+/**
+ * Wide-logo variant for long wordmarks (FleetCraft): the logo runs as a band
+ * across the top, the text block sits full-width under it, the barcode
+ * across the bottom. Same page; only the boxes move.
+ */
+export const DYMO_WIDE_LOGO_LAYOUT = {
+  logo:    { x: 5.67, y: 2.0, w: 75, h: 6.5 },
+  text:    { x: 5.85, y: 9.4, w: 75, h: 10.4, titlePt: 9, pt: 8, floorPt: 5.5, lineH: 3.5 },
+  barcode: { x: 10.26, y: 20.6, w: 67.88, h: 13.6, barH: 8.4, guardH: 10.0, digitPt: 8, digitBaseline: 12.6, maxModule: 0.5 } as DymoBarcodeBox,
+};
+
+export type DymoLogoLayout = typeof DYMO_LOGO_LAYOUT;
+
+/** The logo layout to use for a logo key: full-width band for wide wordmarks, BGLBDM box otherwise. */
+export function dymoLogoLayoutFor(logoKey: string | null | undefined): DymoLogoLayout {
+  return isWideBarcodeLogo(logoKey) ? DYMO_WIDE_LOGO_LAYOUT : DYMO_LOGO_LAYOUT;
+}
+
 /** Text lines for the logo layout: title, subtitle (if any), notes that fit, then "SKU: code". */
-export function dymoLogoTextLines(input: BarcodeLabelInput): { text: string; bold: boolean }[] {
-  const X = DYMO_LOGO_LAYOUT.text;
+export function dymoLogoTextLines(input: BarcodeLabelInput, layout: DymoLogoLayout = dymoLogoLayoutFor(input.logo)): { text: string; bold: boolean }[] {
+  const X = layout.text;
   const maxLines = Math.floor(X.h / X.lineH);
   const notes = (input.notes ?? "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const head = [{ text: input.title.trim(), bold: true }];
@@ -345,13 +367,14 @@ function drawDymoLogoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLab
   doc.setTextColor(0);
   doc.setFillColor(0);
 
-  const L = DYMO_LOGO_LAYOUT.logo;
+  const layout = dymoLogoLayoutFor(input.logo);
+  const L = layout.logo;
   const fit = fitLogo(logo, L.w, L.h);
   doc.addImage(logo.dataUri, "PNG", ox + L.x + (L.w - fit.w) / 2, oy + L.y + (L.h - fit.h) / 2, fit.w, fit.h);
 
   // Text block — lines stacked and centred vertically in the box, each shrunk to fit its width.
-  const X = DYMO_LOGO_LAYOUT.text;
-  const lines = dymoLogoTextLines(input);
+  const X = layout.text;
+  const lines = dymoLogoTextLines(input, layout);
   const lineH = Math.min(X.lineH, X.h / lines.length);
   let y = oy + X.y + (X.h - lineH * lines.length) / 2;
   for (const line of lines) {
@@ -362,7 +385,7 @@ function drawDymoLogoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLab
     y += lineH;
   }
 
-  drawDymoBarcode(doc, ox, oy, DYMO_LOGO_LAYOUT.barcode, code);
+  drawDymoBarcode(doc, ox, oy, layout.barcode, code);
 }
 
 function drawCropMarks(doc: jsPDF, ox: number, oy: number, size: LabelSize) {
