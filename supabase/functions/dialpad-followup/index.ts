@@ -25,16 +25,20 @@ const CORS = {
   "Content-Type": "application/json",
 };
 
+// Agent → own mailbox (searched first), then the shared inbox and every staff
+// mailbox: the callback is often actioned by someone else (e.g. the fitment team).
 const DEFAULT_MAILBOXES: Record<string, string> = {
-  "John Paguio": "johnp@automotivegroupaustralia.com.au",
+  "John Paguio": "johnp@automotivegroup.com.au",
   "Damian Fowler": "damianf@automotivegroup.com.au",
 };
+const DEFAULT_ALL_MAILBOXES = ["info@trailbait.com.au", "johnp@automotivegroup.com.au", "kylef@automotivegroup.com.au", "damianf@automotivegroup.com.au"];
+const RECEPTION_NUMBERS = new Set(["+61280001629"]); // inbound via the main line carries no caller identity
 const NON_CUSTOMER = ["Supplier / parts sourcing", "Internal"];
 const ATTENTION_FLAGS = ["complaint", "escalation_risk", "churn_risk", "unresolved", "callback_promised"];
 const STATUSES = ["resolved", "in_progress", "awaiting_customer", "no_follow_up", "unclear"];
 const RECHECK_AFTER_MS = 24 * 3600e3;   // re-check open items daily
 const GIVE_UP_AFTER_MS = 21 * 86400e3;  // stop re-checking calls older than 3 weeks
-const MAX_THREADS = 5;
+const MAX_THREADS = 6;
 const MAX_CHARS_PER_MESSAGE = 2500;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: CORS });
@@ -221,29 +225,34 @@ async function buildQueries(call: CallRow): Promise<string[]> {
 
 // ── Verdict ──────────────────────────────────────────────────────────────────
 
-interface Verdict { status: string; note: string; next_action: string | null; evidence_thread_ids: string[] }
+interface LaterCall { call_id: string; started_at: string; direction: string; status: string; duration_seconds: number; agent_name: string | null; ai_summary: string | null; ai_resolved: boolean | null; ai_csat: number | null }
 
-async function judge(call: CallRow, mailbox: string, threads: MailThread[]): Promise<Verdict> {
-  if (!threads.length) return { status: "no_follow_up", note: "No email correspondence found after the call.", next_action: call.ai_resolved ? null : "Follow up with the customer.", evidence_thread_ids: [] };
+interface Verdict { status: string; note: string; next_action: string | null; evidence_thread_ids: string[]; evidence_call_ids?: string[] }
+
+async function judge(call: CallRow, mailboxes: string[], threads: MailThread[], laterCalls: LaterCall[]): Promise<Verdict> {
+  if (!threads.length && !laterCalls.length) return { status: "no_follow_up", note: "No email or phone follow-up found after the call.", next_action: call.ai_resolved ? null : "Follow up with the customer.", evidence_thread_ids: [], evidence_call_ids: [] };
+  const mailbox = mailboxes.join(", ");
+  const renderedCalls = laterCalls.map((c) => `CALL ${c.call_id} [${c.started_at}] ${c.direction} ${c.status} ${c.duration_seconds}s, agent ${c.agent_name ?? "?"}${c.ai_summary ? ` — ${c.ai_summary}` : ""}${c.ai_resolved === null ? "" : ` (resolved on that call: ${c.ai_resolved})`}`).join("\n");
   const callTime = new Date(call.started_at).getTime();
-  const rendered = threads.map((t) => `THREAD ${t.id} — "${t.subject}"\n` + t.messages.map((m) => `  [${m.date}] ${m.date > call.started_at ? "(after call)" : "(before call)"} from ${m.from} to ${m.to}\n  ${m.text.replace(/\n/g, "\n  ")}`).join("\n")).join("\n\n");
+  const rendered = !threads.length ? "(none found)" : threads.map((t) => `THREAD ${t.id} — "${t.subject}"\n` + t.messages.map((m) => `  [${m.date}] ${m.date > call.started_at ? "(after call)" : "(before call)"} from ${m.from} to ${m.to}\n  ${m.text.replace(/\n/g, "\n  ")}`).join("\n")).join("\n\n");
   const out = await claude(
-    `You are auditing customer-service follow-through for Automotive Group Australia (AGA; brands TrailBait, FleetCraft). You get a phone call summary and the email threads found in the handling agent's mailbox (${mailbox}). Decide whether the issue raised on the call was subsequently resolved by email.
+    `You are auditing customer-service follow-through for Automotive Group Australia (AGA; brands TrailBait, FleetCraft). You get a phone call summary, the email threads found in staff mailboxes (${mailbox}), and any LATER PHONE CALLS with the same customer number (with their own transcript summaries). Decide whether the issue raised on the call was subsequently resolved — by email or by a later call.
 
 Respond with ONLY JSON:
 {
   "status": "resolved" | "in_progress" | "awaiting_customer" | "no_follow_up" | "unclear",
   "note": one sentence (max 30 words) citing what the emails show,
   "next_action": one short sentence for AGA staff, or null if nothing is needed,
-  "evidence_thread_ids": [thread ids that support the verdict]
+  "evidence_thread_ids": [thread ids that support the verdict],
+  "evidence_call_ids": [later call ids that support the verdict]
 }
-Rules: "resolved" needs concrete evidence after the call (replacement sent, instructions emailed, refund confirmed, customer confirming). "in_progress" = AGA has acted but it isn't finished. "awaiting_customer" = AGA's last message is unanswered and needs the customer. "no_follow_up" = the threads are unrelated or nothing happened after the call. Threads that are clearly about a different customer count as unrelated. Only threads after ${new Date(callTime).toISOString()} count as follow-up.`,
-    `CALL (${call.started_at}, ${call.direction}, agent ${call.agent_name}, contact ${call.contact_name ?? ""} ${call.external_number ?? ""})\nPurpose: ${call.ai_purpose}\nCall summary: ${call.ai_summary}\nFlags: ${call.ai_flags.join(", ")}\nResolved on call per transcript grade: ${call.ai_resolved}\n\nEMAILS:\n${rendered.slice(0, 40000)}`,
+Rules: "resolved" needs concrete evidence after the call (replacement sent, instructions emailed, refund confirmed, customer confirming, or a later answered call whose summary shows the need met). "in_progress" = AGA has acted (email sent, callback attempted, later call still open) but it isn't finished. "awaiting_customer" = AGA's last message/call is unanswered and needs the customer. "no_follow_up" = the threads and calls are unrelated or nothing happened after the call. Threads clearly about a different customer count as unrelated. A missed/unanswered outbound attempt alone is "in_progress", not resolved. Only items after ${new Date(callTime).toISOString()} count.`,
+    `CALL (${call.started_at}, ${call.direction}, agent ${call.agent_name}, contact ${call.contact_name ?? ""} ${call.external_number ?? ""})\nPurpose: ${call.ai_purpose}\nCall summary: ${call.ai_summary}\nFlags: ${call.ai_flags.join(", ")}\nResolved on call per transcript grade: ${call.ai_resolved}\n\nLATER PHONE CALLS WITH THIS NUMBER:\n${renderedCalls || "(none)"}\n\nEMAILS:\n${rendered.slice(0, 40000)}`,
     500,
   );
   const v = parseJson<Verdict>(out);
-  if (!v || !STATUSES.includes(v.status)) return { status: "unclear", note: "Could not judge the correspondence.", next_action: null, evidence_thread_ids: [] };
-  return { status: v.status, note: String(v.note ?? "").slice(0, 300), next_action: v.next_action ? String(v.next_action).slice(0, 200) : null, evidence_thread_ids: Array.isArray(v.evidence_thread_ids) ? v.evidence_thread_ids.map(String) : [] };
+  if (!v || !STATUSES.includes(v.status)) return { status: "unclear", note: "Could not judge the correspondence.", next_action: null, evidence_thread_ids: [], evidence_call_ids: [] };
+  return { status: v.status, note: String(v.note ?? "").slice(0, 300), next_action: v.next_action ? String(v.next_action).slice(0, 200) : null, evidence_thread_ids: Array.isArray(v.evidence_thread_ids) ? v.evidence_thread_ids.map(String) : [], evidence_call_ids: Array.isArray(v.evidence_call_ids) ? v.evidence_call_ids.map(String) : [] };
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -278,8 +287,8 @@ Deno.serve(async (req) => {
   // action: check
   const sb = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
   const limit = Math.min(Number(body.limit) || 8, 25);
-  const mailboxes = { ...DEFAULT_MAILBOXES, ...(JSON.parse(Deno.env.get("DIALPAD_AGENT_MAILBOXES") ?? "{}") as Record<string, string>) };
-  const defaultMailbox = Deno.env.get("DIALPAD_DEFAULT_MAILBOX") ?? DEFAULT_MAILBOXES["John Paguio"];
+  const agentMailboxes = { ...DEFAULT_MAILBOXES, ...(JSON.parse(Deno.env.get("DIALPAD_AGENT_MAILBOXES") ?? "{}") as Record<string, string>) };
+  const allMailboxes: string[] = JSON.parse(Deno.env.get("DIALPAD_MAILBOXES") ?? "null") ?? DEFAULT_ALL_MAILBOXES;
 
   let q = sb.from("dialpad_calls")
     .select("call_id,started_at,direction,agent_name,contact_name,external_number,duration_seconds,ai_csat,ai_resolved,ai_purpose,ai_summary,ai_flags,transcript_text,followup_status,followup_checked_at")
@@ -306,26 +315,47 @@ Deno.serve(async (req) => {
   const t0 = Date.now();
   for (const call of due) {
     if (Date.now() - t0 > 110e3) break; // stay under the edge runtime wall clock
-    const mailbox = mailboxes[call.agent_name ?? ""] ?? defaultMailbox;
+    const own = agentMailboxes[call.agent_name ?? ""];
+    const mailboxes = [...new Set([...(own ? [own] : []), ...allMailboxes])];
     try {
+      // Later calls with the same customer number (phone callbacks count as follow-through).
+      let laterCalls: LaterCall[] = [];
+      if (call.external_number && !RECEPTION_NUMBERS.has(call.external_number) && !/reception/i.test(call.contact_name ?? "")) {
+        const { data: lc } = await sb.from("dialpad_calls")
+          .select("call_id,started_at,direction,status,duration_seconds,agent_name,ai_summary,ai_resolved,ai_csat")
+          .eq("external_number", call.external_number).gt("started_at", call.started_at)
+          .order("started_at", { ascending: true }).limit(6);
+        laterCalls = (lc ?? []) as LaterCall[];
+      }
       const queries = await buildQueries(call);
-      const seen = new Map<string, MailThread>();
-      for (const query of queries) {
-        for (const t of await gmailSearch(mailbox, query)) if (!seen.has(t.id)) seen.set(t.id, t);
-        if (seen.size >= MAX_THREADS) break;
+      const seen = new Map<string, MailThread & { mailbox: string }>();
+      outer: for (const mailbox of mailboxes) {
+        for (const query of queries) {
+          try {
+            for (const t of await gmailSearch(mailbox, query)) if (!seen.has(t.id)) seen.set(t.id, { ...t, mailbox });
+          } catch (e) {
+            const msg = (e as Error).message;
+            if (/Google auth failed/i.test(msg) && mailbox === mailboxes[0]) throw e; // DWD problem on the primary box — surface it
+            console.warn("[dialpad-followup] search failed", mailbox, msg);
+          }
+          if (seen.size >= MAX_THREADS) break outer;
+        }
       }
       const threads = [...seen.values()].slice(0, MAX_THREADS);
-      const v = await judge(call, mailbox, threads);
-      const evidence = threads.filter((t) => v.evidence_thread_ids.includes(t.id)).map((t) => ({
-        thread_id: t.id, subject: t.subject, mailbox,
+      const v = await judge(call, mailboxes, threads, laterCalls);
+      const evidence: Record<string, unknown>[] = threads.filter((t) => v.evidence_thread_ids.includes(t.id)).map((t) => ({
+        type: "email", thread_id: t.id, subject: t.subject, mailbox: t.mailbox,
         date: t.messages[t.messages.length - 1]?.date ?? null, from: t.messages[t.messages.length - 1]?.from ?? null,
         messages: t.messages.length,
       }));
+      for (const c of laterCalls.filter((c) => (v.evidence_call_ids ?? []).includes(c.call_id))) {
+        evidence.push({ type: "call", thread_id: `call:${c.call_id}`, call_id: c.call_id, subject: `Call ${new Date(c.started_at).toLocaleDateString("en-AU", { day: "numeric", month: "short" })} (${c.direction}, ${c.status})${c.ai_summary ? `: ${c.ai_summary}` : ""}`, mailbox: null, date: c.started_at, from: c.agent_name, messages: 1 });
+      }
       await sb.from("dialpad_calls").update({
         followup_status: v.status, followup_note: v.note, followup_next_action: v.next_action,
-        followup_evidence: evidence, followup_mailbox: mailbox, followup_checked_at: new Date().toISOString(), followup_error: null,
+        followup_evidence: evidence, followup_mailbox: mailboxes.join(","), followup_checked_at: new Date().toISOString(), followup_error: null,
       }).eq("call_id", call.call_id);
-      results.push({ call_id: call.call_id, status: v.status, note: v.note, threads: threads.length, queries });
+      results.push({ call_id: call.call_id, status: v.status, note: v.note, threads: threads.length, later_calls: laterCalls.length, queries });
     } catch (e) {
       const msg = (e as Error).message;
       await sb.from("dialpad_calls").update({ followup_error: msg.slice(0, 300), followup_checked_at: new Date().toISOString() }).eq("call_id", call.call_id);
