@@ -23,8 +23,8 @@ const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: ""
 const PREVIEW_DEBOUNCE_MS = 250;
 
 const OUTPUTS: { key: LabelOutput; label: string }[] = [
-  { key: "trim",  label: "Trimmed" },
   { key: "proof", label: "Proof with crop marks" },
+  { key: "trim",  label: "Trimmed" },
 ];
 
 const LABEL_SIZE_KEY = "barcode-labels:size";
@@ -94,7 +94,8 @@ function Button({ kind, onClick, children }: { kind: "primary" | "ghost" | "disa
 
 export default function BarcodeLabels() {
   const [input, setInput] = useState<BarcodeLabelInput>(() => ({ ...EMPTY, logo: readLogo() }));
-  const [output, setOutput] = useState<LabelOutput>("trim");
+  // Download output only — the preview is always the trimmed label.
+  const [output, setOutput] = useState<LabelOutput>("proof");
   const [size, setSize] = useState<LabelSizeKey>(readSize);
   const [copies, setCopies] = useState("1");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -167,7 +168,7 @@ export default function BarcodeLabels() {
     let url: string | null = null;
     const t = window.setTimeout(() => {
       try {
-        const doc = buildBarcodeLabelPdf(input, { output, size, copies: 1, logoImage });
+        const doc = buildBarcodeLabelPdf(input, { output: "trim", size, copies: 1, logoImage });
         url = URL.createObjectURL(doc.output("blob"));
         setPreviewUrl(url);
         setPreviewError(null);
@@ -180,7 +181,7 @@ export default function BarcodeLabels() {
       window.clearTimeout(t);
       if (url) URL.revokeObjectURL(url);
     };
-  }, [input, output, size, valid, logoImage]);
+  }, [input, size, valid, logoImage]);
 
   const touchAll = () => setTouched({ title: true, subtitle: true, sku: true, barcode: true });
 
@@ -213,8 +214,8 @@ export default function BarcodeLabels() {
   const stock = LABEL_SIZES[size];
   const [pw, ph] = pageSize(output, size);
   const outputHint = output === "proof"
-    ? `${stock.w} × ${stock.h} mm label centred on a ${pw} × ${ph} mm page with crop marks`
-    : `${stock.w} × ${stock.h} mm page, no marks`;
+    ? `Download: ${stock.w} × ${stock.h} mm label centred on a ${pw} × ${ph} mm page with crop marks (the preview stays trimmed)`
+    : `Download: ${stock.w} × ${stock.h} mm page, no marks`;
 
   // Everything except the Cin7 lookup and the logo stays collapsed until the
   // user opens it — or a validation error (e.g. no barcode in Cin7) needs a
@@ -318,7 +319,7 @@ export default function BarcodeLabels() {
                       {LABEL_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </Field>
-                  <Field label="PDF output" hint={outputHint}>
+                  <Field label="Download PDF as" hint={outputHint}>
                     <div style={{ display: "inline-flex", border: "1px solid #222222", borderRadius: "8px", overflow: "hidden" }}>
                       {OUTPUTS.map(o => {
                         const active = o.key === output;
@@ -357,7 +358,7 @@ export default function BarcodeLabels() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
                 <span style={{ ...labelStyle, marginBottom: 0 }}>PDF preview</span>
-                <span style={{ ...hintStyle, marginTop: 0 }}>{pw} × {ph} mm page</span>
+                <span style={{ ...hintStyle, marginTop: 0 }}>{stock.w} × {stock.h} mm label</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                 {!valid && <span style={{ fontSize: "11px", color: "#666" }}>Fill in the details to enable</span>}
