@@ -211,7 +211,8 @@ function drawLabel(doc: jsPDF, ox: number, oy: number, size: LabelSize, input: B
 
 // ─── DYMO Large Address layout (mm, from AMBHX2.dymo, inches × 25.4) ────────
 
-const DYMO = {
+/** Shared with the browser print route (src/pages/BarcodeLabelPrint.tsx) so the printed label matches the PDF preview. */
+export const DYMO_LAYOUT = {
   title:    { x: 5.85, y: 1.70,  w: 80.3, h: 10.49, pt: 16, floorPt: 9 },
   subtitle: { x: 5.67, y: 10.22, w: 80.5, h: 7.76,  pt: 16, floorPt: 8 },
   /** Notes + SKU lines, bottom-anchored beside the barcode. */
@@ -219,6 +220,22 @@ const DYMO = {
   /** EAN-13 centred in the template's barcode box; bars, then guard bars reaching into the digit row. */
   barcode:  { x: 33.5, y: 21.56, w: 48.8, h: 11.03, barH: 7.8, guardH: 9.4, digitPt: 7, digitBaseline: 10.5, maxModule: 0.33 },
 };
+const DYMO = DYMO_LAYOUT;
+
+/** Lines printed in the DYMO notes block: the notes that fit, then "SKU: code" last. */
+export function dymoNoteLines(input: BarcodeLabelInput): string[] {
+  const N = DYMO_LAYOUT.notes;
+  const maxLines = Math.floor(N.h / N.lineH);
+  const notes = (input.notes ?? "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // The SKU line always prints; notes that do not fit above it are dropped from the end.
+  return [...notes.slice(0, maxLines - 1), `SKU: ${input.sku.trim()}`];
+}
+
+/** EAN-13 module width (mm) in the DYMO barcode box. */
+export function dymoBarcodeModule(): number {
+  const C = DYMO_LAYOUT.barcode;
+  return Math.min(C.maxModule, C.w / (EAN13_MODULES + 18));
+}
 
 /** Baseline that vertically centres capitals of `pt` in a box. */
 const middleBaseline = (y: number, h: number, pt: number) => y + h / 2 + (pt * PT_MM * 0.7) / 2;
@@ -246,10 +263,7 @@ function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelIn
 
   // Notes then "SKU: code", bottom-left, last line sitting on the block's bottom edge.
   const N = DYMO.notes;
-  const maxLines = Math.floor(N.h / N.lineH);
-  const notes = (input.notes ?? "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  // The SKU line always prints; notes that do not fit above it are dropped from the end.
-  const shown = [...notes.slice(0, maxLines - 1), `SKU: ${input.sku.trim()}`];
+  const shown = dymoNoteLines(input);
   let y = oy + N.y + N.h - N.pt * PT_MM * 0.25;
   for (let i = shown.length - 1; i >= 0; i--) {
     setFont(doc, "light", N.pt);
@@ -260,7 +274,7 @@ function drawDymoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLabelIn
 
   // EAN-13, centred in its box, digits underneath as on the product label.
   const C = DYMO.barcode;
-  const module = Math.min(C.maxModule, C.w / (EAN13_MODULES + 18));
+  const module = dymoBarcodeModule();
   const bx = ox + C.x + (C.w - EAN13_MODULES * module) / 2;
   const by = oy + C.y;
   for (const [start, width] of ean13Bars(code)) {

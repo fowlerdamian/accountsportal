@@ -68,6 +68,7 @@ const GuideDeliveries = lazy(() => import('./apps/Guide/pages/admin/Deliveries')
 const GuideViewer = lazy(() => import('./apps/Guide/pages/guide/GuideViewer'))
 // Chrome-free DYMO label render route, loaded in a hidden iframe by printLabels().
 const LabelPrint = lazy(() => import('./pages/LabelPrint'))
+const BarcodeLabelPrint = lazy(() => import('./pages/BarcodeLabelPrint'))
 const LabelStation = lazy(() => import('./pages/LabelStation'))
 // Warehouse — barcode labels (Cin7 lookup, PDF / DYMO) and future stock tools.
 const Warehouse = lazy(() => import('./apps/Warehouse/index.jsx'))
@@ -183,7 +184,7 @@ function PortalChrome() {
   const { pathname } = useLocation()
   const { user } = useAuth()
   // Chrome-free routes: the pinned task widget, the label print frame and the print station.
-  const isWidget = pathname === '/tasks/widget' || pathname === '/labels/print' || pathname === '/labels/station'
+  const isWidget = pathname === '/tasks/widget' || pathname === '/labels/print' || pathname === '/labels/print-barcode' || pathname === '/labels/station'
   const isGuideHost = typeof window !== 'undefined' && window.location.hostname.startsWith('guide.')
   if (!user || isGuideHost) return null
   return (
@@ -215,6 +216,8 @@ export default function App() {
 
             {/* DYMO label print route — label markup only; see src/lib/labels/printLabels.ts */}
             <Route path="/labels/print" element={<ProtectedRoute><LabelPrint /></ProtectedRoute>} />
+            {/* Warehouse barcode label on the DYMO — same pipeline; see src/pages/BarcodeLabelPrint.tsx */}
+            <Route path="/labels/print-barcode" element={<ProtectedRoute><BarcodeLabelPrint /></ProtectedRoute>} />
             {/* Print station — kept open in kiosk Chrome next to the LabelWriter; see tools/label-station.cmd */}
             <Route path="/labels/station" element={<ProtectedRoute><LabelStation /></ProtectedRoute>} />
 

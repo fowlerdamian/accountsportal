@@ -3,7 +3,9 @@
  *
  * Type a SKU to pull the product name and EAN-13 from Cin7 Core (or fill the
  * fields by hand), then download the label as a PDF in the chosen stock size
- * or as a DYMO Connect .dymo file. The layout is fixed
+ * or print it straight to the DYMO LabelWriter through the browser print
+ * pipeline the Guide app uses (src/lib/labels/printLabels.ts → the
+ * /labels/print-barcode route). The layout is fixed
  * (see src/lib/labels/barcodeLabelPdf.ts) and the preview on the right is the
  * actual PDF, so what you see is what prints.
  */
@@ -13,7 +15,7 @@ import {
   LABEL_SIZES, LABEL_SIZE_OPTIONS, DEFAULT_LABEL_SIZE, resolveLabelSize,
   type BarcodeLabelInput, type LabelOutput, type LabelSizeKey,
 } from "@portal/lib/labels/barcodeLabelPdf";
-import { buildDymoLabelFile, dymoLabelFileName } from "@portal/lib/labels/dymoLabelFile";
+import { printBarcodeLabel } from "@portal/lib/labels/printLabels";
 
 const EMPTY: BarcodeLabelInput = { title: "", subtitle: "", sku: "", barcode: "", notes: "" };
 const PREVIEW_DEBOUNCE_MS = 250;
@@ -26,15 +28,6 @@ const OUTPUTS: { key: LabelOutput; label: string }[] = [
 const LABEL_SIZE_KEY = "barcode-labels:size";
 const readSize = (): LabelSizeKey => { try { return resolveLabelSize(localStorage.getItem(LABEL_SIZE_KEY)); } catch { return DEFAULT_LABEL_SIZE; } };
 const writeSize = (v: LabelSizeKey) => { try { localStorage.setItem(LABEL_SIZE_KEY, v); } catch { /* private window */ } };
-
-/** Save a text file through a temporary link (same-origin blob, so no popup rules apply). */
-function saveTextFile(name: string, text: string, type: string) {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const a = document.createElement("a");
-  a.href = url; a.download = name; a.style.display = "none";
-  document.body.appendChild(a); a.click(); a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
 
 interface Cin7Product { sku: string; name: string; barcode: string }
 
@@ -173,11 +166,22 @@ export default function BarcodeLabels() {
     buildBarcodeLabelPdf(input, { output, size, copies: copiesN }).save(barcodeLabelFileName(input));
   };
 
-  const downloadDymo = () => {
+  // Print straight to the LabelWriter: hidden iframe on /labels/print-barcode,
+  // Chrome's print dialog picks the queue (same pipeline as the Guide labels).
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const printDymo = async () => {
     touchAll();
-    const xml = buildDymoLabelFile(input);
-    if (!valid || !xml) return;
-    saveTextFile(dymoLabelFileName(input), xml, "application/xml");
+    if (!valid || printing) return;
+    setPrinting(true);
+    setPrintError(null);
+    try {
+      await printBarcodeLabel(input, { copies: copiesN });
+    } catch (e: any) {
+      setPrintError(e?.message ?? String(e));
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const stock = LABEL_SIZES[size];
@@ -189,7 +193,7 @@ export default function BarcodeLabels() {
   return (
     <>
       <p style={{ ...hintStyle, marginTop: 0, marginBottom: "16px" }}>
-        Look a SKU up in Cin7 or fill the fields in, then download the label as a PDF or a DYMO file. EAN-13, League Spartan, TrailBait logo.
+        Look a SKU up in Cin7 or fill the fields in, then download the label as a PDF or print it straight to the DYMO. EAN-13, League Spartan, TrailBait logo.
       </p>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 400px) 1fr", gap: "20px", alignItems: "start" }}>
           {/* ── Inputs ─────────────────────────────────────────────────── */}
@@ -238,7 +242,7 @@ export default function BarcodeLabels() {
                 placeholder="9360281002218" inputMode="numeric"
               />
             </Field>
-            <Field label="Notes (optional)" hint="DYMO layout and .dymo file only — one per line, printed above the SKU">
+            <Field label="Notes (optional)" hint="DYMO layout only — one per line, printed above the SKU">
               <textarea
                 style={{ ...inputStyle, resize: "vertical", minHeight: "58px" }} rows={2}
                 value={input.notes ?? ""} onChange={upd("notes")} placeholder="Passenger Side"
@@ -270,7 +274,7 @@ export default function BarcodeLabels() {
                   })}
                 </div>
               </Field>
-              <Field label="Copies" hint="Pages in the PDF, one label per page">
+              <Field label="Copies" hint="Pages in the PDF, or labels sent to the DYMO">
                 <input
                   style={{ ...inputStyle, width: "90px" }} value={copies} inputMode="numeric"
                   onChange={e => setCopies(e.target.value.replace(/\D/g, "").slice(0, 3))}
@@ -283,12 +287,18 @@ export default function BarcodeLabels() {
               <Button kind={valid ? "primary" : "disabled"} onClick={downloadPdf}>
                 Download PDF{copiesN > 1 ? ` (${copiesN} pages)` : ""}
               </Button>
-              <Button kind={valid ? "ghost" : "disabled"} onClick={downloadDymo}>Download .dymo</Button>
+              <Button kind={!valid || printing ? "disabled" : isDymo ? "primary" : "ghost"} onClick={printDymo}>
+                {printing ? "Printing…" : `Print to DYMO${copiesN > 1 ? ` (${copiesN})` : ""}`}
+              </Button>
               {!valid && <span style={{ fontSize: "11px", color: "#666" }}>Fill in the fields above</span>}
             </div>
-            <div style={{ ...hintStyle, marginTop: "-8px" }}>
-              The .dymo file is the Large Address (99012) template for DYMO Connect, whatever size is picked above.
-            </div>
+            {printError
+              ? <div style={{ ...errorStyle, marginTop: "-8px" }}>Couldn't print: {printError}</div>
+              : (
+                <div style={{ ...hintStyle, marginTop: "-8px" }}>
+                  Print to DYMO uses the Large Address (99012) layout whatever size is picked above — pick the LabelWriter in Chrome's print dialog, scale 100%, margins none.
+                </div>
+              )}
           </div>
 
           {/* ── Preview ────────────────────────────────────────────────── */}

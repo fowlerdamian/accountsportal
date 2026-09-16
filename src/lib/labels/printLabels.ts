@@ -2,12 +2,17 @@
  * Print DYMO labels through the browser print pipeline without leaving the
  * current screen.
  *
- * Loads /labels/print in a hidden same-origin iframe, waits for the route to
- * post `labels:ready` (data fetched, barcodes rendered, logos loaded), then
- * calls print() on the iframe window. The user picks the LabelWriter queue in
- * Chrome's print dialog once (scale 100%, margins None); Chrome remembers the
- * choice per destination.
+ * Loads a label render route in a hidden same-origin iframe, waits for the
+ * route to post `labels:ready` (data fetched, barcodes rendered, logos
+ * loaded), then calls print() on the iframe window. The user picks the
+ * LabelWriter queue in Chrome's print dialog once (scale 100%, margins None);
+ * Chrome remembers the choice per destination.
+ *
+ * Two routes speak this protocol:
+ *   /labels/print          — Guide QR labels by instruction_sets id (printLabels)
+ *   /labels/print-barcode  — warehouse product barcode label (printBarcodeLabel)
  */
+import type { BarcodeLabelInput } from "./barcodeLabelPdf";
 
 export interface PrintLabelsOptions {
   /** instruction_sets ids to print, one label per id. */
@@ -23,6 +28,7 @@ export interface PrintLabelsOptions {
 }
 
 export const LABEL_PRINT_PATH = "/labels/print";
+export const BARCODE_LABEL_PRINT_PATH = "/labels/print-barcode";
 
 export type LabelPrintMessage =
   | { type: "labels:ready"; count: number }
@@ -38,17 +44,43 @@ export function labelPrintUrl(opts: PrintLabelsOptions): string {
   return `${LABEL_PRINT_PATH}?${q.toString()}`;
 }
 
+export interface PrintBarcodeLabelOptions {
+  /** Copies of the label (one per printed page). */
+  copies?: number;
+}
+
+/** Query string the barcode print route reads back with `barcodeLabelFromParams`. */
+export function barcodeLabelPrintUrl(input: BarcodeLabelInput, opts: PrintBarcodeLabelOptions = {}): string {
+  const q = new URLSearchParams();
+  q.set("title", input.title.trim());
+  if (input.subtitle.trim()) q.set("subtitle", input.subtitle.trim());
+  q.set("sku", input.sku.trim());
+  q.set("barcode", input.barcode.trim());
+  if (input.notes?.trim()) q.set("notes", input.notes.trim());
+  if (opts.copies && opts.copies > 1) q.set("copies", String(opts.copies));
+  return `${BARCODE_LABEL_PRINT_PATH}?${q.toString()}`;
+}
+
+export function barcodeLabelFromParams(params: URLSearchParams): BarcodeLabelInput {
+  return {
+    title: params.get("title") ?? "",
+    subtitle: params.get("subtitle") ?? "",
+    sku: params.get("sku") ?? "",
+    barcode: params.get("barcode") ?? "",
+    notes: params.get("notes") ?? "",
+  };
+}
+
 const READY_TIMEOUT_MS = 20_000;
 /** How long a dismissed-but-silent print dialog may keep the iframe alive before it is torn down anyway. */
 const AFTERPRINT_TIMEOUT_MS = 5 * 60_000;
 
 /**
- * Resolves once the print dialog has been dismissed (printed or cancelled).
- * Rejects if the route reports an error or never becomes ready.
+ * Load a label render route in a hidden iframe and print it once it reports
+ * ready. Resolves once the print dialog has been dismissed (printed or
+ * cancelled). Rejects if the route reports an error or never becomes ready.
  */
-export function printLabels(opts: PrintLabelsOptions): Promise<void> {
-  if (!opts.ids.length) return Promise.reject(new Error("Nothing to print"));
-
+export function printLabelRoute(url: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
@@ -100,7 +132,18 @@ export function printLabels(opts: PrintLabelsOptions): Promise<void> {
 
     window.addEventListener("message", onMessage);
     readyTimer = window.setTimeout(() => finish(new Error("Label print timed out before the labels rendered")), READY_TIMEOUT_MS);
-    iframe.src = labelPrintUrl(opts);
+    iframe.src = url;
     document.body.appendChild(iframe);
   });
+}
+
+/** Print Guide QR labels (one per instruction_sets id). */
+export function printLabels(opts: PrintLabelsOptions): Promise<void> {
+  if (!opts.ids.length) return Promise.reject(new Error("Nothing to print"));
+  return printLabelRoute(labelPrintUrl(opts));
+}
+
+/** Print a warehouse product barcode label on the DYMO 99012 Large Address stock. */
+export function printBarcodeLabel(input: BarcodeLabelInput, opts: PrintBarcodeLabelOptions = {}): Promise<void> {
+  return printLabelRoute(barcodeLabelPrintUrl(input, opts));
 }

@@ -11,14 +11,14 @@
  * rendered so the parent can call print(). Opened directly it prints itself,
  * unless `preview=1` is set.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { labelLogoUrl, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
-import { LABEL_STOCK, SCAN_LINES, codeLines, computeLabelLayout, resolveLabelStock, type Box, type LabelStockKey } from "@portal/lib/labels/labelStock";
-import type { LabelPrintMessage } from "@portal/lib/labels/printLabels";
+import { SCAN_LINES, codeLines, computeLabelLayout, resolveLabelStock, type LabelStockKey } from "@portal/lib/labels/labelStock";
+import { abs, fitTexts, inPrintFrame, nextPaint, postToOpener as post, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
 
 interface GuideRow { id: string; title: string; product_code: string | null; slug: string; label_logo: string | null }
 interface BrandRow { id: string; key: string; name: string; domain: string; dymo_label_size: string | null }
@@ -30,52 +30,6 @@ export interface LabelData {
   productCode: string;
   title: string;
   logoSrc: string | null;
-}
-
-const mm = (n: number) => `${n.toFixed(3)}mm`;
-const abs = (b: Box): CSSProperties => ({ position: "absolute", left: mm(b.x), top: mm(b.y), width: mm(b.w), height: mm(b.h) });
-
-/** Page + label CSS for one stock. Everything else on the page is inline so nothing from the portal shell leaks in. */
-/**
- * The label box is a hair smaller than the page so px rounding of the mm
- * values can never overflow the page box and feed a blank label.
- */
-const PAGE_SLACK_MM = 0.3;
-
-export function stockCss(stock: LabelStockKey): string {
-  const { width, height } = LABEL_STOCK[stock];
-  return `
-@page { size: ${mm(width)} ${mm(height)}; margin: 0; }
-html, body, #root { margin: 0; padding: 0; height: auto; min-height: 0; background: #fff; color: #000; }
-body { font-family: Arial, Helvetica, sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.label { position: relative; width: ${mm(width - PAGE_SLACK_MM)}; height: ${mm(height - PAGE_SLACK_MM)}; overflow: hidden; background: #fff; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; }
-.label:last-child { page-break-after: auto; break-after: auto; }
-.label * { box-sizing: border-box; }
-/* Only the label sheet may reach the page box: portal chrome that mounts on
-   every route (mention/shortcut helpers, toast + dialog portals appended to
-   body) would otherwise lay out as flow content after the last label and
-   push a blank page onto the roll. */
-body > :not(#root), #root > :not([data-labels]) { display: none !important; }
-[data-labels] { display: block; }
-.fit { white-space: nowrap; overflow: hidden; line-height: 1.15; }
-@media screen {
-  body { background: #d4d4d4; padding: 8mm; }
-  .label { margin: 0 auto 4mm; outline: 1px solid #888; }
-}
-`;
-}
-
-/** Shrink any `[data-fit]` text that overflows its box, down to a 4pt floor. */
-function fitTexts(root: HTMLElement) {
-  root.querySelectorAll<HTMLElement>("[data-fit]").forEach(el => {
-    let size = parseFloat(getComputedStyle(el).fontSize);
-    const floor = (4 * 96) / 72;
-    let guard = 40;
-    while (el.scrollWidth > el.clientWidth + 0.5 && size > floor && guard-- > 0) {
-      size -= 0.5;
-      el.style.fontSize = `${size}px`;
-    }
-  });
 }
 
 export function Label({ data, stock }: { data: LabelData; stock: LabelStockKey }) {
@@ -107,18 +61,6 @@ export function Label({ data, stock }: { data: LabelData; stock: LabelStockKey }
       </div>
     </div>
   );
-}
-
-function whenImagesSettled(root: HTMLElement): Promise<void> {
-  const imgs = Array.from(root.querySelectorAll("img"));
-  return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise<void>(res => {
-    img.addEventListener("load", () => res(), { once: true });
-    img.addEventListener("error", () => res(), { once: true });
-  }))).then(() => undefined);
-}
-
-function post(msg: LabelPrintMessage) {
-  if (window.parent && window.parent !== window) window.parent.postMessage(msg, window.location.origin);
 }
 
 export default function LabelPrint() {
@@ -191,10 +133,10 @@ export default function LabelPrint() {
       fitTexts(root);
       await whenImagesSettled(root);
       await (document.fonts?.ready ?? Promise.resolve());
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await nextPaint();
       if (cancelled) return;
       fitTexts(root);
-      if (window.parent && window.parent !== window) post({ type: "labels:ready", count: built.labels.length });
+      if (inPrintFrame()) post({ type: "labels:ready", count: built.labels.length });
       else if (!preview) window.print();
     })();
     return () => { cancelled = true; };
