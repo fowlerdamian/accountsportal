@@ -66,7 +66,7 @@ create table if not exists public.community_notes (
   attachments jsonb not null default '[]'::jsonb,
   created_at  timestamptz not null default now()
 );
-create unique index if not exists idx_community_notes_source on public.community_notes (kind, source_ref) where source_ref is not null;
+create unique index if not exists idx_community_notes_source on public.community_notes (kind, source_ref);
 create index if not exists idx_community_notes_contact on public.community_notes (contact_id, date desc);
 
 create table if not exists public.community_tasks (
