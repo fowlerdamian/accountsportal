@@ -32,6 +32,7 @@ const PULL_MAX_PAGES = 3
 const ENRICH_MAX = 24
 const GRADE_MAX = 24
 const PARALLEL = 4
+const DIALPAD_TIMEOUT_MS = 15e3   // a hung Dialpad page must not eat the whole invocation
 const MIN_GRADE_SECONDS = 20     // shorter answered calls are skipped as "too_short"
 const MIN_TRANSCRIPT_CHARS = 120
 
@@ -41,7 +42,7 @@ async function dp(path, query, apiKey) {
   const url = new URL(`${DIALPAD_BASE}${path}`)
   for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
   for (let attempt = 0; attempt < 3; attempt++) {
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' } })
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' }, signal: AbortSignal.timeout(DIALPAD_TIMEOUT_MS) })
     if (r.status === 429) { await new Promise((res) => setTimeout(res, 2000 * (attempt + 1))); continue }
     const text = await r.text()
     if (!r.ok) throw new Error(`Dialpad ${r.status} ${path}: ${text.slice(0, 200)}`)
@@ -215,7 +216,8 @@ async function enrich(apiKey, deadline) {
     if (text.length < MIN_TRANSCRIPT_CHARS) { body.ai_skip_reason = 'no_transcript'; skipped++ } else fetched++
     await patch(row.call_id, body)
   })
-  return { fetched, skipped, remaining: Math.max(0, (pending?.length ?? 0) - done) }
+  const n = pending?.length ?? 0
+  return { fetched, skipped, remaining: Math.max(0, n - done), batch_full: n >= ENRICH_MAX }
 }
 
 async function grade(deadline) {
@@ -249,7 +251,8 @@ async function grade(deadline) {
     })
     graded++
   })
-  return { graded, failed, remaining: Math.max(0, (pending?.length ?? 0) - done) }
+  const n = pending?.length ?? 0
+  return { graded, failed, remaining: Math.max(0, n - done), batch_full: n >= GRADE_MAX }
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -278,11 +281,18 @@ export default async function handler(req, res) {
   const phases = (req.query?.phase ?? (typeof req.body === 'object' ? req.body?.phase : null)) ?? 'all'
   const out = { trigger: who }
   try {
-    if (phases === 'all' || phases === 'pull') out.pull = await pull(apiKey, t0 + PULL_DEADLINE_MS)
+    if (phases === 'all' || phases === 'pull') {
+      // A slow/hung Dialpad listing must not block transcripts + grading.
+      try { out.pull = await pull(apiKey, t0 + PULL_DEADLINE_MS) } catch (err) { out.pull = { error: err?.message ?? String(err), complete: false } }
+    }
     if (phases === 'all' || phases === 'enrich') out.enrich = await enrich(apiKey, t0 + ENRICH_DEADLINE_MS)
     if (phases === 'all' || phases === 'grade') out.grade = await grade(t0 + GRADE_DEADLINE_MS)
     out.elapsed_ms = Date.now() - t0
-    out.more = Boolean((out.enrich?.remaining ?? 0) || (out.grade?.remaining ?? 0) || (out.pull && !out.pull.complete))
+    out.more = Boolean(
+      (out.enrich?.remaining ?? 0) || (out.grade?.remaining ?? 0) ||
+      out.enrich?.batch_full || out.grade?.batch_full ||
+      (out.pull && !out.pull.complete),
+    )
     return res.status(200).json(out)
   } catch (err) {
     console.error('[dialpad-sync]', err)
