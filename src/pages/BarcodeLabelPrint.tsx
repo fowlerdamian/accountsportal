@@ -18,7 +18,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  DYMO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoLogoLayoutFor, dymoLogoTextLines, dymoNoteLines, validateBarcodeLabel,
+  DYMO_LAYOUT, barcodeValue, dymoBarcodeModule, dymoLogoLayoutFor, dymoLogoTextLayout, dymoNoteLines, validateBarcodeLabel,
   type BarcodeLabelInput, type DymoBarcodeBox,
 } from "@portal/lib/labels/barcodeLabelPdf";
 import { barcodeLogoUrl } from "@portal/lib/labels/barcodeLogos";
@@ -74,8 +74,7 @@ const row: CSSProperties = { display: "flex", alignItems: "center" };
 function DymoLogoLabel({ input, code, logoSrc }: { input: BarcodeLabelInput; code: string; logoSrc: string }) {
   const layout = dymoLogoLayoutFor(input.logo);
   const { logo: L, text: X, barcode: C } = layout;
-  const lines = dymoLogoTextLines(input, layout);
-  const lineH = Math.min(X.lineH, X.h / lines.length);
+  const { lines } = dymoLogoTextLayout(input, layout);
   return (
     <>
       <div style={{ ...abs(L), display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -83,7 +82,7 @@ function DymoLogoLabel({ input, code, logoSrc }: { input: BarcodeLabelInput; cod
       </div>
       <div style={{ ...abs(X), display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {lines.map((l, i) => (
-          <span key={i} className="fit" data-fit style={{ maxWidth: "100%", height: mm(lineH), lineHeight: mm(lineH), fontSize: pt(l.bold ? X.titlePt : X.pt), fontWeight: l.bold ? MEDIUM : LIGHT }}>{l.text}</span>
+          <span key={i} className="fit" data-fit style={{ maxWidth: "100%", height: mm(l.h), lineHeight: mm(l.h), fontSize: pt(l.pt), fontWeight: l.bold ? MEDIUM : LIGHT }}>{l.text}</span>
         ))}
       </div>
       <div style={abs(C)}>

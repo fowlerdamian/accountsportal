@@ -253,11 +253,11 @@ export type DymoBarcodeBox = typeof DYMO_LAYOUT.barcode;
  */
 export const DYMO_LOGO_LAYOUT = {
   /** Logo box; the image is fitted uniformly and centred in it. */
-  logo:    { x: 5.67, y: 3.38, w: 35.66, h: 13.68 },
+  logo:    { x: 5.67, y: 2.6, w: 25, h: 10.5 },
   /** Title, subtitle, notes and "SKU:" lines, left-aligned, vertically centred. */
-  text:    { x: 44.2, y: 3.91, w: 36.45, h: 12.36, titlePt: 9, pt: 8, floorPt: 5.5, lineH: 3.7 },
+  text:    { x: 32.5, y: 2.4, w: 48.2, h: 14.6, titlePt: 12, pt: 9.5, floorPt: 6, lineH: 4.4 },
   /** Barcode across the bottom (the template's ITF-14 box, EAN-13 centred in it). */
-  barcode: { x: 10.26, y: 17.91, w: 67.88, h: 16.33, barH: 10.6, guardH: 12.4, digitPt: 8, digitBaseline: 15.1, maxModule: 0.5 } as DymoBarcodeBox,
+  barcode: { x: 10.26, y: 18.8, w: 67.88, h: 13.6, barH: 8.6, guardH: 10.2, digitPt: 7, digitBaseline: 12.6, maxModule: 0.42 } as DymoBarcodeBox,
 };
 
 /**
@@ -266,9 +266,9 @@ export const DYMO_LOGO_LAYOUT = {
  * across the bottom. Same page; only the boxes move.
  */
 export const DYMO_WIDE_LOGO_LAYOUT = {
-  logo:    { x: 5.67, y: 2.0, w: 75, h: 6.5 },
-  text:    { x: 5.85, y: 9.4, w: 75, h: 10.4, titlePt: 9, pt: 8, floorPt: 5.5, lineH: 3.5 },
-  barcode: { x: 10.26, y: 20.6, w: 67.88, h: 13.6, barH: 8.4, guardH: 10.0, digitPt: 8, digitBaseline: 12.6, maxModule: 0.5 } as DymoBarcodeBox,
+  logo:    { x: 5.67, y: 1.8, w: 75, h: 5 },
+  text:    { x: 5.85, y: 7.2, w: 75, h: 13.2, titlePt: 12, pt: 9.5, floorPt: 6, lineH: 4.2 },
+  barcode: { x: 10.26, y: 20.8, w: 67.88, h: 13.4, barH: 8.0, guardH: 9.6, digitPt: 7, digitBaseline: 12.0, maxModule: 0.42 } as DymoBarcodeBox,
 };
 
 export type DymoLogoLayout = typeof DYMO_LOGO_LAYOUT;
@@ -281,7 +281,7 @@ export function dymoLogoLayoutFor(logoKey: string | null | undefined): DymoLogoL
 /** Text lines for the logo layout: title, subtitle (if any), notes that fit, then "SKU: code". */
 export function dymoLogoTextLines(input: BarcodeLabelInput, layout: DymoLogoLayout = dymoLogoLayoutFor(input.logo)): { text: string; bold: boolean }[] {
   const X = layout.text;
-  const maxLines = Math.floor(X.h / X.lineH);
+  const maxLines = Math.floor(X.h / MIN_LINE_H);
   const notes = (input.notes ?? "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const head = [{ text: input.title.trim(), bold: true }];
   const subtitle = input.subtitle.trim();
@@ -289,6 +289,32 @@ export function dymoLogoTextLines(input: BarcodeLabelInput, layout: DymoLogoLayo
   const tail = { text: `SKU: ${input.sku.trim()}`, bold: false };
   const room = Math.max(0, maxLines - head.length - 1);
   return [...head, ...notes.slice(0, room).map(text => ({ text, bold: false })), tail];
+}
+
+/** Smallest line pitch the text block will go to before dropping note lines (mm). */
+const MIN_LINE_H = 3.0;
+/** The title line is this much taller than the others. */
+const TITLE_LINE_FACTOR = 1.3;
+
+export interface DymoTextLine { text: string; bold: boolean; pt: number; h: number }
+
+/**
+ * Lines of the logo layout's text block with their font size and line height.
+ * When the block is crowded (a note plus a subtitle) every line and its type
+ * scale down together, like DYMO's AlwaysFit, so nothing is dropped or clipped.
+ */
+export function dymoLogoTextLayout(input: BarcodeLabelInput, layout: DymoLogoLayout = dymoLogoLayoutFor(input.logo)): { lines: DymoTextLine[]; height: number } {
+  const X = layout.text;
+  const raw = dymoLogoTextLines(input, layout);
+  const units = raw.reduce((n, l) => n + (l.bold ? TITLE_LINE_FACTOR : 1), 0);
+  const unit = Math.min(X.lineH, X.h / units);
+  const scale = unit / X.lineH;
+  const lines = raw.map(l => ({
+    ...l,
+    pt: (l.bold ? X.titlePt : X.pt) * scale,
+    h: unit * (l.bold ? TITLE_LINE_FACTOR : 1),
+  }));
+  return { lines, height: lines.reduce((n, l) => n + l.h, 0) };
 }
 
 /** Lines printed in the DYMO notes block: the notes that fit, then "SKU: code" last. */
@@ -374,15 +400,13 @@ function drawDymoLogoLabel(doc: jsPDF, ox: number, oy: number, input: BarcodeLab
 
   // Text block — lines stacked and centred vertically in the box, each shrunk to fit its width.
   const X = layout.text;
-  const lines = dymoLogoTextLines(input, layout);
-  const lineH = Math.min(X.lineH, X.h / lines.length);
-  let y = oy + X.y + (X.h - lineH * lines.length) / 2;
+  const { lines, height } = dymoLogoTextLayout(input, layout);
+  let y = oy + X.y + (X.h - height) / 2;
   for (const line of lines) {
-    const startPt = line.bold ? X.titlePt : X.pt;
-    setFont(doc, line.bold ? "medium" : "light", startPt);
-    const pt = fitFontSize(doc, line.text, startPt, X.w, X.floorPt);
-    doc.text(line.text, ox + X.x, middleBaseline(y, lineH, pt));
-    y += lineH;
+    setFont(doc, line.bold ? "medium" : "light", line.pt);
+    const pt = fitFontSize(doc, line.text, line.pt, X.w, X.floorPt);
+    doc.text(line.text, ox + X.x, middleBaseline(y, line.h, pt));
+    y += line.h;
   }
 
   drawDymoBarcode(doc, ox, oy, layout.barcode, code);
