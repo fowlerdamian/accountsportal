@@ -74,8 +74,8 @@ export const LABEL_SIZES = {
   /** DYMO driver form "99012 Large Address" (see labelStock.ts) — nominal 89 × 36 mm. */
   "dymo-99012": { name: "DYMO 99012 Large Address (89 × 36 mm)", w: 88.39, h: 35.81, layout: "dymo" },
   "50x40":      { name: "50 × 40 mm",                            w: 50,    h: 40,    layout: "product" },
-  /** Portrait — the 50 × 40 design sits centred with room above and below. */
-  "50x70":      { name: "50 × 70 mm",                            w: 50,    h: 70,    layout: "product" },
+  /** Landscape — the 50 × 40 design scales up to 62.5 × 50 and sits centred. */
+  "70x50":      { name: "70 × 50 mm",                            w: 70,    h: 50,    layout: "product" },
 } as const satisfies Record<string, LabelSize>;
 
 export type LabelSizeKey = keyof typeof LABEL_SIZES;
