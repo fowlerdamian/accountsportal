@@ -26,6 +26,8 @@ const CALL_PAGE_LIMIT = 50 // Dialpad: "Limit cannot be greater than 50" on /cal
 const MAX_SCAN_PAGES = 10 // upper bound for client-side call filtering
 // Dialpad rejects any started_after..started_before span of 30 days or more.
 const MAX_WINDOW_MS = 30 * 86400e3 - 60e3
+// Stop scanning before Vercel's 60s function limit and hand back a resume point.
+const SCAN_BUDGET_MS = 40e3
 
 // ─── Dialpad client ───────────────────────────────────────────────────────────
 
@@ -206,20 +208,27 @@ function transcriptView(t) {
 
 async function scanCalls(apiKey, { started_after, started_before, target_type, target_id, match, max }) {
   const out = []
+  const t0 = Date.now()
   let pages = 0
+  let oldestSeen = started_before
+  const stop = (reason) => ({ calls: out, truncated: true, stop_reason: reason, resume_before: toIso(oldestSeen), scanned_pages: pages })
   for (const slice of windowSlices(started_after, started_before)) {
     let cursor
     do {
-      if (pages++ >= MAX_SCAN_PAGES) return { calls: out, truncated: true }
+      if (pages >= MAX_SCAN_PAGES) return stop('page_limit')
+      if (Date.now() - t0 > SCAN_BUDGET_MS) return stop('time_budget')
       const data = await dp('GET', '/call', { apiKey, query: { ...slice, target_type, target_id, cursor, limit: CALL_PAGE_LIMIT } })
+      pages++
       for (const c of data.items ?? []) {
+        const started = Number(c.date_started)
+        if (Number.isFinite(started) && started < oldestSeen) oldestSeen = started
         if (match(c)) out.push(summariseCall(c))
-        if (out.length >= max) return { calls: out, truncated: true }
+        if (out.length >= max) return stop('max_results')
       }
       cursor = data.cursor
     } while (cursor)
   }
-  return { calls: out, truncated: false }
+  return { calls: out, truncated: false, stop_reason: null, resume_before: null, scanned_pages: pages }
 }
 
 // ─── Tools ────────────────────────────────────────────────────────────────────
@@ -313,7 +322,7 @@ const TOOLS = [
   },
   {
     name: 'dialpad_calls_for_contact',
-    description: 'Call history with a specific person: pass a phone number (any format) and/or a Dialpad contact ID. Scans the date window (default last 30 days; wider windows are split into 30-day slices) and returns matching calls newest first.',
+    description: 'Call history with a specific person: pass a phone number (any format) and/or a Dialpad contact ID. Scans the date window (default last 30 days; wider windows are split into 30-day slices) newest first. Busy periods may be truncated by a time budget — the response then includes resume_before to continue.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -478,7 +487,7 @@ const HANDLERS = {
       if (want && (phoneKey(c.external_number) === want || phoneKey(c.contact?.phone) === want)) return true
       return false
     }
-    const { calls, truncated } = await scanCalls(k, { started_after, started_before, target_type: a.target_type, target_id: a.target_id, match, max: Number(a.max_results) || 50 })
+    const { calls, truncated, stop_reason, resume_before, scanned_pages } = await scanCalls(k, { started_after, started_before, target_type: a.target_type, target_id: a.target_id, match, max: Number(a.max_results) || 50 })
     const answered = calls.filter((c) => c.status === 'answered')
     return {
       query: { phone: a.phone ?? null, contact_id: contactId },
@@ -488,6 +497,7 @@ const HANDLERS = {
       total_talk_seconds: answered.reduce((s, c) => s + c.duration_seconds, 0),
       last_call_at: calls[0]?.started_at ?? null,
       truncated,
+      ...(truncated ? { stop_reason, resume_before, hint: `Scan stopped (${stop_reason}) after ${scanned_pages} pages. Call again with started_before=${resume_before} to continue further back.` } : { scanned_pages }),
       calls,
     }
   },
