@@ -17,29 +17,63 @@
 
 export interface Inset { top: number; right: number; bottom: number; left: number }
 
-export interface LabelStock {
+/**
+ * The driver's printable rectangle for a form, in mm, in the landscape
+ * orientation the @page uses (x runs along the long edge, from the leading
+ * edge that feeds first). Read with PrinterSettings.DefaultPageSettings
+ * .PrintableArea per PaperSize on the LabelWriter queue (2026-09-17).
+ */
+export interface Printable { x: number; y: number; w: number; h: number }
+
+interface LabelStockDef {
   /** Human name shown in settings / pickers. */
   name: string;
   /** Driver paper size in mm — becomes the @page size. */
   width: number;
   height: number;
-  /**
-   * Unprintable band the LabelWriter head cannot reach, in mm. The label
-   * feeds left-edge first, so that side needs the most room.
-   */
-  inset: Inset;
+  printable: Printable;
   /** wide = text column on the left, QR on the right. square = QR with the code underneath. */
   layout: "wide" | "square";
   /** Font sizes in points. 0 = element not shown on this stock. */
   fonts: { scan: number; code: number; title: number };
 }
 
-export const LABEL_STOCK = {
+export interface LabelStock extends LabelStockDef {
+  /**
+   * Keep-out band around the page, in mm, derived from the driver's
+   * printable area — see `insetFor`.
+   */
+  inset: Inset;
+}
+
+/** Extra keep-out beyond the driver's figures: quiet zone for the QR + mm→px rounding. */
+const INSET_SAFETY_MM = 0.4;
+
+/**
+ * Chrome places the page at the paper's physical corner on some driver /
+ * queue combinations and at the printable-area corner on others (the shared
+ * LabelWriter 550 queue does the latter: everything lands `printable.x`
+ * further along the label, which pushed the 99012 QR off the trailing edge,
+ * 2026-09-17). Keep the layout inside the region that is printable either
+ * way: from the leading offset up to the printable width, and likewise
+ * across — the head's cross-feed offset can land on either side in landscape.
+ */
+function insetFor(width: number, height: number, p: Printable): Inset {
+  const across = Math.max(p.y, height - p.h) + INSET_SAFETY_MM;
+  return {
+    left: p.x + INSET_SAFETY_MM,
+    right: width - p.w + INSET_SAFETY_MM,
+    top: across,
+    bottom: across,
+  };
+}
+
+const STOCK_DEFS = {
   /** S0722400 Large Address. */
   "99012": {
     name: "99012 — Large Address (89×36mm)",
     width: 88.39, height: 35.81, // driver form "99012 Large Address"
-    inset: { top: 2, right: 2, bottom: 2, left: 4 },
+    printable: { x: 5.67, y: 1.02, w: 81.36, h: 33.19 },
     layout: "wide",
     fonts: { scan: 9, code: 8, title: 5.5 },
   },
@@ -47,7 +81,7 @@ export const LABEL_STOCK = {
   "99010": {
     name: "99010 — Standard Address (89×28mm)",
     width: 88.9, height: 27.69, // driver form "99010 Standard Address"
-    inset: { top: 1.5, right: 2, bottom: 1.5, left: 4 },
+    printable: { x: 5.84, y: 1.02, w: 81.53, h: 25.32 },
     layout: "wide",
     fonts: { scan: 8, code: 7, title: 0 },
   },
@@ -55,7 +89,7 @@ export const LABEL_STOCK = {
   "11354": {
     name: "11354 — Multi-Purpose (57×32mm)",
     width: 57.15, height: 31.75, // driver form "11354 Multi-Purpose"
-    inset: { top: 1.5, right: 1.5, bottom: 1.5, left: 3 },
+    printable: { x: 1.52, y: 1.02, w: 55.12, h: 28.7 },
     layout: "wide",
     fonts: { scan: 7, code: 6.5, title: 0 },
   },
@@ -63,7 +97,7 @@ export const LABEL_STOCK = {
   "30334": {
     name: "30334 — Multi-Purpose (57×32mm)",
     width: 57.15, height: 31.75, // driver form "30334 2-1/4 in x 1-1/4 in"
-    inset: { top: 1.5, right: 1.5, bottom: 1.5, left: 3 },
+    printable: { x: 1.52, y: 1.02, w: 55.12, h: 28.7 },
     layout: "wide",
     fonts: { scan: 7, code: 6.5, title: 0 },
   },
@@ -71,13 +105,20 @@ export const LABEL_STOCK = {
   "30332": {
     name: "30332 — Square (25×25mm)",
     width: 25.4, height: 25.4, // driver form "30332 1 in x 1 in"
-    inset: { top: 1.5, right: 1.5, bottom: 1.5, left: 2.5 },
+    printable: { x: 2.37, y: 1.02, w: 21.51, h: 22.94 },
     layout: "square",
     fonts: { scan: 0, code: 5.5, title: 0 },
   },
-} as const satisfies Record<string, LabelStock>;
+} as const satisfies Record<string, LabelStockDef>;
 
-export type LabelStockKey = keyof typeof LABEL_STOCK;
+export type LabelStockKey = keyof typeof STOCK_DEFS;
+
+export const LABEL_STOCK: Record<LabelStockKey, LabelStock> = Object.fromEntries(
+  (Object.keys(STOCK_DEFS) as LabelStockKey[]).map(key => {
+    const def = STOCK_DEFS[key];
+    return [key, { ...def, inset: insetFor(def.width, def.height, def.printable) }];
+  }),
+) as Record<LabelStockKey, LabelStock>;
 
 export const DEFAULT_LABEL_STOCK: LabelStockKey = "99012";
 
