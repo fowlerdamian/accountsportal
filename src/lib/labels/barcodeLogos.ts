@@ -23,6 +23,10 @@ export const DEFAULT_BARCODE_LOGO = NO_BARCODE_LOGO;
 
 export const BARCODE_LOGOS: BarcodeLogo[] = [
   { key: "trailbait",   name: "TrailBait",    url: "/label-logos/trailbait.png" },
+  // 3.16:1 — close to TrailBait, so the standard box suits it. The mark is
+  // width-limited in the box and keeps its own vertical air, and the three
+  // stacked text lines only get harder to read if it is scaled down.
+  { key: "aga",         name: "Automotive Group Australia", url: "/label-logos/aga.png" },
   { key: "fleetcraft",  name: "FleetCraft",   url: "/label-logos/fleetcraft.png", wide: true },
   { key: "ultravision", name: "Ultra Vision", url: "/label-logos/ultravision.png", scale: 0.72 },
 ];
