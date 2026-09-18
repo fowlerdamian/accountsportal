@@ -6,7 +6,7 @@ import type { Contact, ContactNote, Task, Sale } from '../types';
 const sb = supabase as any;
 
 export const CONTACT_COLUMNS =
-  'id,first_name,last_name,title,company_name,email_jsonb,phone_jsonb,linkedin_url,gender,has_newsletter,background,status,tags,avatar_url,address,sales_id,first_seen,last_seen,shopify_customer_id,nb_orders,total_spent,last_order_at,nb_calls,last_call_at,avg_csat,nb_emails,last_email_at,nb_tasks,ai_summary,ai_summary_at,created_at,updated_at';
+  'id,first_name,last_name,title,company_name,email_jsonb,phone_jsonb,linkedin_url,gender,has_newsletter,background,status,status_source,status_reason,status_set_at,tags,avatar_url,address,sales_id,first_seen,last_seen,shopify_customer_id,nb_orders,total_spent,last_order_at,nb_calls,last_call_at,avg_csat,nb_emails,last_email_at,nb_tasks,ai_summary,ai_summary_at,created_at,updated_at';
 
 export type ContactFilter = 'all' | 'customers' | 'called' | 'emailed' | 'attention' | 'tasks';
 
@@ -61,6 +61,14 @@ export async function getContact(id: string): Promise<Contact | null> {
   const { data, error } = await sb.from('community_contacts').select(CONTACT_COLUMNS).eq('id', id).maybeSingle();
   if (error) throw error;
   return (data as Contact) ?? null;
+}
+
+/**
+  * A status chosen by a person pins the contact: community_apply_labels() only
+  * touches rows still marked 'auto'.
+  */
+export async function setContactStatus(id: string, status: string): Promise<Contact> {
+  return updateContact(id, { status, status_source: 'manual', status_set_at: new Date().toISOString(), status_reason: null });
 }
 
 export async function updateContact(id: string, patch: Partial<Contact>): Promise<Contact> {

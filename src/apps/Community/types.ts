@@ -22,6 +22,10 @@ export interface Contact {
   has_newsletter: boolean;
   background: string | null;
   status: ContactStatus | string;
+  /** 'auto' = maintained by community_apply_labels(); 'manual' = a person chose it. */
+  status_source: 'auto' | 'manual' | string;
+  status_reason: string | null;
+  status_set_at: string | null;
   tags: string[];
   avatar_url: string | null;
   address: Record<string, string | null> | null;
@@ -86,6 +90,14 @@ export const STATUSES: { value: ContactStatus; label: string }[] = [
   { value: 'angry', label: 'Angry' },
   { value: 'in-contract', label: 'In contract' },
 ];
+
+export const STATUS_LABEL: Record<string, string> = Object.fromEntries(STATUSES.map((s) => [s.value, s.label]));
+
+/** How the status is worked out when nobody has overridden it. */
+export const STATUS_RULES =
+  'Set automatically: angry when a call or email reads as unhappy and nothing positive has happened since; '
+  + 'waiting when the customer is owed a reply and we have not called back or emailed; otherwise cold. '
+  + 'Choosing a status here pins it and stops the automation touching this contact.';
 export const TASK_TYPES = ['None', 'Email', 'Call', 'Follow-up', 'Meeting', 'Ship', 'Other'];
 
 export const contactName = (c: Pick<Contact, 'first_name' | 'last_name' | 'company_name' | 'email_jsonb' | 'phone_jsonb'>) =>

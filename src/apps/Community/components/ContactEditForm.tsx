@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { CONTACT_TYPES, GENDERS, STATUSES, type Contact, type ContactType, type Sale } from '../types';
+import { CONTACT_TYPES, GENDERS, STATUSES, STATUS_RULES, type Contact, type ContactType, type Sale } from '../types';
 
 export interface ContactFormValues {
   first_name: string; last_name: string; title: string; company_name: string;
@@ -123,6 +123,7 @@ export function ContactEditForm({ contact, sales, onSave, onCancel, saving }: {
         <Field label="Background / bio" htmlFor="background"><Textarea id="background" rows={4} {...register('background')} /></Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Status">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">{STATUS_RULES}</p>
             <Controller control={control} name="status" render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
                 <SelectTrigger><SelectValue /></SelectTrigger>

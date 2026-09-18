@@ -48,7 +48,13 @@ export default function ContactShow({ mode = 'show' }: { mode?: 'show' | 'edit' 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['community'] });
 
   const save = useMutation({
-    mutationFn: (patch: Partial<Contact>) => updateContact(id, patch),
+    mutationFn: (patch: Partial<Contact>) => updateContact(id, {
+      ...patch,
+      // Picking a status by hand pins it; the automation skips 'manual' rows.
+      ...(patch.status && patch.status !== contact?.status
+        ? { status_source: 'manual', status_set_at: new Date().toISOString(), status_reason: null }
+        : {}),
+    }),
     onSuccess: () => { invalidate(); navigate(`/community/contacts/${id}`); },
     onError: (e) => toast({ title: 'Could not save', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });

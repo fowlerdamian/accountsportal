@@ -120,7 +120,7 @@ export default function ContactList() {
               <Avatar className="h-9 w-9"><AvatarFallback className="bg-muted text-xs text-muted-foreground">{contactInitials(c)}</AvatarFallback></Avatar>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[c.status] ?? STATUS_DOT.cold)} title={c.status} />
+                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[c.status] ?? STATUS_DOT.cold)} title={c.status_reason ? `${c.status} — ${c.status_reason}` : c.status} />
                   <span className="truncate text-sm font-medium">{contactName(c)}</span>
                   {c.company_name && [c.first_name, c.last_name].some(Boolean) && <span className="truncate text-sm text-muted-foreground">· {c.company_name}</span>}
                 </div>

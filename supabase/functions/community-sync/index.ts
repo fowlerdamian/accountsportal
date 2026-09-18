@@ -28,7 +28,12 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const SHOPIFY_API = "2024-10";
 const INTERNAL_DOMAINS = ["automotivegroup.com.au", "automotivegroupaustralia.com.au", "trailbait.com.au", "fleetcraft.com.au"];
 const DEFAULT_MAILBOXES = ["info@trailbait.com.au", "johnp@automotivegroup.com.au", "kylef@automotivegroup.com.au", "damianf@automotivegroup.com.au"];
+// AGA's own numbers: the reception line plus each staff member's Dialpad DID.
+// A call to or from one of these is us, so it must never create a "customer".
 const RECEPTION_NUMBERS = new Set(["+61280001629"]);
+const INTERNAL_NUMBERS = new Set(["+61280001629", "+61285284760", "+61285284705", "+61261902894"]);
+// Staff names, so the transcript reader never files an agent as the customer.
+const STAFF_NAMES = ["john paguio", "damian fowler", "kyle fowler", "john paolo paguio"];
 const AUTOMATED_SENDER = /(no-?reply|donotreply|do-not-reply|notifications?@|mailer-daemon|postmaster|newsletter|bounce|alerts?@|@shopify\.com|@dearsystems\.com|@hubspot|@google\.com|@dialpad\.com|@xero\.com|@stripe\.com|@paypal|@afterpay|@zip\.co|@auspost|@startrack|@sendle|@shippit|@aramex|@couriersplease|@linkedin|@facebookmail|@synergywholesale|@vercel|@supabase|@github|@atlassian|@canva|@zoom\.us|@calendly|unsubscribe)/i;
 const INITIAL_LOOKBACK_DAYS = 90;
 
@@ -116,7 +121,7 @@ interface Hints {
  */
 async function resolveContact(sb: SupabaseClient, h: Hints): Promise<string | null> {
   const emails = [...new Set((h.emails ?? []).map(normEmail).filter((e): e is string => !!e && !isInternalEmail(e)))];
-  const phones = [...new Set((h.phones ?? []).map(normPhone).filter((p): p is string => !!p && !RECEPTION_NUMBERS.has(p)))];
+  const phones = [...new Set((h.phones ?? []).map(normPhone).filter((p): p is string => !!p && !INTERNAL_NUMBERS.has(p)))];
   const shopify = h.shopify_customer_id ? String(h.shopify_customer_id) : null;
   const keys: { kind: string; value: string }[] = [
     ...(shopify ? [{ kind: "shopify_customer", value: shopify }] : []),
@@ -300,23 +305,35 @@ async function syncCalls(sb: SupabaseClient, deadline: number) {
     last = c.started_at;
     if (c.ai_purpose === "Internal" || c.ai_purpose === "Supplier / parts sourcing") { skipped++; continue; }
     const phone = normPhone(c.external_number);
+    if (phone && INTERNAL_NUMBERS.has(phone) && !RECEPTION_NUMBERS.has(phone)) { skipped++; continue; } // our own line
     const viaReception = !phone || RECEPTION_NUMBERS.has(phone) || /reception/i.test(c.contact_name ?? "");
+    /** The agent's own name must never end up on the customer's profile. */
+    const isStaffName = (first?: string | null, last?: string | null) => {
+      const full = `${first ?? ""} ${last ?? ""}`.trim().toLowerCase();
+      if (!full) return false;
+      const agent = (c.agent_name ?? "").trim().toLowerCase();
+      return STAFF_NAMES.includes(full) || (!!agent && (full === agent || agent.includes(full) || full.includes(agent)));
+    };
     const hints: Hints = { phones: viaReception ? [] : [phone], source: "dialpad", seen_at: c.started_at };
     const nameFromDialpad = c.contact_name && !/^\+?[\d\s()-]+$/.test(c.contact_name) && !/reception/i.test(c.contact_name) ? splitName(c.contact_name) : null;
-    if (nameFromDialpad) { hints.first_name = nameFromDialpad.first; hints.last_name = nameFromDialpad.last; }
+    if (nameFromDialpad && !isStaffName(nameFromDialpad.first, nameFromDialpad.last)) {
+      hints.first_name = nameFromDialpad.first; hints.last_name = nameFromDialpad.last;
+    }
 
     // Unknown caller (or reception line): let Claude read the transcript for identity.
     const known = !viaReception && (await sb.from("community_identities").select("contact_id").eq("kind", "phone").eq("value", phone!).maybeSingle()).data;
     if (!known && c.transcript_text && c.transcript_text.length > 200 && extracted < 20) {
       extracted++;
       const out = await claude(
-        `Extract the CUSTOMER's identity from an Australian auto-accessories support call transcript (AGA staff: ${c.agent_name ?? "unknown"}). Respond with ONLY JSON: {"first_name": string|null, "last_name": string|null, "email": string|null, "company": string|null, "order_number": string|null, "vehicle": string|null}. Use null when not clearly stated. Never invent.`,
+        `Extract the CUSTOMER's identity from an Australian auto-accessories support call transcript. The AGA employee on this call is "${c.agent_name ?? "unknown"}" — they are NOT the customer, and neither is anyone answering on behalf of AGA. Never return an AGA employee's name, and never return a name that only appears as the person greeting or introducing themselves from AGA's side. If the customer never states their own name, return null. Respond with ONLY JSON: {"first_name": string|null, "last_name": string|null, "email": string|null, "company": string|null, "order_number": string|null, "vehicle": string|null}. Use null when not clearly stated. Never invent.`,
         c.transcript_text.slice(0, 7000), 200);
       const id = parseJson<{ first_name?: string | null; last_name?: string | null; email?: string | null; company?: string | null; order_number?: string | null }>(out);
       if (id) {
         if (id.email) hints.emails = [id.email];
-        if (id.first_name && !hints.first_name) hints.first_name = id.first_name;
-        if (id.last_name && !hints.last_name) hints.last_name = id.last_name;
+        if (!isStaffName(id.first_name, id.last_name)) {
+          if (id.first_name && !hints.first_name) hints.first_name = id.first_name;
+          if (id.last_name && !hints.last_name) hints.last_name = id.last_name;
+        }
         if (id.company) hints.company = id.company;
         if (id.order_number && !id.email) {
           const { data: ord } = await sb.from("community_notes").select("contact_id").eq("kind", "order").ilike("meta->>name", `%${String(id.order_number).replace(/[^0-9a-z]/gi, "")}`).limit(1).maybeSingle();
@@ -404,6 +421,45 @@ async function syncEmails(sb: SupabaseClient, deadline: number) {
   return out;
 }
 
+// ── Phase: inbound email sentiment ───────────────────────────────────────────
+// Call sentiment comes from the Cases grader; email had none, so a customer who
+// only ever writes could never be read as unhappy. One cheap Haiku call per
+// inbound email fills that in, and community_apply_labels() reads it.
+
+async function syncEmailSentiment(sb: SupabaseClient, deadline: number) {
+  const { data: pending } = await sb.from("community_notes")
+    .select("id,text,meta")
+    .eq("kind", "email").eq("meta->>direction", "inbound")
+    .filter("meta->>sentiment", "is", null)
+    .order("date", { ascending: false }).limit(24);
+  let graded = 0, failed = 0;
+  for (const n of pending ?? []) {
+    if (Date.now() > deadline) break;
+    try {
+      const out = await claude(
+        `You read inbound customer emails for an Australian 4x4 / trailer accessories business (AGA; brands TrailBait, FleetCraft). Judge the CUSTOMER's tone. Respond with ONLY JSON: {"sentiment": "positive" | "neutral" | "negative", "needs_reply": true | false}. "negative" means frustrated, complaining, chasing something late, or threatening to return or leave — not merely a problem calmly described. Marketing, automated and supplier-admin mail is "neutral" with needs_reply false.`,
+        String(n.text ?? "").slice(0, 2000), 120);
+      const v = parseJson<{ sentiment?: string; needs_reply?: boolean }>(out);
+      const sentiment = ["positive", "neutral", "negative"].includes(String(v?.sentiment)) ? String(v!.sentiment) : "neutral";
+      await sb.from("community_notes")
+        .update({ meta: { ...(n.meta as Record<string, unknown>), sentiment, needs_reply: Boolean(v?.needs_reply) } })
+        .eq("id", n.id);
+      graded++;
+    } catch (e) { failed++; console.warn("[community-sync] email sentiment", n.id, (e as Error).message); }
+  }
+  return { graded, failed, pending: (pending?.length ?? 0) - graded - failed };
+}
+
+// ── Phase: status labels ─────────────────────────────────────────────────────
+// Pure SQL — see community_apply_labels(). Contacts a person has labelled by
+// hand carry status_source = 'manual' and are left alone.
+
+async function syncLabels(sb: SupabaseClient) {
+  const { data, error } = await sb.rpc("community_apply_labels", { p_contact: null });
+  if (error) throw new Error(error.message);
+  return { relabelled: data as number };
+}
+
 // ── Phase: AI profile summaries ──────────────────────────────────────────────
 
 async function syncProfiles(sb: SupabaseClient, deadline: number) {
@@ -445,17 +501,20 @@ Deno.serve(async (req) => {
     return json({ contacts: count, state: data });
   }
 
-  const phases = (Array.isArray(body.phases) && body.phases.length ? body.phases : ["orders", "calls", "emails", "profiles"]) as string[];
+  const phases = (Array.isArray(body.phases) && body.phases.length ? body.phases : ["orders", "calls", "emails", "sentiment", "profiles", "labels"]) as string[];
   const t0 = Date.now();
   const budget = Math.min(Number(body.budget_ms) || 120e3, 140e3);
   const out: Record<string, unknown> = {};
   // Absolute per-phase deadlines so the later phases always get their share.
   const at = (share: number) => t0 + Math.floor(budget * share);
   try {
-    if (phases.includes("orders")) out.orders = await syncOrders(sb, at(0.22)).catch((e) => ({ error: (e as Error).message }));
-    if (phases.includes("calls")) out.calls = await syncCalls(sb, at(0.5)).catch((e) => ({ error: (e as Error).message }));
-    if (phases.includes("emails")) out.emails = await syncEmails(sb, at(0.82)).catch((e) => ({ error: (e as Error).message }));
-    if (phases.includes("profiles")) out.profiles = await syncProfiles(sb, t0 + budget - 3e3).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("orders")) out.orders = await syncOrders(sb, at(0.16)).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("calls")) out.calls = await syncCalls(sb, at(0.40)).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("emails")) out.emails = await syncEmails(sb, at(0.62)).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("sentiment")) out.sentiment = await syncEmailSentiment(sb, at(0.80)).catch((e) => ({ error: (e as Error).message }));
+    if (phases.includes("profiles")) out.profiles = await syncProfiles(sb, t0 + budget - 6e3).catch((e) => ({ error: (e as Error).message }));
+    // Cheap and last, so it always reflects everything the run just ingested.
+    if (phases.includes("labels")) out.labels = await syncLabels(sb).catch((e) => ({ error: (e as Error).message }));
     await setState(sb, "last_run", { at: new Date().toISOString(), elapsed_ms: Date.now() - t0, result: out });
     return json({ ok: true, elapsed_ms: Date.now() - t0, ...out });
   } catch (e) {

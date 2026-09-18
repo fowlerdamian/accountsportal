@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { ContactMergeButton } from './ContactMergeButton';
 import { TagsListEdit } from './TagsListEdit';
 import { AddTask, TasksIterator } from './Tasks';
-import { contactName, type Contact, type Sale, type Task } from '../types';
+import { contactName, STATUS_LABEL, STATUS_RULES, type Contact, type Sale, type Task } from '../types';
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -25,6 +25,31 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
 const TypeTag = ({ type }: { type: string }) => <span className="ml-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">{type}</span>;
 
 const GENDER_LABEL: Record<string, string> = { male: 'Male', female: 'Female', nonbinary: 'Non-binary' };
+
+const STATUS_STYLE: Record<string, string> = {
+  angry: 'text-destructive',
+  waiting: 'text-primary',
+  'in-contract': 'text-primary',
+  cold: 'text-muted-foreground',
+};
+
+function StatusBlock({ contact }: { contact: Contact }) {
+  const manual = contact.status_source === 'manual';
+  return (
+    <Section title="Status">
+      <div className="space-y-1">
+        <div className={cn('text-sm font-medium', STATUS_STYLE[contact.status] ?? 'text-foreground')}>
+          {STATUS_LABEL[contact.status] ?? contact.status}
+          {manual && <span className="ml-2 text-[11px] font-normal text-muted-foreground">set by hand</span>}
+        </div>
+        {contact.status_reason && <p className="text-xs leading-relaxed text-muted-foreground">{contact.status_reason}</p>}
+        {!manual && !contact.status_reason && (
+          <p className="text-xs text-muted-foreground" title={STATUS_RULES}>Nothing outstanding.</p>
+        )}
+      </div>
+    </Section>
+  );
+}
 
 export function ContactAside({ contact, mode, sales, tasks, onTagsChange, onDelete, onTaskCreate, onTaskToggle, onTaskDelete, className }: {
   contact: Contact;
@@ -80,6 +105,8 @@ export function ContactAside({ contact, mode, sales, tasks, onTagsChange, onDele
           </>
         )}
       </div>
+
+      <StatusBlock contact={contact} />
 
       {hasPersonal && (
         <Section title="Personal info">
