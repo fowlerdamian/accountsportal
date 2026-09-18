@@ -46,10 +46,10 @@ export interface LabelStock extends LabelStockDef {
   inset: Inset;
 }
 
-/** Extra keep-out beyond the driver's figures: quiet zone for the QR + mm→px rounding. */
+/** Extra keep-out beyond the driver's figures: mm→px rounding. */
 const INSET_SAFETY_MM = 0.4;
-/** Breathing room at the leading edge, on top of the head's own offset. */
-const LEAD_MARGIN_MM = 1;
+/** Quiet zone kept between the QR and the trailing edge of the printable area. */
+const TRAIL_MARGIN_MM = 2;
 
 /**
  * The shared LabelWriter 550 queue lands the page at the driver's
@@ -57,20 +57,19 @@ const LEAD_MARGIN_MM = 1;
  * in from the leading edge (verified 2026-09-17/18 — with paper-corner
  * insets the 99012 QR ran off the trailing edge, and with hedged insets
  * the whole layout sat `printable.x` too far along). So the left inset is
- * just breathing room, and the right inset gives up the same physical
- * margin at the trailing edge as the head forces at the leading one, which
- * centres the label on the paper. Across the feed the offset can land on
- * either side in landscape, so that keep-out is symmetric.
+ * only rounding slack (the head already forces ~5.7mm of blank lead-in on
+ * the address stocks), and the right inset stops the layout at the
+ * printable width plus a QR quiet zone. The same holds across the feed, so
+ * the top inset is slack too and only the far cross-feed band is given up.
  */
 function insetFor(width: number, height: number, p: Printable): Inset {
-  const across = Math.max(p.y, height - p.h) + INSET_SAFETY_MM;
-  const left = LEAD_MARGIN_MM;
   return {
-    left,
-    // Trailing physical margin = leading physical margin (p.x + left).
-    right: Math.max(2 * p.x + left, width - p.w + INSET_SAFETY_MM),
-    top: across,
-    bottom: across,
+    left: INSET_SAFETY_MM,
+    right: width - p.w + TRAIL_MARGIN_MM,
+    // Page y = 0 is already p.y inside the label, so only the far side of
+    // the cross-feed band has to be given up.
+    top: INSET_SAFETY_MM,
+    bottom: height - p.h + INSET_SAFETY_MM,
   };
 }
 
@@ -81,7 +80,7 @@ const STOCK_DEFS = {
     width: 88.39, height: 35.81, // driver form "99012 Large Address"
     printable: { x: 5.67, y: 1.02, w: 81.36, h: 33.19 },
     layout: "wide",
-    fonts: { scan: 9, code: 8, title: 5.5 },
+    fonts: { scan: 12, code: 11, title: 7 },
   },
   /** S0722370 Standard Address. */
   "99010": {
@@ -89,7 +88,7 @@ const STOCK_DEFS = {
     width: 88.9, height: 27.69, // driver form "99010 Standard Address"
     printable: { x: 5.84, y: 1.02, w: 81.53, h: 25.32 },
     layout: "wide",
-    fonts: { scan: 8, code: 7, title: 0 },
+    fonts: { scan: 11, code: 10, title: 0 },
   },
   /** S0722540 Multi-Purpose. */
   "11354": {
@@ -97,7 +96,7 @@ const STOCK_DEFS = {
     width: 57.15, height: 31.75, // driver form "11354 Multi-Purpose"
     printable: { x: 1.52, y: 1.02, w: 55.12, h: 28.7 },
     layout: "wide",
-    fonts: { scan: 7, code: 6.5, title: 0 },
+    fonts: { scan: 9, code: 8.5, title: 0 },
   },
   /** US part number for the same 57×32 roll — brands.dymo_label_size may hold either. */
   "30334": {
@@ -105,7 +104,7 @@ const STOCK_DEFS = {
     width: 57.15, height: 31.75, // driver form "30334 2-1/4 in x 1-1/4 in"
     printable: { x: 1.52, y: 1.02, w: 55.12, h: 28.7 },
     layout: "wide",
-    fonts: { scan: 7, code: 6.5, title: 0 },
+    fonts: { scan: 9, code: 8.5, title: 0 },
   },
   /** Square — QR with the code underneath. */
   "30332": {
@@ -113,7 +112,7 @@ const STOCK_DEFS = {
     width: 25.4, height: 25.4, // driver form "30332 1 in x 1 in"
     printable: { x: 2.37, y: 1.02, w: 21.51, h: 22.94 },
     layout: "square",
-    fonts: { scan: 0, code: 5.5, title: 0 },
+    fonts: { scan: 0, code: 6.5, title: 0 },
   },
 } as const satisfies Record<string, LabelStockDef>;
 
@@ -205,6 +204,7 @@ export function codeLines(stockIn: string | null | undefined, productCode: strin
   const spec = LABEL_STOCK[resolveLabelStock(stockIn)];
   const lines = [{ text: productCode.trim(), size: spec.fonts.code, bold: true }];
   const t = (title ?? "").trim();
-  if (t && spec.fonts.title > 0) lines.push({ text: t.length > 44 ? `${t.slice(0, 43)}…` : t, size: spec.fonts.title, bold: false });
+  // The column is wide and `fitTexts` shrinks the line, so only cap runaway titles.
+  if (t && spec.fonts.title > 0) lines.push({ text: t.length > 64 ? `${t.slice(0, 63)}…` : t, size: spec.fonts.title, bold: false });
   return lines;
 }
