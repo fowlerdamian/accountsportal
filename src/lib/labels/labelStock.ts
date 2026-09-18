@@ -48,21 +48,27 @@ export interface LabelStock extends LabelStockDef {
 
 /** Extra keep-out beyond the driver's figures: quiet zone for the QR + mm→px rounding. */
 const INSET_SAFETY_MM = 0.4;
+/** Breathing room at the leading edge, on top of the head's own offset. */
+const LEAD_MARGIN_MM = 1;
 
 /**
- * Chrome places the page at the paper's physical corner on some driver /
- * queue combinations and at the printable-area corner on others (the shared
- * LabelWriter 550 queue does the latter: everything lands `printable.x`
- * further along the label, which pushed the 99012 QR off the trailing edge,
- * 2026-09-17). Keep the layout inside the region that is printable either
- * way: from the leading offset up to the printable width, and likewise
- * across — the head's cross-feed offset can land on either side in landscape.
+ * The shared LabelWriter 550 queue lands the page at the driver's
+ * PRINTABLE corner, not the paper corner: page x = 0 prints `printable.x`
+ * in from the leading edge (verified 2026-09-17/18 — with paper-corner
+ * insets the 99012 QR ran off the trailing edge, and with hedged insets
+ * the whole layout sat `printable.x` too far along). So the left inset is
+ * just breathing room, and the right inset gives up the same physical
+ * margin at the trailing edge as the head forces at the leading one, which
+ * centres the label on the paper. Across the feed the offset can land on
+ * either side in landscape, so that keep-out is symmetric.
  */
 function insetFor(width: number, height: number, p: Printable): Inset {
   const across = Math.max(p.y, height - p.h) + INSET_SAFETY_MM;
+  const left = LEAD_MARGIN_MM;
   return {
-    left: p.x + INSET_SAFETY_MM,
-    right: width - p.w + INSET_SAFETY_MM,
+    left,
+    // Trailing physical margin = leading physical margin (p.x + left).
+    right: Math.max(2 * p.x + left, width - p.w + INSET_SAFETY_MM),
     top: across,
     bottom: across,
   };
