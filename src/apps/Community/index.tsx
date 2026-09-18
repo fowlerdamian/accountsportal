@@ -1,5 +1,6 @@
-// Community — one profile per customer, built from Shopify orders, Dialpad calls
-// and the shared inbox. Mounted at /community/* inside the portal Layout.
+// Customer Service — one profile per customer, built from Shopify orders, Dialpad
+// calls and the shared inbox. Mounted at /community/* inside the portal Layout.
+// (The Cases app, at /support, handles case management.)
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';

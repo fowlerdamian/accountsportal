@@ -43,7 +43,7 @@ export async function listContacts(opts: { q?: string; filter?: ContactFilter; l
     case 'called': query = query.gt('nb_calls', 0); break;
     case 'emailed': query = query.gt('nb_emails', 0); break;
     case 'tasks': query = query.gt('nb_tasks', 0); break;
-    case 'attention': query = query.in('status', ['hot', 'warm']); break;
+    case 'attention': query = query.in('status', ['angry', 'waiting']); break;
   }
   const limit = opts.limit ?? 50;
   const offset = opts.offset ?? 0;

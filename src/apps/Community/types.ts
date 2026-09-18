@@ -7,7 +7,7 @@ export type ContactType = 'Work' | 'Home' | 'Other';
 export interface EmailAndType { email: string; type: ContactType }
 export interface PhoneNumberAndType { number: string; type: ContactType }
 
-export type ContactStatus = 'cold' | 'warm' | 'hot' | 'in-contract';
+export type ContactStatus = 'cold' | 'waiting' | 'angry' | 'in-contract';
 
 export interface Contact {
   id: string;
@@ -82,8 +82,8 @@ export const CONTACT_TYPES: ContactType[] = ['Work', 'Home', 'Other'];
 export const GENDERS = ['male', 'female', 'nonbinary'] as const;
 export const STATUSES: { value: ContactStatus; label: string }[] = [
   { value: 'cold', label: 'Cold' },
-  { value: 'warm', label: 'Warm' },
-  { value: 'hot', label: 'Hot' },
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'angry', label: 'Angry' },
   { value: 'in-contract', label: 'In contract' },
 ];
 export const TASK_TYPES = ['None', 'Email', 'Call', 'Follow-up', 'Meeting', 'Ship', 'Other'];

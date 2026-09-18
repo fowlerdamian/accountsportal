@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Pencil, Eye, Trash2, Download, Mail, Phone, Link2 } from 'lucide-react';
+import { Pencil, Eye, Trash2, Mail, Phone, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { downloadVCard } from '../lib/vcard';
 import { ContactMergeButton } from './ContactMergeButton';
 import { TagsListEdit } from './TagsListEdit';
 import { AddTask, TasksIterator } from './Tasks';
@@ -78,9 +77,6 @@ export function ContactAside({ contact, mode, sales, tasks, onTagsChange, onDele
               </AlertDialogContent>
             </AlertDialog>
             <ContactMergeButton contact={contact} />
-            <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={() => downloadVCard(contact)}>
-              <Download className="mr-1.5 h-3.5 w-3.5" /> vCard
-            </Button>
           </>
         )}
       </div>

@@ -35,7 +35,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: 'var(--brand-accent)' }} />
               <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff' }}>
-                Support Hub
+                Cases
               </span>
             </div>
           </>
@@ -43,7 +43,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '4px', height: '18px', borderRadius: '2px', background: 'var(--brand-accent)' }} />
             <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#ffffff' }}>
-              Support Hub
+              Cases
             </span>
           </div>
         )}

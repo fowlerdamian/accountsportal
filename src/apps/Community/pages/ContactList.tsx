@@ -18,9 +18,9 @@ const FILTERS: { key: ContactFilter; label: string }[] = [
   { key: 'called', label: 'Called' },
   { key: 'emailed', label: 'Emailed' },
   { key: 'tasks', label: 'With tasks' },
-  { key: 'attention', label: 'Warm & hot' },
+  { key: 'attention', label: 'Angry & waiting' },
 ];
-const STATUS_DOT: Record<string, string> = { cold: 'bg-muted-foreground/40', warm: 'bg-primary/70', hot: 'bg-destructive', 'in-contract': 'bg-primary' };
+const STATUS_DOT: Record<string, string> = { cold: 'bg-muted-foreground/40', waiting: 'bg-primary/70', angry: 'bg-destructive', 'in-contract': 'bg-primary' };
 const STALE_MS = 30 * 60 * 1000;
 
 export default function ContactList() {
@@ -76,7 +76,7 @@ export default function ContactList() {
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Community</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Customer Service</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {status?.contacts != null ? `${status.contacts.toLocaleString()} contacts` : 'Contacts'} built from Shopify orders, Dialpad calls and the inbox
             {lastRun?.at && <span> · synced {formatDistanceToNowStrict(new Date(lastRun.at), { addSuffix: true })}</span>}

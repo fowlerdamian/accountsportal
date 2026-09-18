@@ -17,6 +17,21 @@ const kindIcon = (n: ContactNote) => {
 
 const KIND_LABEL: Record<string, string> = { note: 'Note', call: 'Call', email: 'Email', order: 'Order' };
 
+/**
+ * Superhuman has no public per-thread URL scheme (its share links are generated
+ * on demand), so an email opens Superhuman's web app with the conversation
+ * already searched for — subject first, falling back to the other party.
+ */
+function superhumanUrl(note: ContactNote): string {
+  const meta = note.meta ?? {};
+  const subject = typeof meta.subject === 'string' ? meta.subject.replace(/^(re|fwd?):\s*/i, '').trim() : '';
+  const counterpart = meta.direction === 'inbound'
+    ? (typeof meta.from === 'string' ? meta.from : '')
+    : (Array.isArray(meta.to) ? String(meta.to[0] ?? '') : '');
+  const query = subject || counterpart;
+  return query ? `https://mail.superhuman.com/search/${encodeURIComponent(query)}` : 'https://mail.superhuman.com/';
+}
+
 function Csat({ value }: { value: number }) {
   return (
     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title={`CSAT ${value}/5`}>
@@ -37,7 +52,7 @@ export function Note({ note, sales, canDelete, onDelete }: { note: ContactNote; 
   const lines = note.text.split('\n');
   const long = lines.length > 4 || note.text.length > 420;
   const shown = expanded || !long ? note.text : lines.slice(0, 4).join('\n').slice(0, 420) + '…';
-  const url = typeof meta.url === 'string' ? meta.url : null;
+  const url = note.kind === 'email' ? superhumanUrl(note) : (typeof meta.url === 'string' ? meta.url : null);
 
   return (
     <li className="group flex gap-4 py-5">
@@ -68,7 +83,7 @@ export function Note({ note, sales, canDelete, onDelete }: { note: ContactNote; 
           )}
           {url && (
             <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
-              {note.kind === 'order' ? 'Open in Shopify' : note.kind === 'email' ? 'Open in Gmail' : 'Open'} <ExternalLink className="h-3 w-3" />
+              {note.kind === 'order' ? 'Open in Shopify' : note.kind === 'email' ? 'Open in Superhuman' : 'Open'} <ExternalLink className="h-3 w-3" />
             </a>
           )}
           {canDelete && (

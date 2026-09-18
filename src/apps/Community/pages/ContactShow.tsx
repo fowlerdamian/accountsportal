@@ -76,7 +76,7 @@ export default function ContactShow({ mode = 'show' }: { mode?: 'show' | 'edit' 
   if (!contact) {
     return (
       <div className="p-8 text-sm text-muted-foreground">
-        Contact not found. <Link to="/community" className="underline">Back to Community</Link>
+        Contact not found. <Link to="/community" className="underline">Back to Customer Service</Link>
       </div>
     );
   }
@@ -132,7 +132,7 @@ export default function ContactShow({ mode = 'show' }: { mode?: 'show' | 'edit' 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
       <Link to="/community" className="mb-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" /> Community
+        <ArrowLeft className="h-3.5 w-3.5" /> Customer Service
       </Link>
 
       {/* Desktop */}

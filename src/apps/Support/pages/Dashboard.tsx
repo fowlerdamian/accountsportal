@@ -238,7 +238,7 @@ export default function Dashboard() {
           Cases
         </h1>
         <p style={{ fontSize: '13px', color: '#a0a0a0', margin: '4px 0 0', fontFamily: '"JetBrains Mono", monospace' }}>
-          {teamMember?.name ? `Welcome back, ${teamMember.name.split(' ')[0]}` : 'Support Hub'}
+          {teamMember?.name ? `Welcome back, ${teamMember.name.split(' ')[0]}` : 'Cases'}
         </p>
       </div>
 
