@@ -1,5 +1,6 @@
 // Data access for the Community app — plain Supabase calls wrapped for react-query.
 import { supabase } from '@portal/lib/supabase';
+import { isPhoneQuery, phoneDigits, phoneSearchToken } from './phone';
 import type { Contact, ContactNote, Task, Sale } from '../types';
 
 const sb = supabase as any;
@@ -9,10 +10,34 @@ export const CONTACT_COLUMNS =
 
 export type ContactFilter = 'all' | 'customers' | 'called' | 'emailed' | 'attention' | 'tasks';
 
+/**
+ * Contacts whose E.164 identity ends with these digits. Covers numbers that were
+ * only ever seen on a call, so they never reached the contact's phone list.
+ */
+async function contactIdsByPhone(digits: string): Promise<string[]> {
+  if (digits.length < 6) return [];
+  const suffix = digits.length >= 9 ? digits.slice(-9) : digits;
+  const { data, error } = await sb.from('community_identities').select('contact_id').eq('kind', 'phone').like('value', `%${suffix}`);
+  if (error) return [];
+  return [...new Set((data ?? []).map((r: { contact_id: string }) => r.contact_id))].slice(0, 50); // keep the URL short
+}
+
 export async function listContacts(opts: { q?: string; filter?: ContactFilter; limit?: number; offset?: number }): Promise<Contact[]> {
   let query = sb.from('community_contacts').select(CONTACT_COLUMNS).order('last_seen', { ascending: false });
-  const q = opts.q?.trim().toLowerCase();
-  if (q) query = query.ilike('search_text', `%${q.replace(/[%_]/g, '')}%`);
+  const raw = opts.q?.trim() ?? '';
+  if (raw) {
+    // A phone-shaped query is reduced to digits so every format — 0410 849 548,
+    // 0410849548, +61 410 849 548, (02) 6190 2894 — hits the same tokens.
+    const term = (isPhoneQuery(raw) ? phoneSearchToken(raw) : raw.toLowerCase()).replace(/[%_,]/g, '');
+    if (isPhoneQuery(raw)) {
+      const ids = await contactIdsByPhone(phoneDigits(raw));
+      query = ids.length
+        ? query.or(`search_text.ilike.%${term}%,id.in.(${ids.join(',')})`)
+        : query.ilike('search_text', `%${term}%`);
+    } else if (term) {
+      query = query.ilike('search_text', `%${term}%`);
+    }
+  }
   switch (opts.filter) {
     case 'customers': query = query.gt('nb_orders', 0); break;
     case 'called': query = query.gt('nb_calls', 0); break;

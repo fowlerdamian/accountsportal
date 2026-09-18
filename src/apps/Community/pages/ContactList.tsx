@@ -93,7 +93,7 @@ export default function ContactList() {
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <div className="relative w-full sm:w-80">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, email or phone" className="pl-9" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, email or phone (any format)" className="pl-9" />
         </div>
         <div className="flex flex-wrap gap-1">
           {FILTERS.map((f) => (

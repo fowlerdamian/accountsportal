@@ -53,7 +53,7 @@ export function ContactMergeButton({ contact }: { contact: Contact }) {
               The other contact's notes, calls, emails, orders and tasks move onto <span className="font-medium text-foreground">{contactName(contact)}</span>, then it is deleted.
             </DialogDescription>
           </DialogHeader>
-          <Input value={q} onChange={(e) => { setQ(e.target.value); setPicked(null); }} placeholder="Search by name, email, phone or company" autoFocus />
+          <Input value={q} onChange={(e) => { setQ(e.target.value); setPicked(null); }} placeholder="Search by name, email, phone (any format) or company" autoFocus />
           {results.length > 0 && !picked && (
             <ul className="max-h-64 divide-y divide-border/60 overflow-y-auto rounded-md border">
               {results.map((r) => (
