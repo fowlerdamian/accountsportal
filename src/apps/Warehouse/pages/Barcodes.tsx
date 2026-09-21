@@ -347,7 +347,7 @@ export default function BarcodeLabels() {
                   </Field>
                 </div>
                 <div style={hintStyle}>
-                  Print to DYMO uses the Large Address (99012) layout whatever size is picked above — pick the LabelWriter in Chrome's print dialog, scale 100%, margins none.
+                  Print to DYMO uses the Large Address (99012) layout whatever size is picked above — in Chrome's print dialog pick the LabelWriter, paper size 99012 Large Address (36 × 89 mm), scale 100%, margins none. An Address / 30252 paper size prints the label at 70% in the top corner.
                 </div>
               </>
             )}

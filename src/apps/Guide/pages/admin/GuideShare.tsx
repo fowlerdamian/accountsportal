@@ -212,6 +212,10 @@ export default function GuideShare() {
                           </div>
                           <Button variant="outline" size="sm" onClick={() => setFullscreen(brand.key)}><Maximize2 className="w-4 h-4 mr-2" /> Fullscreen</Button>
                         </div>
+                        <p className="text-xs text-muted-foreground text-center max-w-md">
+                          Print label opens Chrome's print dialog: destination DYMO LabelWriter, paper size <strong>99012 Large Address (36 × 89 mm)</strong>, scale 100%, margins none.
+                          If the paper size shows an Address / 30252 form the label prints at 70% in the top corner.
+                        </p>
                         <Button
                           variant="destructive"
                           size="sm"
