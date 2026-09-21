@@ -52,23 +52,23 @@ const INSET_SAFETY_MM = 0.4;
 const TRAIL_MARGIN_MM = 2;
 
 /**
- * The shared LabelWriter 550 queue lands the page at the driver's
- * PRINTABLE corner, not the paper corner: page x = 0 prints `printable.x`
- * in from the leading edge (verified 2026-09-17/18 — with paper-corner
- * insets the 99012 QR ran off the trailing edge, and with hedged insets
- * the whole layout sat `printable.x` too far along). So the left inset is
- * only rounding slack (the head already forces ~5.7mm of blank lead-in on
- * the address stocks), and the right inset stops the layout at the
- * printable width plus a QR quiet zone. The same holds across the feed, so
- * the top inset is slack too and only the far cross-feed band is given up.
+ * Keep the whole layout inside the driver's printable window IN PAGE
+ * COORDINATES: x from `printable.x` to `printable.w`, y likewise.
+ *
+ * Which physical spot page (0,0) lands on depends on the queue's driver and
+ * on the Chrome print dialog's margins setting, and prints from this office
+ * have shown both: a 99012 label whose QR ran off the trailing edge (page
+ * origin at the printable corner, everything 5.67mm further along) and
+ * layouts that print exactly where the page says. This window is the
+ * intersection of the two, so the label prints complete either way; the
+ * only difference is a leading margin of ~6mm or ~11mm. Do not "reclaim"
+ * the leading band without a ruler print proving which case a PC is in.
  */
 function insetFor(width: number, height: number, p: Printable): Inset {
   return {
-    left: INSET_SAFETY_MM,
+    left: p.x + INSET_SAFETY_MM,
     right: width - p.w + TRAIL_MARGIN_MM,
-    // Page y = 0 is already p.y inside the label, so only the far side of
-    // the cross-feed band has to be given up.
-    top: INSET_SAFETY_MM,
+    top: p.y + INSET_SAFETY_MM,
     bottom: height - p.h + INSET_SAFETY_MM,
   };
 }

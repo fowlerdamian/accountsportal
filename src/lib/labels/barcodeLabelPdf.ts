@@ -234,13 +234,20 @@ function drawLabel(doc: jsPDF, ox: number, oy: number, size: LabelSize, input: B
 // ─── DYMO Large Address layout (mm, from AMBHX2.dymo, inches × 25.4) ────────
 
 /** Shared with the browser print route (src/pages/BarcodeLabelPrint.tsx) so the printed label matches the PDF preview. */
+/*
+ * Every box below stays inside the LabelWriter driver's printable window for
+ * the 99012 form, x 5.67..81.36 and y 1.02..33.19 mm (see labelStock.ts):
+ * the head cannot print the first 5.67mm of the label, and on some print
+ * setups page (0,0) lands at that printable corner rather than the paper
+ * corner, so anything past x 81.36 is lost in that case.
+ */
 export const DYMO_LAYOUT = {
-  title:    { x: 5.85, y: 1.70,  w: 80.3, h: 10.49, pt: 16, floorPt: 9 },
-  subtitle: { x: 5.67, y: 10.22, w: 80.5, h: 7.76,  pt: 16, floorPt: 8 },
+  title:    { x: 5.85, y: 1.70,  w: 75.5, h: 10.49, pt: 16, floorPt: 9 },
+  subtitle: { x: 5.67, y: 10.22, w: 75.6, h: 7.76,  pt: 16, floorPt: 8 },
   /** Notes + SKU lines, bottom-anchored beside the barcode. */
   notes:    { x: 5.85, y: 15.35, w: 26.1, h: 16.6,  pt: 10, floorPt: 6, lineH: 4.2 },
   /** EAN-13 centred in the template's barcode box; bars, then guard bars reaching into the digit row. */
-  barcode:  { x: 33.5, y: 21.56, w: 48.8, h: 11.03, barH: 7.8, guardH: 9.4, digitPt: 7, digitBaseline: 10.5, maxModule: 0.33 },
+  barcode:  { x: 33.5, y: 21.56, w: 47.8, h: 11.03, barH: 7.8, guardH: 9.4, digitPt: 7, digitBaseline: 10.5, maxModule: 0.33 },
 };
 const DYMO = DYMO_LAYOUT;
 
@@ -268,7 +275,7 @@ export const DYMO_LOGO_LAYOUT = {
 export const DYMO_WIDE_LOGO_LAYOUT = {
   logo:    { x: 5.67, y: 1.8, w: 75, h: 5 },
   text:    { x: 5.85, y: 7.2, w: 75, h: 13.2, titlePt: 12, pt: 9.5, floorPt: 6, lineH: 4.2 },
-  barcode: { x: 10.26, y: 20.8, w: 67.88, h: 13.4, barH: 8.0, guardH: 9.6, digitPt: 7, digitBaseline: 12.0, maxModule: 0.42 } as DymoBarcodeBox,
+  barcode: { x: 10.26, y: 19.7, w: 67.88, h: 13.4, barH: 8.0, guardH: 9.6, digitPt: 7, digitBaseline: 12.0, maxModule: 0.42 } as DymoBarcodeBox,
 };
 
 export type DymoLogoLayout = typeof DYMO_LOGO_LAYOUT;

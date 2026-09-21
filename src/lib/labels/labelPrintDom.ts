@@ -11,24 +11,6 @@ export const mm = (n: number) => `${n.toFixed(3)}mm`;
 export const abs = (b: Box): CSSProperties => ({ position: "absolute", left: mm(b.x), top: mm(b.y), width: mm(b.w), height: mm(b.h) });
 
 /**
- * Wrapper that turns page coordinates into PHYSICAL label coordinates.
- *
- * The LabelWriter queue maps page (0,0) to the driver's printable corner, so
- * a box placed at page x prints `printable.x` further along the label (see
- * `insetFor` in labelStock.ts). A layout whose numbers were measured from
- * the physical edge of the label — the .dymo templates the barcode label is
- * copied from — therefore prints shifted toward the trailing edge unless it
- * is pulled back by that offset, which is what this does.
- *
- * Layouts computed by `computeLabelLayout` already work in page space and
- * must NOT use this.
- */
-export function physicalSpace(stock: LabelStockKey): CSSProperties {
-  const { width, height, printable } = LABEL_STOCK[stock];
-  return { position: "absolute", left: mm(-printable.x), top: mm(-printable.y), width: mm(width), height: mm(height) };
-}
-
-/**
  * The label box is a hair smaller than the page so px rounding of the mm
  * values can never overflow the page box and feed a blank label.
  */

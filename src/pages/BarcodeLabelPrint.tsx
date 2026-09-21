@@ -24,7 +24,7 @@ import {
 import { barcodeLogoScale, barcodeLogoUrl } from "@portal/lib/labels/barcodeLogos";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule } from "@portal/lib/labels/ean13";
 import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "@portal/lib/labels/leagueSpartanFonts";
-import { abs, fitTexts, inPrintFrame, mm, nextPaint, physicalSpace, postToOpener as post, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
+import { abs, fitTexts, inPrintFrame, mm, nextPaint, postToOpener as post, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
 import { barcodeLabelFromParams } from "@portal/lib/labels/printLabels";
 import type { LabelStockKey } from "@portal/lib/labels/labelStock";
 
@@ -126,10 +126,7 @@ export function DymoBarcodeLabel({ input, code }: { input: BarcodeLabelInput; co
   useLayoutEffect(() => { if (ref.current) fitTexts(ref.current); }, [input, code]);
   return (
     <div ref={ref} className="label" data-label={code}>
-      {/* DYMO_LAYOUT is measured from the physical label edge, not the page. */}
-      <div style={physicalSpace(STOCK)}>
-        {logoSrc ? <DymoLogoLabel input={input} code={code} logoSrc={logoSrc} /> : <DymoPlainLabel input={input} code={code} />}
-      </div>
+      {logoSrc ? <DymoLogoLabel input={input} code={code} logoSrc={logoSrc} /> : <DymoPlainLabel input={input} code={code} />}
     </div>
   );
 }
