@@ -21,6 +21,6 @@ $env:SLDPRT_SERVICE_ROLE_KEY = [System.Net.NetworkCredential]::new('', $secure).
     -ExecutionPolicy Bypass `
     -NoProfile `
     -File         (Join-Path $PSScriptRoot 'sldprt-thumbs.ps1') `
-    -FolderPath     'H:\Shared drives\MAIN\_OPERATIONS\PROJECTS','H:\Shared drives\MAIN\_OPERATIONS\DRAWINGS' `
+    -FolderPath     'H:\Shared drives\MAIN\_OPERATIONS\PROJECTS;H:\Shared drives\MAIN\_OPERATIONS\DRAWINGS' `
     -SupabaseUrl    'https://nvlezbqolzwixquusbfo.supabase.co'
 $env:SLDPRT_SERVICE_ROLE_KEY = $null

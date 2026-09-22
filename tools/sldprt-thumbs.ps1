@@ -39,7 +39,8 @@
   A named mutex prevents overlapping runs; everything is logged to
   -LogDir\sldprt-thumbs.log (rotated) as well as the console.
 
-.PARAMETER FolderPath      One or more Drive for desktop folders holding the SolidWorks files.
+.PARAMETER FolderPath      One or more Drive for desktop folders holding the SolidWorks files
+                           (array, or one string with folders separated by ';' for Task Scheduler).
 .PARAMETER Limit           Render at most this many files this run (0 = no limit); for testing.
 .PARAMETER SupabaseUrl     e.g. https://nvlezbqolzwixquusbfo.supabase.co
 .PARAMETER ServiceRoleKey  Supabase service-role JWT (default: $env:SLDPRT_SERVICE_ROLE_KEY).
@@ -63,7 +64,7 @@ param(
     [string] $Bucket = 'contractor-hub-files',
     [int]    $ThumbSize = 512,
     [int]    $PerFileTimeoutSec = 90,
-    [string] $LogDir = (Join-Path $PSScriptRoot 'logs'),
+    [string] $LogDir = '',
     [int]    $Limit = 0,
     [switch] $Force,
     [switch] $DryRun
@@ -72,6 +73,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $SupabaseUrl = $SupabaseUrl.TrimEnd('/')
 $Extensions  = @('.sldprt', '.sldasm')
+# `powershell -File` passes arguments as plain strings, so accept "A;B" as well as an array.
+$FolderPath  = @($FolderPath | ForEach-Object { $_ -split ';' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+# $PSScriptRoot is not set while parameter defaults are evaluated under -File; resolve the log dir here.
+if (-not $LogDir) { $LogDir = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'logs' }
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 
