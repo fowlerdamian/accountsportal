@@ -15,3 +15,4 @@ tools/.sldprt-key.bin
 # Local tooling state (per-machine, not for the repo)
 .claude/
 supabase/.temp/
+tools/logs/
