@@ -774,7 +774,24 @@ export default function RevenueTargets() {
                 </thead>
                 <tbody>
                   {[
-                    { label: 'Index', render: (m) => `${(m.index * 100).toFixed(1)}%`, color: C.faint, total: '100%' },
+                    // Actual as a share of that month's target (historical plan for
+                    // completed months, catch-up value for open ones); Year = YTD
+                    // actual over the targets of the months that have actuals.
+                    {
+                      label: '% Achieved', color: C.faint,
+                      render: (m) => {
+                        const target = m.completed ? m.planBase : m.base
+                        if (m.actual == null || !target) return '—'
+                        const pct = (m.actual / target) * 100
+                        const color = pct >= 100 ? C.green : pct >= 95 ? palette.orange : m.completed ? C.red : C.text
+                        return <span style={{ color }}>{`${pct.toFixed(1)}%`}</span>
+                      },
+                      total: (() => {
+                        const withActual = seasonality.rolling.months.filter((m) => m.actual != null)
+                        const target = withActual.reduce((s, m) => s + (m.completed ? m.planBase : m.base), 0)
+                        return target ? `${((seasonality.rolling.ytdActual / target) * 100).toFixed(1)}%` : '—'
+                      })(),
+                    },
                     {
                       label: 'Actual', color: C.text,
                       render: (m) => {
