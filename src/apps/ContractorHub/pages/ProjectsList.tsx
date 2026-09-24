@@ -52,7 +52,7 @@ function stageColor(stageName: string) {
 // ── Kanban columns (product dev stages + catch-all) ──────────
 
 const KANBAN_STAGE_COLS = [
-  ...NEW_PRODUCT_STAGES.map((s, i) => ({ key: s, label: s, color: ["border-t-[var(--brand-purple)]","border-t-[var(--brand-blue)]","border-t-[var(--brand-blue)]","border-t-[var(--brand-orange)]","border-t-[var(--brand-aqua)]"][i] })),
+  ...NEW_PRODUCT_STAGES.map((s, i) => ({ key: s, label: s, color: ["border-t-[var(--brand-purple)]","border-t-[var(--brand-blue)]","border-t-[var(--brand-blue)]","border-t-[var(--brand-orange)]","border-t-[var(--brand-pink)]","border-t-[var(--brand-aqua)]"][i] })),
   { key: "__other__", label: "Other", color: "border-t-zinc-500" },
 ];
 

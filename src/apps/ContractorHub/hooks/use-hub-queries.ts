@@ -52,8 +52,8 @@ export interface Project {
 }
 
 // ── Projects vs Ideas — app-wide rule ─────────────────────────
-// Ranked above 5/10 = a project. Lower-ranked and unranked projects sit under Ideas.
-export const IDEA_MAX_SCORE = 5;
+// Ranked above 6/10 = a project. Ranked 6 or less, or unranked, sits under Ideas.
+export const IDEA_MAX_SCORE = 6;
 export const isIdea = (p: { priority_score: number | null }) => p.priority_score == null || p.priority_score <= IDEA_MAX_SCORE;
 export const isRankedProject = (p: { priority_score: number | null }) => !isIdea(p);
 /** Ranked projects first, then ideas — for pickers that list both. */
@@ -153,6 +153,7 @@ export const NEW_PRODUCT_STAGES = [
   "Sketch",
   "CAD",
   "Prototype",
+  "Testing",
   "Complete",
 ] as const;
 

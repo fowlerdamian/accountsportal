@@ -19,6 +19,7 @@ const STAGE_DOT: Record<string, string> = {
   Sketch:    "bg-[var(--brand-blue)]",
   CAD:       "bg-[var(--brand-blue)]",
   Prototype: "bg-[var(--brand-orange)]",
+  Testing:   "bg-[var(--brand-pink)]",
   Complete:  "bg-[var(--brand-aqua)]",
 };
 
@@ -27,6 +28,7 @@ const STAGE_LABEL: Record<string, string> = {
   Sketch:    "text-[var(--brand-blue)]",
   CAD:       "text-[var(--brand-blue)]",
   Prototype: "text-[var(--brand-orange)]",
+  Testing:   "text-[var(--brand-pink)]",
   Complete:  "text-[var(--brand-aqua)]",
 };
 
