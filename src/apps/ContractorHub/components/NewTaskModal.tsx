@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@guide/components/ui/dialog";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { DatePicker } from "@portal/components/DatePicker";
 import { toast } from "sonner";
 import {
@@ -10,6 +10,7 @@ import {
   useContractors,
   useCreateTask,
   type TaskPriority,
+  splitProjectsAndIdeas,
 } from "@hub/hooks/use-hub-queries";
 
 interface NewTaskModalProps {
@@ -100,9 +101,13 @@ export function NewTaskModal({ open, onClose, projectId }: NewTaskModalProps) {
                   <SelectValue placeholder="Select a project…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
+                  {(() => { const { projects: ranked, ideas } = splitProjectsAndIdeas(projects); return (<>
+
+                    <SelectGroup><SelectLabel>Projects</SelectLabel>{ranked.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectGroup>
+
+                    {ideas.length > 0 && <SelectGroup><SelectLabel>Ideas</SelectLabel>{ideas.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectGroup>}
+
+                  </>); })()}
                 </SelectContent>
               </Select>
             </div>

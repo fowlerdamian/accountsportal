@@ -51,6 +51,16 @@ export interface Project {
   created_at:       string;
 }
 
+// ── Projects vs Ideas — app-wide rule ─────────────────────────
+// Ranked above 5/10 = a project. Lower-ranked and unranked projects sit under Ideas.
+export const IDEA_MAX_SCORE = 5;
+export const isIdea = (p: { priority_score: number | null }) => p.priority_score == null || p.priority_score <= IDEA_MAX_SCORE;
+export const isRankedProject = (p: { priority_score: number | null }) => !isIdea(p);
+/** Ranked projects first, then ideas — for pickers that list both. */
+export function splitProjectsAndIdeas<T extends { priority_score: number | null }>(list: T[]): { projects: T[]; ideas: T[] } {
+  return { projects: list.filter(isRankedProject), ideas: list.filter(isIdea) };
+}
+
 export interface Task {
   id:             string;
   project_id:     string;
@@ -1400,7 +1410,7 @@ export function useHubSearch(query: string) {
           .limit(5),
         supabase
           .from("projects")
-          .select("id, name, status, type")
+          .select("id, name, status, type, priority_score")
           .ilike("name", q)
           .limit(5),
         supabase

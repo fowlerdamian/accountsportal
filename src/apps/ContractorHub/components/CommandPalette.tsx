@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Users, Folder, CheckSquare, X } from "lucide-react";
 import { cn } from "@guide/lib/utils";
-import { useHubSearch } from "@hub/hooks/use-hub-queries";
+import { useHubSearch, isIdea } from "@hub/hooks/use-hub-queries";
 
 interface CommandPaletteProps {
   open:    boolean;
@@ -11,7 +11,7 @@ interface CommandPaletteProps {
 
 type ResultItem =
   | { kind: "contractor"; id: string; label: string; sub: string }
-  | { kind: "project";    id: string; label: string; sub: string }
+  | { kind: "project";    id: string; label: string; sub: string; idea: boolean }
   | { kind: "task";       id: string; label: string; sub: string; projectId: string };
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
@@ -28,7 +28,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     items.push({ kind: "contractor", id: c.id, label: c.name, sub: (c as any).role ?? "" });
   }
   for (const p of results?.projects ?? []) {
-    items.push({ kind: "project", id: p.id, label: p.name, sub: p.type });
+    items.push({ kind: "project", id: p.id, label: p.name, sub: p.type, idea: isIdea(p) });
   }
   for (const t of results?.tasks ?? []) {
     items.push({
@@ -105,7 +105,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     {
       label: "Projects",
       icon:  Folder,
-      items: items.filter((i) => i.kind === "project"),
+      items: items.filter((i) => i.kind === "project" && !i.idea),
+    },
+    {
+      label: "Ideas",
+      icon:  Folder,
+      items: items.filter((i) => i.kind === "project" && i.idea),
     },
     {
       label: "Tasks",

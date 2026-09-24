@@ -13,6 +13,7 @@ import {
   useProjects,
   useOverdueTaskCount,
   type AiChatMessage,
+  isIdea,
 } from "@hub/hooks/use-hub-queries";
 import { ActionConfirmationCard, type ToolResult } from "./ActionConfirmationCard";
 import { useQueryClient } from "@tanstack/react-query";
@@ -115,6 +116,7 @@ export function AiAssistantPanel({ open, onClose, searchInputRef }: AiAssistantP
         status: c.status, source: c.source, hourly_rate: c.hourly_rate,
       })),
       projects: projects?.map((p) => ({
+        bucket: isIdea(p) ? "idea" : "project", // ranked above 5/10 = project; lower or unranked = idea
         id: p.id, name: p.name, status: p.status,
         type: p.type, budget_allocated: p.budget_allocated,
       })),

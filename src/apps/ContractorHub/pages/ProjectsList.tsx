@@ -23,6 +23,7 @@ import {
   type ProjectStage,
   type ProjectBudgetSummary,
   type Contractor,
+  isIdea,
 } from "@hub/hooks/use-hub-queries";
 
 type ContractorBrief = Pick<Contractor, "id" | "name" | "avatar_url" | "role" | "source">;
@@ -240,10 +241,6 @@ function KanbanCard({
 
 type TypeFilter = "all" | "new_product" | "web" | "other";
 type Bucket     = "projects" | "ideas";
-
-/** Ideas = no ranking yet, or ranked 5 or below. Raising the score above 5 moves a project back. */
-const IDEA_MAX_SCORE = 5;
-const isIdea = (p: Project) => p.priority_score == null || p.priority_score <= IDEA_MAX_SCORE;
 type ViewMode   = "grid" | "kanban";
 type SortBy     = "priority" | "created" | "progress";
 type SortDir    = "asc" | "desc";
@@ -262,8 +259,7 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
 
   const { data: allProjects = [],    isLoading }         = useProjects();
   // Everything below (counts, filters, grid, kanban) works on the selected bucket.
-  const ideaCount = allProjects.filter(isIdea).length;
-  const projects  = allProjects.filter(p => (bucket === "ideas") === isIdea(p));
+  const projects = allProjects.filter(p => (bucket === "ideas") === isIdea(p));
   const { data: deletedProjects = [] }                   = useDeletedProjects();
   const { data: activeStages = [],   isLoading: stagesLoading } = useActiveStages();
   const { data: contractorsByProject } = useAllProjectContractors();
@@ -319,13 +315,6 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
 
   return (
     <div className="space-y-4 animate-fade-in">
-
-        {/* Ideas vs Projects is decided by the ranking; the sidebar picks the bucket. */}
-        <p className="text-[11px] text-muted-foreground">
-          {bucket === "ideas"
-            ? `Ideas: unranked projects and those ranked ${IDEA_MAX_SCORE}/10 or less (${ideaCount}). Rank one above ${IDEA_MAX_SCORE} to promote it to Projects.`
-            : `Projects ranked above ${IDEA_MAX_SCORE}/10. Lower-ranked and unranked ones sit under Ideas (${ideaCount}).`}
-        </p>
 
         {/* ── Header row ── */}
         <div className="flex items-center gap-2 flex-wrap">

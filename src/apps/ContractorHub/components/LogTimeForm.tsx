@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@guide/components/ui/select";
 import { DatePicker } from "@portal/components/DatePicker";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@guide/contexts/AuthContext";
-import { useLogTime, usePostActivity, useContractors, useProjects } from "@hub/hooks/use-hub-queries";
+import { useLogTime, usePostActivity, useContractors, useProjects, splitProjectsAndIdeas } from "@hub/hooks/use-hub-queries";
 import { localToday } from "@portal/lib/dates";
 
 interface LogTimeFormProps {
@@ -87,9 +87,13 @@ export function LogTimeForm({ projectId, taskId, contractorId: presetId, onClose
             <Select value={selectedPid} onValueChange={setSelectedPid}>
               <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
-                {projects.filter((p) => p.status !== "archived").map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
+                {(() => { const { projects: ranked, ideas } = splitProjectsAndIdeas(projects.filter((p) => p.status !== "archived")); return (<>
+
+                  <SelectGroup><SelectLabel>Projects</SelectLabel>{ranked.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectGroup>
+
+                  {ideas.length > 0 && <SelectGroup><SelectLabel>Ideas</SelectLabel>{ideas.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectGroup>}
+
+                </>); })()}
               </SelectContent>
             </Select>
           </div>

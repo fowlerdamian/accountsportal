@@ -10,6 +10,7 @@ import {
   useLogTime,
   usePostActivity,
   useMyContractorProfile,
+  splitProjectsAndIdeas,
 } from "@hub/hooks/use-hub-queries";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,9 +164,10 @@ function TimerSaveModal({
             className="w-full rounded-lg border bg-muted/30 px-3 py-2 text-sm outline-none focus:border-primary/50"
           >
             <option value="">Select project…</option>
-            {activeProjects.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
+            {(() => { const { projects: ranked, ideas } = splitProjectsAndIdeas(activeProjects); return (<>
+              <optgroup label="Projects">{ranked.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>
+              {ideas.length > 0 && <optgroup label="Ideas">{ideas.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>}
+            </>); })()}
           </select>
         </div>
 
