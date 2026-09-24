@@ -239,6 +239,11 @@ function KanbanCard({
 // ── Types ─────────────────────────────────────────────────────
 
 type TypeFilter = "all" | "new_product" | "web" | "other";
+type Bucket     = "projects" | "ideas";
+
+/** Ideas = no ranking yet, or ranked 5 or below. Raising the score above 5 moves a project back. */
+const IDEA_MAX_SCORE = 5;
+const isIdea = (p: Project) => p.priority_score == null || p.priority_score <= IDEA_MAX_SCORE;
 type ViewMode   = "grid" | "kanban";
 type SortBy     = "priority" | "created" | "progress";
 type SortDir    = "asc" | "desc";
@@ -249,13 +254,17 @@ function ProjectsListBody() {
   const { openNewProject } = useHub();
   const [view,            setView]            = useState<ViewMode>("grid");
   const [search,          setSearch]          = useState("");
+  const [bucket,          setBucket]          = useState<Bucket>("projects");
   const [typeFilter,      setTypeFilter]      = useState<TypeFilter>("all");
   const [sortBy,          setSortBy]          = useState<SortBy>("priority");
   const [sortDir,         setSortDir]         = useState<SortDir>("desc");
   const [showBin,         setShowBin]         = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const { data: projects = [],       isLoading }         = useProjects();
+  const { data: allProjects = [],    isLoading }         = useProjects();
+  // Everything below (counts, filters, grid, kanban) works on the selected bucket.
+  const ideaCount = allProjects.filter(isIdea).length;
+  const projects  = allProjects.filter(p => (bucket === "ideas") === isIdea(p));
   const { data: deletedProjects = [] }                   = useDeletedProjects();
   const { data: activeStages = [],   isLoading: stagesLoading } = useActiveStages();
   const { data: contractorsByProject } = useAllProjectContractors();
@@ -311,6 +320,23 @@ function ProjectsListBody() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+
+        {/* ── Projects / Ideas tabs ── */}
+        <div className="flex items-center gap-1 border-b border-border">
+          {([["projects", "Projects", allProjects.length - ideaCount], ["ideas", "Ideas", ideaCount]] as [Bucket, string, number][]).map(([key, label, n]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => { setBucket(key); setShowBin(false); }}
+              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${bucket === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              {label} <span className="ml-1 opacity-50">{n}</span>
+            </button>
+          ))}
+          <span className="ml-auto text-[11px] text-muted-foreground pr-1">
+            {bucket === "ideas" ? `Unranked or ranked ${IDEA_MAX_SCORE}/10 or less. Rank one above ${IDEA_MAX_SCORE} to promote it to Projects.` : `Ranked above ${IDEA_MAX_SCORE}/10. Lower-ranked and unranked projects sit under Ideas.`}
+          </span>
+        </div>
 
         {/* ── Header row ── */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -406,7 +432,7 @@ function ProjectsListBody() {
         {!showBin && view === "grid" && (
           filtered.length === 0 ? (
             <div className="rounded-lg border border-dashed p-10 text-center">
-              <p className="text-muted-foreground text-sm">No projects found.</p>
+              <p className="text-muted-foreground text-sm">{bucket === "ideas" ? "No ideas — new or low-ranked projects will appear here." : "No projects found."}</p>
               <Button variant="outline" size="sm" className="mt-3" onClick={() => openNewProject()}>
                 <Plus className="w-3.5 h-3.5 mr-1.5" />Create one
               </Button>
