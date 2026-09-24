@@ -154,6 +154,7 @@ const PATH_TITLES = [
   ['/community',             'Customer Service'],
   ['/compliance',            'Compliance'],
   ['/support',               'Cases'],
+  ['/projects/ideas',        'Ideas'],
   ['/projects',              'Projects'],
   ['/tasks',                 'Tasks'],
   ['/guide',                 'Guide Portal'],
@@ -241,6 +242,7 @@ export default function App() {
                       <Route path="contractors" element={<ContractorsList />} />
                       <Route path="contractors/:id" element={<ContractorProfile />} />
                       <Route path="list" element={<ProjectsList />} />
+                      <Route path="ideas" element={<ProjectsList bucket="ideas" />} />
                       <Route path="list/:id" element={<ProjectView />} />
                       <Route path="settings" element={<HubSettings />} />
                     </Routes>

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { NavLink, Link, useMatch } from "react-router-dom";
-import { FolderOpen, Menu, Plus, Sparkles } from "lucide-react";
+import { FolderOpen, Menu, Plus, Sparkles, Lightbulb } from "lucide-react";
 import { UsersIcon, GearIcon, LogoutIcon } from "@portal/components/icons";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "@guide/contexts/AuthContext";
@@ -42,7 +42,10 @@ export function useHub() {
 
 const navItems = [
   { label: "Projects",    icon: FolderOpen,       path: "/projects/list",        end: false },
-  { label: "Contractors", icon: UsersIcon,        path: "/projects/contractors", end: false },
+  // Ideas = projects with no ranking or ranked 5/10 or less (see ProjectsList).
+  { label: "Ideas",       icon: Lightbulb,     path: "/projects/ideas",       end: false },
+  // Contractors hidden from the nav for now (routes still work) — revisit later.
+  // { label: "Contractors", icon: UsersIcon,        path: "/projects/contractors", end: false },
   { label: "Settings",    icon: GearIcon,         path: "/projects/settings",    end: false },
 ];
 

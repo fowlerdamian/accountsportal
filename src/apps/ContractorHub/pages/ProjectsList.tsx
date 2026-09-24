@@ -250,11 +250,10 @@ type SortDir    = "asc" | "desc";
 
 // ── Page ─────────────────────────────────────────────────────
 
-function ProjectsListBody() {
+function ProjectsListBody({ bucket }: { bucket: Bucket }) {
   const { openNewProject } = useHub();
   const [view,            setView]            = useState<ViewMode>("grid");
   const [search,          setSearch]          = useState("");
-  const [bucket,          setBucket]          = useState<Bucket>("projects");
   const [typeFilter,      setTypeFilter]      = useState<TypeFilter>("all");
   const [sortBy,          setSortBy]          = useState<SortBy>("priority");
   const [sortDir,         setSortDir]         = useState<SortDir>("desc");
@@ -321,22 +320,12 @@ function ProjectsListBody() {
   return (
     <div className="space-y-4 animate-fade-in">
 
-        {/* ── Projects / Ideas tabs ── */}
-        <div className="flex items-center gap-1 border-b border-border">
-          {([["projects", "Projects", allProjects.length - ideaCount], ["ideas", "Ideas", ideaCount]] as [Bucket, string, number][]).map(([key, label, n]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => { setBucket(key); setShowBin(false); }}
-              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${bucket === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-            >
-              {label} <span className="ml-1 opacity-50">{n}</span>
-            </button>
-          ))}
-          <span className="ml-auto text-[11px] text-muted-foreground pr-1">
-            {bucket === "ideas" ? `Unranked or ranked ${IDEA_MAX_SCORE}/10 or less. Rank one above ${IDEA_MAX_SCORE} to promote it to Projects.` : `Ranked above ${IDEA_MAX_SCORE}/10. Lower-ranked and unranked projects sit under Ideas.`}
-          </span>
-        </div>
+        {/* Ideas vs Projects is decided by the ranking; the sidebar picks the bucket. */}
+        <p className="text-[11px] text-muted-foreground">
+          {bucket === "ideas"
+            ? `Ideas: unranked projects and those ranked ${IDEA_MAX_SCORE}/10 or less (${ideaCount}). Rank one above ${IDEA_MAX_SCORE} to promote it to Projects.`
+            : `Projects ranked above ${IDEA_MAX_SCORE}/10. Lower-ranked and unranked ones sit under Ideas (${ideaCount}).`}
+        </p>
 
         {/* ── Header row ── */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -534,10 +523,10 @@ function ProjectsListBody() {
   );
 }
 
-export default function ProjectsList() {
+export default function ProjectsList({ bucket = "projects" }: { bucket?: Bucket }) {
   return (
     <HubLayout>
-      <ProjectsListBody />
+      <ProjectsListBody key={bucket} bucket={bucket} />
     </HubLayout>
   );
 }
