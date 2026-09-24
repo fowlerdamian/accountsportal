@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { NavLink, Link, useMatch } from "react-router-dom";
+import { NavLink, Link, useMatch, useLocation } from "react-router-dom";
 import { FolderOpen, Menu, Plus, Sparkles, Lightbulb } from "lucide-react";
 import { UsersIcon, GearIcon, LogoutIcon } from "@portal/components/icons";
 import { cn } from "@guide/lib/utils";
@@ -137,6 +137,11 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
   const [newTaskPid,     setNewTaskPid]     = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { pathname } = useLocation();
+  const pageTitle =
+    pathname.startsWith("/projects/ideas")       ? "Ideas" :
+    pathname.startsWith("/projects/contractors") ? "Contractors" :
+    pathname.startsWith("/projects/settings")    ? "Settings" : "Projects";
   const [aiOpen, setAiOpen]           = useState(false);
   const aiInputRef = useRef<HTMLTextAreaElement>(null);
 const isMobile                      = useIsMobile();
@@ -220,6 +225,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         {/* Main area */}
         <div className={isMobile ? "" : "ml-56"} style={{ display: "flex", flexDirection: "column", minHeight: "calc(100dvh - var(--task-dock-h, 0px))" }}>
 
+          {/* Header title = the page you are on (the sidebar wordmark is the link back to the portal dashboard). */}
           {/* Header */}
           <header
             className="flex items-center justify-between px-4 md:px-6"
@@ -234,7 +240,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "var(--brand-accent)" }} />
                     <span style={{ fontSize: "12px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ffffff" }}>
-                      Dashboard
+                      {pageTitle}
                     </span>
                   </div>
                 </>
@@ -242,7 +248,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "k") {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <div style={{ width: "4px", height: "18px", borderRadius: "2px", background: "var(--brand-accent)" }} />
                   <span style={{ fontSize: "12px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ffffff" }}>
-                    Dashboard
+                    {pageTitle}
                   </span>
                 </div>
               )}
