@@ -79,6 +79,8 @@ export interface ActionItem {
   completed_at: string | null;
   is_warehouse_task: boolean;
   is_replacement_pick: boolean;
+  /** Warehouse task: create the return label in ShipStation and send it to the customer. */
+  is_return_label?: boolean;
   warehouse_result: string | null;
   shipstation_order_id: string | null;
   shipstation_order_number: string | null;

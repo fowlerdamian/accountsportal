@@ -278,6 +278,78 @@ function PickOrderCard({ item, readOnly }: { item: WarehouseActionItem; readOnly
   );
 }
 
+// Return label task: a single tick — "sent via ShipStation" — completes it.
+function ReturnLabelCard({ item, readOnly }: { item: WarehouseActionItem; readOnly: boolean }) {
+  const queryClient = useQueryClient();
+  const { teamMember } = useAuth();
+  const [sent, setSent] = useState(false);
+  const caseNum = item.cases?.case_number || '—';
+
+  const markSent = useMutation({
+    mutationFn: async () => {
+      const now = new Date().toISOString();
+      const { error: updateError } = await supabase.from('action_items').update({
+        status: 'done' as any,
+        completed_at: now,
+        warehouse_result: 'Return label sent via ShipStation',
+      }).eq('id', item.id);
+      if (updateError) throw updateError;
+
+      await supabase.from('case_updates').insert({
+        case_id: item.case_id,
+        author_type: 'system',
+        author_name: teamMember?.name || 'Warehouse',
+        message: `Return label sent via ShipStation\nBy: ${teamMember?.name || 'Warehouse'}`,
+      });
+
+      notifyActionItemAssigned({
+        caseId: item.case_id,
+        caseNumber: caseNum,
+        caseTitle: item.description,
+        assigneeName: teamMember?.name || 'Warehouse',
+        taskDescription: 'Return label sent via ShipStation',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-tasks-count'] });
+      toast.success('Return label marked as sent');
+    },
+    onError: () => { setSent(false); toast.error('Failed to update the return label task'); },
+  });
+
+  return (
+    <div className="bg-card border border-border p-5" style={{ borderLeftWidth: '4px', borderLeftColor: 'var(--brand-blue)' }}>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[11px] font-medium px-2 py-0.5 border" style={{ color: 'var(--brand-blue)', borderColor: 'var(--brand-blue)' }}>
+          Return label
+        </span>
+        <span className="text-xs text-muted-foreground">#{caseNum}</span>
+      </div>
+
+      <p className="text-base text-foreground mb-1">{item.cases?.customer_name || item.description}</p>
+      <p className="text-xs text-muted-foreground mb-4">
+        {item.cases?.title}{item.cases?.title ? ' · ' : ''}Requested by {item.created_by_name} · {format(new Date(item.created_at), 'dd MMM')}
+      </p>
+
+      {readOnly ? (
+        <span className="text-xs text-muted-foreground">View only</span>
+      ) : (
+        <label className="flex items-center gap-3 cursor-pointer select-none border border-border px-3 py-2.5 hover:border-foreground transition-colors">
+          <input
+            type="checkbox"
+            checked={sent}
+            disabled={markSent.isPending}
+            onChange={e => { if (e.target.checked) { setSent(true); markSent.mutate(); } }}
+            className="h-4 w-4 accent-[var(--brand-blue)] cursor-pointer"
+          />
+          <span className="text-sm text-foreground">{markSent.isPending ? 'Saving…' : 'Return label sent to ShipStation'}</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
 function GeneralTaskCard({ item, readOnly }: { item: WarehouseActionItem; readOnly: boolean }) {
   const queryClient = useQueryClient();
   const { teamMember } = useAuth();
@@ -445,7 +517,8 @@ export default function WarehouseDashboard() {
   const activeTasks = tasks.filter(t => t.status !== 'done');
   const doneToday = tasks.filter(t => t.status === 'done' && t.completed_at && new Date(t.completed_at) >= today);
   const pickOrders = activeTasks.filter(t => t.is_replacement_pick);
-  const generalTasks = activeTasks.filter(t => !t.is_replacement_pick);
+  const returnLabels = activeTasks.filter(t => !t.is_replacement_pick && t.is_return_label);
+  const generalTasks = activeTasks.filter(t => !t.is_replacement_pick && !t.is_return_label);
 
   // Sort: urgent first, then oldest
   const sortedGeneral = [...generalTasks].sort((a, b) => {
@@ -531,6 +604,15 @@ export default function WarehouseDashboard() {
             )}
 
             {/* Tasks */}
+            {returnLabels.length > 0 && (
+              <div>
+                <h2 className="text-xs font-heading tracking-wider text-muted-foreground mb-3">RETURN LABELS</h2>
+                <div className="space-y-3">
+                  {returnLabels.map(t => <ReturnLabelCard key={t.id} item={t} readOnly={readOnly} />)}
+                </div>
+              </div>
+            )}
+
             {sortedGeneral.length > 0 && (
               <div className="mb-8">
                 <h2 className="text-xs font-heading tracking-wider text-muted-foreground mb-3">TASKS</h2>
