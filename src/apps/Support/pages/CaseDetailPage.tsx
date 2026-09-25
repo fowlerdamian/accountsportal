@@ -39,6 +39,78 @@ interface MentionSuggestion {
 
 type DetailTab = 'activity' | 'notes';
 
+// "Return label required?" — sits under the replacement order form. Ticking it
+// flags the case and puts a task on the warehouse board; the warehouse ticks
+// that off once the label has gone out via ShipStation. Unticking removes the
+// task while it is still open.
+function ReturnLabelRequired({ caseData, actionItems }: { caseData: any; actionItems: ActionItem[] }) {
+  const queryClient = useQueryClient();
+  const { teamMember } = useAuth();
+  const task = [...actionItems].reverse().find(a => a.is_return_label);
+  const required = !!caseData.return_label_required;
+  const sent = task?.status === 'done';
+
+  const toggle = useMutation({
+    mutationFn: async (on: boolean) => {
+      const { error } = await supabase.from('cases').update({ return_label_required: on } as any).eq('id', caseData.id);
+      if (error) throw error;
+      if (on && !task) {
+        const customer = caseData.customer_name || 'customer';
+        const orderRef = caseData.order_number || null;
+        const { error: taskError } = await supabase.from('action_items').insert({
+          case_id: caseData.id,
+          description: `Return label for ${customer}${orderRef ? ` (${orderRef})` : ''} — create in ShipStation and send to the customer`,
+          assigned_to_name: 'Warehouse',
+          assigned_to_email: 'warehouse@automotivegroup.com.au',
+          created_by_name: teamMember?.name || 'Staff',
+          priority: 'normal',
+          is_warehouse_task: true,
+          is_return_label: true,
+        } as any);
+        if (taskError) throw taskError;
+      }
+      if (!on && task && task.status !== 'done') {
+        const { error: delError } = await supabase.from('action_items').delete().eq('id', task.id);
+        if (delError) throw delError;
+      }
+      await supabase.from('case_updates').insert({
+        case_id: caseData.id,
+        author_type: 'system',
+        author_name: teamMember?.name || 'System',
+        message: on ? 'Return label required — task sent to the warehouse' : 'Return label no longer required',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['case', caseData.id] });
+      queryClient.invalidateQueries({ queryKey: ['action-items', caseData.id] });
+      queryClient.invalidateQueries({ queryKey: ['case-updates', caseData.id] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-tasks-count'] });
+    },
+    onError: () => toast.error('Could not update the return label'),
+  });
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={required}
+          disabled={toggle.isPending || sent}
+          onChange={e => toggle.mutate(e.target.checked)}
+          className="h-4 w-4 accent-[var(--brand-accent)] cursor-pointer disabled:cursor-default"
+        />
+        <span className="text-sm text-foreground">Return label required?</span>
+        <span className="text-xs text-muted-foreground">
+          {sent && task?.completed_at
+            ? `Sent via ShipStation ${format(new Date(task.completed_at), 'dd MMM')}`
+            : required && task ? 'Waiting on warehouse' : required ? 'Task missing — untick and tick again' : 'Creates a warehouse task'}
+        </span>
+      </label>
+    </div>
+  );
+}
+
 export default function CaseDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -509,6 +581,7 @@ export default function CaseDetailPage() {
             shipDate={caseData.replacement_ship_date}
             hasReplacementOrder={!!actionItems.some(a => a.is_replacement_pick)}
           />
+          <ReturnLabelRequired caseData={caseData} actionItems={actionItems} />
         </div>
       )}
 

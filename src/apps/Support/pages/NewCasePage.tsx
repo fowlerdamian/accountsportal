@@ -66,14 +66,13 @@ function formatCurrency(amount: number | null): string {
 
 export default function NewCasePage() {
   const navigate = useNavigate();
-  const { user, teamMember } = useAuth();
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [selectedTile, setSelectedTile] = useState<string>('');
   const [issueType, setIssueType] = useState<CaseType | ''>('');
   const [errorOrigin, setErrorOrigin] = useState<ErrorOrigin>(null);
   const [orderInput, setOrderInput] = useState('');
   const [description, setDescription] = useState('');
-  const [returnLabelRequired, setReturnLabelRequired] = useState(false);
   const [direction, setDirection] = useState(1);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -203,38 +202,10 @@ export default function NewCasePage() {
           customer_name: lookedUpOrder?.Customer || null,
           product_name: null,
           purchase_date: purchaseDate,
-          return_label_required: returnLabelRequired,
         } as any)
         .select('case_number, id')
         .maybeSingle();
       if (error) throw error;
-
-      // Return label: hand the warehouse a task on the board; they tick it off once it has gone out via ShipStation.
-      if (data && returnLabelRequired) {
-        const customer = lookedUpOrder?.Customer || 'customer';
-        const orderRef = lookedUpOrder?.SaleOrderNumber || lookedUpOrder?.CustomerReference || manualOrderNumber || null;
-        const { error: taskError } = await supabase.from('action_items').insert({
-          case_id: data.id,
-          description: `Return label for ${customer}${orderRef ? ` (${orderRef})` : ''} — create in ShipStation and send to the customer`,
-          assigned_to_name: 'Warehouse',
-          assigned_to_email: 'warehouse@automotivegroup.com.au',
-          created_by_name: teamMember?.name || 'Staff',
-          priority: 'normal',
-          is_warehouse_task: true,
-          is_return_label: true,
-        } as any);
-        if (taskError) {
-          console.error('Return label task failed:', taskError);
-          toast.error('Case created, but the return label task could not be added — add it from the case');
-        } else {
-          await supabase.from('case_updates').insert({
-            case_id: data.id,
-            author_type: 'system',
-            author_name: teamMember?.name || 'System',
-            message: 'Return label required — task sent to the warehouse',
-          });
-        }
-      }
 
       // Google Chat notification — fire & forget
       if (data) {
@@ -460,18 +431,7 @@ export default function NewCasePage() {
               className="w-full bg-background border border-input text-sm px-3 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-foreground transition-colors resize-none mb-1"
               placeholder="What went wrong?"
             />
-            <p className="text-xs text-muted-foreground mb-1">{description.length}/500</p>
-
-            <label className="flex items-center gap-2.5 mb-5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={returnLabelRequired}
-                onChange={e => setReturnLabelRequired(e.target.checked)}
-                className="h-4 w-4 accent-[var(--brand-accent)] cursor-pointer"
-              />
-              <span className="text-sm text-foreground">Return label required?</span>
-              <span className="text-xs text-muted-foreground">creates a warehouse task</span>
-            </label>
+            <p className="text-xs text-muted-foreground mb-4">{description.length}/500</p>
 
             <div className="flex gap-3">
               <button onClick={goBack} className="px-5 py-2.5 text-sm border border-foreground text-foreground hover:bg-surface-elevated transition-colors">Back</button>
