@@ -43,9 +43,11 @@ export function notifyGuideComment(opts: { guideTitle: string; comment: string; 
 }
 
 /**
- * A support question was inserted — ask the guide-support fn to ping the
- * support Google Chat space with a deep link. Fire-and-forget; the fn only
- * accepts rows created in the last 10 minutes and notifies each once.
+ * A support question is complete (contact details saved, skipped or the
+ * sheet dismissed) — ask the guide-support fn to ping the support Google Chat
+ * space with the question, the customer's details and a deep link.
+ * Fire-and-forget; the fn only accepts rows created in the last 30 minutes,
+ * notifies each once, and sweeps up anything the viewer never reported.
  */
 export function notifySupportQuestion(id: string): void {
   if (!id) return;

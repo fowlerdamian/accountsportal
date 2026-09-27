@@ -582,7 +582,9 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
     });
     setSubmitting(null);
     if (error) { reportError('message'); return; }
-    notifySupportQuestion(questionId);
+    // The Chat ping waits for the contact step below (saved, skipped or
+    // dismissed) so it can carry the customer's details; guide-support's
+    // sweep covers a customer who closes the tab first.
     setSupportMessage("");
     setSupportSentId(questionId); // → contact step
   };
@@ -598,12 +600,14 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
     setSubmitting(null);
     if (error || ok === false) { reportError('contact details'); return; }
     safeLocal.set('guide-contact', JSON.stringify({ name, email, phone }));
+    notifySupportQuestion(supportSentId);
     setSupportSentId(null);
     setSupportOpen(false);
     const when = afterHours ? ` when we're back at ${backAt}` : '';
     toast.success(email ? `Thanks — we'll reply to ${email}${when}.` : `Thanks — we'll call you on ${phone}${when}.`);
   };
   const skipSupportContact = () => {
+    if (supportSentId) notifySupportQuestion(supportSentId);
     setSupportSentId(null);
     setSupportOpen(false);
     toast.success(`Sent — ${afterHours ? `we'll pick this up when we're back at ${backAt}` : "we'll do our best to help"}.${brand?.support_phone ? ` For anything urgent call ${brand.support_phone}.` : ""}`);
@@ -1079,7 +1083,7 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
 
       {/* Floating support button */}
       {!finished && chatEnabled && (
-        <Sheet open={supportOpen} onOpenChange={(v) => { setSupportOpen(v); if (!v && supportSentId) setSupportSentId(null); }}>
+        <Sheet open={supportOpen} onOpenChange={(v) => { setSupportOpen(v); if (!v && supportSentId) { notifySupportQuestion(supportSentId); setSupportSentId(null); } }}>
           <SheetTrigger asChild>
             <button
               type="button"

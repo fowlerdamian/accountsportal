@@ -1,8 +1,12 @@
 // guide-support — the support loop behind the customer "Need help?" sheet.
 //
-//   { action: "submitted", id }                 — anonymous (called by the viewer right after
-//                                                 inserting the question): ping Google Chat with a
-//                                                 deep link. Only for rows < 10 min old, once.
+//   { action: "submitted", id }                 — anonymous (called by the viewer once the
+//                                                 contact step is done): ping Google Chat with
+//                                                 the question, contact details and a deep
+//                                                 link. Only for rows < 30 min old, once.
+//   { action: "sweep" }                         — service role / cron (every 5 min): ping any
+//                                                 question 3 min–2 days old that was never
+//                                                 reported (customer closed the tab mid-way).
 //   { action: "draft", id }                     — staff: AI-draft an answer from the guide's steps
 //   { action: "reply", id, answer, resolve? }   — staff: save the answer; email it to the customer
 //                                                 via Resend when they left an address
@@ -59,22 +63,48 @@ async function notifyChat(text: string) {
 }
 
 // ── Anonymous: question submitted ────────────────────────────────────────────
+const SUBMIT_WINDOW_MS = 30 * 60_000;
+/** Sweep picks up rows the viewer never reported, once they are old enough that a contact step is clearly not coming. */
+const SWEEP_MIN_AGE_MS = 3 * 60_000;
+const SWEEP_MAX_AGE_MS = 2 * 24 * 60 * 60_000;
+
+function questionText(q: any): string {
+  const guide = q.instruction_sets;
+  const step = q.step_number ? ` · Step ${q.step_number}${q.step_title ? ` — ${q.step_title}` : ""}` : "";
+  const who = [q.customer_name, q.customer_email, q.customer_phone].filter(Boolean).join(" · ") || "no contact details left";
+  return `🙋 *${guide?.title ?? "Guide"}*${step} — Support question (${q.brands?.name ?? "brand?"})\n` +
+    `"${truncate(String(q.question).trim(), 300)}"\n` +
+    `${who}\n<${PORTAL_URL}/guide/support?q=${q.id}|Reply in portal>`;
+}
+
+/** Post the Chat ping for one loaded question and stamp notified_at (whether or not the webhook accepted it, so it is never re-sent). */
+async function notifyQuestion(db: SupabaseClient, q: any): Promise<boolean> {
+  const ok = await notifyChat(questionText(q));
+  await db.from("support_questions").update({ notified_at: new Date().toISOString() }).eq("id", q.id);
+  return ok;
+}
+
 async function onSubmitted(db: SupabaseClient, id: string) {
   const q = await loadQuestion(db, id);
   if (!q) return json({ error: "not found" }, 404);
   if (q.notified_at) return json({ ok: true, already: true });
-  if (Date.now() - new Date(q.created_at).getTime() > 10 * 60_000) return json({ error: "too old" }, 403);
-
-  const guide = q.instruction_sets;
-  const step = q.step_number ? ` · Step ${q.step_number}${q.step_title ? ` — ${q.step_title}` : ""}` : "";
-  const who = [q.customer_name, q.customer_email, q.customer_phone].filter(Boolean).join(" · ") || "no contact details left";
-  const text =
-    `🙋 *${guide?.title ?? "Guide"}*${step} — Support question (${q.brands?.name ?? "brand?"})\n` +
-    `"${truncate(String(q.question).trim(), 300)}"\n` +
-    `${who}\n<${PORTAL_URL}/guide/support?q=${q.id}|Reply in portal>`;
-  const ok = await notifyChat(text);
-  await db.from("support_questions").update({ notified_at: new Date().toISOString() }).eq("id", id);
+  if (Date.now() - new Date(q.created_at).getTime() > SUBMIT_WINDOW_MS) return json({ error: "too old" }, 403);
+  const ok = await notifyQuestion(db, q);
   return json({ ok, notified: ok });
+}
+
+async function sweep(db: SupabaseClient) {
+  const now = Date.now();
+  const { data, error } = await db.from("support_questions")
+    .select("*, instruction_sets(id,title,product_code,slug), brands(id,key,name,domain,support_email,support_phone,logo_url,primary_colour)")
+    .is("notified_at", null)
+    .lt("created_at", new Date(now - SWEEP_MIN_AGE_MS).toISOString())
+    .gt("created_at", new Date(now - SWEEP_MAX_AGE_MS).toISOString())
+    .order("created_at").limit(20);
+  if (error) throw error;
+  let sent = 0;
+  for (const q of data ?? []) if (await notifyQuestion(db, q)) sent++;
+  return json({ ok: true, due: (data ?? []).length, sent });
 }
 
 // ── Staff: AI draft ──────────────────────────────────────────────────────────
@@ -209,6 +239,8 @@ Deno.serve(async (req) => {
 
     const auth = await requireStaff(req, corsHeaders);
     if (!auth.ok) return auth.response;
+    // The sweep runs under the service role from pg_cron (see chat-outbox-flush for the pattern).
+    if (action === "sweep") return await sweep(db);
     if (!(await isStaffUser(auth.userId))) return forbidden(corsHeaders);
 
     switch (action) {
