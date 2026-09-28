@@ -183,14 +183,17 @@ renderer.domElement.addEventListener("pointerup", (e) => {
   post({ type: "pick", name });
 });
 
+const CAPTURE_BG = new THREE.Color(0xd9dadd);
 function captureViews(views, px) {
   const prev = { pos: camera.position.clone(), rot: controls.autoRotate, w: innerWidth, h: innerHeight, bg: scene.background };
   controls.autoRotate = false;
+  scene.background = CAPTURE_BG; // light studio backdrop: dark parts stay legible to the vision review
   renderer.setSize(px, px, false); camera.aspect = 1; camera.updateProjectionMatrix();
   const images = views.map(({ yaw = 0, pitch = 12 }) => {
     setView(yaw, pitch); renderer.render(scene, camera);
     return renderer.domElement.toDataURL("image/jpeg", 0.85);
   });
+  scene.background = prev.bg;
   camera.position.copy(prev.pos); controls.autoRotate = prev.rot; controls.update(); resize();
   return images;
 }
