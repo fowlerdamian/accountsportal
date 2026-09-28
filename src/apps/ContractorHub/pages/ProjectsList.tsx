@@ -35,24 +35,33 @@ import { FilterPill } from "@portal/components/FilterPill";
 import { TrashIcon } from "@portal/components/icons";
 
 // ── Stage colour map ──────────────────────────────────────────
+// Keyed by stage NAME, not position: when a stage is added to
+// NEW_PRODUCT_STAGES without a colour here, the card falls back to the last
+// colour instead of throwing (a positional array did exactly that when
+// "Testing" was inserted on 2026-09-24 and every "Complete" project took the
+// whole portal down with `undefined.border`).
 
-const STAGE_COLORS = [
-  { border: "border-l-[var(--brand-purple)]", dot: "bg-[var(--brand-purple)]", text: "text-[var(--brand-purple)]" },
-  { border: "border-l-[var(--brand-blue)]",   dot: "bg-[var(--brand-blue)]",   text: "text-[var(--brand-blue)]" },
-  { border: "border-l-[var(--brand-blue)]",   dot: "bg-[var(--brand-blue)]",   text: "text-[var(--brand-blue)]" },
-  { border: "border-l-[var(--brand-orange)]",  dot: "bg-[var(--brand-orange)]",  text: "text-[var(--brand-orange)]" },
-  { border: "border-l-[var(--brand-aqua)]",  dot: "bg-[var(--brand-aqua)]",  text: "text-[var(--brand-aqua)]" },
-];
+type StageColour = { border: string; dot: string; text: string };
+const colour = (c: string): StageColour => ({ border: `border-l-[var(--brand-${c})]`, dot: `bg-[var(--brand-${c})]`, text: `text-[var(--brand-${c})]` });
+const STAGE_COLOURS: Partial<Record<(typeof NEW_PRODUCT_STAGES)[number], StageColour>> = {
+  Idea:      colour("purple"),
+  Sketch:    colour("blue"),
+  CAD:       colour("blue"),
+  Prototype: colour("orange"),
+  Testing:   colour("pink"),
+  Complete:  colour("aqua"),
+};
+const DEFAULT_STAGE_COLOUR = colour("aqua");
+const FIRST_STAGE_COLOUR = STAGE_COLOURS.Idea ?? DEFAULT_STAGE_COLOUR;
 
-function stageColor(stageName: string) {
-  const idx = NEW_PRODUCT_STAGES.indexOf(stageName as any);
-  return STAGE_COLORS[idx >= 0 ? idx : STAGE_COLORS.length - 1];
+function stageColor(stageName: string): StageColour {
+  return STAGE_COLOURS[stageName as (typeof NEW_PRODUCT_STAGES)[number]] ?? DEFAULT_STAGE_COLOUR;
 }
 
 // ── Kanban columns (product dev stages + catch-all) ──────────
 
 const KANBAN_STAGE_COLS = [
-  ...NEW_PRODUCT_STAGES.map((s, i) => ({ key: s, label: s, color: ["border-t-[var(--brand-purple)]","border-t-[var(--brand-blue)]","border-t-[var(--brand-blue)]","border-t-[var(--brand-orange)]","border-t-[var(--brand-pink)]","border-t-[var(--brand-aqua)]"][i] })),
+  ...NEW_PRODUCT_STAGES.map((s) => ({ key: s, label: s, color: stageColor(s).border.replace("border-l-", "border-t-") })),
   { key: "__other__", label: "Other", color: "border-t-zinc-500" },
 ];
 
@@ -72,7 +81,7 @@ function ProjectCard({
   const isOverdue                  = project.due_date && project.due_date < today;
   const isProduct                  = project.type === "new_product";
   const stageIdx                   = activeStage ? NEW_PRODUCT_STAGES.indexOf(activeStage.name as any) : -1;
-  const color                      = activeStage ? stageColor(activeStage.name) : STAGE_COLORS[0];
+  const color                      = activeStage ? stageColor(activeStage.name) : FIRST_STAGE_COLOUR;
   const burnPct                    = budget?.budget_allocated
     ? Math.min((budget.budget_spent / budget.budget_allocated) * 100, 100)
     : 0;
@@ -199,7 +208,7 @@ function KanbanCard({
   const today                      = localToday();
   const isOverdue                  = project.due_date && project.due_date < today;
   const isProduct                  = project.type === "new_product";
-  const color                      = activeStage ? stageColor(activeStage.name) : STAGE_COLORS[0];
+  const color                      = activeStage ? stageColor(activeStage.name) : FIRST_STAGE_COLOUR;
 
   return (
     <div
