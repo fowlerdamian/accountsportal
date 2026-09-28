@@ -6,9 +6,8 @@ import {
 } from "recharts";
 import {
   RefreshCw, Loader2, AlertCircle, ShoppingCart, Mail, TrendingUp, MousePointerClick,
-  DollarSign, Users, Flame, PhoneCall, Sparkles, GitBranch, BarChart3, Box,
+  DollarSign, Users, Flame, PhoneCall, Sparkles, GitBranch, BarChart3,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import {
   useTrailbaitDashboard, useBrandWebsite,
   type TrailbaitDashboard, type MarketingSegment, type ShopSegment, type EmailSegment,
@@ -506,13 +505,6 @@ export default function MarketingDashboard() {
             </button>
           ),
         )}
-        <Link
-          to="3d"
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-md transition-colors font-medium text-muted-foreground hover:text-foreground"
-        >
-          <Box className="w-3.5 h-3.5" />
-          3D Model Builder
-        </Link>
       </div>
 
       {view === "channels" ? (
