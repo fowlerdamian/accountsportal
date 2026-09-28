@@ -1,5 +1,7 @@
 /**
- * /labels/print?ids=<guide ids>[&brand=key][&logo=key][&stock=99012][&copies=n][&preview=1]
+ * /labels/print?ids=<guide ids>[&brand=key][&stock=99012][&copies=n][&preview=1]
+ *
+ * Guide labels print without a logo (2026-09-28); a legacy `logo=` param is ignored.
  *
  * Chrome-free label render route for the browser print pipeline. Outputs only
  * label markup: `@page` sized to the DYMO stock with zero margin, one label per
@@ -16,11 +18,10 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@guide/integrations/supabase/client";
-import { labelLogoUrl, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
 import { SCAN_LINES, codeLines, computeLabelLayout, resolveLabelStock, type LabelStockKey } from "@portal/lib/labels/labelStock";
 import { abs, fitTexts, inPrintFrame, nextPaint, postToOpener as post, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
 
-interface GuideRow { id: string; title: string; product_code: string | null; slug: string; label_logo: string | null }
+interface GuideRow { id: string; title: string; product_code: string | null; slug: string }
 interface BrandRow { id: string; key: string; name: string; domain: string; dymo_label_size: string | null }
 interface PubRow { instruction_set_id: string; brand_id: string; status: string }
 
@@ -67,7 +68,6 @@ export default function LabelPrint() {
   const [params] = useSearchParams();
   const ids = useMemo(() => (params.get("ids") ?? "").split(",").map(s => s.trim()).filter(Boolean), [params]);
   const brandKey = params.get("brand");
-  const logoParam = params.get("logo");
   const stockParam = params.get("stock");
   const copies = Math.max(1, Math.min(50, parseInt(params.get("copies") ?? "1", 10) || 1));
   const preview = params.get("preview") === "1";
@@ -78,7 +78,7 @@ export default function LabelPrint() {
     enabled: ids.length > 0,
     queryFn: async () => {
       const [guides, brands, pubs] = await Promise.all([
-        supabase.from("instruction_sets").select("id, title, product_code, slug, label_logo").in("id", ids),
+        supabase.from("instruction_sets").select("id, title, product_code, slug").in("id", ids),
         supabase.from("brands").select("*").order("name"),
         supabase.from("guide_publications").select("instruction_set_id, brand_id, status").in("instruction_set_id", ids),
       ]);
@@ -102,19 +102,17 @@ export default function LabelPrint() {
       const brand = forced ?? brands.find(b => b.id === published?.brand_id) ?? brands[0];
       if (!brand) continue;
       stock ??= resolveLabelStock(brand.dymo_label_size);
-      // Logo is set per guide in the editor; `logo=` only overrides it for this job.
-      const logoKey = resolveLabelLogoKey(logoParam ?? g.label_logo);
       const base: LabelData = {
         key: `${g.id}-${brand.key}`,
         url: `https://${brand.domain}/${g.slug}`,
         productCode: (g.product_code || g.slug || "").trim(),
         title: g.title ?? "",
-        logoSrc: labelLogoUrl(logoKey),
+        logoSrc: null,
       };
       for (let c = 0; c < copies; c++) labels.push({ ...base, key: `${base.key}-${c}` });
     }
     return { labels, stock: stock ?? resolveLabelStock(null) };
-  }, [data, ids, brandKey, logoParam, stockParam, copies]);
+  }, [data, ids, brandKey, stockParam, copies]);
 
   // Report errors to the opener so it can surface them instead of hanging.
   useEffect(() => {

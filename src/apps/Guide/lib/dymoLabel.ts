@@ -85,12 +85,16 @@ export const LABEL_LOGOS: LabelLogo[] = [
 ];
 
 export const NO_LOGO = "none";
-export const DEFAULT_LABEL_LOGO = "trailbait";
+export const DEFAULT_LABEL_LOGO = NO_LOGO;
 
-/** Normalise a stored/selected logo key: unknown values fall back to the TrailBait default. */
-export function resolveLabelLogoKey(key: string | null | undefined): string {
-  if (key === NO_LOGO) return NO_LOGO;
-  return key && LABEL_LOGOS.some(l => l.key === key) ? key : DEFAULT_LABEL_LOGO;
+/**
+ * Guide (instruction manual) labels print WITHOUT a logo — Damian, 2026-09-28.
+ * The row the logo used goes to the "SCAN HERE" text. Any stored
+ * instruction_sets.label_logo value is ignored; LABEL_LOGOS stays for the
+ * files themselves (the warehouse barcode label has its own picker).
+ */
+export function resolveLabelLogoKey(_key: string | null | undefined): string {
+  return NO_LOGO;
 }
 
 export function labelLogoUrl(key: string | null | undefined): string | null {

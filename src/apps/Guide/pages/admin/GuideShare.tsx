@@ -9,7 +9,7 @@ import { useState, useRef, useCallback } from "react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { buildDymoLabelXml, dymoLabelFileContents, escapeXml, fetchLogoAsPngBase64, labelLogoName, labelLogoUrl, resolveLabelLogoKey } from "@guide/lib/dymoLabel";
+import { buildDymoLabelXml, dymoLabelFileContents, escapeXml } from "@guide/lib/dymoLabel";
 import { printLabels } from "@portal/lib/labels/printLabels";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -42,7 +42,6 @@ export default function GuideShare() {
   if (!guide) return <div className="p-8 text-center text-muted-foreground">Guide not found</div>;
 
   // Logo is chosen per guide in the editor ("Label logo"); unknown/null = default.
-  const labelLogoKey = resolveLabelLogoKey((guide as any).label_logo);
 
   const copyUrl = async (url: string, key: string) => {
     try {
@@ -83,16 +82,12 @@ export default function GuideShare() {
     guideUrl: string,
   ) => {
     try {
-      const logoUrl = labelLogoUrl(labelLogoKey);
-      // Re-encode the logo as PNG through a canvas so any source format works in DYMO Connect.
-      const logoBase64 = logoUrl ? await fetchLogoAsPngBase64(logoUrl) : null;
-      if (logoUrl && !logoBase64) toast.warning("Logo couldn't be loaded — label generated without it");
       const xml = buildDymoLabelXml({
         size: brand.dymo_label_size,
         url: guideUrl,
         productCode: guide.product_code || guide.slug,
         title: guide.title,
-        logoBase64,
+        logoBase64: null, // guide labels print without a logo (2026-09-28)
       });
       const blob = new Blob([dymoLabelFileContents(xml)], { type: "application/octet-stream" });
       const blobUrl = URL.createObjectURL(blob);
@@ -205,7 +200,7 @@ export default function GuideShare() {
                           <Button variant="outline" size="sm" onClick={() => downloadQRPng(brand.key)}><Download className="w-4 h-4 mr-2" /> PNG</Button>
                           <Button variant="outline" size="sm" onClick={() => downloadQRPdf(brand.key, brand.name, url)}><Download className="w-4 h-4 mr-2" /> Print PDF</Button>
                           <div className="flex items-center">
-                            <Button variant="outline" size="sm" onClick={() => printLabel(brand)} disabled={printing === brand.key} title={`Label logo: ${labelLogoName(labelLogoKey)} (set in the guide editor)`}>
+                            <Button variant="outline" size="sm" onClick={() => printLabel(brand)} disabled={printing === brand.key}>
                               {printing === brand.key ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Printer className="w-4 h-4 mr-2" />} Print label
                             </Button>
                             <Button variant="outline" size="sm" className="ml-2" onClick={() => downloadDymoLabel(brand, url)}><Download className="w-4 h-4 mr-2" /> .dymo</Button>

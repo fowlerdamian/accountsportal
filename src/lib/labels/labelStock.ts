@@ -80,7 +80,7 @@ const STOCK_DEFS = {
     width: 88.39, height: 35.81, // driver form "99012 Large Address"
     printable: { x: 5.67, y: 1.02, w: 81.36, h: 33.19 },
     layout: "wide",
-    fonts: { scan: 12, code: 11, title: 7 },
+    fonts: { scan: 13, code: 12, title: 8 },
   },
   /** S0722370 Standard Address. */
   "99010": {
@@ -204,7 +204,7 @@ export function codeLines(stockIn: string | null | undefined, productCode: strin
   const spec = LABEL_STOCK[resolveLabelStock(stockIn)];
   const lines = [{ text: productCode.trim(), size: spec.fonts.code, bold: true }];
   const t = (title ?? "").trim();
-  // The column is wide and `fitTexts` shrinks the line, so only cap runaway titles.
-  if (t && spec.fonts.title > 0) lines.push({ text: t.length > 64 ? `${t.slice(0, 63)}…` : t, size: spec.fonts.title, bold: false });
+  // `fitTexts` shrinks the line to the column; cap the length so it never has to go below ~5pt.
+  if (t && spec.fonts.title > 0) lines.push({ text: t.length > 44 ? `${t.slice(0, 43)}…` : t, size: spec.fonts.title, bold: false });
   return lines;
 }
