@@ -26,7 +26,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const yy = (year) => String(year).slice(2) // 'MMM YY' house style
 
 // Committed revenue by year → calendar month → $ (see seasonalityTargets.js).
-const COMMITTED_REVENUE = { 2026: { 10: 170_000 } }
+// Oct 2026 +$170k removed 2026-09-30 — it spiked Oct; targets now follow seasonality only.
+const COMMITTED_REVENUE = {}
 const EMPTY_COMMITTED = {}
 
 // Fixed year→hue assignment (stable by position in the full years list, so
@@ -437,9 +438,8 @@ export default function RevenueTargets() {
   // model is only used for completed/actual/YTD metadata in the table.
   const BASE_TOTAL = 2_000_000
   const STRETCH_TOTAL = 2_500_000
-  // Owner-supplied revenue committed on top of organic seasonality (per Damian
-  // 2026-09-01: ~$170k extra expected in October). Carved out of the annual
-  // totals before the seasonal spread — the $2.0m year plan is unchanged.
+  // Owner-supplied revenue committed on top of organic seasonality, carved out
+  // of the annual totals before the seasonal spread (see COMMITTED_REVENUE).
   const committed = COMMITTED_REVENUE[thisYear] ?? EMPTY_COMMITTED
   const seasonality = useMemo(() => {
     if (!data?.revenue?.length) return null
