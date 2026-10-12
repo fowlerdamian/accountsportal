@@ -7,7 +7,6 @@
 export const APPS = [
   {
     name:        'Finance',
-    description: 'Invoice profit analysis and Xero financial data',
     route:       '/accounts',
     icon:        'BarChart3',
     status:      'live',
@@ -15,7 +14,6 @@ export const APPS = [
   },
   {
     name:        'Logistics',
-    description: 'Freight invoice management, rate card reconciliation, and dispute letters',
     route:       '/logistics',
     icon:        'Truck',
     status:      'live',
@@ -23,7 +21,6 @@ export const APPS = [
   },
   {
     name:        'Purchasing',
-    description: 'Monitor PO due dates with live sync from Cin7 Core',
     route:       '/purchase-orders',
     icon:        'ShoppingCart',
     status:      'live',
@@ -31,15 +28,13 @@ export const APPS = [
   },
   {
     name:        'Cases',
-    description: 'Cases, customer profiles, action items, and warehouse task tracking',
     route:       '/support',
     icon:        'Headphones',
     status:      'live',
     external:    false,
   },
   {
-    name:        'Projects',
-    description: 'Project and contractor management, time tracking, and AI assistant',
+    name:        'R&D',
     route:       '/projects',
     icon:        'Wrench',
     status:      'live',
@@ -47,7 +42,6 @@ export const APPS = [
   },
   {
     name:        'Tasks',
-    description: 'Lite cross-staff task tracker with Eisenhower scoring, dependencies, and a persistent bottom dock',
     route:       '/tasks',
     icon:        'ClipboardCheck',
     status:      'live',
@@ -55,7 +49,6 @@ export const APPS = [
   },
   {
     name:        'Guide Portal',
-    description: 'Product guides, categories, brands, and customer feedback management',
     route:       '/guide',
     icon:        'BookOpen',
     status:      'live',
@@ -63,7 +56,6 @@ export const APPS = [
   },
   {
     name:        'Sales',
-    description: 'Leads, scoring and daily call lists across TrailBait, FleetCraft and AGA, plus the open-deal pressure board',
     route:       '/sales',
     icon:        'TrendingUp',
     status:      'live',
@@ -71,7 +63,6 @@ export const APPS = [
   },
   {
     name:        'Marketing',
-    description: 'Per-brand marketing performance — TrailBait (Consumer/B2B), AGA & FleetCraft pipelines',
     route:       '/marketing',
     icon:        'Target',
     status:      'live',
@@ -79,7 +70,6 @@ export const APPS = [
   },
   {
     name:        'Compliance',
-    description: 'ISO 9001:2015 QMS documentation, self-audit, and evidence management',
     route:       '/compliance',
     icon:        'ShieldCheck',
     status:      'live',
@@ -87,7 +77,6 @@ export const APPS = [
   },
   {
     name:        'Warehouse',
-    description: 'Barcode labels from Cin7 SKUs as PDF or DYMO, freight labels, and other warehouse tools',
     route:       '/warehouse',
     icon:        'Package',
     status:      'live',
@@ -95,7 +84,6 @@ export const APPS = [
   },
   {
     name:        'Settings',
-    description: 'Account details, login links, and user role & tile access management',
     route:       '/settings',
     icon:        'Settings',
     status:      'live',

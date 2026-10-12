@@ -36,7 +36,7 @@ export const APP_CHAT_CONTEXTS: ChatContextEntry[] = [
     suggestions: ['Show disputed invoices', "What's our freight spend this month?", 'Any unresolved disputes?'],
   },
   {
-    prefix: '/projects', context: 'projects', label: 'Projects',
+    prefix: '/projects', context: 'projects', label: 'R&D',
     suggestions: ['What tasks are overdue?', 'Show active projects', 'Who has the most open tasks?'],
   },
   {

@@ -31,7 +31,7 @@ export type Shortcut = {
 export const NAV_SHORTCUTS: Array<{ letter: string; path: string; label: string }> = [
   { letter: "d", path: "/dashboard",       label: "Dashboard" },
   { letter: "t", path: "/tasks",           label: "Tasks" },
-  { letter: "p", path: "/projects",        label: "Projects" },
+  { letter: "p", path: "/projects",        label: "R&D" },
   { letter: "s", path: "/support",         label: "Customer Service" },
   { letter: "l", path: "/logistics",       label: "Logistics" },
   { letter: "o", path: "/purchase-orders", label: "Purchasing" },

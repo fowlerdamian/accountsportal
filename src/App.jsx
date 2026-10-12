@@ -161,7 +161,7 @@ const PATH_TITLES = [
   ['/support/customers',     'Customers'],
   ['/support',               'Cases'],
   ['/projects/ideas',        'Ideas'],
-  ['/projects',              'Projects'],
+  ['/projects',              'R&D'],
   ['/tasks',                 'Tasks'],
   ['/guide',                 'Guide Portal'],
   ['/warehouse',             'Warehouse'],

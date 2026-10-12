@@ -66,15 +66,10 @@ function TileCard({ app, hovered }) {
         <AppIcon name={app.icon} size={22} />
       </div>
 
-      {/* Text */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.01em' }}>
-          {app.name}
-        </p>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
-          {app.description}
-        </p>
-      </div>
+      {/* Name */}
+      <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.01em' }}>
+        {app.name}
+      </p>
 
       {/* Arrow */}
       {!isComingSoon && (
