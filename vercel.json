@@ -19,7 +19,6 @@
     { "path": "/api/sales-sync-list",      "schedule": "0 14 * * 1-5" },
     { "path": "/api/task-reminders",       "schedule": "0 22 * * *" },
     { "path": "/api/finance-snapshot",     "schedule": "0 15 * * *" },
-    { "path": "/api/finance-snapshot?backfill=24", "schedule": "30 15 1 * *" },
     { "path": "/api/finance-mtd-digest",   "schedule": "0 8 * * *" },
     { "path": "/api/opportunity-sync",     "schedule": "45 21 * * *" },
     { "path": "/api/dialpad-sync",         "schedule": "30 19 * * *" }
