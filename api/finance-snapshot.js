@@ -5,6 +5,12 @@
 //
 // Wired in vercel.json: { "path": "/api/finance-snapshot", "schedule": "0 15 * * *" }
 // 15:00 UTC ≈ 01:00 AEST — after the day's Xero activity has settled.
+//
+// Monthly backfill: { "path": "/api/finance-snapshot?backfill=24", "schedule": "30 15 1 * *" }
+// Closed months only change when someone posts back into them (year-end journals,
+// late bills), which the nightly run never sees — so re-pull two years monthly.
+
+const MAX_BACKFILL_MONTHS = 24
 
 export default async function handler(req, res) {
   try {
@@ -20,10 +26,15 @@ export default async function handler(req, res) {
     // Optional shared secret (only enforced if FINANCE_CRON_SECRET is set on both ends).
     if (process.env.FINANCE_CRON_SECRET) headers['x-cron-secret'] = process.env.FINANCE_CRON_SECRET
 
+    // ?backfill=N re-runs the trailing N months (capped) so journals posted to
+    // already-closed months flow through to the snapshots.
+    const n = parseInt(req.query?.backfill, 10)
+    const backfill = Number.isFinite(n) && n > 0 ? Math.min(n, MAX_BACKFILL_MONTHS) : 0
+
     const resp = await fetch(`${url}/functions/v1/xero-pl-snapshot`, {
       method:  'POST',
       headers,
-      body:    JSON.stringify({}), // default = current open month
+      body:    JSON.stringify(backfill ? { backfill } : {}), // default = current open month
     })
 
     const text = await resp.text()
