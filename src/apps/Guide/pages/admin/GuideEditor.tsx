@@ -55,6 +55,16 @@ const WIRING_BREAK_DEFAULT_IMAGE =
 
 const newStepKey = () => crypto.randomUUID();
 const blankStep = (n: number): StepDraft => ({ key: newStepKey(), step_number: n, subtitle: '', description: '', order_index: n });
+const wiringBreakStep = (n: number): StepDraft => ({
+  key: newStepKey(),
+  step_number: n,
+  subtitle: WIRING_BREAK_SUBTITLE,
+  description: WIRING_BREAK_DESCRIPTION,
+  order_index: n,
+  is_divider: true,
+  image_url: WIRING_BREAK_DEFAULT_IMAGE,
+  image_original_url: WIRING_BREAK_DEFAULT_IMAGE,
+});
 /** True when a step carries anything worth keeping (text, image, or a divider). */
 const stepHasContent = (s: Pick<StepDraft, 'subtitle' | 'description' | 'image_url' | 'image2_url' | 'is_divider'>) =>
   !!(s.subtitle || s.description || s.is_divider || s.image_url || s.image2_url);
@@ -512,6 +522,8 @@ export default function GuideEditor() {
   const [editingVariantIdx, setEditingVariantIdx] = useState<number | null>(null);
   const [newVariantLabel, setNewVariantLabel] = useState("");
   const [showAddVariant, setShowAddVariant] = useState(false);
+  // Tool chip input for the expanded variant (only one is open at a time)
+  const [variantToolInput, setVariantToolInput] = useState("");
 
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -956,16 +968,7 @@ export default function GuideEditor() {
       toast.info("Wiring instructions already exist in this guide.");
       return;
     }
-    setGuideSteps(prev => prev.some(s => s.is_divider) ? prev : [...prev, {
-      key: newStepKey(),
-      step_number: prev.length + 1,
-      subtitle: WIRING_BREAK_SUBTITLE,
-      description: WIRING_BREAK_DESCRIPTION,
-      order_index: prev.length + 1,
-      is_divider: true,
-      image_url: WIRING_BREAK_DEFAULT_IMAGE,
-      image_original_url: WIRING_BREAK_DEFAULT_IMAGE,
-    }]);
+    setGuideSteps(prev => prev.some(s => s.is_divider) ? prev : [...prev, wiringBreakStep(prev.length + 1)]);
   };
 
   const updateStep = (index: number, field: string, value: string) => {
@@ -1056,7 +1059,53 @@ export default function GuideEditor() {
     setVariants(prev => prev.map((v, i) => (i === vIdx ? fn(v) : v)));
   };
 
-  // --- Variant step image handlers (mirror updateStepImage / openEditor for variant steps) ---
+  // --- Variant step handlers (mirror the main Installation Steps handlers) ---
+  const updateVariantSteps = (vIdx: number, fn: (steps: StepDraft[]) => StepDraft[]) => {
+    updateVariant(vIdx, v => ({ ...v, steps: fn(v.steps) }));
+  };
+
+  const addVariantStep = (vIdx: number) => {
+    updateVariantSteps(vIdx, steps => [...steps, blankStep(steps.length + 1)]);
+  };
+
+  const addVariantWiringBreak = (vIdx: number) => {
+    updateVariantSteps(vIdx, steps => (steps.some(s => s.is_divider) ? steps : [...steps, wiringBreakStep(steps.length + 1)]));
+  };
+
+  const updateVariantStep = (vIdx: number, sIdx: number, field: string, value: string) => {
+    updateVariantSteps(vIdx, steps => steps.map((s, i) => (i === sIdx ? { ...s, [field]: value } : s)));
+  };
+
+  const removeVariantStep = (vIdx: number, sIdx: number) => {
+    updateVariantSteps(vIdx, steps => (steps.length <= 1 ? steps : renumber(steps.filter((_, i) => i !== sIdx))));
+  };
+
+  const transferVariantStepImage = (vIdx: number, sIdx: number, field: 'image_url' | 'image2_url', url: string, originalUrl: string | null) => {
+    const origField = field === 'image_url' ? 'image_original_url' : 'image2_original_url';
+    updateVariantSteps(vIdx, steps => steps.map((s, i) => (i === sIdx ? { ...s, [field]: url, [origField]: originalUrl ?? url } : s)));
+    toast.success("Image copied to this slot");
+  };
+
+  const handleVariantStepDragEnd = (vIdx: number, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const landed = variants[vIdx]?.steps.findIndex(s => s.key === over.id) ?? -1;
+    updateVariantSteps(vIdx, steps => {
+      const oldIndex = steps.findIndex(s => s.key === active.id);
+      const newIndex = steps.findIndex(s => s.key === over.id);
+      if (oldIndex === -1 || newIndex === -1) return steps;
+      return renumber(arrayMove(steps, oldIndex, newIndex));
+    });
+    if (landed !== -1) toast.success(`Moved step to position ${landed + 1}`);
+  };
+
+  const addVariantTool = (vIdx: number) => {
+    const tool = variantToolInput.trim();
+    if (!tool) return;
+    updateVariant(vIdx, v => (v.tools_required.includes(tool) ? v : { ...v, tools_required: [...v.tools_required, tool] }));
+    setVariantToolInput("");
+  };
+
   const updateVariantStepImage = (vIdx: number, sIdx: number, field: 'image_url' | 'image2_url', value: string | null) => {
     const origField = field === 'image_url' ? 'image_original_url' : 'image2_original_url';
     setVariants(prev => {
@@ -1401,7 +1450,7 @@ export default function GuideEditor() {
               <div key={variant.id ?? variant.slug} className="border rounded-lg overflow-hidden">
                 <div
                   className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors"
-                  onClick={() => setEditingVariantIdx(editingVariantIdx === vIdx ? null : vIdx)}
+                  onClick={() => { setEditingVariantIdx(editingVariantIdx === vIdx ? null : vIdx); setVariantToolInput(""); }}
                 >
                   <div>
                     <p className="font-medium text-sm">{variant.variant_label}</p>
@@ -1432,83 +1481,79 @@ export default function GuideEditor() {
                 {/* Expanded variant step editor */}
                 {editingVariantIdx === vIdx && (
                   <div className="border-t p-4 space-y-4 bg-muted/10">
-                    <div className="flex items-center gap-3">
-                      <Label className="text-xs shrink-0">Label</Label>
+                    <div>
+                      <Label>Variant Name</Label>
                       <Input
                         value={variant.variant_label}
                         onChange={(e) => {
                           const value = e.target.value;
                           updateVariant(vIdx, v => ({ ...v, variant_label: value }));
                         }}
-                        className="h-8 text-sm"
+                        className="mt-1.5"
                       />
                     </div>
 
                     {/* Per-variant overview — what the customer sees on the welcome
-                        screen after picking this version. Blank = same as the guide. */}
-                    <div className="border rounded-lg p-3 space-y-3 bg-background">
+                        screen after picking this version. Blank = same as the guide.
+                        Same fields and controls as the Product Details tab. */}
+                    <div className="border rounded-lg p-3 sm:p-4 space-y-5 bg-background">
                       <div>
-                        <p className="text-sm font-medium">Welcome screen for this version</p>
-                        <p className="text-xs text-muted-foreground">Leave a field blank to show the guide's Product Details value.</p>
+                        <h3 className="text-lg font-semibold">Product Details</h3>
+                        <p className="text-xs text-muted-foreground mt-1">Shown on the welcome screen for this version. Leave a field blank to show the guide's Product Details value.</p>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-xs">Title</Label>
+                          <Label>Product Title</Label>
                           <Input
                             value={variant.title}
                             placeholder={title || "Same as guide"}
                             onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, title: value })); }}
-                            className="mt-1 h-8 text-sm"
+                            className="mt-1.5"
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">SKU</Label>
+                          <Label>SKU</Label>
                           <Input
                             value={variant.product_code}
                             placeholder={productCode || "Same as guide"}
                             onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, product_code: value })); }}
-                            className="mt-1 h-8 text-sm font-mono"
+                            className="mt-1.5 font-mono"
                           />
                         </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-xs">Estimated Completion Time</Label>
+                          <Label>Estimated Completion Time</Label>
                           <Input
                             value={variant.estimated_time}
                             placeholder={estimatedTime || "Same as guide"}
                             onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, estimated_time: value })); }}
-                            className="mt-1 h-8 text-sm"
+                            className="mt-1.5"
                           />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Tools Required</Label>
-                          <Input
-                            value={variant.tools_required.join(", ")}
-                            placeholder={tools.length ? tools.join(", ") : "Same as guide"}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              // Keep a trailing empty token while typing so ", " isn't swallowed mid-edit.
-                              updateVariant(vIdx, v => ({ ...v, tools_required: value.split(",").map(t => t.trimStart()).filter((t, i, a) => t !== "" || i === a.length - 1) }));
-                            }}
-                            onBlur={() => updateVariant(vIdx, v => ({ ...v, tools_required: v.tools_required.map(t => t.trim()).filter(Boolean) }))}
-                            className="mt-1 h-8 text-sm"
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">Comma-separated. Replaces the guide's list when set.</p>
                         </div>
                       </div>
                       <div>
-                        <Label className="text-xs">Short Description</Label>
-                        <Textarea
+                        <Label>Short Description</Label>
+                        <AiField
                           value={variant.short_description}
-                          placeholder={description || "Same as guide"}
-                          maxLength={300}
-                          rows={2}
-                          onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, short_description: value })); }}
-                          className="mt-1 text-sm"
-                        />
+                          onRewrite={(t) => updateVariant(vIdx, v => ({ ...v, short_description: t }))}
+                          kind="description"
+                          context={variant.title || title}
+                        >
+                          <Textarea
+                            value={variant.short_description}
+                            placeholder={description || "Same as guide"}
+                            maxLength={300}
+                            rows={3}
+                            onChange={(e) => { const value = e.target.value; updateVariant(vIdx, v => ({ ...v, short_description: value })); }}
+                            className="mt-1.5 pr-8"
+                          />
+                        </AiField>
+                        <p className="text-xs text-muted-foreground mt-1">{variant.short_description.length}/300</p>
                       </div>
                       <div>
-                        <Label className="text-xs">Product Images</Label>
-                        <div className="mt-1">
+                        <Label>Product Images</Label>
+                        <div className="mt-1.5">
                           <ImageSlots
                             urls={variant.product_image_urls}
                             onChange={(next) => updateVariant(vIdx, v => ({ ...v, product_image_urls: next }))}
@@ -1519,75 +1564,74 @@ export default function GuideEditor() {
                       </div>
                     </div>
 
-                    {/* Variant steps */}
-                    {variant.steps.map((step, sIdx) => (
-                      <div key={step.key} className="border rounded-lg p-3 space-y-2 bg-background">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                            Step {sIdx + 1}
-                            {step.is_divider && (
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-orange)] bg-[rgba(var(--brand-accent-rgb),0.15)] px-1.5 py-0.5 rounded">
-                                Wiring instructions
-                              </span>
-                            )}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Remove step ${sIdx + 1} from ${variant.variant_label || 'variant'}`}
-                            disabled={variant.steps.length <= 1}
-                            className="h-6 w-6 p-0 text-destructive"
-                            onClick={() => {
-                              updateVariant(vIdx, v => (v.steps.length <= 1 ? v : { ...v, steps: renumber(v.steps.filter((_, i) => i !== sIdx)) }));
-                            }}
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </div>
-                        <StepTextFields
-                          subtitle={step.subtitle}
-                          description={step.description}
-                          context={title}
-                          onSubtitle={(t) => {
-                            updateVariant(vIdx, v => ({ ...v, steps: v.steps.map((s, i) => (i === sIdx ? { ...s, subtitle: t } : s)) }));
-                          }}
-                          onDescription={(t) => {
-                            updateVariant(vIdx, v => ({ ...v, steps: v.steps.map((s, i) => (i === sIdx ? { ...s, description: t } : s)) }));
-                          }}
-                          descriptionPlaceholder="Step description"
-                          inputClassName="h-8 text-sm"
-                          textareaClassName="text-sm"
+                    {/* Same chip input as the Tools Required tab. Empty = inherit the guide's list. */}
+                    <div className="border rounded-lg p-3 sm:p-4 space-y-5 bg-background">
+                      <h3 className="text-lg font-semibold">Tools Required</h3>
+                      <div className="flex gap-2">
+                        <Input
+                          value={variantToolInput}
+                          onChange={e => setVariantToolInput(e.target.value)}
+                          placeholder="Add a tool (press Enter)"
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addVariantTool(vIdx); } }}
+                          className="flex-1"
                         />
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <DropZone
-                            label="Primary image"
-                            currentUrl={step.image_url}
-                            onUpload={(url) => updateVariantStepImage(vIdx, sIdx, 'image_url', url)}
-                            onClear={() => updateVariantStepImage(vIdx, sIdx, 'image_url', null)}
-                            onEdit={step.image_url ? () => openVariantEditor(vIdx, sIdx, 'image_url') : undefined}
-                            folder="steps"
-                          />
-                          <DropZone
-                            label="Add second image"
-                            currentUrl={step.image2_url}
-                            onUpload={(url) => updateVariantStepImage(vIdx, sIdx, 'image2_url', url)}
-                            onClear={() => updateVariantStepImage(vIdx, sIdx, 'image2_url', null)}
-                            onEdit={step.image2_url ? () => openVariantEditor(vIdx, sIdx, 'image2_url') : undefined}
-                            folder="steps"
-                          />
-                        </div>
+                        <Button onClick={() => addVariantTool(vIdx)} variant="outline">Add</Button>
                       </div>
-                    ))}
+                      <div className="flex flex-wrap gap-2">
+                        {variant.tools_required.map((tool, i) => (
+                          <Badge key={i} variant="secondary" className="px-3 py-1.5 text-sm gap-2">
+                            {tool}
+                            <button type="button" aria-label={`Remove ${tool}`} onClick={() => updateVariant(vIdx, v => ({ ...v, tools_required: v.tools_required.filter((_, j) => j !== i) }))}><X className="w-3 h-3" /></button>
+                          </Badge>
+                        ))}
+                        {variant.tools_required.length === 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            {tools.length > 0 ? `Same as guide: ${tools.join(", ")}` : "No tools added yet"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        updateVariant(vIdx, v => ({ ...v, steps: [...v.steps, blankStep(v.steps.length + 1)] }));
-                      }}
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1" /> Add Step
-                    </Button>
+                    {/* Variant steps — same sortable step cards as the Installation Steps tab */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Installation Steps</h3>
+                      <p className="text-xs text-muted-foreground">Drag steps by the handle to reorder them.</p>
+                      <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={(event) => handleVariantStepDragEnd(vIdx, event)}>
+                        <SortableContext items={variant.steps.map(s => s.key)} strategy={verticalListSortingStrategy}>
+                          {variant.steps.map((step, sIdx) => (
+                            <SortableStep
+                              key={step.key}
+                              id={step.key}
+                              step={step}
+                              index={sIdx}
+                              onUpdate={(i, field, value) => updateVariantStep(vIdx, i, field, value)}
+                              onUpdateImage={(i, field, value) => updateVariantStepImage(vIdx, i, field, value)}
+                              onTransferImage={(i, field, url, originalUrl) => transferVariantStepImage(vIdx, i, field, url, originalUrl)}
+                              onOpenEditor={(i, field) => openVariantEditor(vIdx, i, field)}
+                              onRemove={(i) => removeVariantStep(vIdx, i)}
+                              canRemove={variant.steps.length > 1}
+                              context={variant.title || title}
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Button variant="outline" onClick={() => addVariantStep(vIdx)} className="w-full">
+                          <Plus className="w-4 h-4 mr-2" /> Add Step
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => addVariantWiringBreak(vIdx)}
+                          disabled={variant.steps.some(s => s.is_divider)}
+                          className="w-full border-[rgba(var(--brand-accent-rgb),0.4)] text-[var(--brand-orange)] dark:text-[var(--brand-orange)] hover:bg-[rgba(var(--brand-accent-rgb),0.1)]"
+                        >
+                          <Plus className="w-4 h-4 mr-2" /> Add Wiring Instructions
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Adding wiring instructions marks where bracket-only steps end and the full light-kit wiring section begins. Customers without the wiring kit can stop here.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
