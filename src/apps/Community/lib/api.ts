@@ -1,14 +1,14 @@
 // Data access for the Community app — plain Supabase calls wrapped for react-query.
 import { supabase } from '@portal/lib/supabase';
 import { isPhoneQuery, phoneDigits, phoneSearchToken } from './phone';
-import type { Contact, ContactNote, Task, Sale } from '../types';
+import type { Contact, ContactCase, ContactNote, Task, Sale } from '../types';
 
 const sb = supabase as any;
 
 export const CONTACT_COLUMNS =
   'id,first_name,last_name,title,company_name,email_jsonb,phone_jsonb,linkedin_url,gender,has_newsletter,background,status,status_source,status_reason,status_set_at,tags,avatar_url,address,sales_id,first_seen,last_seen,shopify_customer_id,nb_orders,total_spent,last_order_at,nb_calls,last_call_at,avg_csat,nb_emails,last_email_at,nb_tasks,ai_summary,ai_summary_at,created_at,updated_at';
 
-export type ContactFilter = 'all' | 'customers' | 'called' | 'emailed' | 'attention' | 'tasks';
+export type ContactFilter = 'all' | 'cases' | 'customers' | 'called' | 'emailed' | 'attention' | 'tasks';
 
 /**
  * Contacts whose E.164 identity ends with these digits. Covers numbers that were
@@ -23,7 +23,10 @@ async function contactIdsByPhone(digits: string): Promise<string[]> {
 }
 
 export async function listContacts(opts: { q?: string; filter?: ContactFilter; limit?: number; offset?: number }): Promise<Contact[]> {
-  let query = sb.from('community_contacts').select(CONTACT_COLUMNS).order('last_seen', { ascending: false });
+  // Open-case count rides along; the 'cases' filter makes the embed inner so only
+  // customers with a live case come back.
+  const embed = opts.filter === 'cases' ? 'open_cases:cases!inner(count)' : 'open_cases:cases(count)';
+  let query = sb.from('community_contacts').select(`${CONTACT_COLUMNS},${embed}`).neq('cases.status', 'closed').order('last_seen', { ascending: false });
   const raw = opts.q?.trim() ?? '';
   if (raw) {
     // A phone-shaped query is reduced to digits so every format — 0410 849 548,
@@ -86,6 +89,20 @@ export async function mergeContacts(keepId: string, dropId: string): Promise<str
   const { data, error } = await sb.rpc('community_merge_contacts', { p_keep: keepId, p_drop: dropId });
   if (error) throw error;
   return data as string;
+}
+
+export async function listContactCases(contactId: string): Promise<ContactCase[]> {
+  const { data, error } = await sb.from('cases')
+    .select('id,case_number,title,type,error_origin,priority,status,order_number,created_at')
+    .eq('contact_id', contactId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ContactCase[];
+}
+
+/** Attach a case to a customer profile. */
+export async function linkCaseToContact(caseId: string, contactId: string): Promise<void> {
+  const { error } = await sb.from('cases').update({ contact_id: contactId }).eq('id', caseId);
+  if (error) throw error;
 }
 
 export async function listNotes(contactId: string, limit = 60, before?: string): Promise<ContactNote[]> {

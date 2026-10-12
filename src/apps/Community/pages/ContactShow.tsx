@@ -11,11 +11,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@portal/context/AuthContext';
 import { ContactAside } from '../components/ContactAside';
+import { ContactCases } from '../components/ContactCases';
 import { ContactEditForm } from '../components/ContactEditForm';
 import { NoteCreate } from '../components/NoteCreate';
 import { NotesIterator } from '../components/NotesIterator';
 import { AddTask, TasksIterator } from '../components/Tasks';
-import { createNote, createTask, deleteContact, deleteNote, deleteTask, getContact, listNotes, listSales, listTasks, updateContact, updateTask } from '../lib/api';
+import { createNote, createTask, deleteContact, deleteNote, deleteTask, getContact, listContactCases, listNotes, listSales, listTasks, updateContact, updateTask } from '../lib/api';
 import { contactInitials, contactName, type Contact, type ContactNote, type Task } from '../types';
 
 const PAGE = 60;
@@ -31,6 +32,7 @@ export default function ContactShow({ mode = 'show' }: { mode?: 'show' | 'edit' 
   const { data: contact, isLoading } = useQuery({ queryKey: ['community', 'contact', id], queryFn: () => getContact(id), enabled: Boolean(id) });
   const { data: sales = [] } = useQuery({ queryKey: ['community', 'sales'], queryFn: listSales, staleTime: 300_000 });
   const { data: tasks = [] } = useQuery({ queryKey: ['community', 'tasks', id], queryFn: () => listTasks(id), enabled: Boolean(id) });
+  const { data: cases = [] } = useQuery({ queryKey: ['community', 'cases', id], queryFn: () => listContactCases(id), enabled: Boolean(id) });
   const { data: firstPage = [], isLoading: notesLoading } = useQuery({ queryKey: ['community', 'notes', id], queryFn: () => listNotes(id, PAGE), enabled: Boolean(id) });
 
   const [older, setOlder] = useState<ContactNote[]>([]);
@@ -55,7 +57,7 @@ export default function ContactShow({ mode = 'show' }: { mode?: 'show' | 'edit' 
         ? { status_source: 'manual', status_set_at: new Date().toISOString(), status_reason: null }
         : {}),
     }),
-    onSuccess: () => { invalidate(); navigate(`/community/contacts/${id}`); },
+    onSuccess: () => { invalidate(); navigate(`/support/customers/${id}`); },
     onError: (e) => toast({ title: 'Could not save', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
   const addNote = useMutation({
@@ -75,14 +77,14 @@ export default function ContactShow({ mode = 'show' }: { mode?: 'show' | 'edit' 
   const setTags = useMutation({ mutationFn: (tags: string[]) => updateContact(id, { tags }), onSuccess: invalidate });
   const remove = useMutation({
     mutationFn: () => deleteContact(id),
-    onSuccess: () => { invalidate(); navigate('/community'); toast({ title: 'Contact deleted' }); },
+    onSuccess: () => { invalidate(); navigate('/support/customers'); toast({ title: 'Contact deleted' }); },
   });
 
   if (isLoading) return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
   if (!contact) {
     return (
       <div className="p-8 text-sm text-muted-foreground">
-        Contact not found. <Link to="/community" className="underline">Back to Customer Service</Link>
+        Contact not found. <Link to="/support/customers" className="underline">Back to Customers</Link>
       </div>
     );
   }
@@ -108,7 +110,7 @@ export default function ContactShow({ mode = 'show' }: { mode?: 'show' | 'edit' 
           {contact.title && <span>{contact.title}</span>}
           {contact.title && contact.company_name && <span> at </span>}
           {contact.company_name && (
-            <Link to={`/community?q=${encodeURIComponent(contact.company_name)}`} className="inline-flex items-center gap-1 text-foreground/80 underline-offset-4 hover:underline">
+            <Link to={`/support/customers?q=${encodeURIComponent(contact.company_name)}`} className="inline-flex items-center gap-1 text-foreground/80 underline-offset-4 hover:underline">
               <Building2 className="h-3.5 w-3.5" /> {contact.company_name}
             </Link>
           )}
@@ -127,18 +129,19 @@ export default function ContactShow({ mode = 'show' }: { mode?: 'show' | 'edit' 
   );
 
   const main = mode === 'edit' ? (
-    <ContactEditForm contact={contact} sales={sales} saving={save.isPending} onSave={async (p) => { await save.mutateAsync(p); }} onCancel={() => navigate(`/community/contacts/${id}`)} />
+    <ContactEditForm contact={contact} sales={sales} saving={save.isPending} onSave={async (p) => { await save.mutateAsync(p); }} onCancel={() => navigate(`/support/customers/${id}`)} />
   ) : (
     <>
+      <ContactCases contactId={id} cases={cases} />
       <NoteCreate onCreate={async (t) => { await addNote.mutateAsync(t); }} busy={addNote.isPending} />
       <NotesIterator notes={notes} sales={sales} currentUserId={userId} onDelete={(nid) => removeNote.mutate(nid)} hasMore={hasMore} onLoadMore={loadMore} loading={notesLoading || loadingMore} />
     </>
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-      <Link to="/community" className="mb-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" /> Customer Service
+    <div className="mx-auto w-full max-w-6xl">
+      <Link to="/support/customers" className="mb-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-3.5 w-3.5" /> Customers
       </Link>
 
       {/* Desktop */}

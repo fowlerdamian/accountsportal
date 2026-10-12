@@ -16,6 +16,7 @@ import { ShopifyOrderPanel } from '@/components/ShopifyOrderPanel';
 import { ManualPickForm } from '@/components/ManualPickForm';
 import { ReplacementTrackingPanel } from '@/components/ReplacementTrackingPanel';
 import { EscalationPanel } from '@/components/EscalationPanel';
+import { CustomerPanel } from '@/components/CustomerPanel';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
@@ -531,6 +532,9 @@ export default function CaseDetailPage() {
         <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-2">DESCRIPTION</h3>
         <InlineEdit caseId={id!} field="description" value={caseData.description} placeholder="Click to add a description..." multiline className="text-sm text-muted-foreground" />
       </div>
+
+      {/* Customer profile */}
+      <CustomerPanel caseId={id!} contactId={caseData.contact_id} customerName={caseData.customer_name} />
 
       {/* Order info */}
       <div className="bg-card border border-border p-4 mb-4">

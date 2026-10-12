@@ -34,7 +34,7 @@ export function ContactMergeButton({ contact }: { contact: Contact }) {
       const keep = await mergeContacts(contact.id, picked.id);
       await qc.invalidateQueries({ queryKey: ['community'] });
       setOpen(false);
-      navigate(`/community/contacts/${keep}`, { replace: true });
+      navigate(`/support/customers/${keep}`, { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Merge failed');
     } finally { setBusy(false); }

@@ -30,16 +30,8 @@ export const APPS = [
     external:    false,
   },
   {
-    name:        'Customer Service',
-    description: 'One profile per customer — calls, emails and Shopify orders in a single timeline',
-    route:       '/community',
-    icon:        'Users',
-    status:      'live',
-    external:    false,
-  },
-  {
     name:        'Cases',
-    description: 'Case management, action items, and warehouse task tracking',
+    description: 'Cases, customer profiles, action items, and warehouse task tracking',
     route:       '/support',
     icon:        'Headphones',
     status:      'live',

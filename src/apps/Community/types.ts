@@ -46,6 +46,21 @@ export interface Contact {
   ai_summary_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Embedded count of cases that are not closed (list view only). */
+  open_cases?: { count: number }[];
+}
+
+/** A row of public.cases as shown on a customer profile. */
+export interface ContactCase {
+  id: string;
+  case_number: string;
+  title: string;
+  type: string;
+  error_origin: string | null;
+  priority: string;
+  status: string;
+  order_number: string | null;
+  created_at: string;
 }
 
 export type NoteKind = 'note' | 'call' | 'email' | 'order';

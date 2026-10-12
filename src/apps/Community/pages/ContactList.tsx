@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { RefreshCw, Search, ShoppingBag, Phone, Mail } from 'lucide-react';
+import { RefreshCw, Search, ShoppingBag, Phone, Mail, Headphones } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { contactInitials, contactName, type Contact } from '../types';
 const PAGE = 50;
 const FILTERS: { key: ContactFilter; label: string }[] = [
   { key: 'all', label: 'All' },
+  { key: 'cases', label: 'Open cases' },
   { key: 'customers', label: 'Ordered' },
   { key: 'called', label: 'Called' },
   { key: 'emailed', label: 'Emailed' },
@@ -73,10 +74,10 @@ export default function ContactList() {
   }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Customer Service</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Customers</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {status?.contacts != null ? `${status.contacts.toLocaleString()} contacts` : 'Contacts'} built from Shopify orders, Dialpad calls and the inbox
             {lastRun?.at && <span> · synced {formatDistanceToNowStrict(new Date(lastRun.at), { addSuffix: true })}</span>}
@@ -116,7 +117,7 @@ export default function ContactList() {
         )}
         {contacts.map((c) => (
           <li key={c.id}>
-            <Link to={`/community/contacts/${c.id}`} className="-mx-3 flex items-center gap-4 rounded-md px-3 py-3 transition-colors hover:bg-muted/60">
+            <Link to={`/support/customers/${c.id}`} className="-mx-3 flex items-center gap-4 rounded-md px-3 py-3 transition-colors hover:bg-muted/60">
               <Avatar className="h-9 w-9"><AvatarFallback className="bg-muted text-xs text-muted-foreground">{contactInitials(c)}</AvatarFallback></Avatar>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -131,7 +132,8 @@ export default function ContactList() {
               <div className="hidden items-center gap-1 sm:flex">
                 {c.tags.slice(0, 3).map((t) => <Badge key={t} variant="secondary" className="rounded-full font-normal">{t}</Badge>)}
               </div>
-              <div className="hidden w-40 items-center justify-end gap-3 text-xs text-muted-foreground md:flex">
+              <div className="hidden w-48 items-center justify-end gap-3 text-xs text-muted-foreground md:flex">
+                {(c.open_cases?.[0]?.count ?? 0) > 0 && <span className="inline-flex items-center gap-1 text-primary" title="Open cases"><Headphones className="h-3.5 w-3.5" />{c.open_cases?.[0]?.count}</span>}
                 {c.nb_orders > 0 && <span className="inline-flex items-center gap-1" title="Orders"><ShoppingBag className="h-3.5 w-3.5" />{c.nb_orders}</span>}
                 {c.nb_calls > 0 && <span className="inline-flex items-center gap-1" title="Calls"><Phone className="h-3.5 w-3.5" />{c.nb_calls}</span>}
                 {c.nb_emails > 0 && <span className="inline-flex items-center gap-1" title="Emails"><Mail className="h-3.5 w-3.5" />{c.nb_emails}</span>}

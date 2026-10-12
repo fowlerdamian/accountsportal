@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react';
 import { palette } from '@portal/lib/palette';
 import { localDateString } from '@portal/lib/dates';
@@ -14,6 +14,8 @@ import { CustomerReferenceLink } from '@/components/CustomerReferenceLink';
 import { DuplicateCaseWarning } from '@/components/DuplicateCaseWarning';
 import { notifyNewCase } from '@/lib/notifyGoogleChat';
 import { CASE_TYPE_LABELS } from '@/lib/types';
+import { getContact } from '@portal/apps/Community/lib/api';
+import { contactName } from '@portal/apps/Community/types';
 
 type Step = 1 | 2 | 3;
 
@@ -67,6 +69,11 @@ function formatCurrency(amount: number | null): string {
 export default function NewCasePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Opened from a customer profile: the case is filed against that customer.
+  const [searchParams] = useSearchParams();
+  const contactId = searchParams.get('contact');
+  const { data: contact } = useQuery({ queryKey: ['community', 'contact', contactId], queryFn: () => getContact(contactId!), enabled: !!contactId });
+  const contactLabel = contact ? contactName(contact) : null;
   const [step, setStep] = useState<Step>(1);
   const [selectedTile, setSelectedTile] = useState<string>('');
   const [issueType, setIssueType] = useState<CaseType | ''>('');
@@ -116,7 +123,7 @@ export default function NewCasePage() {
     const tile = issueTiles.find(t => t.value === selectedTile);
     const typeLabel = tile?.label || 'Case';
     const orderNum = lookedUpOrder?.SaleOrderNumber || manualOrderNumber || null;
-    const custName = lookedUpOrder?.Customer || null;
+    const custName = lookedUpOrder?.Customer || contactLabel || null;
     const parts = [typeLabel];
     if (orderNum) parts.push(orderNum);
     if (custName) parts.push(custName);
@@ -199,7 +206,8 @@ export default function NewCasePage() {
           cin7_order_number: lookedUpOrder?.SaleOrderNumber || null,
           cin7_sale_id: lookedUpOrder?.SaleID || null,
           customer_reference: lookedUpOrder?.CustomerReference || null,
-          customer_name: lookedUpOrder?.Customer || null,
+          customer_name: lookedUpOrder?.Customer || contactLabel || null,
+          contact_id: contact?.id ?? null,
           product_name: null,
           purchase_date: purchaseDate,
         } as any)
@@ -216,7 +224,7 @@ export default function NewCasePage() {
           caseType: CASE_TYPE_LABELS[getDbType()] || getDbType(),
           errorOrigin: issueType === 'order_error' ? errorOrigin : null,
           orderNumber: lookedUpOrder?.SaleOrderNumber || lookedUpOrder?.CustomerReference || manualOrderNumber || null,
-          customerName: lookedUpOrder?.Customer || null,
+          customerName: lookedUpOrder?.Customer || contactLabel || null,
         });
       }
 
@@ -235,7 +243,7 @@ export default function NewCasePage() {
 
   return (
     <div>
-      <button onClick={() => navigate('/support')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
+      <button onClick={() => navigate(contact ? `/support/customers/${contact.id}` : '/support')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
         <ArrowLeft className="h-4 w-4" /> Back
       </button>
 
@@ -243,7 +251,10 @@ export default function NewCasePage() {
         <h2 className="text-[28px] font-heading font-bold uppercase text-foreground">NEW CASE</h2>
         <span className="text-xs text-[hsl(0,0%,35%)]">Step {step} of 3</span>
       </div>
-      <p className="text-sm text-muted-foreground mb-8">What type of issue is this?</p>
+      <p className="text-sm text-muted-foreground mb-8">
+        What type of issue is this?
+        {contactLabel && <span> · for <span className="text-foreground">{contactLabel}</span></span>}
+      </p>
 
       {/* Step indicator */}
       <div className="flex items-center gap-2 mb-8">

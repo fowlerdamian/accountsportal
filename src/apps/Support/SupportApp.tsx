@@ -14,6 +14,8 @@ import ActionItemsPage from '@/pages/ActionItemsPage';
 import WarehouseDashboard from '@/pages/WarehouseDashboard';
 import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
 import NotFound from '@/pages/NotFound';
+import ContactList from '@portal/apps/Community/pages/ContactList';
+import ContactShow from '@portal/apps/Community/pages/ContactShow';
 
 // Mounted at /support/* in the staff portal.
 // QueryClient and auth are provided by the root App.
@@ -29,6 +31,10 @@ export default function SupportApp() {
             <Route index element={<Dashboard />} />
             <Route path="cases/new" element={<NewCasePage />} />
             <Route path="cases/:id" element={<CaseDetailPage />} />
+            {/* Customer profiles (formerly the Customer Service app at /community). */}
+            <Route path="customers" element={<ContactList />} />
+            <Route path="customers/:id" element={<ContactShow mode="show" />} />
+            <Route path="customers/:id/edit" element={<ContactShow mode="edit" />} />
             <Route path="actions" element={<ActionItemsPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="reports" element={<AnalyticsPage />} />

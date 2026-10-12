@@ -77,11 +77,11 @@ export function ContactAside({ contact, mode, sales, tasks, onTagsChange, onDele
       <div className="flex flex-wrap items-center gap-1">
         {mode === 'show' ? (
           <Button asChild variant="outline" size="sm" className="h-8">
-            <Link to={`/community/contacts/${contact.id}/edit`}><Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit</Link>
+            <Link to={`/support/customers/${contact.id}/edit`}><Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit</Link>
           </Button>
         ) : (
           <Button asChild variant="outline" size="sm" className="h-8">
-            <Link to={`/community/contacts/${contact.id}`}><Eye className="mr-1.5 h-3.5 w-3.5" /> Show</Link>
+            <Link to={`/support/customers/${contact.id}`}><Eye className="mr-1.5 h-3.5 w-3.5" /> Show</Link>
           </Button>
         )}
         {mode === 'show' && (

@@ -32,6 +32,8 @@ export interface Case {
   purchase_date: string;
   customer_reference: string | null;
   customer_name: string | null;
+  /** Customer profile (community_contacts) - matched automatically or linked by hand. */
+  contact_id: string | null;
   cin7_sale_id: string | null;
   cin7_order_number: string | null;
   is_escalated: boolean;
