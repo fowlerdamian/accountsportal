@@ -12,7 +12,7 @@ import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import {
   GRAINS, buildOptions, periodKeys, chartKeys, aggregate, toKey, monthLabel,
-  prevAnchor, ytdWindow, periodElapsed,
+  prevAnchor, ytdWindow, periodElapsed, breakevenOf,
 } from './periods.js'
 import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
 
@@ -63,6 +63,14 @@ function compact(v) {
   return `$${Math.round(v)}`
 }
 function pct(v, dp = 1) { return v == null ? '—' : `${(v * 100).toFixed(dp)}%` }
+// Breakeven tile/header text. A period whose variable costs exceed revenue has
+// no breakeven (see breakevenOf) — say so rather than showing a blank.
+function breakevenLabel(c) {
+  if (c.breakeven == null && c.cmPct != null && c.cmPct <= 0) {
+    return { value: 'N/A', sub: `No breakeven · CM ${pct(c.cmPct)}`, none: true }
+  }
+  return { value: pct(c.pctToBreakeven, 1), sub: c.marginOfSafety != null ? `MoS ${money(c.marginOfSafety)}` : '', none: false }
+}
 function deltaPct(curr, prev) {
   if (prev == null || prev === 0 || curr == null) return null
   return (curr - prev) / Math.abs(prev)
@@ -186,6 +194,7 @@ export default function FinanceDashboard() {
   const effAnchor = anchor ?? options[options.length - 1]?.value ?? null
 
   const curr = useMemo(() => effAnchor ? aggregate(periodKeys(grain, effAnchor), snapByKey) : null, [grain, effAnchor, snapByKey])
+  const be = curr ? breakevenLabel(curr) : null
 
   // Cases for the SELECTED period only (was previously summing the whole trend
   // window, so the tile ignored the month/period filter).
@@ -224,7 +233,7 @@ export default function FinanceDashboard() {
       return {
         key: k, label: monthLabel(k), // 'MMM YY'
         revenue: s ? Number(s.revenue) : 0,
-        breakeven: s ? Number(s.breakeven_revenue) : null,
+        breakeven: s ? breakevenOf(Number(s.revenue) || 0, Number(s.variable_costs) || 0, Number(s.fixed_costs) || 0).breakeven : null,
         ebitda: s ? Number(s.ebitda) : 0,
         casesTotal: c ? c.cases_total : 0,
         casesOpen: c ? c.cases_open : 0,
@@ -417,10 +426,10 @@ export default function FinanceDashboard() {
             delta={showCmp ? deltaPct(curr.grossProfit, prev?.grossProfit) : null} sub={pct(curr.grossProfitPct)} />
           <Tile icon={WalletIcon} label="EBITDA" value={money(curr.ebitda)} hue={C.purple} valueColor={curr.ebitda >= 0 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.ebitda, prev?.ebitda) : null} sub={pct(curr.ebitdaPct)} />
-          <Tile icon={GaugeIcon} label="% of Breakeven" value={pct(curr.pctToBreakeven, 1)} hue={C.orange}
+          <Tile icon={GaugeIcon} label="% of Breakeven" value={be.value} hue={C.orange}
             valueColor={curr.pctToBreakeven >= 1 ? C.green : C.red}
             delta={showCmp ? deltaPct(curr.pctToBreakeven, prev?.pctToBreakeven) : null}
-            sub={curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : ''} />
+            sub={be.sub} />
           <Tile icon={TargetIcon} label="Cases" value={fmt0.format(currCases.total)} hue={C.blue} valueColor={C.blue}
             sub={`${currCases.open} open`} />
         </div>
@@ -445,7 +454,7 @@ export default function FinanceDashboard() {
           </Panel>
 
           <Panel title="Revenue vs Breakeven" icon={TargetIcon}
-            right={<Mono>{curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)} · ${pct(curr.pctToBreakeven, 1)} of BE` : ''}</Mono>}>
+            right={<Mono>{be.none ? be.sub : curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)} · ${pct(curr.pctToBreakeven, 1)} of BE` : ''}</Mono>}>
             <ResponsiveContainer width="100%" height={250}>
               <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 8, bottom: 0 }}>
                 <CartesianGrid stroke={C.borderSoft} vertical={false} />
@@ -598,7 +607,7 @@ function SnapshotCard({ cardRef, periodLabel, curr, currCases, prev, showCmp, as
     { label: 'Revenue', value: money(curr.revenue), accent: C.gold, sub: showCmp ? deltaLabel(deltaPct(curr.revenue, prev?.revenue)) : 'GST-excl.' },
     { label: 'Gross Profit', value: money(curr.grossProfit), accent: C.aqua, sub: `${pct(curr.grossProfitPct)} margin` },
     { label: 'EBITDA', value: money(curr.ebitda), accent: C.purple, sub: `${pct(curr.ebitdaPct)} margin` },
-    { label: '% of Breakeven', value: pct(curr.pctToBreakeven, 1), accent: C.orange, sub: curr.marginOfSafety != null ? `MoS ${money(curr.marginOfSafety)}` : null },
+    { label: '% of Breakeven', value: breakevenLabel(curr).value, accent: C.orange, sub: breakevenLabel(curr).sub || null },
     { label: 'Cases', value: fmt0.format(currCases.total), accent: C.blue, sub: `${currCases.open} open` },
   ]
   return (

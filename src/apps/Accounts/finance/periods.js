@@ -130,6 +130,19 @@ export function chartKeys(grain, anchor) {
   return periodKeys(grain, anchor)
 }
 
+// Breakeven revenue = fixed costs ÷ contribution margin %. When variable costs
+// meet or exceed revenue the margin is ≤ 0 and no revenue level breaks even —
+// the division would give a negative "breakeven" and a huge positive margin of
+// safety — so breakeven and everything derived from it are null.
+export function breakevenOf(revenue, variableCosts, fixedCosts) {
+  const contribution = revenue - variableCosts
+  const cmPct = revenue !== 0 ? contribution / revenue : null
+  const breakeven = cmPct > 0 ? fixedCosts / cmPct : null
+  const pctToBreakeven = breakeven ? revenue / breakeven : null
+  const marginOfSafety = breakeven != null ? revenue - breakeven : null
+  return { contribution, cmPct, breakeven, pctToBreakeven, marginOfSafety }
+}
+
 // Aggregate base figures across months, then RE-DERIVE ratios/breakeven from the
 // sums (never average percentages). `rows` is a map key → finance_snapshot row.
 export function aggregate(keys, snapByKey) {
@@ -150,11 +163,8 @@ export function aggregate(keys, snapByKey) {
   const grossProfitPct = sum.revenue !== 0 ? grossProfit / sum.revenue : null
   const ebitda = grossProfit - sum.opex_ebitda
   const ebitdaPct = sum.revenue !== 0 ? ebitda / sum.revenue : null
-  const contribution = sum.revenue - sum.variable_costs
-  const cmPct = sum.revenue !== 0 ? contribution / sum.revenue : null
-  const breakeven = cmPct ? sum.fixed_costs / cmPct : null
-  const pctToBreakeven = breakeven ? sum.revenue / breakeven : null
-  const marginOfSafety = breakeven != null ? sum.revenue - breakeven : null
+  const { contribution, cmPct, breakeven, pctToBreakeven, marginOfSafety } =
+    breakevenOf(sum.revenue, sum.variable_costs, sum.fixed_costs)
   return {
     revenue: sum.revenue, cogs: sum.cogs, grossProfit, grossProfitPct,
     opex: sum.opex_ebitda, ebitda, ebitdaPct, variableCosts: sum.variable_costs,

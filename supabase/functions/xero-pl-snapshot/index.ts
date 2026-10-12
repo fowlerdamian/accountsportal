@@ -197,7 +197,8 @@ async function computeMonth(
   const ebitda = grossProfit - opex;
   const contribution = revenue - variable;
   const cmPct = revenue !== 0 ? contribution / revenue : null;
-  const breakeven = (cmPct && cmPct !== 0) ? fixed / cmPct : null;
+  // No breakeven exists when variable costs meet or exceed revenue (CM ≤ 0).
+  const breakeven = (cmPct != null && cmPct > 0) ? fixed / cmPct : null;
   const pctToBreakeven = (breakeven && breakeven !== 0) ? revenue / breakeven : null;
   const marginOfSafety = breakeven != null ? revenue - breakeven : null;
 
