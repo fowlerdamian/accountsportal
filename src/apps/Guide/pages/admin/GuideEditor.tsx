@@ -1054,6 +1054,10 @@ export default function GuideEditor() {
   const vehiclesForKey = (key: string) => vehicles.filter(v => v.make && v.model && (v.variant || 'all') === key);
   const vehicleText = (v: VehicleDraft) => `${v.make} ${v.model} ${v.year_from}${v.year_to ? `–${v.year_to}` : '+'}`.trim();
 
+  const updateVehicle = (index: number, patch: Partial<VehicleDraft>) => {
+    setVehicles(prev => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)));
+  };
+
   /** Functional update of one variant by index. */
   const updateVariant = (vIdx: number, fn: (v: VariantDraft) => VariantDraft) => {
     setVariants(prev => prev.map((v, i) => (i === vIdx ? fn(v) : v)));
@@ -1561,6 +1565,44 @@ export default function GuideEditor() {
                             emptyLabel={productImageUrls.length ? "Upload different images for this version" : "Drag and drop or click to upload"}
                           />
                         </div>
+                      </div>
+
+                      {/* Vehicle Fitment for this version — the same rows as Product
+                          Details, filtered to the ones tied to this variant. */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="flex items-center gap-1.5"><Car className="w-4 h-4" /> Vehicle Fitment</Label>
+                            <p className="text-xs text-muted-foreground mt-0.5">Which vehicles does this version suit? Customers see it on the version picker.</p>
+                          </div>
+                          <Button type="button" variant="outline" size="sm" onClick={() => setVehicles(prev => [...prev, { make: '', model: '', year_from: '', year_to: '', variant: variantKeyOf(variant) }])}>
+                            <Plus className="w-4 h-4 mr-1" /> Add Vehicle
+                          </Button>
+                        </div>
+                        {vehicles.map((v, i) => (v.variant || 'all') !== variantKeyOf(variant) ? null : (
+                          <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-end border rounded-lg p-3">
+                            <div className="flex-1 w-full sm:w-auto">
+                              <Label className="text-xs">Make</Label>
+                              <Input value={v.make} onChange={e => updateVehicle(i, { make: e.target.value })} placeholder="e.g. Toyota" className="mt-1" />
+                            </div>
+                            <div className="flex-1 w-full sm:w-auto">
+                              <Label className="text-xs">Model</Label>
+                              <Input value={v.model} onChange={e => updateVehicle(i, { model: e.target.value })} placeholder="e.g. Hilux" className="mt-1" />
+                            </div>
+                            <div className="w-full sm:w-24">
+                              <Label className="text-xs">From</Label>
+                              <Input type="number" value={v.year_from} onChange={e => updateVehicle(i, { year_from: e.target.value })} placeholder="2015" className="mt-1" />
+                            </div>
+                            <div className="w-full sm:w-24">
+                              <Label className="text-xs">To (blank = current)</Label>
+                              <Input type="number" value={v.year_to} onChange={e => updateVehicle(i, { year_to: e.target.value })} placeholder="Current" className="mt-1" />
+                            </div>
+                            <Button type="button" variant="ghost" size="icon" aria-label={`Remove vehicle ${i + 1}`} className="shrink-0 h-9 w-9 text-destructive" onClick={() => setVehicles(prev => prev.filter((_, j) => j !== i))}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {!vehicles.some(v => (v.variant || 'all') === variantKeyOf(variant)) && <p className="text-sm text-muted-foreground">No vehicles added yet</p>}
                       </div>
                     </div>
 
