@@ -26,8 +26,7 @@ const Carriers = lazy(() => import('./apps/Logistics/components/Carriers.jsx'))
 const Disputes = lazy(() => import('./apps/Logistics/components/Disputes.jsx'))
 const TrackingLookup = lazy(() => import('./apps/Logistics/components/TrackingLookup.jsx'))
 const SupportApp = lazy(() => import('./apps/Support/SupportApp'))
-const SalesSupport = lazy(() => import('./apps/SalesSupport/index.jsx'))
-const OpportunityPressure = lazy(() => import('./apps/Opportunities/OpportunityPressure'))
+const Sales = lazy(() => import('./apps/Sales/index.jsx'))
 const Marketing = lazy(() => import('./apps/Marketing/index.jsx'))
 const Community = lazy(() => import('./apps/Community/index'))
 const ComplianceApp = lazy(() => import('./apps/Compliance/index'))
@@ -74,6 +73,13 @@ const LabelStation = lazy(() => import('./pages/LabelStation'))
 const Warehouse = lazy(() => import('./apps/Warehouse/index.jsx'))
 
 // Shown while a route chunk downloads (first visit to an app only).
+// Old /sales-support/... links land on the same page under /sales.
+function SalesSupportRedirect() {
+  const { '*': rest = '' } = useParams()
+  const { search } = useLocation()
+  return <Navigate to={`/sales${rest ? `/${rest}` : ''}${search}`} replace />
+}
+
 function RouteFallback() {
   return (
     <div style={{
@@ -148,8 +154,8 @@ const PATH_TITLES = [
   ['/logistics/tracking',    'Tracking Lookup'],
   ['/logistics',             'Logistics'],
   ['/purchase-orders',       'Purchasing'],
-  ['/sales-support',         'Sales Support'],
-  ['/opportunities',         'Opportunities'],
+  ['/sales/opportunities',   'Opportunities'],
+  ['/sales',                 'Sales'],
   ['/marketing',             'Marketing'],
   ['/compliance',            'Compliance'],
   ['/support/customers',     'Customers'],
@@ -312,8 +318,10 @@ export default function App() {
               {/* Old direct link to the barcode tool. */}
               <Route path="labels/barcode" element={<Navigate to="/warehouse/barcodes" replace />} />
               <Route path="purchase-orders" element={<PurchaseOrders />} />
-              <Route path="sales-support/*" element={<SalesSupport />} />
-              <Route path="opportunities" element={<OpportunityPressure />} />
+              <Route path="sales/*" element={<Sales />} />
+              {/* Sales Support and Opportunities merged into Sales (2026-10-12). */}
+              <Route path="sales-support/*" element={<SalesSupportRedirect />} />
+              <Route path="opportunities" element={<Navigate to="/sales/opportunities" replace />} />
               <Route path="marketing/*" element={<Marketing />} />
               <Route path="community/*" element={<Community />} />
               <Route path="compliance/*" element={<GuideAuthProvider><ComplianceApp /></GuideAuthProvider>} />

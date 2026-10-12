@@ -53,7 +53,7 @@ export default function OpportunityPressure() {
   const selected = opportunities.find((o) => o.id === selectedId) ?? null;
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 48px)", background: "var(--bg-primary)" }}>
+    <div style={{ display: "flex", height: "100%", background: "var(--bg-primary)" }}>
       <div style={{ flex: 1, position: "relative", minWidth: 0 }}>
         <div
           style={{

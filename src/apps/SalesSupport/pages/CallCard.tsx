@@ -163,7 +163,7 @@ export default function CallCard() {
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
       {/* Back nav */}
       <button
-        onClick={() => navigate(`/sales-support/${channel}/calls`)}
+        onClick={() => navigate(`/sales/${channel}/calls`)}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
@@ -463,7 +463,7 @@ export default function CallCard() {
             </p>
           </div>
           <button
-            onClick={() => navigate(`/sales-support/${channel}/calls`)}
+            onClick={() => navigate(`/sales/${channel}/calls`)}
             className="ml-auto px-3 py-1.5 text-xs bg-muted rounded hover:bg-muted/70 transition-colors"
           >
             Back to list

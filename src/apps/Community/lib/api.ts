@@ -23,10 +23,16 @@ async function contactIdsByPhone(digits: string): Promise<string[]> {
 }
 
 export async function listContacts(opts: { q?: string; filter?: ContactFilter; limit?: number; offset?: number }): Promise<Contact[]> {
-  // Open-case count rides along; the 'cases' filter makes the embed inner so only
-  // customers with a live case come back.
-  const embed = opts.filter === 'cases' ? 'open_cases:cases!inner(count)' : 'open_cases:cases(count)';
-  let query = sb.from('community_contacts').select(`${CONTACT_COLUMNS},${embed}`).neq('cases.status', 'closed').order('last_seen', { ascending: false });
+  // The open-case count rides along as an embed.
+  let query = sb.from('community_contacts').select(`${CONTACT_COLUMNS},open_cases:cases(count)`).neq('cases.status', 'closed').order('last_seen', { ascending: false });
+  if (opts.filter === 'cases') {
+    // An inner embed does not filter once it is aggregated, so resolve the ids first.
+    const { data: open, error: openError } = await sb.from('cases').select('contact_id').neq('status', 'closed').not('contact_id', 'is', null);
+    if (openError) throw openError;
+    const ids = [...new Set((open ?? []).map((r: { contact_id: string }) => r.contact_id))];
+    if (!ids.length) return [];
+    query = query.in('id', ids);
+  }
   const raw = opts.q?.trim() ?? '';
   if (raw) {
     // A phone-shaped query is reduced to digits so every format — 0410 849 548,

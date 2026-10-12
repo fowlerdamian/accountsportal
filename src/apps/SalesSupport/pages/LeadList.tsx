@@ -228,7 +228,7 @@ export default function LeadList() {
         ) : filtered.map((lead) => (
           <div
             key={lead.id}
-            onClick={() => navigate(`/sales-support/${channel}/leads/${lead.id}`)}
+            onClick={() => navigate(`/sales/${channel}/leads/${lead.id}`)}
             className={cn(
               "rounded-xl border border-border bg-card/50 p-3.5 cursor-pointer hover:border-foreground/20 transition-all",
               selectedIds.has(lead.id) && "bg-primary/5 border-primary/30"
@@ -323,7 +323,7 @@ export default function LeadList() {
               ) : filtered.map((lead) => (
                 <tr
                   key={lead.id}
-                  onClick={() => navigate(`/sales-support/${channel}/leads/${lead.id}`)}
+                  onClick={() => navigate(`/sales/${channel}/leads/${lead.id}`)}
                   className={cn(
                     "border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors cursor-pointer",
                     selectedIds.has(lead.id) && "bg-primary/5"

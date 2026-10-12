@@ -254,7 +254,7 @@ export default function Dashboard() {
             <div
               key={ch}
               className={cn("rounded-xl border bg-card/50 p-4 space-y-4 cursor-pointer hover:border-foreground/20 transition-colors", colors.border)}
-              onClick={() => navigate(`/sales-support/${ch}/leads`)}
+              onClick={() => navigate(`/sales/${ch}/leads`)}
             >
               {/* Channel heading */}
               <div className={cn("inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold border", colors.bg, colors.text, colors.border)}>
@@ -288,7 +288,7 @@ export default function Dashboard() {
                     {metrics.top3Leads.map((l: any) => (
                       <div
                         key={l.id}
-                        onClick={(e) => { e.stopPropagation(); navigate(`/sales-support/${ch}/leads`); }}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/sales/${ch}/leads`); }}
                         className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
                       >
                         <span className="text-sm font-medium truncate">{l.company_name}</span>

@@ -24,7 +24,7 @@ export interface ChatContextEntry {
 // First prefix match wins — keep more specific prefixes before their parents.
 export const APP_CHAT_CONTEXTS: ChatContextEntry[] = [
   {
-    prefix: '/sales-support', context: 'sales-support', label: 'Sales Support',
+    prefix: '/sales', context: 'sales-support', label: 'Sales',
     suggestions: ["What's on today's call list?", 'Show me top leads by score', 'How many leads per channel?'],
   },
   {

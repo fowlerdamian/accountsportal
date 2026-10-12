@@ -38,7 +38,7 @@ export const NAV_SHORTCUTS: Array<{ letter: string; path: string; label: string 
   { letter: "c", path: "/compliance",      label: "Compliance" },
   { letter: "g", path: "/guide",           label: "Guide Portal" },
   { letter: "a", path: "/accounts",        label: "Finance" },
-  { letter: "x", path: "/sales-support",   label: "Sales Support" },
+  { letter: "x", path: "/sales",           label: "Sales" },
   { letter: "e", path: "/settings",        label: "Settings" },
 ];
 
