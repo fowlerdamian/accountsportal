@@ -79,7 +79,7 @@ function TileCard({ app, hovered }) {
           color: hovered ? 'var(--accent)' : 'var(--text-disabled)',
           transition: 'color 150ms',
         }}>
-          {app.submenu ? 'Choose ↓' : app.external ? 'Open ↗' : 'Open →'}
+          {app.submenu ? 'Choose ↓' : app.external ? '↗' : '→'}
         </div>
       )}
     </div>
