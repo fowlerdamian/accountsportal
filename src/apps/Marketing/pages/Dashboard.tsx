@@ -36,6 +36,16 @@ const fmtPct = (n?: number) => (n == null ? "—" : `${n}%`);
 const fmtDate = (s?: string | null) =>
   !s ? "—" : new Date(s).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 
+// Y-axis ceiling that ignores one-off spikes: 95th percentile with headroom.
+// Points above it are clipped (allowDataOverflow); the tooltip still shows the real value.
+const outlierCap = (values: number[]): number | undefined => {
+  const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (sorted.length < 10) return undefined;
+  const p95 = sorted[Math.floor(sorted.length * 0.95)];
+  const cap = Math.ceil(p95 * 1.5);
+  return sorted[sorted.length - 1] > cap ? cap : undefined;
+};
+
 const TOOLTIP_STYLE = {
   contentStyle: { background: "#1a1a1a", border: "1px solid #333", borderRadius: 8, fontSize: 12 },
   labelStyle: { color: "#aaa" },
@@ -107,6 +117,7 @@ function WebsiteBody({ w, accent }: { w: WebsiteAnalytics; accent: string }) {
     );
   }
   const hasTraffic = (w.sessions ?? 0) > 0 || (w.timeseries?.length ?? 0) > 0;
+  const sessionsCap = outlierCap((w.timeseries ?? []).map((p: any) => Number(p.sessions)));
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -126,7 +137,8 @@ function WebsiteBody({ w, accent }: { w: WebsiteAnalytics; accent: string }) {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
             <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#777" }} tickFormatter={fmtDate} minTickGap={24} />
-            <YAxis tick={{ fontSize: 10, fill: "#777" }} width={32} allowDecimals={false} />
+            <YAxis tick={{ fontSize: 10, fill: "#777" }} width={32} allowDecimals={false}
+              domain={sessionsCap ? [0, sessionsCap] : undefined} allowDataOverflow={!!sessionsCap} />
             <Tooltip {...TOOLTIP_STYLE} labelFormatter={fmtDate}
               formatter={(v: any) => [fmtNum(Number(v)), "Sessions"]} />
             <Area type="monotone" dataKey="sessions" stroke={accent} fill="url(#ga-sessions)" strokeWidth={2} />
