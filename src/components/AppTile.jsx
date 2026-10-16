@@ -71,15 +71,15 @@ function TileCard({ app, hovered }) {
         {app.name}
       </p>
 
-      {/* Arrow */}
-      {!isComingSoon && (
+      {/* Submenu hint */}
+      {!isComingSoon && app.submenu && (
         <div style={{
           marginTop: 'auto', fontSize: '12px',
           fontFamily: 'var(--font-mono)',
           color: hovered ? 'var(--accent)' : 'var(--text-disabled)',
           transition: 'color 150ms',
         }}>
-          {app.submenu ? 'Choose ↓' : app.external ? '↗' : '→'}
+          Choose ↓
         </div>
       )}
     </div>
