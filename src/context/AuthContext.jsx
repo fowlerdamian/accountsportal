@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext({})
@@ -6,6 +7,7 @@ const AuthContext = createContext({})
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null)
   const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     // Dev bypass: set VITE_DEV_AUTO_LOGIN=true in .env.local to skip Supabase auth
@@ -22,12 +24,18 @@ export function AuthProvider({ children }) {
     })
 
     // Keep in sync with Supabase auth events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
+      if (event === 'SIGNED_OUT') {
+        // Drop cached finance data so the next person on this browser can't see it
+        // (key matches PERSIST_STORAGE_KEY in App.jsx). Covers every sign-out path.
+        queryClient.clear()
+        try { localStorage.removeItem('portal-query-cache') } catch { /* storage blocked */ }
+      }
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [queryClient])
 
   const signIn = (email, password) =>
     supabase.auth.signInWithPassword({ email, password })

@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useEffect } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import { AuthProvider as GuideAuthProvider } from './apps/Guide/contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
@@ -144,6 +146,21 @@ const queryClient = new QueryClient({
   },
 })
 
+// Queries listed here are saved to localStorage so the page paints from the last
+// result while the refetch runs (the DB is in ap-south-1, ~300 ms per round trip
+// from Sydney). Each persisted query needs gcTime >= PERSIST_MAX_AGE or it is
+// dropped from the saved cache when unmounted. Cleared on sign-out (AuthContext).
+export const PERSIST_STORAGE_KEY = 'portal-query-cache'
+const PERSIST_MAX_AGE = 24 * 60 * 60_000
+const PERSISTED_QUERY_KEYS = new Set(['stat-breakdown'])
+const persistOptions = {
+  persister: createSyncStoragePersister({ storage: window.localStorage, key: PERSIST_STORAGE_KEY }),
+  maxAge: PERSIST_MAX_AGE,
+  dehydrateOptions: {
+    shouldDehydrateQuery: (q) => q.state.status === 'success' && PERSISTED_QUERY_KEYS.has(q.queryKey[0]),
+  },
+}
+
 // Longest prefix wins — more specific paths must come before their parents.
 const PATH_TITLES = [
   ['/accounts/xero',         'Xero'],
@@ -207,7 +224,7 @@ function PortalChrome() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
       <BrowserRouter>
         <AuthProvider>
           <DocumentTitle />
@@ -333,6 +350,6 @@ export default function App() {
           </Suspense>
         </AuthProvider>
       </BrowserRouter>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   )
 }

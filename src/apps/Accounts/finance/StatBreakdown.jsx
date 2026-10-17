@@ -92,6 +92,8 @@ function useStatBreakdown() {
       }
     },
     staleTime: 5 * 60_000,
+    // Persisted to localStorage (App.jsx) — keep it in cache as long as the saved copy lives.
+    gcTime: 24 * 60 * 60_000,
     refetchOnWindowFocus: false,
     // While a backfill/sync is draining, keep the tab filling in by itself.
     refetchInterval: (query) => (query.state.data?.pending > 0 ? 30_000 : false),
