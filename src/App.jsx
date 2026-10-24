@@ -48,6 +48,7 @@ const ContractorProfile = lazy(() => import('./apps/ContractorHub/pages/Contract
 const ProjectsList = lazy(() => import('./apps/ContractorHub/pages/ProjectsList'))
 const ProjectView = lazy(() => import('./apps/ContractorHub/pages/ProjectView'))
 const HubSettings = lazy(() => import('./apps/ContractorHub/pages/HubSettings'))
+const Drawings = lazy(() => import('./apps/ContractorHub/pages/Drawings'))
 
 // Tasks (staff_tasks app)
 const TasksApp = lazy(() => import('./apps/Tasks/TasksApp'))
@@ -178,6 +179,7 @@ const PATH_TITLES = [
   ['/support/customers',     'Customers'],
   ['/support',               'Cases'],
   ['/projects/ideas',        'Ideas'],
+  ['/projects/drawings',     'Drawings'],
   ['/projects',              'R&D'],
   ['/tasks',                 'Tasks'],
   ['/guide',                 'Guide Portal'],
@@ -267,6 +269,7 @@ export default function App() {
                       <Route path="list" element={<ProjectsList />} />
                       <Route path="ideas" element={<ProjectsList bucket="ideas" />} />
                       <Route path="list/:id" element={<ProjectView />} />
+                      <Route path="drawings" element={<Drawings />} />
                       <Route path="settings" element={<HubSettings />} />
                     </Routes>
                   </GuideAuthProvider>

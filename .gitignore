@@ -16,3 +16,6 @@ tools/.sldprt-key.bin
 .claude/
 supabase/.temp/
 tools/logs/
+
+# Python
+__pycache__/
