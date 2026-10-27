@@ -61,11 +61,11 @@ export function splitProjectsAndIdeas<T extends { priority_score: number | null 
   return { projects: list.filter(isRankedProject), ideas: list.filter(isIdea) };
 }
 
-// ── Completed — app-wide rule ─────────────────────────────────
-// Status complete/archived, or a product whose active stage is "Complete".
-// Completed projects live under the Completed tab and are never synced from
-// Drive: their folder has usually been removed from Drive by then.
-export const isCompleted = (p: { status: string }, activeStage?: { name: string } | null) =>
+// ── Archive — app-wide rule ───────────────────────────────────
+// Status complete/archived (archived = shelved with the Archive button), or a
+// product whose active stage is "Complete". These live under the Archive tab
+// and are never synced from Drive: their folder has usually been removed by then.
+export const isArchived = (p: { status: string }, activeStage?: { name: string } | null) =>
   p.status === "complete" || p.status === "archived" || activeStage?.name === "Complete";
 
 export interface Task {

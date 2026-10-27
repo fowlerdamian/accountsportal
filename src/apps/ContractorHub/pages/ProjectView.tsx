@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2, ChevronRight, Plus, Paperclip, Clock,
-  GripVertical, Camera, Trash2, ExternalLink, Box, X,
+  GripVertical, Camera, Trash2, ExternalLink, Box, X, Archive, ArchiveRestore,
 } from "lucide-react";
 import { UploadIcon, ClockIcon } from "@portal/components/icons";
 import CadViewer, { canPreview3D } from "@hub/components/CadViewer";
@@ -31,7 +31,7 @@ import {
   useProject, useTasks, useProjectBudgetSummary, useActivityLog,
   useFiles, useContractors, useProjectContractors, useTimeEntries,
   useUpdateProject, useCreateTask, useUpdateTask, useDeleteTask, useReorderTasks,
-  usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages, isCompleted,
+  usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages, isArchived,
   useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
   useGenerateStepThumbnails,
   useGenerateServerThumbnails,
@@ -122,8 +122,8 @@ function ProjectViewContent() {
   const { mutateAsync: createProjectStages }   = useCreateProjectStages();
   const { data: existingStages = [] }          = useProjectStages(id);
 
-  // Completed projects don't sync from Drive — their folder has been removed.
-  const completed = !!project && isCompleted(project, existingStages.find(s => s.is_active));
+  // Archived/completed projects don't sync from Drive — their folder has been removed.
+  const completed = !!project && isArchived(project, existingStages.find(s => s.is_active));
   useSyncDriveFiles(id, completed ? null : project?.drive_folder_id);
   useGenerateStepThumbnails(files);
   useGenerateServerThumbnails(completed ? [] : files);
@@ -428,6 +428,15 @@ function ProjectViewContent() {
     } catch { toast.error("Failed to upload thumbnail"); }
   }
 
+  async function handleArchive() {
+    if (!project) return;
+    const archiving = project.status !== "archived";
+    try {
+      await updateProject({ id: project.id, status: archiving ? "archived" : "active" });
+      toast.success(archiving ? `"${project.name}" moved to Archive` : `"${project.name}" restored from Archive`);
+    } catch { toast.error(archiving ? "Failed to archive project" : "Failed to unarchive project"); }
+  }
+
   async function handleDelete() {
     if (!project) return;
     if (!window.confirm(`Move "${project.name}" to the recycle bin? It will be permanently deleted after 15 days.`)) return;
@@ -607,6 +616,12 @@ function ProjectViewContent() {
             <Button size="sm" variant="outline" onClick={() => setLogTimeOpen(v => !v)}>
               <Clock className="w-3.5 h-3.5 mr-1.5" />
               Log Time
+            </Button>
+
+            <Button size="sm" variant="outline" onClick={handleArchive}>
+              {project.status === "archived"
+                ? <><ArchiveRestore className="w-3.5 h-3.5 mr-1.5" />Unarchive</>
+                : <><Archive className="w-3.5 h-3.5 mr-1.5" />Archive</>}
             </Button>
 
             <Button size="sm" variant="ghost" onClick={handleDelete} className="text-muted-foreground hover:text-[var(--brand-pink)] hover:bg-[rgba(var(--brand-pink-rgb),0.1)]">
