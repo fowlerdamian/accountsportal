@@ -518,12 +518,15 @@ serve(async (req) => {
       const reattachedIds = new Set<string>();
       const newFiles: typeof driveFiles = [];
       const changedFiles: typeof driveFiles = [];
+      const renamedFiles: typeof driveFiles = [];
 
       for (const f of driveFiles) {
         const ex = existingByDriveId.get(f.id);
         if (ex) {
           if (f.size != null && parseInt(f.size, 10) !== (ex.file_size ?? -1)) {
             changedFiles.push(f);
+          } else if (f.name !== ex.filename) {
+            renamedFiles.push(f);  // same content, renamed in Drive
           }
           continue;
         }
@@ -572,10 +575,16 @@ serve(async (req) => {
         );
       }
 
+      for (const f of renamedFiles) {
+        await sb.from("files").update({ filename: f.name }).eq("id", existingByDriveId.get(f.id)!.id);
+        console.log("[sync_from_drive] renamed", existingByDriveId.get(f.id)!.filename, "→", f.name);
+      }
+
       for (const f of changedFiles) {
         const ex = existingByDriveId.get(f.id)!;
         await sb.from("files")
           .update({
+            filename:      f.name,
             file_size:     parseInt(f.size!, 10),
             stl_url:       null,
             thumbnail_url: null,
@@ -604,7 +613,7 @@ serve(async (req) => {
         }
       }
 
-      return json({ synced: newFiles.length, updated: changedFiles.length, removed });
+      return json({ synced: newFiles.length, updated: changedFiles.length + renamedFiles.length, removed });
     }
 
     // ── delete_folder ─────────────────────────────────────────
