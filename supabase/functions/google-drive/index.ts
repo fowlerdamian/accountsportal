@@ -827,7 +827,9 @@ serve(async (req) => {
 
     // ── save_drawing ──────────────────────────────────────────
     // The STEP drawings worker drops a finished PDF into the project's Drive
-    // folder as <drawing number>.pdf, replacing an earlier one of the same name.
+    // folder as <drawing number>.pdf. It overwrites (and renames) the PDF this
+    // drawing saved last time — replace_id, else replace_name — or one already
+    // carrying the new name, so a redraw or a renamed STEP never leaves a stale PDF.
     // Service role only; never recreates a removed folder (completed projects).
     if (action === "save_drawing") {
       // verify_jwt has already checked the signature at the gateway; just read the role claim.
@@ -838,7 +840,9 @@ serve(async (req) => {
         } catch { return null; }
       })();
       if (role !== "service_role") return json({ error: "Forbidden" }, 403);
-      const { project_id, filename, base64 } = payload as { project_id: string; filename: string; base64: string };
+      const { project_id, filename, base64, replace_id, replace_name } = payload as {
+        project_id: string; filename: string; base64: string; replace_id?: string | null; replace_name?: string | null;
+      };
       if (!project_id || !filename || !base64) return json({ error: "project_id, filename and base64 required" }, 400);
       const { data: project } = await sb.from("projects").select("drive_folder_id").eq("id", project_id).single();
       const folderId = project?.drive_folder_id;
@@ -848,13 +852,39 @@ serve(async (req) => {
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 
-      const q = encodeURIComponent(`'${folderId}' in parents and name = '${filename.replace(/'/g, "\\'")}' and trashed = false`);
-      const listResp = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
-        { headers: { Authorization: `Bearer ${gtoken}` } },
-      );
-      if (!listResp.ok) return json({ skipped: `drive folder unavailable (${listResp.status})` });
-      const existingId: string | undefined = (await listResp.json()).files?.[0]?.id;
+      const auth = { Authorization: `Bearer ${gtoken}` };
+      const findByName = async (name: string): Promise<string | undefined> => {
+        const q = encodeURIComponent(`'${folderId}' in parents and name = '${name.replace(/'/g, "\\'")}' and trashed = false`);
+        const r = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+          { headers: auth },
+        );
+        if (!r.ok) throw new Error(`drive folder unavailable (${r.status})`);
+        return (await r.json()).files?.[0]?.id;
+      };
+      const liveInFolder = async (id: string): Promise<boolean> => {
+        const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=trashed,parents&supportsAllDrives=true`, { headers: auth });
+        if (!r.ok) return false;
+        const f = await r.json();
+        return !f.trashed && (f.parents ?? []).includes(folderId);
+      };
+
+      let existingId: string | undefined;
+      let sameNameId: string | undefined;
+      try {
+        if (replace_id && await liveInFolder(replace_id)) existingId = replace_id;
+        if (!existingId && replace_name && replace_name !== filename) existingId = await findByName(replace_name);
+        sameNameId = await findByName(filename);
+      } catch (e) {
+        return json({ skipped: (e as Error).message });
+      }
+      // Overwriting the old PDF under the new name: drop any other copy already using that name.
+      if (existingId && sameNameId && sameNameId !== existingId) {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${sameNameId}?supportsAllDrives=true`, {
+          method: "PATCH", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }),
+        });
+      }
+      existingId ??= sameNameId;
 
       const boundary = `drawing_${Date.now()}`;
       const enc = new TextEncoder();

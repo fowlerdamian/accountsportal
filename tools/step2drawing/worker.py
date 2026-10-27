@@ -127,6 +127,7 @@ def fetch_step(job: dict) -> bytes:
 
 def process(job: dict, make_drawing, render_preview, fmt) -> None:
     jid = job["id"]
+    drive_pdf: dict = {}  # set when a project PDF lands in Drive
     log(f"start {jid} {job['file_name']}")
     with tempfile.TemporaryDirectory(prefix="step2drawing-") as tmp:
         tmp = Path(tmp)
@@ -156,14 +157,18 @@ def process(job: dict, make_drawing, render_preview, fmt) -> None:
 
         if job.get("project_id"):  # project drawing → its Drive folder, named by drawing number
             res = edge("google-drive", {"action": "save_drawing", "project_id": job["project_id"],
-                                        "filename": pdf.name, "base64": base64.b64encode(pdf.read_bytes()).decode()})
+                                        "filename": pdf.name, "base64": base64.b64encode(pdf.read_bytes()).decode(),
+                                        # overwrite the PDF this drawing saved last time, even if the STEP was renamed
+                                        "replace_id": job.get("drive_pdf_id"), "replace_name": job.get("drive_pdf_name")})
+            if res.get("drive_file_id"):
+                drive_pdf = {"drive_pdf_id": res["drive_file_id"], "drive_pdf_name": pdf.name}
             log(f"drive {jid} {pdf.name}: {res.get('error') or res.get('skipped') or ('replaced' if res.get('replaced') else 'saved')}")
 
     holes = ", ".join(f"{q}× Ø{fmt(d)}" if q > 1 else f"Ø{fmt(d)}" for q, d in info["holes"])
     rest("PATCH", f"id=eq.{jid}", {
         "status": "done", "finished_at": now_iso(), "pdf_path": out_pdf, "png_path": out_png,
         "scale": info["scale"], "envelope": " × ".join(fmt(v) for v in info["size"]),
-        "holes": holes or None, "error": None,
+        "holes": holes or None, "error": None, **drive_pdf,
     })
     log(f"done  {jid} scale {info['scale']}")
 
