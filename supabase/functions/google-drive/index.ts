@@ -816,6 +816,52 @@ serve(async (req) => {
       return json({ scanned: rows?.length ?? 0, updated, failed });
     }
 
+    // ── save_drawing ──────────────────────────────────────────
+    // The STEP drawings worker drops a finished PDF into the project's Drive
+    // folder as <drawing number>.pdf, replacing an earlier one of the same name.
+    // Service role only; never recreates a removed folder (completed projects).
+    if (action === "save_drawing") {
+      if (authHeader !== `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`) return json({ error: "Forbidden" }, 403);
+      const { project_id, filename, base64 } = payload as { project_id: string; filename: string; base64: string };
+      if (!project_id || !filename || !base64) return json({ error: "project_id, filename and base64 required" }, 400);
+      const { data: project } = await sb.from("projects").select("drive_folder_id").eq("id", project_id).single();
+      const folderId = project?.drive_folder_id;
+      if (!folderId) return json({ skipped: "no drive folder" });
+
+      const bin = atob(base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+      const q = encodeURIComponent(`'${folderId}' in parents and name = '${filename.replace(/'/g, "\\'")}' and trashed = false`);
+      const listResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+        { headers: { Authorization: `Bearer ${gtoken}` } },
+      );
+      if (!listResp.ok) return json({ skipped: `drive folder unavailable (${listResp.status})` });
+      const existingId: string | undefined = (await listResp.json()).files?.[0]?.id;
+
+      const boundary = `drawing_${Date.now()}`;
+      const enc = new TextEncoder();
+      const meta = existingId ? { name: filename } : { name: filename, parents: [folderId] };
+      const body = new Blob([
+        enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n`),
+        enc.encode(`--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`),
+        bytes,
+        enc.encode(`\r\n--${boundary}--`),
+      ]);
+      const url = existingId
+        ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink`
+        : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink`;
+      const up = await fetch(url, {
+        method: existingId ? "PATCH" : "POST",
+        headers: { Authorization: `Bearer ${gtoken}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+        body,
+      });
+      const data = await up.json();
+      if (!up.ok || !data.id) return json({ error: `Drive upload failed: ${JSON.stringify(data).slice(0, 300)}` }, 502);
+      return json({ drive_file_id: data.id, drive_file_url: data.webViewLink, replaced: !!existingId });
+    }
+
     // ── download_bytes ────────────────────────────────────────
     // Returns a Drive file as base64 so the browser hook can render
     // thumbnails for Drive-sourced CAD files (STEP, STL, IGES, etc.).

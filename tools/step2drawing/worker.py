@@ -1,8 +1,11 @@
 """Queue worker for the portal's R&D → Drawings tab.
 
-Polls public.step_drawing_jobs for queued rows, downloads the STEP file from the
-private `step-drawings` bucket, runs step2drawing.make_drawing, uploads the PDF and
-a PNG preview to out/<job id>/, and marks the row done (or error).
+Polls public.step_drawing_jobs for queued rows, downloads the STEP file (from the
+private `step-drawings` bucket, or for project jobs from the project file itself),
+runs step2drawing.make_drawing, uploads the PDF and a PNG preview to out/<job id>/,
+and marks the row done (or error). Project jobs (queued by DB triggers once a
+project reaches Prototype) also save the PDF to the project's Drive folder as
+<drawing number>.pdf via the google-drive edge function.
 
 Runs on the R&D PC because build123d/OpenCascade is too large for Vercel or edge
 functions. Started by tools/step-drawings-worker-scheduled.ps1 (Task Scheduler,
@@ -13,6 +16,7 @@ Stdlib only for HTTP, so it runs in the same venv as step2drawing.
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import json
 import os
@@ -96,13 +100,37 @@ def object_path(p: str) -> str:
     return "/".join(urllib.parse.quote(seg) for seg in p.split("/"))
 
 
+def edge(fn: str, payload: dict, timeout: int = 180) -> dict:
+    raw = http("POST", f"/functions/v1/{fn}", body=json.dumps(payload).encode(),
+               headers={"Content-Type": "application/json"}, timeout=timeout)
+    return json.loads(raw or b"{}")
+
+
+def fetch_step(job: dict) -> bytes:
+    """STEP bytes: uploaded to the Drawings tab, or the project file the job came from."""
+    if job.get("step_path"):
+        return http("GET", f"/storage/v1/object/{BUCKET}/{object_path(job['step_path'])}", timeout=300)
+    rows = json.loads(http("GET", f"/rest/v1/files?id=eq.{job['source_file_id']}&select=source,file_url,drive_file_id"))
+    if not rows:
+        raise ValueError("project file no longer exists")
+    f = rows[0]
+    if f["source"] == "drive" and f.get("drive_file_id"):
+        data = edge("google-drive", {"action": "download_bytes", "drive_file_id": f["drive_file_id"]}, timeout=300)
+        if "base64" not in data:
+            raise ValueError(f"Drive download failed: {data.get('error') or data}")
+        return base64.b64decode(data["base64"])
+    req = urllib.request.Request(f["file_url"])
+    with urllib.request.urlopen(req, timeout=300, context=SSL_CTX) as resp:
+        return resp.read()
+
+
 def process(job: dict, make_drawing, render_preview, fmt) -> None:
     jid = job["id"]
     log(f"start {jid} {job['file_name']}")
     with tempfile.TemporaryDirectory(prefix="step2drawing-") as tmp:
         tmp = Path(tmp)
         step = tmp / f"{job['part_name']}{Path(job['file_name']).suffix.lower() or '.step'}"
-        step.write_bytes(http("GET", f"/storage/v1/object/{BUCKET}/{object_path(job['step_path'])}", timeout=300))
+        step.write_bytes(fetch_step(job))
 
         pdf = tmp / f"{job['part_name']}.pdf"
         info = make_drawing(step, pdf, drawn_by=job.get("drawn_by") or "", rev=job.get("rev") or "A",
@@ -115,6 +143,11 @@ def process(job: dict, make_drawing, render_preview, fmt) -> None:
         for local, remote, ctype in ((pdf, out_pdf, "application/pdf"), (png, out_png, "image/png")):
             http("POST", f"/storage/v1/object/{BUCKET}/{object_path(remote)}", body=local.read_bytes(),
                  headers={"Content-Type": ctype, "x-upsert": "true"}, timeout=300)
+
+        if job.get("project_id"):  # project drawing → its Drive folder, named by drawing number
+            res = edge("google-drive", {"action": "save_drawing", "project_id": job["project_id"],
+                                        "filename": pdf.name, "base64": base64.b64encode(pdf.read_bytes()).decode()})
+            log(f"drive {jid} {pdf.name}: {res.get('error') or res.get('skipped') or ('replaced' if res.get('replaced') else 'saved')}")
 
     holes = ", ".join(f"{q}× Ø{fmt(d)}" if q > 1 else f"Ø{fmt(d)}" for q, d in info["holes"])
     rest("PATCH", f"id=eq.{jid}", {

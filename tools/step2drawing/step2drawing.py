@@ -38,7 +38,8 @@ LABEL_OFFSET = 20.0  # view label distance below the view
 MARGIN_DIM = 24.0  # space reserved around the view block for dims/labels
 
 # ISO 5455 preferred scales, largest first
-SCALES = [Fraction(n) for n in (50, 20, 10, 5, 2)] + [Fraction(1, d) for d in (1, 2, 5, 10, 20, 50, 100, 200, 500)]
+# plus 1:2.5 and 1:4 (BS 8888 / common practice) so a part that just misses 1:2 doesn't drop straight to 1:5
+SCALES = [Fraction(n) for n in (50, 20, 10, 5, 2)] + [Fraction(1, d) for d in (1, 2)] + [Fraction(2, 5), Fraction(1, 4)]     + [Fraction(1, d) for d in (5, 10, 20, 50, 100, 200, 500)]
 
 LW_VISIBLE, LW_HIDDEN, LW_THIN = 0.5, 0.25, 0.18
 HIDDEN_DASH = (3.0, 1.5)
@@ -130,6 +131,81 @@ def pick_iso_direction(shape: bd.Shape, centre: bd.Vector) -> tuple[tuple[int, i
     return best, best_frac
 
 
+ORIENT_CANDIDATES = 6  # largest plate directions tried as the front face
+
+
+def _face_front(shape: bd.Shape, n: bd.Vector) -> bd.Shape:
+    """Rotate so plate normal n points along Y (seen flat in the front view), then spin about Y
+    to the tightest outline with the longest side horizontal."""
+    target = bd.Vector(0, 1, 0)
+    axis = n.cross(target)
+    if axis.length > 1e-9:
+        ang = math.degrees(math.acos(max(-1.0, min(1.0, n.dot(target)))))
+        shape = shape.rotate(bd.Axis(shape.bounding_box().center(), axis.normalized()), ang)
+
+    pts = [(v.X, v.Z) for v in shape.vertices()]
+    cands = {0.0}
+    for e in shape.edges():  # straight edges lying in the X-Z plane give the candidate spins
+        if e.geom_type == bd.GeomType.LINE and e.length > 1.0:
+            d = e.position_at(1) - e.position_at(0)
+            if abs(d.Y) < 1e-3 * e.length:
+                cands.add(round(math.degrees(math.atan2(d.Z, d.X)) % 90.0, 3))
+
+    def area(a):
+        c, s = math.cos(math.radians(a)), math.sin(math.radians(a))
+        us = [x * c + z * s for x, z in pts]
+        ws = [-x * s + z * c for x, z in pts]
+        return (max(us) - min(us)) * (max(ws) - min(ws))
+
+    best = min(cands, key=area)
+    if best > 1e-6:
+        # rotation sense about Y is easiest to settle empirically: keep whichever way is tighter
+        yc = bd.Axis(shape.bounding_box().center(), (0, 1, 0))
+        shape = min((shape.rotate(yc, best), shape.rotate(yc, -best)),
+                    key=lambda r: r.bounding_box().size.X * r.bounding_box().size.Z)
+    b = shape.bounding_box()
+    if b.size.Z > b.size.X:
+        shape = shape.rotate(bd.Axis(b.center(), (0, 1, 0)), 90)
+    return shape
+
+
+def orient_part(shape: bd.Shape) -> tuple[bd.Shape, bool]:
+    """Square a tilted part up to the drawing axes so envelope dims are real lengths.
+
+    Parts are often modelled at an angle (a bracket placed as it sits on the
+    vehicle). Their X/Y/Z spans then match no real edge and every hole reads as
+    inclined. When the largest plate isn't square to an axis, each of the
+    largest plate directions is tried as the front face; the winner puts the
+    most plate area square to the views (so the main plate and its holes read
+    true), with the smaller envelope as tie-break. A part whose largest plate
+    is already square to an axis is left exactly as modelled.
+    """
+    areas: dict[tuple, list] = {}
+    for f in shape.faces():
+        if f.geom_type != bd.GeomType.PLANE:
+            continue
+        n = f.normal_at().normalized()
+        if max((n.X, n.Y, n.Z), key=abs) < 0:
+            n = -n
+        key = (round(n.X, 2), round(n.Y, 2), round(n.Z, 2))
+        areas.setdefault(key, [n, 0.0])[1] += f.area
+    if not areas:
+        return shape, False
+    ranked = sorted(areas.values(), key=lambda a: -a[1])
+    n0 = ranked[0][0]
+    if max(abs(n0.X), abs(n0.Y), abs(n0.Z)) > 1 - 1e-4:
+        return shape, False  # main plate already square to an axis: keep the modelled orientation
+
+    def score(s):
+        square = sum(f.area for f in s.faces() if f.geom_type == bd.GeomType.PLANE
+                     and max(abs(c) for c in tuple(f.normal_at())) > 1 - 1e-4)
+        b = s.bounding_box()
+        return (-round(square, -2), b.size.X * b.size.Y * b.size.Z)  # area to ~100 mm² so near-ties fall to volume
+
+    options = [_face_front(shape, n) for n, _ in ranked[:ORIENT_CANDIDATES]]
+    return min(options, key=score), True
+
+
 def find_holes(shape: bd.Shape) -> list[HoleGroup]:
     """Concave cylindrical faces → holes, de-duplicated per axis and grouped by diameter."""
     acc: dict[tuple, dict] = {}
@@ -160,7 +236,8 @@ def find_holes(shape: bd.Shape) -> list[HoleGroup]:
         if length <= 1e-6 or e["area"] / (2 * math.pi * e["r"] * length) < HOLE_MIN_COVERAGE:
             continue  # partial arc → internal fillet / slot end, not a round hole
         d = e["d"]
-        axis = next((i for i, c in enumerate((d.X, d.Y, d.Z)) if abs(abs(c) - 1) < 1e-4), None)
+        # within ~2.5° of an axis counts as on it: bent sheet parts are rarely squared up exactly
+        axis = next((i for i, c in enumerate((d.X, d.Y, d.Z)) if abs(abs(c) - 1) < 1e-3), None)
         dia = round(2 * e["r"], 2)
         g = groups.setdefault((dia, axis), HoleGroup(dia, axis))
         g.centres.append((e["foot"].X, e["foot"].Y, e["foot"].Z))
@@ -177,6 +254,8 @@ def hole_label(g: HoleGroup) -> str:
 
 
 def fmt_scale(s: Fraction) -> str:
+    if s < 1 and s.numerator != 1:
+        return f"1:{float(1 / s):g}"  # 2/5 → 1:2.5
     return f"{s.numerator}:{s.denominator}"
 
 
@@ -563,14 +642,21 @@ def notes(sh: Sheet, groups: list[HoleGroup], iso_scale: Fraction, scale: Fracti
         lines.append(f"{len(lines)}. NOT CALLED OUT ON VIEWS: " + ", ".join(hole_label(g) for g in unplaced) + ".")
     if iso_scale != scale:
         lines.append(f"{len(lines)}. ISOMETRIC VIEW AT {fmt_scale(iso_scale)}.")
+    # wrap to the notes area (left of the title block), continuation lines indented
+    max_w = SHEET_W - BORDER - TB_W - 6 - x
+    row = 0
     for i, s in enumerate(lines):
-        sh.text(x, y - i * 5.0, s, size=3.0 if i else 3.5, anchor="start", font="Helvetica-Bold" if i == 0 else "Helvetica")
+        size = 3.0 if i else 3.5
+        for j, part in enumerate(wrap(sh, s, max_w - (4.0 if i else 0), size) if i else [s]):
+            sh.text(x + (4.0 if j else 0), y - row * 5.0, part, size=size, anchor="start",
+                    font="Helvetica-Bold" if i == 0 else "Helvetica")
+            row += 1
 
 
 # ── One part → one PDF ─────────────────────────────────────────────────────
 def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, date: str, logo: Path | None,
                  material: str = "", finish: str = "") -> dict:
-    shape = bd.import_step(str(step_path))
+    shape, reoriented = orient_part(bd.import_step(str(step_path)))
     bb = shape.bounding_box()
     size = (bb.size.X, bb.size.Y, bb.size.Z)
     if max(size) <= 0:
@@ -678,7 +764,7 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, da
 
     notes(sh, holes, iso_scale, scale, unplaced)
     sh.save()
-    return dict(scale=fmt_scale(scale), size=size, iso_dir=iso_dir, iso_visible=round(iso_visible, 3), weight=weight, holes=[(g.qty, g.diameter) for g in holes],
+    return dict(scale=fmt_scale(scale), size=size, iso_dir=iso_dir, iso_visible=round(iso_visible, 3), weight=weight, reoriented=reoriented, holes=[(g.qty, g.diameter) for g in holes],
                 unplaced=[hole_label(g) for g in unplaced])
 
 
