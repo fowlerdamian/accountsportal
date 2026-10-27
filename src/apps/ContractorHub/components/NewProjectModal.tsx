@@ -5,8 +5,6 @@ import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
 import { Label } from "@guide/components/ui/label";
 import { Textarea } from "@guide/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@guide/components/ui/select";
-import { DatePicker } from "@portal/components/DatePicker";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -17,7 +15,7 @@ import {
 import { PriorityScorecardModal } from "@hub/components/PriorityScorecardModal";
 import { localToday } from "@portal/lib/dates";
 
-type ModalProjectType = "web" | "new_product" | "other";
+// R&D is strictly new products: every project is new_product with the stage pipeline.
 
 interface NewProjectModalProps {
   open:    boolean;
@@ -28,10 +26,6 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
   const navigate = useNavigate();
   const [name,          setName]          = useState("");
   const [description,   setDescription]   = useState("");
-  const [type,          setType]          = useState<ModalProjectType>("new_product");
-  const [budget,        setBudget]        = useState("");
-  const [startDate,     setStartDate]     = useState("");
-  const [dueDate,       setDueDate]       = useState("");
   const [priorityScore,  setPriorityScore]  = useState<number | null>(null);
   const [scorecardOpen,  setScorecardOpen]  = useState(false);
   const [saving,         setSaving]         = useState(false);
@@ -40,8 +34,7 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
   const { mutateAsync: createProjectStages } = useCreateProjectStages();
 
   function resetForm() {
-    setName(""); setDescription(""); setType("web");
-    setBudget(""); setStartDate(""); setDueDate(""); setPriorityScore(null); setScorecardOpen(false);
+    setName(""); setDescription(""); setPriorityScore(null); setScorecardOpen(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -52,16 +45,16 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
       const project = await createProject({
         name:             name.trim(),
         description:      description.trim() || null,
-        type,
+        type:             "new_product",
         status:           "active",
         priority_score:   priorityScore,
-        budget_allocated: (type === "web" && budget) ? Number(budget) : null,
-        start_date:       startDate || null,
-        due_date:         (type === "web" && dueDate) ? dueDate : null,
+        budget_allocated: null,
+        start_date:       null,
+        due_date:         null,
       });
 
-      // Auto-create stages for new product projects
-      if (type === "new_product") {
+      // Every project gets the product stage pipeline
+      {
         const today = localToday();
         await createProjectStages({
           projectId: project.id,
@@ -87,8 +80,6 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
     }
   }
 
-  const isNewProduct = type === "new_product";
-
   return (
     <>
     <Dialog open={open} onOpenChange={(v) => { if (!v) { resetForm(); onClose(); } }}>
@@ -105,43 +96,10 @@ export function NewProjectModal({ open, onClose }: NewProjectModalProps) {
             <Label>Description</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional overview..." rows={2} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5 col-span-2">
-              <Label>Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as ModalProjectType)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="new_product">New Product</SelectItem>
-                  <SelectItem value="web">Web</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {!isNewProduct && (
-              <>
-                <div className="space-y-1.5">
-                  <Label>Budget ($)</Label>
-                  <Input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="0" min="0" step="100" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Start Date</Label>
-                  <DatePicker value={startDate || null} onChange={(v) => setStartDate(v ?? "")} />
-                </div>
-                <div className="space-y-1.5 col-span-2">
-                  <Label>Due Date</Label>
-                  <DatePicker value={dueDate || null} onChange={(v) => setDueDate(v ?? "")} />
-                </div>
-              </>
-            )}
-
-            {isNewProduct && (
-              <div className="space-y-1.5 col-span-2 rounded-md border bg-muted/30 p-3">
-                <p className="text-xs text-muted-foreground">
-                  Stages will be created automatically: {NEW_PRODUCT_STAGES.join(" → ")}
-                </p>
-              </div>
-            )}
+          <div className="rounded-md border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">
+              Stages will be created automatically: {NEW_PRODUCT_STAGES.join(" → ")}
+            </p>
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

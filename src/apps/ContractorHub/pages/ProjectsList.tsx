@@ -32,7 +32,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@guide/integrations/supabase/client";
 import { cn } from "@guide/lib/utils";
 import { localToday } from "@portal/lib/dates";
-import { FilterPill } from "@portal/components/FilterPill";
 import { TrashIcon } from "@portal/components/icons";
 
 // ── Stage colour map ──────────────────────────────────────────
@@ -61,10 +60,7 @@ function stageColor(stageName: string): StageColour {
 
 // ── Kanban columns (product dev stages + catch-all) ──────────
 
-const KANBAN_STAGE_COLS = [
-  ...NEW_PRODUCT_STAGES.map((s) => ({ key: s, label: s, color: stageColor(s).border.replace("border-l-", "border-t-") })),
-  { key: "__other__", label: "Other", color: "border-t-zinc-500" },
-];
+const KANBAN_STAGE_COLS = NEW_PRODUCT_STAGES.map((s) => ({ key: s, label: s, color: stageColor(s).border.replace("border-l-", "border-t-") }));
 
 // ── Project card (grid) ───────────────────────────────────────
 
@@ -249,7 +245,6 @@ function KanbanCard({
 
 // ── Types ─────────────────────────────────────────────────────
 
-type TypeFilter = "all" | "new_product" | "web" | "other";
 type Bucket     = "projects" | "ideas" | "archive";
 type ViewMode   = "grid" | "kanban";
 type SortBy     = "priority" | "created" | "progress";
@@ -261,7 +256,6 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
   const { openNewProject } = useHub();
   const [view,            setView]            = useState<ViewMode>("grid");
   const [search,          setSearch]          = useState("");
-  const [typeFilter,      setTypeFilter]      = useState<TypeFilter>("all");
   const [sortBy,          setSortBy]          = useState<SortBy>("priority");
   const [sortDir,         setSortDir]         = useState<SortDir>("desc");
   const [showBin,         setShowBin]         = useState(false);
@@ -306,7 +300,6 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
   }
 
   const filtered = projects
-    .filter(p => typeFilter === "all" || (typeFilter === "other" ? p.type !== "new_product" && p.type !== "web" : p.type === typeFilter))
     .filter(p => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => {
       let cmp = 0;
@@ -342,22 +335,6 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
               placeholder="Search projects…"
               className="pl-8 h-8 text-xs"
             />
-          </div>
-
-          {/* Type pills */}
-          <div className="flex items-center gap-1 flex-wrap">
-            <FilterPill active={typeFilter === "all"} onClick={() => setTypeFilter("all")}>
-              All <span className="ml-1 opacity-50">{projects.length}</span>
-            </FilterPill>
-            <FilterPill active={typeFilter === "new_product"} onClick={() => setTypeFilter("new_product")}>
-              Products <span className="ml-1 opacity-50">{projects.filter(p => p.type === "new_product").length}</span>
-            </FilterPill>
-            <FilterPill active={typeFilter === "web"} onClick={() => setTypeFilter("web")}>
-              Web <span className="ml-1 opacity-50">{projects.filter(p => p.type === "web").length}</span>
-            </FilterPill>
-            <FilterPill active={typeFilter === "other"} onClick={() => setTypeFilter("other")}>
-              Other <span className="ml-1 opacity-50">{projects.filter(p => p.type !== "new_product" && p.type !== "web").length}</span>
-            </FilterPill>
           </div>
 
           {/* Sort pills */}
@@ -450,9 +427,7 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
         {!showBin && view === "kanban" && (
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 items-start">
             {KANBAN_STAGE_COLS.map(col => {
-              const colProjects = col.key === "__other__"
-                ? filtered.filter(p => p.type !== "new_product" || !activeStageByProject[p.id])
-                : filtered.filter(p => activeStageByProject[p.id]?.name === col.key);
+              const colProjects = filtered.filter(p => activeStageByProject[p.id]?.name === col.key);
               return (
                 <div key={col.key} className={cn("rounded-lg border border-t-2 bg-muted/20 flex flex-col gap-2 p-3", col.color)}>
                   <div className="flex items-center justify-between px-0.5 mb-1">

@@ -249,28 +249,6 @@ function ProjectViewContent() {
     } catch { toast.error("Failed to save description"); }
   }
 
-  async function handleTypeChange(newType: string) {
-    if (!project) return;
-    try {
-      await updateProject({ id: project.id, type: newType as any });
-      if (newType === "new_product" && existingStages.length === 0) {
-        const today = localToday();
-        await createProjectStages({
-          projectId: project.id,
-          stages: NEW_PRODUCT_STAGES.map((stageName, i) => ({
-            project_id: project.id,
-            name:       stageName,
-            position:   i,
-            start_date: i === 0 ? today : null,
-            end_date:   null,
-            is_active:  i === 0,
-          })),
-        });
-      }
-      toast.success("Project type updated");
-    } catch { toast.error("Failed to update type"); }
-  }
-
   async function handleStatusCycle(task: Task, e: React.MouseEvent) {
     e.stopPropagation();
     if (!user) return;
@@ -576,19 +554,6 @@ function ProjectViewContent() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap shrink-0">
-            <Select value={project.type} onValueChange={handleTypeChange}>
-              <SelectTrigger className="h-8 w-fit border-0 bg-transparent p-0 focus:ring-0 shadow-none">
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                  {{ web: "Web", new_product: "New Product", product: "Product", website: "Website", other: "Other" }[project.type] ?? project.type}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new_product">New Product</SelectItem>
-                <SelectItem value="web">Web</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-
             {/* Priority score */}
             <button
               onClick={() => setScorecardOpen(true)}
