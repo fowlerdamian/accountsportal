@@ -821,7 +821,14 @@ serve(async (req) => {
     // folder as <drawing number>.pdf, replacing an earlier one of the same name.
     // Service role only; never recreates a removed folder (completed projects).
     if (action === "save_drawing") {
-      if (authHeader !== `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`) return json({ error: "Forbidden" }, 403);
+      // verify_jwt has already checked the signature at the gateway; just read the role claim.
+      const role = (() => {
+        try {
+          const seg = authHeader.replace(/^Bearer\s+/i, "").split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+          return JSON.parse(atob(seg + "=".repeat((4 - seg.length % 4) % 4))).role;
+        } catch { return null; }
+      })();
+      if (role !== "service_role") return json({ error: "Forbidden" }, 403);
       const { project_id, filename, base64 } = payload as { project_id: string; filename: string; base64: string };
       if (!project_id || !filename || !base64) return json({ error: "project_id, filename and base64 required" }, 400);
       const { data: project } = await sb.from("projects").select("drive_folder_id").eq("id", project_id).single();
