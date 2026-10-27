@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2, ChevronRight, Plus, Paperclip, Clock,
-  GripVertical, Camera, Trash2, ExternalLink, Box, X, Archive, ArchiveRestore,
+  GripVertical, Camera, Trash2, ExternalLink, Box, X, Archive, ArchiveRestore, RefreshCw,
 } from "lucide-react";
 import { UploadIcon, ClockIcon } from "@portal/components/icons";
 import CadViewer, { canPreview3D } from "@hub/components/CadViewer";
@@ -426,6 +426,22 @@ function ProjectViewContent() {
       await uploadThumbnail({ file, projectId: id });
       toast.success("Thumbnail updated");
     } catch { toast.error("Failed to upload thumbnail"); }
+  }
+
+  // Refresh icon on a STEP file: (re)queue its drawing; the worker overwrites
+  // <drawing number>.pdf in the project's Drive folder.
+  const [redrawing, setRedrawing] = useState<string | null>(null);
+  async function handleRedraw(fileId: string, filename: string) {
+    setRedrawing(fileId);
+    try {
+      const { error } = await supabase.rpc("request_step_drawing" as any, { p_file: fileId });
+      if (error) throw error;
+      toast.success(`Drawing for ${filename} queued — the PDF in Drive will be replaced`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't queue the drawing");
+    } finally {
+      setRedrawing(null);
+    }
   }
 
   async function handleArchive() {
@@ -1043,6 +1059,16 @@ function ProjectViewContent() {
                         className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
                       >
                         <Box className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {(ext === "step" || ext === "stp") && (
+                      <button
+                        onClick={() => handleRedraw(file.id, file.filename)}
+                        disabled={redrawing === file.id}
+                        title="Regenerate drawing (replaces the PDF)"
+                        className="shrink-0 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw className={cn("w-3.5 h-3.5", redrawing === file.id && "animate-spin")} />
                       </button>
                     )}
                     {file.file_size != null && (
