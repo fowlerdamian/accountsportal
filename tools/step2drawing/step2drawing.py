@@ -53,7 +53,11 @@ VIEWS = {
     "top": dict(dir=(0, 0, 1), up=(0, 1, 0), uv=lambda p: (p[0], p[1])),
     "right": dict(dir=(1, 0, 0), up=(0, 0, 1), uv=lambda p: (p[1], p[2])),
 }
-ISO_DIR, ISO_UP = (1, -1, 1), (0, 0, 1)
+ISO_DIR, ISO_UP = (1, -1, 1), (0, 0, 1)  # conventional iso corner; tie-break winner
+# Isometric candidates: all eight cube corners. Views from below are allowed but
+# must beat the best view from above by this much visible-edge fraction.
+ISO_CANDIDATES = [(sx, sy, sz) for sz in (1, -1) for sx in (1, -1) for sy in (-1, 1)]
+ISO_BELOW_PENALTY = 0.05
 AXIS_VIEW = {0: "right", 1: "front", 2: "top"}  # hole axis ∥ X/Y/Z → view showing it as a circle
 
 Rect = tuple[float, float, float, float]  # x0, y0, x1, y1
@@ -104,6 +108,25 @@ def project(shape: bd.Shape, direction, up, centre: bd.Vector, resolution: float
     pts = [p for line in vis + hid for p in line] or [(0.0, 0.0)]
     us, vs = [p[0] for p in pts], [p[1] for p in pts]
     return ProjectedView(vis, hid, (min(us), min(vs), max(us), max(vs)))
+
+
+def pick_iso_direction(shape: bd.Shape, centre: bd.Vector) -> tuple[tuple[int, int, int], float]:
+    """Isometric corner that hides the least: highest share of edge length left visible.
+
+    Folds, flanges and pockets that face away from a corner turn into hidden
+    edges there, so the corner with the most visible edge length shows the most
+    features. Returns (direction, visible fraction).
+    """
+    best, best_score, best_frac = ISO_DIR, -math.inf, 0.0
+    for d in ISO_CANDIDATES:
+        eye = centre + bd.Vector(*d).normalized() * 10_000
+        vis, hid = shape.project_to_viewport(eye, ISO_UP, centre)
+        lv, lh = sum(e.length for e in vis), sum(e.length for e in hid)
+        frac = lv / (lv + lh) if lv + lh > 0 else 0.0
+        score = frac - (ISO_BELOW_PENALTY if d[2] < 0 else 0.0) + (1e-3 if d == ISO_DIR else 0.0)
+        if score > best_score:
+            best, best_score, best_frac = d, score, frac
+    return best, best_frac
 
 
 def find_holes(shape: bd.Shape) -> list[HoleGroup]:
@@ -515,8 +538,10 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, da
         lw = sh.width_of(label, 3.5, "Helvetica-Bold")
         sh.block((cx - lw / 2, label_y - 1.0, cx + lw / 2, label_y + 3.5), pad=1.0)
 
-    # Isometric: visible edges only, in whichever free cell lets it be largest.
-    iso = project(shape, ISO_DIR, ISO_UP, centre, res, hidden=False)
+    # Isometric: visible edges only, from the corner that hides the fewest features,
+    # in whichever free cell lets it be largest.
+    iso_dir, iso_visible = pick_iso_direction(shape, centre)
+    iso = project(shape, iso_dir, ISO_UP, centre, res, hidden=False)
     top_r, right_r = view_rects["top"], view_rects["right"]
     cells = [
         (top_r[2] + 30, right_r[3] + VIEW_GAP, SHEET_W - BORDER - 6, SHEET_H - BORDER - 6),  # above the right view
@@ -560,7 +585,7 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, da
 
     notes(sh, holes, iso_scale, scale, unplaced)
     sh.save()
-    return dict(scale=fmt_scale(scale), size=size, holes=[(g.qty, g.diameter) for g in holes],
+    return dict(scale=fmt_scale(scale), size=size, iso_dir=iso_dir, iso_visible=round(iso_visible, 3), holes=[(g.qty, g.diameter) for g in holes],
                 unplaced=[hole_label(g) for g in unplaced])
 
 
