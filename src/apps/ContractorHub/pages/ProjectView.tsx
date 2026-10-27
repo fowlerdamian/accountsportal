@@ -444,6 +444,26 @@ function ProjectViewContent() {
     }
   }
 
+  // Manual Drive sync (Files header). Works on archived projects too, if their folder still exists.
+  const [syncingDrive, setSyncingDrive] = useState(false);
+  async function handleDriveSync() {
+    if (!project?.drive_folder_id) return;
+    setSyncingDrive(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("google-drive", {
+        body: { action: "sync_from_drive", project_id: project.id, folder_id: project.drive_folder_id },
+      });
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ["hub_files", project.id] });
+      const changed = (data?.synced ?? 0) + (data?.updated ?? 0) + (data?.removed ?? 0);
+      toast.success(changed > 0 ? `Synced ${changed} change${changed > 1 ? "s" : ""} from Drive` : "Files are up to date with Drive");
+    } catch {
+      toast.error("Couldn't sync with Drive");
+    } finally {
+      setSyncingDrive(false);
+    }
+  }
+
   async function handleArchive() {
     if (!project) return;
     const archiving = project.status !== "archived";
@@ -988,8 +1008,18 @@ function ProjectViewContent() {
 
       {/* ── Files ── */}
       <div className="rounded-lg border bg-background overflow-hidden">
-        <div className="px-5 py-3 border-b bg-muted/30">
+        <div className="px-5 py-3 border-b bg-muted/30 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Files</h2>
+          {project.drive_folder_id && (
+            <button
+              onClick={handleDriveSync}
+              disabled={syncingDrive}
+              title="Sync with Google Drive"
+              className="text-muted-foreground/60 hover:text-primary transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", syncingDrive && "animate-spin")} />
+            </button>
+          )}
         </div>
         <div className="p-5 space-y-3">
           {files.length > 0 && (
