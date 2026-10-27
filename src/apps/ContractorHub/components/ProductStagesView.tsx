@@ -9,7 +9,7 @@ import {
   useTasks,
   useUpdateTask,
   useCreateTask,
-  useSoftDeleteProject,
+  useUpdateProject,
   type ProjectStage,
   type Task,
   type TaskStatus,
@@ -235,7 +235,7 @@ export function ProductStagesView({ projectId }: ProductStagesViewProps) {
   const { mutateAsync: updateStage }       = useUpdateProjectStage();
   const { mutateAsync: updateTask  }       = useUpdateTask();
   const { mutateAsync: createTask  }       = useCreateTask();
-  const { mutateAsync: softDeleteProject } = useSoftDeleteProject();
+  const { mutateAsync: updateProject }     = useUpdateProject();
 
   const [activating,  setActivating]  = useState(false);
   const [addingTask,  setAddingTask]   = useState(false);
@@ -244,13 +244,14 @@ export function ProductStagesView({ projectId }: ProductStagesViewProps) {
   const addInputRef = useRef<HTMLInputElement>(null);
 
   async function handleJump(stage: ProjectStage) {
-    // Re-click on the active "Complete" stage → soft-delete (archive to bin).
+    // Re-click on the active "Complete" stage → move to Archive (not the Bin:
+    // finished products must stay findable).
     if (stage.is_active && stage.name === "Complete") {
       setActivating(true);
       try {
-        await softDeleteProject(projectId);
-        toast.success("Project archived — restore from Bin within 15 days");
-        navigate("/projects/list");
+        await updateProject({ id: projectId, status: "archived" });
+        toast.success("Project moved to Archive");
+        navigate("/projects/archive");
       } catch {
         toast.error("Failed to archive project");
       } finally {
