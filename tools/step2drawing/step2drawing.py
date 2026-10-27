@@ -30,7 +30,9 @@ DEFAULT_LOGO = HERE / "assets" / "aga-logo.png"
 
 # ── Sheet geometry (all mm, origin bottom-left) ────────────────────────────
 SHEET_W, SHEET_H = 420.0, 297.0  # A3 landscape
-BORDER = 10.0
+BORDER = 10.0  # ISO 5457 frame margin: top, right, bottom
+BORDER_L = 20.0  # ISO 5457 filing margin on the left
+ZONES_X, ZONES_Y = 8, 6  # ISO 5457 grid reference zones for A3 (~50 mm fields): 1–8 across, A–F down
 TB_W, TB_H = 250.0, 66.0  # title block, bottom-right inside the border
 VIEW_GAP = 28.0  # space between adjacent views (room for labels)
 DIM_OFFSET = 10.0  # dimension line distance from the view
@@ -449,7 +451,7 @@ def place_callout(sh: Sheet, label: str, anchors: list[tuple[float, float]], rad
     one whose text clears everything already on the sheet and whose leader crosses no dims, text, leaders
     or other views (it may cross its own view to reach an inner hole)."""
     tw = sh.width_of(label)
-    frame = (BORDER + 2, BORDER + 2, SHEET_W - BORDER - 2, SHEET_H - BORDER - 2)
+    frame = (BORDER_L + 2, BORDER + 2, SHEET_W - BORDER - 2, SHEET_H - BORDER - 2)
     obstacles = sh.blocked + other_views
     best = None
     for (hx, hy) in anchors[:16]:
@@ -540,6 +542,42 @@ def wrap(sh: "Sheet", s: str, max_w: float, size: float) -> list[str]:
         else:
             cur = nxt
     return lines + ([cur] if cur else [])
+
+
+def drawing_frame(sh: Sheet):
+    """ISO 5457 / BS 8888 sheet frame: 0.7 mm frame line (20 mm filing margin left, 10 mm elsewhere),
+    grid reference zones numbered 1–8 left→right and lettered A–F top→bottom on all four sides,
+    and centring marks at the middle of each side."""
+    fx0, fy0, fx1, fy1 = BORDER_L, BORDER, SHEET_W - BORDER, SHEET_H - BORDER
+    sh.rect(fx0, fy0, fx1 - fx0, fy1 - fy0, width=0.7)
+    band = 5.0  # zone band just outside the frame
+    sh.style(LW_THIN * 1.5)
+    sh.c.rect(fx0 - band, fy0 - band, fx1 - fx0 + 2 * band, fy1 - fy0 + 2 * band, stroke=1, fill=0)
+    zw, zh = (fx1 - fx0) / ZONES_X, (fy1 - fy0) / ZONES_Y
+    for i in range(ZONES_X):
+        if i:
+            x = fx0 + i * zw
+            sh.line(x, fy0, x, fy0 - band)
+            sh.line(x, fy1, x, fy1 + band)
+        cx = fx0 + (i + 0.5) * zw
+        for y in (fy0 - band / 2 - 1.2, fy1 + band / 2 - 1.2):
+            sh.text(cx, y, str(i + 1), size=3.5)
+    for j in range(ZONES_Y):
+        if j:
+            y = fy1 - j * zh
+            sh.line(fx0, y, fx0 - band, y)
+            sh.line(fx1, y, fx1 + band, y)
+        cy = fy1 - (j + 0.5) * zh - 1.2
+        for x in (fx0 - band / 2, fx1 + band / 2):
+            sh.text(x, cy, "ABCDEFGHJK"[j], size=3.5)
+    # centring marks: from 5 mm inside the frame out to the trimmed sheet edge
+    # (the bottom one stops at the frame — the title block spans the centre there)
+    sh.style(0.7)
+    mx, my = (fx0 + fx1) / 2, (fy0 + fy1) / 2
+    sh.line(mx, 0, mx, fy0)
+    sh.line(mx, SHEET_H, mx, fy1 - 5)
+    sh.line(0, my, fx0 + 5, my)
+    sh.line(SHEET_W, my, fx1 - 5, my)
 
 
 TB_COL_B, TB_COL_C = 78.0, 158.0  # title block column splits from its left edge
@@ -635,8 +673,8 @@ def title_block(sh: Sheet, drawing_number: str, scale: Fraction, date: str, draw
 
 
 def notes(sh: Sheet, groups: list[HoleGroup], iso_scale: Fraction, scale: Fraction, unplaced: list[HoleGroup]):
-    lines = ["1. ALL DIMENSIONS IN MILLIMETRES.", "2. THIRD ANGLE PROJECTION.",
-             "3. ENVELOPE DIMENSIONS ONLY UNLESS SHOWN."]
+    # Units and projection are already in the title block, so they aren't repeated here.
+    lines = ["1. ENVELOPE DIMENSIONS ONLY UNLESS SHOWN."]
     if groups:
         lines.append(f"{len(lines) + 1}. HOLES: " + ", ".join(
             hole_label(g) + (" (INCLINED AXIS)" if g.axis is None else "") for g in groups) + ".")
@@ -672,7 +710,7 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, date: str, l
     X, Y, Z = size
 
     # Usable area: inside the border, above the title-block band, less room for dims/labels.
-    area_x0, area_x1 = BORDER + MARGIN_DIM, SHEET_W - BORDER - MARGIN_DIM
+    area_x0, area_x1 = BORDER_L + MARGIN_DIM, SHEET_W - BORDER - MARGIN_DIM
     area_y0, area_y1 = BORDER + TB_H + MARGIN_DIM, SHEET_H - BORDER - MARGIN_DIM
     fit = min((area_x1 - area_x0 - VIEW_GAP) / max(X + Y, 1e-6), (area_y1 - area_y0 - VIEW_GAP) / max(Z + Y, 1e-6))
     scale = pick_scale(fit)
@@ -692,7 +730,7 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, date: str, l
     }
 
     sh = Sheet(out_path)
-    sh.rect(BORDER, BORDER, SHEET_W - 2 * BORDER, SHEET_H - 2 * BORDER, width=0.7)
+    drawing_frame(sh)
 
     view_rects: dict[str, Rect] = {}
     for name, (cx, cy) in centres.items():
