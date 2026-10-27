@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { NavLink, Link, useMatch, useLocation } from "react-router-dom";
-import { FolderOpen, Menu, Plus, Sparkles, Lightbulb, DraftingCompass } from "lucide-react";
+import { FolderOpen, Menu, Plus, Sparkles, Lightbulb, DraftingCompass, CircleCheck } from "lucide-react";
 import { UsersIcon, GearIcon, LogoutIcon } from "@portal/components/icons";
 import { cn } from "@guide/lib/utils";
 import { useAuth } from "@guide/contexts/AuthContext";
@@ -44,6 +44,8 @@ const navItems = [
   { label: "Projects",    icon: FolderOpen,       path: "/projects/list",        end: false },
   // Ideas = projects with no ranking or ranked 5/10 or less (see ProjectsList).
   { label: "Ideas",       icon: Lightbulb,     path: "/projects/ideas",       end: false },
+  // Completed = status complete/archived or stage "Complete"; no Drive sync.
+  { label: "Completed",   icon: CircleCheck,   path: "/projects/completed",   end: false },
   { label: "Drawings",    icon: DraftingCompass, path: "/projects/drawings",  end: false },
   // Contractors hidden from the nav for now (routes still work) — revisit later.
   // { label: "Contractors", icon: UsersIcon,        path: "/projects/contractors", end: false },
@@ -141,6 +143,7 @@ export function HubLayout({ children, fullScreen }: HubLayoutProps) {
   const { pathname } = useLocation();
   const pageTitle =
     pathname.startsWith("/projects/ideas")       ? "Ideas" :
+    pathname.startsWith("/projects/completed")   ? "Completed" :
     pathname.startsWith("/projects/drawings")    ? "Drawings" :
     pathname.startsWith("/projects/contractors") ? "Contractors" :
     pathname.startsWith("/projects/settings")    ? "Settings" : "Projects";

@@ -24,6 +24,7 @@ import {
   type ProjectBudgetSummary,
   type Contractor,
   isIdea,
+  isCompleted,
 } from "@hub/hooks/use-hub-queries";
 
 type ContractorBrief = Pick<Contractor, "id" | "name" | "avatar_url" | "role" | "source">;
@@ -249,7 +250,7 @@ function KanbanCard({
 // ── Types ─────────────────────────────────────────────────────
 
 type TypeFilter = "all" | "new_product" | "web" | "other";
-type Bucket     = "projects" | "ideas";
+type Bucket     = "projects" | "ideas" | "completed";
 type ViewMode   = "grid" | "kanban";
 type SortBy     = "priority" | "created" | "progress";
 type SortDir    = "asc" | "desc";
@@ -267,8 +268,6 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: allProjects = [],    isLoading }         = useProjects();
-  // Everything below (counts, filters, grid, kanban) works on the selected bucket.
-  const projects = allProjects.filter(p => (bucket === "ideas") === isIdea(p));
   const { data: deletedProjects = [] }                   = useDeletedProjects();
   const { data: activeStages = [],   isLoading: stagesLoading } = useActiveStages();
   const { data: contractorsByProject } = useAllProjectContractors();
@@ -290,6 +289,13 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
   }, [qc]);
 
   const activeStageByProject = Object.fromEntries(activeStages.map(s => [s.project_id, s]));
+  // Everything below (counts, filters, grid, kanban) works on the selected bucket.
+  // Completed projects only appear under Completed, whatever their ranking.
+  const projects = allProjects.filter(p => {
+    const done = isCompleted(p, activeStageByProject[p.id]);
+    if (bucket === "completed") return done;
+    return !done && (bucket === "ideas") === isIdea(p);
+  });
 
   // ── Filter + sort pipeline ────────────────────────────────────
 
@@ -419,7 +425,7 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
         {!showBin && view === "grid" && (
           filtered.length === 0 ? (
             <div className="rounded-lg border border-dashed p-10 text-center">
-              <p className="text-muted-foreground text-sm">{bucket === "ideas" ? "No ideas — new or low-ranked projects will appear here." : "No projects found."}</p>
+              <p className="text-muted-foreground text-sm">{bucket === "ideas" ? "No ideas — new or low-ranked projects will appear here." : bucket === "completed" ? "No completed projects yet." : "No projects found."}</p>
               <Button variant="outline" size="sm" className="mt-3" onClick={() => openNewProject()}>
                 <Plus className="w-3.5 h-3.5 mr-1.5" />Create one
               </Button>

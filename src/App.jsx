@@ -179,6 +179,7 @@ const PATH_TITLES = [
   ['/support/customers',     'Customers'],
   ['/support',               'Cases'],
   ['/projects/ideas',        'Ideas'],
+  ['/projects/completed',    'Completed'],
   ['/projects/drawings',     'Drawings'],
   ['/projects',              'R&D'],
   ['/tasks',                 'Tasks'],
@@ -268,6 +269,7 @@ export default function App() {
                       <Route path="contractors/:id" element={<ContractorProfile />} />
                       <Route path="list" element={<ProjectsList />} />
                       <Route path="ideas" element={<ProjectsList bucket="ideas" />} />
+                      <Route path="completed" element={<ProjectsList bucket="completed" />} />
                       <Route path="list/:id" element={<ProjectView />} />
                       <Route path="drawings" element={<Drawings />} />
                       <Route path="settings" element={<HubSettings />} />

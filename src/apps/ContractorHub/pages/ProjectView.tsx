@@ -31,7 +31,7 @@ import {
   useProject, useTasks, useProjectBudgetSummary, useActivityLog,
   useFiles, useContractors, useProjectContractors, useTimeEntries,
   useUpdateProject, useCreateTask, useUpdateTask, useDeleteTask, useReorderTasks,
-  usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages,
+  usePostActivity, useUploadFile, useProjectStages, useCreateProjectStages, isCompleted,
   useUploadProjectThumbnail, useSoftDeleteProject, useSyncDriveFiles,
   useGenerateStepThumbnails,
   useGenerateServerThumbnails,
@@ -117,14 +117,16 @@ function ProjectViewContent() {
   const { data: projContractors = [] }                = useProjectContractors(id);
   const { data: timeEntries = [] }                    = useTimeEntries({ projectId: id });
 
-  useSyncDriveFiles(id, project?.drive_folder_id);
-  useGenerateStepThumbnails(files);
-  useGenerateServerThumbnails(files);
-
   // ── Mutations ─────────────────────────────────────────────
   const { mutateAsync: updateProject }         = useUpdateProject();
   const { mutateAsync: createProjectStages }   = useCreateProjectStages();
   const { data: existingStages = [] }          = useProjectStages(id);
+
+  // Completed projects don't sync from Drive — their folder has been removed.
+  const completed = !!project && isCompleted(project, existingStages.find(s => s.is_active));
+  useSyncDriveFiles(id, completed ? null : project?.drive_folder_id);
+  useGenerateStepThumbnails(files);
+  useGenerateServerThumbnails(completed ? [] : files);
   const { mutateAsync: uploadThumbnail }       = useUploadProjectThumbnail();
   const { mutateAsync: softDelete }            = useSoftDeleteProject();
   const { mutateAsync: createTask }            = useCreateTask();
