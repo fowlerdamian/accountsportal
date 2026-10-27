@@ -106,7 +106,8 @@ def process(job: dict, make_drawing, render_preview, fmt) -> None:
 
         pdf = tmp / f"{job['part_name']}.pdf"
         info = make_drawing(step, pdf, drawn_by=job.get("drawn_by") or "", rev=job.get("rev") or "A",
-                            date=dt.date.today().isoformat(), logo=HERE / "assets" / "aga-logo.png")
+                            material=job.get("material") or "", finish=job.get("finish") or "",
+                            date=dt.date.today().strftime("%d/%m/%Y"), logo=HERE / "assets" / "aga-logo.png")
         png = render_preview(pdf, dpi=130)
 
         out_pdf = f"out/{jid}/{pdf.name}"

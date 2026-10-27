@@ -14,6 +14,11 @@ import { cn } from "@guide/lib/utils";
 const BUCKET = "step-drawings";
 const STEP_EXTS = [".step", ".stp"];
 const DRAWN_BY_KEY = "rd-drawings-drawn-by";
+const MATERIAL_KEY = "rd-drawings-material";
+const FINISH_KEY   = "rd-drawings-finish";
+const MATERIAL_SUGGESTIONS = ["3mm Mild Steel", "2mm Mild Steel", "5mm Mild Steel", "3mm Aluminium", "2mm Stainless Steel"];
+const FINISH_SUGGESTIONS   = ["Black Textured PC", "Black Satin PC", "Zinc Plated", "Galvanised", "Raw"];
+const INPUT_CLS = "h-8 rounded border border-[#333] bg-transparent px-2 text-sm text-white focus:border-[var(--brand-accent)] focus:outline-none";
 const WORKER_LATE_MS = 2 * 60_000;
 
 type Status = "queued" | "running" | "done" | "error";
@@ -26,6 +31,8 @@ interface DrawingJob {
   step_path:   string;
   drawn_by:    string | null;
   rev:         string;
+  material:    string | null;
+  finish:      string | null;
   status:      Status;
   started_at:  string | null;
   finished_at: string | null;
@@ -103,6 +110,8 @@ export default function Drawings() {
   const [uploading, setUploading] = useState(0);
   const [rev, setRev] = useState("A");
   const [drawnBy, setDrawnBy] = useState("");
+  const [material, setMaterial] = useState(() => { try { return localStorage.getItem(MATERIAL_KEY) ?? ""; } catch { return ""; } });
+  const [finish, setFinish]     = useState(() => { try { return localStorage.getItem(FINISH_KEY) ?? ""; } catch { return ""; } });
 
   useEffect(() => {
     let saved = "";
@@ -118,7 +127,16 @@ export default function Drawings() {
     const skipped = files.length - steps.length;
     if (skipped) toast.error(`${skipped} file${skipped > 1 ? "s" : ""} skipped — only .step and .stp files can be drawn`);
     if (!steps.length) return;
-    try { localStorage.setItem(DRAWN_BY_KEY, drawnBy); } catch { /* storage blocked */ }
+    // Material + finish go in the title block, so they're required.
+    if (!material.trim() || !finish.trim()) {
+      toast.error("Enter the material and finish first — they go in the title block");
+      return;
+    }
+    try {
+      localStorage.setItem(DRAWN_BY_KEY, drawnBy);
+      localStorage.setItem(MATERIAL_KEY, material.trim());
+      localStorage.setItem(FINISH_KEY, finish.trim());
+    } catch { /* storage blocked */ }
 
     setUploading((n) => n + steps.length);
     let queued = 0;
@@ -131,6 +149,7 @@ export default function Drawings() {
         const { error } = await supabase.from("step_drawing_jobs" as any).insert({
           id, file_name: file.name, part_name: stem(file.name), step_path: path,
           drawn_by: drawnBy.trim() || null, rev: rev.trim() || "A",
+          material: material.trim(), finish: finish.trim(),
         });
         if (error) throw error;
         queued++;
@@ -142,7 +161,7 @@ export default function Drawings() {
     }
     if (queued) toast.success(`${queued} drawing${queued > 1 ? "s" : ""} queued`);
     refresh();
-  }, [drawnBy, rev, refresh]);
+  }, [drawnBy, rev, material, finish, refresh]);
 
   const openPdf = async (job: DrawingJob) => {
     try { window.open(await signedUrl(job.pdf_path!), "_blank", "noopener"); }
@@ -200,7 +219,7 @@ export default function Drawings() {
         >
           {uploading > 0 ? <Loader2 className="h-6 w-6 animate-spin text-[var(--brand-accent)]" /> : <Upload className="h-6 w-6 text-[#666]" />}
           <p className="text-sm text-white">{uploading > 0 ? `Uploading ${uploading}…` : "Drop .step / .stp files here, or click to choose"}</p>
-          <p className="text-xs text-muted-foreground">One drawing per file. The part name comes from the file name.</p>
+          <p className="text-xs text-muted-foreground">One drawing per file. The file name is the drawing number; the part number is that less its 6-digit date.</p>
           <input
             ref={inputRef}
             id="rd-drawings-files"
@@ -213,6 +232,30 @@ export default function Drawings() {
         </div>
 
         <div className="flex flex-wrap items-end gap-4">
+          <label className="grid gap-1 text-xs text-muted-foreground" htmlFor="rd-drawings-material">
+            Material
+            <input
+              id="rd-drawings-material"
+              list="rd-drawings-material-list"
+              value={material}
+              placeholder="e.g. 3mm Mild Steel"
+              onChange={(e) => setMaterial(e.target.value)}
+              className={cn(INPUT_CLS, "w-56", !material.trim() && "border-amber-800")}
+            />
+            <datalist id="rd-drawings-material-list">{MATERIAL_SUGGESTIONS.map((m) => <option key={m} value={m} />)}</datalist>
+          </label>
+          <label className="grid gap-1 text-xs text-muted-foreground" htmlFor="rd-drawings-finish">
+            Finish
+            <input
+              id="rd-drawings-finish"
+              list="rd-drawings-finish-list"
+              value={finish}
+              placeholder="e.g. Black Textured PC"
+              onChange={(e) => setFinish(e.target.value)}
+              className={cn(INPUT_CLS, "w-56", !finish.trim() && "border-amber-800")}
+            />
+            <datalist id="rd-drawings-finish-list">{FINISH_SUGGESTIONS.map((f) => <option key={f} value={f} />)}</datalist>
+          </label>
           <label className="grid gap-1 text-xs text-muted-foreground" htmlFor="rd-drawings-drawn-by">
             Drawn by
             <input
@@ -282,7 +325,7 @@ export default function Drawings() {
                     )}
                     {job.status === "error" && <p className="text-xs text-red-400 break-words">{job.error}</p>}
                     <div className="mt-auto flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
-                      <span>Rev {job.rev}{job.drawn_by ? ` · ${job.drawn_by}` : ""} · {new Date(job.created_at).toLocaleDateString("en-AU")}</span>
+                      <span>Rev {job.rev}{job.material ? ` · ${job.material}` : ""}{job.finish ? ` · ${job.finish}` : ""}{job.drawn_by ? ` · ${job.drawn_by}` : ""} · {new Date(job.created_at).toLocaleDateString("en-AU")}</span>
                       <span className="flex items-center gap-1">
                         {job.status === "done" && (
                           <button type="button" onClick={() => downloadPdf(job)} className="rounded p-1 hover:text-white" title="Download PDF">

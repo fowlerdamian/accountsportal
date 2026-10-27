@@ -14,6 +14,7 @@ import datetime as dt
 import getpass
 import math
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -30,7 +31,7 @@ DEFAULT_LOGO = HERE / "assets" / "aga-logo.png"
 # ── Sheet geometry (all mm, origin bottom-left) ────────────────────────────
 SHEET_W, SHEET_H = 420.0, 297.0  # A3 landscape
 BORDER = 10.0
-TB_W, TB_H = 180.0, 45.0  # title block, bottom-right inside the border
+TB_W, TB_H = 250.0, 66.0  # title block, bottom-right inside the border
 VIEW_GAP = 28.0  # space between adjacent views (room for labels)
 DIM_OFFSET = 10.0  # dimension line distance from the view
 LABEL_OFFSET = 20.0  # view label distance below the view
@@ -422,43 +423,133 @@ def third_angle_symbol(sh: Sheet, x: float, y: float, h: float = 9.0):
     sh.line(ccx, y - R - 1.5, ccx, y + R + 1.5)
 
 
-def title_block(sh: Sheet, part: str, scale: Fraction, date: str, drawn_by: str, rev: str, logo: Path | None):
-    x0, y0 = SHEET_W - BORDER - TB_W, BORDER
-    logo_w = 60.0
-    sh.rect(x0, y0, TB_W, TB_H)
-    sh.block((x0, y0, x0 + TB_W, y0 + TB_H), pad=2.0)
-    sh.style(LW_VISIBLE)
-    sh.line(x0 + logo_w, y0, x0 + logo_w, y0 + TB_H)
-    if logo and logo.exists():
-        sh.c.drawImage(str(logo), x0 + 4, y0 + (TB_H - 17) / 2, width=logo_w - 8, height=17,
-                       preserveAspectRatio=True, anchor="c", mask="auto")
+# Approx. weight: density (g/cm³) by material keyword, first match wins.
+DENSITIES = [("stainless", 8.00), ("ss", 8.00), ("alumin", 2.70), ("brass", 8.50), ("copper", 8.96),
+             ("steel", 7.85), ("ms", 7.85), ("galv", 7.85), ("nylon", 1.15), ("acetal", 1.41),
+             ("abs", 1.05), ("hdpe", 0.95), ("polycarb", 1.20), ("pla", 1.24), ("petg", 1.27)]
+CONFIDENTIAL = ("This drawing and any information or descriptive material set out in it are the confidential and "
+                "copyright property of Automotive Group Australia Pty Ltd. © and MUST NOT BE DISCLOSED, COPIED, "
+                "LOANED in whole or part or used for any purpose without the written permission of "
+                "Automotive Group Australia Pty Ltd.")
+TOLERANCES = ["Unless Otherwise Stated:", "Linear Tol.: ±0.2, Angular Tol.: 0°15'", "Surface Finish: 0.8µm",
+              "All Dimensions: mm"]
+OWNER_LINES = ["Automotive Group Australia Pty Ltd", "8 Ribbon Gum Avenue", "www.automotivegroupaustralia.com.au"]
 
-    gx, gw, row = x0 + logo_w, TB_W - logo_w, TB_H / 3
-    sh.style(LW_THIN * 1.5)
-    for k in (1, 2):
-        sh.line(gx, y0 + k * row, x0 + TB_W, y0 + k * row)
 
-    def cell(cx, cy, w, label, value, bold=False, size=4.0):
-        sh.text(cx + 1.5, cy + row - 3.2, label, size=2.0, anchor="start")
+def approx_weight(volume_mm3: float, material: str) -> str:
+    """Kg from volume × density of the first recognised material word; blank when unknown."""
+    words = material.lower().replace("-", " ").split()
+    rho = next((r for k, r in DENSITIES if any(w.startswith(k) if len(k) > 3 else w == k for w in words)), None)
+    if rho is None or volume_mm3 <= 0:
+        return ""
+    kg = volume_mm3 / 1000 * rho / 1000
+    return f"{kg:.2f}" if kg < 10 else f"{kg:.1f}"
+
+
+def part_number(drawing_number: str) -> str:
+    """Drawing number less its trailing 6-digit DDMMYY date (FETFR281026 → FETFR)."""
+    return re.sub(r"\d{6}$", "", drawing_number) or drawing_number
+
+
+def wrap(sh: "Sheet", s: str, max_w: float, size: float) -> list[str]:
+    lines, cur = [], ""
+    for word in s.split():
+        nxt = f"{cur} {word}".strip()
+        if cur and sh.width_of(nxt, size) > max_w:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = nxt
+    return lines + ([cur] if cur else [])
+
+
+def title_block(sh: Sheet, drawing_number: str, scale: Fraction, date: str, drawn_by: str, rev: str,
+                material: str, finish: str, weight: str, logo: Path | None):
+    """AGA title block: three columns — material/tolerances | confidentiality/owner | approvals/numbers."""
+    x0, y0, W, H = SHEET_W - BORDER - TB_W, BORDER, TB_W, TB_H
+    ca, cb = x0 + 78.0, x0 + 158.0  # column splits
+    top = y0 + H
+    sh.rect(x0, y0, W, H)
+    sh.block((x0, y0, x0 + W, top), pad=2.0)
+
+    def box(x, y, w, h, label=None, value="", size=4.2, bold=False, centre=True):
+        """Cell from (x, y) bottom-left: thin border, small label top-left, value below it."""
+        sh.style(LW_THIN * 1.5)
+        sh.c.rect(x, y, w, h, stroke=1, fill=0)
+        if label:
+            sh.text(x + 1.2, y + h - 2.6, label, size=2.1, anchor="start")
         if value:
-            sh.fit_text(cx + 1.5, cy + 3.0, value, w - 3, size, font="Helvetica-Bold" if bold else "Helvetica")
+            font = "Helvetica-Bold" if bold else "Helvetica"
+            sz = size
+            while sz > 2.0 and sh.width_of(value, sz, font) > w - 3:
+                sz -= 0.2
+            vy = y + (h - (3.0 if label else 0)) / 2 - sz * 0.35
+            if centre:
+                sh.text(x + w / 2, vy, value, size=sz, font=font)
+            else:
+                sh.text(x + 1.5, vy, value, size=sz, font=font, anchor="start")
 
-    # top row: part name, full width
-    cell(gx, y0 + 2 * row, gw, "PART NAME", part, bold=True, size=5.0)
-    # middle row: scale | units | rev
-    cw = gw / 3
-    for k in (1, 2):
-        sh.line(gx + k * cw, y0 + row, gx + k * cw, y0 + 2 * row)
-    cell(gx, y0 + row, cw, "SCALE", fmt_scale(scale))
-    cell(gx + cw, y0 + row, cw, "UNITS", "mm")
-    cell(gx + 2 * cw, y0 + row, cw, "REV", rev)
-    # bottom row: date | drawn by | projection
-    for k in (1, 2):
-        sh.line(gx + k * cw, y0, gx + k * cw, y0 + row)
-    cell(gx, y0, cw, "DATE", date)
-    cell(gx + cw, y0, cw, "DRAWN BY", drawn_by)
-    cell(gx + 2 * cw, y0, cw, "PROJECTION", "")
-    third_angle_symbol(sh, gx + 2 * cw + 6.0, y0 + row / 2 - 1.0, h=7.0)
+    # ── Column A: material, finish, tolerances, scale, weight/standard, projection/sheet
+    aw = ca - x0
+    half = aw * 0.46
+    rows_a = [9.0, 9.0, 15.0, 8.0, 11.5]  # from the top; projection row takes the rest
+    y = top - rows_a[0]
+    box(x0, y, aw, rows_a[0], "Material:", material.upper(), size=4.6)
+    y -= rows_a[1]
+    box(x0, y, aw, rows_a[1], "Finish:", finish.upper(), size=4.6)
+    y -= rows_a[2]
+    box(x0, y, aw, rows_a[2])
+    for i, t in enumerate(TOLERANCES):
+        sh.text(x0 + 1.2, y + rows_a[2] - 3.2 - i * 3.3, t, size=2.5, anchor="start")
+    y -= rows_a[3]
+    box(x0, y, aw, rows_a[3], "Drawing Scale:", fmt_scale(scale), size=4.0, bold=True)
+    y -= rows_a[4]
+    box(x0, y, half, rows_a[4], "Approx Weight:", f"{weight} Kg" if weight else "Kg", size=3.8)
+    box(x0 + half, y, aw - half, rows_a[4])
+    for i, t in enumerate(("Drawing Produced In", "Accordance With BS8888")):
+        sh.text(x0 + half + (aw - half) / 2, y + rows_a[4] - 4.2 - i * 3.0, t, size=2.4)
+    ph = y - y0
+    box(x0, y0, half, ph, "Projection Method:")
+    sh.text(x0 + half / 2, y0 + ph - 5.6, "THIRD ANGLE", size=2.4, font="Helvetica-Bold")
+    third_angle_symbol(sh, x0 + half / 2 - 7.0, y0 + 3.6, h=5.0)
+    box(x0 + half, y0, aw - half, ph, "Sheet Size:", "A3", size=6.0)
+
+    # ── Column B: confidentiality, document type, company confidential, legal owner
+    bw = cb - ca
+    y = top - 21.0
+    box(ca, y, bw, 21.0)
+    for i, t in enumerate(wrap(sh, CONFIDENTIAL, bw - 3, 2.3)):
+        sh.text(ca + 1.5, top - 3.2 - i * 2.75, t, size=2.3, anchor="start")
+    y -= 9.0
+    box(ca, y, bw, 9.0, "Document Type:", "Part Drawing", size=3.6)
+    y -= 8.0
+    box(ca, y, bw, 8.0, None, "Company Confidential", size=4.4, bold=True, centre=False)
+    oh = y - y0
+    box(ca, y0, bw, oh, "Legal Owner:")
+    if logo and logo.exists():
+        sh.c.drawImage(str(logo), ca + 3, y0 + 9.0, width=bw * 0.6, height=oh - 12.5,
+                       preserveAspectRatio=True, anchor="sw", mask="auto")
+    for i, t in enumerate(OWNER_LINES):
+        sh.text(ca + 1.5, y0 + 6.6 - i * 2.6, t, size=2.2, anchor="start")
+
+    # ── Column C: description, drawn, checked, part number, drawing number / sheet / revision
+    cw = x0 + W - cb
+    hw = cw / 2
+    y = top - 21.0
+    box(cb, y, cw, 21.0, "Description:")
+    y -= 9.0
+    box(cb, y, hw, 9.0, "Drawn by:", drawn_by, size=3.6)
+    box(cb + hw, y, hw, 9.0, "Drawn date:", date, size=3.6)
+    y -= 9.0
+    box(cb, y, hw, 9.0, "Checked/Approved by:")
+    box(cb + hw, y, hw, 9.0, "Checked/Approved date:")
+    y -= 12.0
+    box(cb, y, cw, 12.0, "Part Number:", part_number(drawing_number), size=4.8)
+    nh = y - y0
+    nw, sw = cw * 0.6, cw * 0.2
+    box(cb, y0, nw, nh, "Drawing Number:", drawing_number, size=4.8)
+    box(cb + nw, y0, sw, nh, "Sheet:", "1 of 1", size=3.4)
+    box(cb + nw + sw, y0, cw - nw - sw, nh, "Revision:", rev, size=4.4, bold=True)
 
 
 def notes(sh: Sheet, groups: list[HoleGroup], iso_scale: Fraction, scale: Fraction, unplaced: list[HoleGroup]):
@@ -477,7 +568,8 @@ def notes(sh: Sheet, groups: list[HoleGroup], iso_scale: Fraction, scale: Fracti
 
 
 # ── One part → one PDF ─────────────────────────────────────────────────────
-def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, date: str, logo: Path | None) -> dict:
+def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, date: str, logo: Path | None,
+                 material: str = "", finish: str = "") -> dict:
     shape = bd.import_step(str(step_path))
     bb = shape.bounding_box()
     size = (bb.size.X, bb.size.Y, bb.size.Z)
@@ -564,7 +656,8 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, da
         lw = sh.width_of(lab, 3.5, "Helvetica-Bold")
         sh.block((icx - lw / 2, ir[1] - 8, icx + lw / 2, ir[1] - 3.5), pad=1.0)
 
-    title_block(sh, step_path.stem, scale, date, drawn_by, rev, logo)
+    weight = approx_weight(shape.volume, material)
+    title_block(sh, step_path.stem, scale, date, drawn_by, rev, material, finish, weight, logo)
 
     # Hole callouts last, so they can steer around everything already placed.
     unplaced = []
@@ -585,7 +678,7 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, da
 
     notes(sh, holes, iso_scale, scale, unplaced)
     sh.save()
-    return dict(scale=fmt_scale(scale), size=size, iso_dir=iso_dir, iso_visible=round(iso_visible, 3), holes=[(g.qty, g.diameter) for g in holes],
+    return dict(scale=fmt_scale(scale), size=size, iso_dir=iso_dir, iso_visible=round(iso_visible, 3), weight=weight, holes=[(g.qty, g.diameter) for g in holes],
                 unplaced=[hole_label(g) for g in unplaced])
 
 
@@ -610,6 +703,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--drawn-by", default=os.environ.get("DRAWN_BY") or getpass.getuser(), help="title block DRAWN BY")
     ap.add_argument("--rev", default="A", help="title block REV (default A)")
     ap.add_argument("--date", default=dt.date.today().isoformat(), help="title block DATE (default today)")
+    ap.add_argument("--material", default="", help="title block MATERIAL, e.g. \"3mm mild steel\"")
+    ap.add_argument("--finish", default="", help="title block FINISH, e.g. \"black textured PC\"")
     ap.add_argument("--logo", type=Path, default=DEFAULT_LOGO, help="logo image for the title block")
     ap.add_argument("-r", "--recursive", action="store_true", help="also search sub-folders")
     ap.add_argument("--preview", action="store_true", help="also write a PNG preview next to each PDF")
@@ -629,7 +724,8 @@ def main(argv: list[str] | None = None) -> int:
     for f in files:
         pdf = out / f"{f.stem}.pdf"
         try:
-            info = make_drawing(f, pdf, drawn_by=args.drawn_by, rev=args.rev, date=args.date, logo=args.logo)
+            info = make_drawing(f, pdf, drawn_by=args.drawn_by, rev=args.rev, date=args.date, logo=args.logo,
+                                material=args.material, finish=args.finish)
             # console output stays ASCII: Windows terminals often can't show × / Ø
             holes = ", ".join(f"{q}x dia {fmt(d)}" for q, d in info["holes"]) or "none"
             dims = " x ".join(fmt(v) for v in info["size"])
