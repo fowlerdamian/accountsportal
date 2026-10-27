@@ -116,7 +116,12 @@ def fetch_step(job: dict) -> bytes:
         raise ValueError("project file no longer exists")
     f = rows[0]
     if f["source"] == "drive" and f.get("drive_file_id"):
-        data = edge("google-drive", {"action": "download_bytes", "drive_file_id": f["drive_file_id"]}, timeout=300)
+        try:
+            data = edge("google-drive", {"action": "download_bytes", "drive_file_id": f["drive_file_id"]}, timeout=300)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 502:  # Drive 404: the file/folder was removed (usual for finished projects)
+                raise ValueError("STEP file no longer in Drive (folder removed) — re-upload it to redraw") from exc
+            raise
         if "base64" not in data:
             raise ValueError(f"Drive download failed: {data.get('error') or data}")
         return base64.b64decode(data["base64"])
