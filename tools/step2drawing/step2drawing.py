@@ -542,11 +542,15 @@ def wrap(sh: "Sheet", s: str, max_w: float, size: float) -> list[str]:
     return lines + ([cur] if cur else [])
 
 
-def title_block(sh: Sheet, drawing_number: str, scale: Fraction, date: str, drawn_by: str, rev: str,
+TB_COL_B, TB_COL_C = 78.0, 158.0  # title block column splits from its left edge
+TB_NOTES_H = 21.0  # notes box, top of column C
+
+
+def title_block(sh: Sheet, drawing_number: str, scale: Fraction, date: str, drawn_by: str,
                 material: str, finish: str, weight: str, logo: Path | None):
     """AGA title block: three columns — material/tolerances | confidentiality/owner | approvals/numbers."""
     x0, y0, W, H = SHEET_W - BORDER - TB_W, BORDER, TB_W, TB_H
-    ca, cb = x0 + 78.0, x0 + 158.0  # column splits
+    ca, cb = x0 + TB_COL_B, x0 + TB_COL_C
     top = y0 + H
     sh.rect(x0, y0, W, H)
     sh.block((x0, y0, x0 + W, top), pad=2.0)
@@ -611,11 +615,11 @@ def title_block(sh: Sheet, drawing_number: str, scale: Fraction, date: str, draw
     for i, t in enumerate(OWNER_LINES):
         sh.text(ca + 1.5, y0 + 6.6 - i * 2.6, t, size=2.2, anchor="start")
 
-    # ── Column C: description, drawn, checked, part number, drawing number / sheet / revision
+    # ── Column C: notes (filled by notes()), drawn, checked, part number, drawing number / sheet
     cw = x0 + W - cb
     hw = cw / 2
-    y = top - 21.0
-    box(cb, y, cw, 21.0, "Description:")
+    y = top - TB_NOTES_H
+    box(cb, y, cw, TB_NOTES_H, "Notes:")
     y -= 9.0
     box(cb, y, hw, 9.0, "Drawn by:", drawn_by, size=3.6)
     box(cb + hw, y, hw, 9.0, "Drawn date:", date, size=3.6)
@@ -625,36 +629,38 @@ def title_block(sh: Sheet, drawing_number: str, scale: Fraction, date: str, draw
     y -= 12.0
     box(cb, y, cw, 12.0, "Part Number:", part_number(drawing_number), size=4.8)
     nh = y - y0
-    nw, sw = cw * 0.6, cw * 0.2
+    nw = cw * 0.72
     box(cb, y0, nw, nh, "Drawing Number:", drawing_number, size=4.8)
-    box(cb + nw, y0, sw, nh, "Sheet:", "1 of 1", size=3.4)
-    box(cb + nw + sw, y0, cw - nw - sw, nh, "Revision:", rev, size=4.4, bold=True)
+    box(cb + nw, y0, cw - nw, nh, "Sheet:", "1 of 1", size=3.4)
 
 
 def notes(sh: Sheet, groups: list[HoleGroup], iso_scale: Fraction, scale: Fraction, unplaced: list[HoleGroup]):
-    x, y = BORDER + 6, BORDER + TB_H - 6
-    lines = ["NOTES", "1. ALL DIMENSIONS IN MILLIMETRES.", "2. THIRD ANGLE PROJECTION.",
+    lines = ["1. ALL DIMENSIONS IN MILLIMETRES.", "2. THIRD ANGLE PROJECTION.",
              "3. ENVELOPE DIMENSIONS ONLY UNLESS SHOWN."]
     if groups:
-        lines.append(f"{len(lines)}. HOLES: " + ", ".join(
+        lines.append(f"{len(lines) + 1}. HOLES: " + ", ".join(
             hole_label(g) + (" (INCLINED AXIS)" if g.axis is None else "") for g in groups) + ".")
     if unplaced:
-        lines.append(f"{len(lines)}. NOT CALLED OUT ON VIEWS: " + ", ".join(hole_label(g) for g in unplaced) + ".")
+        lines.append(f"{len(lines) + 1}. NOT CALLED OUT ON VIEWS: " + ", ".join(hole_label(g) for g in unplaced) + ".")
     if iso_scale != scale:
-        lines.append(f"{len(lines)}. ISOMETRIC VIEW AT {fmt_scale(iso_scale)}.")
-    # wrap to the notes area (left of the title block), continuation lines indented
-    max_w = SHEET_W - BORDER - TB_W - 6 - x
-    row = 0
-    for i, s in enumerate(lines):
-        size = 3.0 if i else 3.5
-        for j, part in enumerate(wrap(sh, s, max_w - (4.0 if i else 0), size) if i else [s]):
-            sh.text(x + (4.0 if j else 0), y - row * 5.0, part, size=size, anchor="start",
-                    font="Helvetica-Bold" if i == 0 else "Helvetica")
-            row += 1
+        lines.append(f"{len(lines) + 1}. ISOMETRIC VIEW AT {fmt_scale(iso_scale)}.")
+    # Into the title block's Notes box, shrinking the text until every wrapped line fits.
+    x = SHEET_W - BORDER - TB_W + TB_COL_C + 1.2
+    max_w = SHEET_W - BORDER - x - 1.2
+    top = BORDER + TB_H - 3.6  # below the "Notes:" label
+    avail = TB_NOTES_H - 4.4
+    size, indent = 2.5, 2.5
+    while True:
+        rows = [(j > 0, part) for s in lines for j, part in enumerate(wrap(sh, s, max_w - indent, size))]
+        if len(rows) * size * 1.2 <= avail or size <= 1.2:
+            break
+        size -= 0.1
+    for k, (cont, part) in enumerate(rows):
+        sh.text(x + (indent if cont else 0), top - size - k * size * 1.2, part, size=size, anchor="start")
 
 
 # ── One part → one PDF ─────────────────────────────────────────────────────
-def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, date: str, logo: Path | None,
+def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, date: str, logo: Path | None,
                  material: str = "", finish: str = "") -> dict:
     shape, reoriented = orient_part(bd.import_step(str(step_path)))
     bb = shape.bounding_box()
@@ -687,7 +693,6 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, da
 
     sh = Sheet(out_path)
     sh.rect(BORDER, BORDER, SHEET_W - 2 * BORDER, SHEET_H - 2 * BORDER, width=0.7)
-    sh.block((BORDER, BORDER, SHEET_W - BORDER - TB_W, BORDER + TB_H))  # notes area
 
     view_rects: dict[str, Rect] = {}
     for name, (cx, cy) in centres.items():
@@ -743,7 +748,7 @@ def make_drawing(step_path: Path, out_path: Path, *, drawn_by: str, rev: str, da
         sh.block((icx - lw / 2, ir[1] - 8, icx + lw / 2, ir[1] - 3.5), pad=1.0)
 
     weight = approx_weight(shape.volume, material)
-    title_block(sh, step_path.stem, scale, date, drawn_by, rev, material, finish, weight, logo)
+    title_block(sh, step_path.stem, scale, date, drawn_by, material, finish, weight, logo)
 
     # Hole callouts last, so they can steer around everything already placed.
     unplaced = []
@@ -787,7 +792,6 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("input", type=Path, help="folder containing .step / .stp files")
     ap.add_argument("-o", "--out", type=Path, help="output folder (default: <input>/drawings)")
     ap.add_argument("--drawn-by", default=os.environ.get("DRAWN_BY") or getpass.getuser(), help="title block DRAWN BY")
-    ap.add_argument("--rev", default="A", help="title block REV (default A)")
     ap.add_argument("--date", default=dt.date.today().isoformat(), help="title block DATE (default today)")
     ap.add_argument("--material", default="", help="title block MATERIAL, e.g. \"3mm mild steel\"")
     ap.add_argument("--finish", default="", help="title block FINISH, e.g. \"black textured PC\"")
@@ -810,7 +814,7 @@ def main(argv: list[str] | None = None) -> int:
     for f in files:
         pdf = out / f"{f.stem}.pdf"
         try:
-            info = make_drawing(f, pdf, drawn_by=args.drawn_by, rev=args.rev, date=args.date, logo=args.logo,
+            info = make_drawing(f, pdf, drawn_by=args.drawn_by, date=args.date, logo=args.logo,
                                 material=args.material, finish=args.finish)
             # console output stays ASCII: Windows terminals often can't show × / Ø
             holes = ", ".join(f"{q}x dia {fmt(d)}" for q, d in info["holes"]) or "none"

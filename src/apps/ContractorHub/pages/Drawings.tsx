@@ -30,7 +30,6 @@ interface DrawingJob {
   part_name:   string;
   step_path:   string;
   drawn_by:    string | null;
-  rev:         string;
   material:    string | null;
   finish:      string | null;
   status:      Status;
@@ -108,7 +107,6 @@ export default function Drawings() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(0);
-  const [rev, setRev] = useState("A");
   const [drawnBy, setDrawnBy] = useState("");
   const [material, setMaterial] = useState(() => { try { return localStorage.getItem(MATERIAL_KEY) ?? ""; } catch { return ""; } });
   const [finish, setFinish]     = useState(() => { try { return localStorage.getItem(FINISH_KEY) ?? ""; } catch { return ""; } });
@@ -148,7 +146,7 @@ export default function Drawings() {
         if (up.error) throw up.error;
         const { error } = await supabase.from("step_drawing_jobs" as any).insert({
           id, file_name: file.name, part_name: stem(file.name), step_path: path,
-          drawn_by: drawnBy.trim() || null, rev: rev.trim() || "A",
+          drawn_by: drawnBy.trim() || null,
           material: material.trim(), finish: finish.trim(),
         });
         if (error) throw error;
@@ -161,7 +159,7 @@ export default function Drawings() {
     }
     if (queued) toast.success(`${queued} drawing${queued > 1 ? "s" : ""} queued`);
     refresh();
-  }, [drawnBy, rev, material, finish, refresh]);
+  }, [drawnBy, material, finish, refresh]);
 
   const openPdf = async (job: DrawingJob) => {
     try { window.open(await signedUrl(job.pdf_path!), "_blank", "noopener"); }
@@ -265,16 +263,6 @@ export default function Drawings() {
               className="h-8 w-56 rounded border border-[#333] bg-transparent px-2 text-sm text-white focus:border-[var(--brand-accent)] focus:outline-none"
             />
           </label>
-          <label className="grid gap-1 text-xs text-muted-foreground" htmlFor="rd-drawings-rev">
-            Rev
-            <input
-              id="rd-drawings-rev"
-              value={rev}
-              maxLength={4}
-              onChange={(e) => setRev(e.target.value.toUpperCase())}
-              className="h-8 w-16 rounded border border-[#333] bg-transparent px-2 text-sm text-white focus:border-[var(--brand-accent)] focus:outline-none"
-            />
-          </label>
           <p className="text-xs text-muted-foreground pb-2">Applied to the next files you drop.</p>
         </div>
 
@@ -325,7 +313,7 @@ export default function Drawings() {
                     )}
                     {job.status === "error" && <p className="text-xs text-red-400 break-words">{job.error}</p>}
                     <div className="mt-auto flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
-                      <span>Rev {job.rev}{job.material ? ` · ${job.material}` : ""}{job.finish ? ` · ${job.finish}` : ""}{job.drawn_by ? ` · ${job.drawn_by}` : ""} · {new Date(job.created_at).toLocaleDateString("en-AU")}</span>
+                      <span>{[job.material, job.finish, job.drawn_by].filter(Boolean).map((v) => `${v} · `).join("")}{new Date(job.created_at).toLocaleDateString("en-AU")}</span>
                       <span className="flex items-center gap-1">
                         {job.status === "done" && (
                           <button type="button" onClick={() => downloadPdf(job)} className="rounded p-1 hover:text-white" title="Download PDF">
