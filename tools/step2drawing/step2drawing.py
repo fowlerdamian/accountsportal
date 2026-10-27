@@ -532,6 +532,17 @@ def part_number(drawing_number: str) -> str:
     return re.sub(r"\d{6}$", "", drawing_number) or drawing_number
 
 
+def drawn_date(drawing_number: str, fallback: str) -> str:
+    """Drawn date from the drawing number's trailing DDMMYY (FETFR281026 → 28/10/2026); fallback if none/invalid."""
+    m = re.search(r"(\d{2})(\d{2})(\d{2})$", drawing_number)
+    if m:
+        try:
+            return dt.date(2000 + int(m[3]), int(m[2]), int(m[1])).strftime("%d/%m/%Y")
+        except ValueError:
+            pass
+    return fallback
+
+
 def wrap(sh: "Sheet", s: str, max_w: float, size: float) -> list[str]:
     lines, cur = [], ""
     for word in s.split():
@@ -660,7 +671,7 @@ def title_block(sh: Sheet, drawing_number: str, scale: Fraction, date: str, draw
     box(cb, y, cw, TB_NOTES_H, "Notes:")
     y -= 9.0
     box(cb, y, hw, 9.0, "Drawn by:", drawn_by, size=3.6)
-    box(cb + hw, y, hw, 9.0, "Drawn date:", date, size=3.6)
+    box(cb + hw, y, hw, 9.0, "Drawn date:", drawn_date(drawing_number, date), size=3.6)
     y -= 9.0
     box(cb, y, hw, 9.0, "Checked/Approved by:")
     box(cb + hw, y, hw, 9.0, "Checked/Approved date:")
