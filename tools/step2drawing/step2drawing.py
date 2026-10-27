@@ -101,7 +101,13 @@ def _polyline(edge: bd.Edge, resolution: float) -> list[tuple[float, float]]:
     else:
         n = max(8, min(400, int(edge.length / max(resolution, 1e-6))))
         ts = [i / n for i in range(n + 1)]
-    return [(p.X, p.Y) for p in (edge.position_at(t) for t in ts)]
+    try:
+        return [(p.X, p.Y) for p in (edge.position_at(t) for t in ts)]
+    except Exception:  # degenerate HLR edge (OCC Standard_ConstructionError): endpoints, else skip it
+        try:
+            return [(v.X, v.Y) for v in edge.vertices()]
+        except Exception:
+            return []
 
 
 def project(shape: bd.Shape, direction, up, centre: bd.Vector, resolution: float, hidden=True) -> ProjectedView:

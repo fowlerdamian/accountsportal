@@ -156,12 +156,19 @@ def process(job: dict, make_drawing, render_preview, fmt) -> None:
                     time.sleep(5 * (attempt + 1))
 
         if job.get("project_id"):  # project drawing → its Drive folder, named by drawing number
-            res = edge("google-drive", {"action": "save_drawing", "project_id": job["project_id"],
-                                        "filename": pdf.name, "base64": base64.b64encode(pdf.read_bytes()).decode(),
-                                        # overwrite the PDF this drawing saved last time, even if the STEP was renamed
-                                        "replace_id": job.get("drive_pdf_id"), "replace_name": job.get("drive_pdf_name")})
+            # Best effort: the drawing is done either way (archived projects' folders are often gone).
+            try:
+                res = edge("google-drive", {"action": "save_drawing", "project_id": job["project_id"],
+                                            "filename": pdf.name, "base64": base64.b64encode(pdf.read_bytes()).decode(),
+                                            # overwrite the PDF this drawing saved last time, even if the STEP was renamed
+                                            "replace_id": job.get("drive_pdf_id"), "replace_name": job.get("drive_pdf_name")})
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", "replace")[:200] if exc.fp else ""
+                res = {"error": f"HTTP {exc.code} {detail}".strip()}
             if res.get("drive_file_id"):
                 drive_pdf = {"drive_pdf_id": res["drive_file_id"], "drive_pdf_name": pdf.name}
+            else:
+                drive_pdf = {"error": f"Drawn, but not saved to Drive: {res.get('error') or res.get('skipped')}"[:500]}
             log(f"drive {jid} {pdf.name}: {res.get('error') or res.get('skipped') or ('replaced' if res.get('replaced') else 'saved')}")
 
     holes = ", ".join(f"{q}× Ø{fmt(d)}" if q > 1 else f"Ø{fmt(d)}" for q, d in info["holes"])
