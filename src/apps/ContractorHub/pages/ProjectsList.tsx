@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus, Loader2, Calendar, AlertCircle, Check, X as XIcon,
-  Trash2, RotateCcw, Search, LayoutGrid, Columns3, ArrowUp, ArrowDown,
+  Trash2, RotateCcw, Search, LayoutGrid, Columns3, ArrowUp, ArrowDown, Sparkles,
 } from "lucide-react";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
@@ -33,6 +33,7 @@ import { supabase } from "@guide/integrations/supabase/client";
 import { cn } from "@guide/lib/utils";
 import { localToday } from "@portal/lib/dates";
 import { TrashIcon } from "@portal/components/icons";
+import { smartCategories } from "@hub/lib/smartCategories";
 
 // ── Stage colour map ──────────────────────────────────────────
 // Keyed by stage NAME, not position: when a stage is added to
@@ -259,6 +260,8 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
   const [sortBy,          setSortBy]          = useState<SortBy>("priority");
   const [sortDir,         setSortDir]         = useState<SortDir>("desc");
   const [showBin,         setShowBin]         = useState(false);
+  const [showSmart,       setShowSmart]       = useState(false);
+  const [smartKey,        setSmartKey]        = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: allProjects = [],    isLoading }         = useProjects();
@@ -299,7 +302,12 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
     return stage ? NEW_PRODUCT_STAGES.indexOf(stage.name as any) : -1;
   }
 
+  // Smart categories are rebuilt from this tab's projects on every render (see lib/smartCategories).
+  const categories = smartCategories(projects);
+  const activeCategory = categories.find(c => c.key === smartKey);
+
   const filtered = projects
+    .filter(p => !activeCategory || activeCategory.ids.has(p.id))
     .filter(p => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => {
       let cmp = 0;
@@ -336,6 +344,19 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
               className="pl-8 h-8 text-xs"
             />
           </div>
+
+          {/* Smart categories toggle */}
+          <button
+            onClick={() => { setShowSmart(v => !v); if (showSmart) setSmartKey(null); }}
+            className={cn(
+              "px-3 py-0.5 rounded-full text-xs font-medium transition-colors border flex items-center gap-1",
+              showSmart ? "bg-muted text-foreground border-border" : "text-muted-foreground border-transparent hover:border-border/50",
+            )}
+          >
+            <Sparkles className="w-3 h-3 opacity-60" />
+            Smart
+            {activeCategory && <span className="ml-0.5 opacity-60">· {activeCategory.label}</span>}
+          </button>
 
           {/* Sort pills */}
           <div className="flex items-center gap-1">
@@ -397,6 +418,31 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
             </Button>
           </div>
         </div>
+
+        {/* ── Smart category chips (a project can sit in several) ── */}
+        {showSmart && !showBin && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {categories.length === 0 ? (
+              <span className="text-xs text-muted-foreground">Not enough projects to group yet.</span>
+            ) : categories.map(c => {
+              const active = c.key === smartKey;
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setSmartKey(active ? null : c.key)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
+                    active
+                      ? "bg-[rgba(var(--brand-accent-rgb),0.12)] text-[var(--brand-accent)] border-[var(--brand-accent)]"
+                      : "text-muted-foreground border-border/60 hover:border-border hover:text-foreground",
+                  )}
+                >
+                  {c.label} <span className="ml-1 opacity-50">{c.ids.size}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── Grid view ── */}
         {!showBin && view === "grid" && (
