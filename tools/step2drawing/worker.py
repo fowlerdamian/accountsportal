@@ -20,6 +20,7 @@ import base64
 import datetime as dt
 import json
 import os
+import re
 import ssl
 import sys
 import tempfile
@@ -138,11 +139,20 @@ def process(job: dict, make_drawing, render_preview, fmt) -> None:
                             date=dt.date.today().strftime("%d/%m/%Y"), logo=HERE / "assets" / "aga-logo.png")
         png = render_preview(pdf, dpi=130)
 
-        out_pdf = f"out/{jid}/{pdf.name}"
-        out_png = f"out/{jid}/{png.name}"
+        # Storage rejects keys with brackets etc. (Cut-Extrude4[1]); Drive keeps the real name.
+        safe = lambda n: re.sub(r"[^\w.\- ]+", "_", n)
+        out_pdf = f"out/{jid}/{safe(pdf.name)}"
+        out_png = f"out/{jid}/{safe(png.name)}"
         for local, remote, ctype in ((pdf, out_pdf, "application/pdf"), (png, out_png, "image/png")):
-            http("POST", f"/storage/v1/object/{BUCKET}/{object_path(remote)}", body=local.read_bytes(),
-                 headers={"Content-Type": ctype, "x-upsert": "true"}, timeout=300)
+            for attempt in range(3):  # Cloudflare 5xx blips (520) are transient
+                try:
+                    http("POST", f"/storage/v1/object/{BUCKET}/{object_path(remote)}", body=local.read_bytes(),
+                         headers={"Content-Type": ctype, "x-upsert": "true"}, timeout=300)
+                    break
+                except urllib.error.HTTPError as exc:
+                    if exc.code < 500 or attempt == 2:
+                        raise
+                    time.sleep(5 * (attempt + 1))
 
         if job.get("project_id"):  # project drawing → its Drive folder, named by drawing number
             res = edge("google-drive", {"action": "save_drawing", "project_id": job["project_id"],

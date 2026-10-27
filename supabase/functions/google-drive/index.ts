@@ -895,7 +895,8 @@ serve(async (req) => {
 
       // Encode as base64 for JSON transport.
       let bin = "";
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      // Chunked: a char-at-a-time loop hit the CPU limit (546) on ~0.5 MB STEP files.
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
       const b64 = btoa(bin);
       return json({ size: bytes.length, base64: b64 });
     }
