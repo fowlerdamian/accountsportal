@@ -130,15 +130,20 @@ function ChartTip({ active, payload, label, segments }) {
   )
 }
 
-function Legend({ segments }) {
+// Click an item to hide/show that segment in the chart (table is unaffected).
+function Legend({ segments, hidden, onToggle }) {
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-      {segments.map((s) => (
-        <span key={s.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: C.muted, fontFamily: MONO }}>
-          <span style={{ width: 9, height: 9, borderRadius: 2, background: s.hue, display: 'inline-block' }} />
-          {s.key}
-        </span>
-      ))}
+      {segments.map((s) => {
+        const off = hidden.has(s.key)
+        return (
+          <span key={s.key} onClick={() => onToggle(s.key)} title={off ? 'Show in chart' : 'Hide from chart'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: off ? C.faint : C.muted, fontFamily: MONO, cursor: 'pointer', userSelect: 'none', opacity: off ? 0.5 : 1, textDecoration: off ? 'line-through' : 'none' }}>
+            <span style={{ width: 9, height: 9, borderRadius: 2, background: off ? C.faint : s.hue, display: 'inline-block' }} />
+            {s.key}
+          </span>
+        )
+      })}
     </div>
   )
 }
@@ -200,6 +205,20 @@ function PieTip({ active, payload }) {
 function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, chartType }) {
   const isMobile = useIsMobile()
 
+  // Segments switched off via the legend — removed from the chart only.
+  const [hidden, setHidden] = useState(() => new Set())
+  const toggleHidden = (key) => setHidden((h) => {
+    const next = new Set(h)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
+  const chartSegments = useMemo(() => {
+    const vis = segments.filter((s) => !hidden.has(s.key))
+    // Recharts stacks in render order (first = bottom); stackTop segments go last
+    return [...vis.filter((s) => !s.stackTop), ...vis.filter((s) => s.stackTop)]
+  }, [segments, hidden])
+
   const chartData = useMemo(() => chartMonths.map((m) => {
     const row = { label: monthLabel(m) } // 'MMM YY'
     const byseg = rowsByMonth.get(m)
@@ -256,11 +275,11 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   // (e.g. a loss-making segment on the Profit metric) can't be a slice — they
   // render at 0 with the true figure in the tooltip.
   const pieData = useMemo(() => {
-    const rows = tableRows.rows.map((r) => ({ name: r.key, hue: r.hue, real: r[metric], value: Math.max(0, r[metric]) }))
+    const rows = tableRows.rows.filter((r) => !hidden.has(r.key)).map((r) => ({ name: r.key, hue: r.hue, real: r[metric], value: Math.max(0, r[metric]) }))
     const sum = rows.reduce((s, r) => s + r.value, 0)
     return rows.map((r) => ({ ...r, share: sum ? r.value / sum : null }))
-  }, [tableRows, metric])
-  const pieTotal = tableRows.total[metric]
+  }, [tableRows, metric, hidden])
+  const pieTotal = pieData.reduce((s, d) => s + d.real, 0)
 
   const pieLabel = ({ cx, cy, midAngle, outerRadius, percent, payload }) => {
     if (!percent || percent < 0.04) return null
@@ -276,7 +295,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   }
 
   return (
-    <Panel title={title} icon={icon} right={<Legend segments={segments} />}>
+    <Panel title={title} icon={icon} right={<Legend segments={segments} hidden={hidden} onToggle={toggleHidden} />}>
       {chartType === 'pie' ? (
         <ResponsiveContainer width="100%" height={isMobile ? 210 : 240}>
           <PieChart>
@@ -303,10 +322,9 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
           <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
           <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={isMobile ? 40 : 48} />
           <Tooltip content={<ChartTip segments={segments} />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-          {/* Recharts stacks in render order (first = bottom); stackTop segments go last */}
-          {[...segments.filter((s) => !s.stackTop), ...segments.filter((s) => s.stackTop)].map((s, i) => (
+          {chartSegments.map((s, i) => (
             <Bar key={s.key} dataKey={s.key} name={s.key} stackId="m" fill={s.hue}
-              fillOpacity={0.8} radius={i === segments.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]}
+              fillOpacity={0.8} radius={i === chartSegments.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]}
               isAnimationActive={false} />
           ))}
         </ComposedChart>
