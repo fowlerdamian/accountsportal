@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus, Loader2, Calendar, AlertCircle, Check, X as XIcon,
-  Trash2, RotateCcw, Search, LayoutGrid, Columns3, ArrowUp, ArrowDown, Sparkles,
+  Trash2, RotateCcw, Search, LayoutGrid, Columns3, ArrowUp, ArrowDown, ListFilter,
 } from "lucide-react";
 import { Button } from "@guide/components/ui/button";
 import { Input } from "@guide/components/ui/input";
@@ -345,7 +345,7 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
             />
           </div>
 
-          {/* Smart categories toggle */}
+          {/* Category filter toggle (smart categories) */}
           <button
             onClick={() => { setShowSmart(v => !v); if (showSmart) setSmartKey(null); }}
             className={cn(
@@ -353,8 +353,8 @@ function ProjectsListBody({ bucket }: { bucket: Bucket }) {
               showSmart ? "bg-muted text-foreground border-border" : "text-muted-foreground border-transparent hover:border-border/50",
             )}
           >
-            <Sparkles className="w-3 h-3 opacity-60" />
-            Smart
+            <ListFilter className="w-3 h-3 opacity-60" />
+            Filter
             {activeCategory && <span className="ml-0.5 opacity-60">· {activeCategory.label}</span>}
           </button>
 
