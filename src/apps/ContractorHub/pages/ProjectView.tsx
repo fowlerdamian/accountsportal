@@ -26,6 +26,7 @@ import { StagedActivityFeed } from "@hub/components/StagedActivityFeed";
 import { TaskDrawer } from "@hub/components/TaskDrawer";
 import { LogTimeForm } from "@hub/components/LogTimeForm";
 import { ProductStagesView } from "@hub/components/ProductStagesView";
+import { MaterialFinishChip } from "@hub/components/MaterialFinishChip";
 import { cn } from "@guide/lib/utils";
 import {
   useProject, useTasks, useProjectBudgetSummary, useActivityLog,
@@ -638,6 +639,7 @@ function ProjectViewContent() {
               Due: {project.due_date}
             </span>
           )}
+          <MaterialFinishChip projectId={project.id} material={project.material} finish={project.finish} />
           {editingDesc ? (
             <textarea
               value={descValue}

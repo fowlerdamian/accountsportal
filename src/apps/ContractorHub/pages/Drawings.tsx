@@ -7,6 +7,7 @@ import { TrashIcon } from "@portal/components/icons";
 import { supabase } from "@guide/integrations/supabase/client";
 import { useAuth } from "@guide/contexts/AuthContext";
 import { cn } from "@guide/lib/utils";
+import { MATERIAL_SUGGESTIONS, FINISH_SUGGESTIONS } from "@hub/lib/materials";
 
 // STEP → A3 third-angle PDF drawings. The portal only queues jobs; the
 // geometry work runs in tools/step2drawing/worker.py on the R&D PC.
@@ -16,8 +17,6 @@ const STEP_EXTS = [".step", ".stp"];
 const DRAWN_BY_KEY = "rd-drawings-drawn-by";
 const MATERIAL_KEY = "rd-drawings-material";
 const FINISH_KEY   = "rd-drawings-finish";
-const MATERIAL_SUGGESTIONS = ["3mm Mild Steel", "2mm Mild Steel", "5mm Mild Steel", "3mm Aluminium", "2mm Stainless Steel"];
-const FINISH_SUGGESTIONS   = ["Black Textured PC", "Black Satin PC", "Zinc Plated", "Galvanised", "Raw"];
 const INPUT_CLS = "h-8 rounded border border-[#333] bg-transparent px-2 text-sm text-white focus:border-[var(--brand-accent)] focus:outline-none";
 const WORKER_LATE_MS = 2 * 60_000;
 

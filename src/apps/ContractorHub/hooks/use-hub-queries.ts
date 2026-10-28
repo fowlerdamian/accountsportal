@@ -48,6 +48,8 @@ export interface Project {
   thumbnail_url:    string | null;
   drive_folder_id:  string | null;
   deleted_at:       string | null;
+  material:         string | null;  // drawing title block (Material & finish popup)
+  finish:           string | null;
   created_at:       string;
 }
 
