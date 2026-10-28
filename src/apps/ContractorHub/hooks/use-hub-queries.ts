@@ -1127,11 +1127,11 @@ export function useAllProjectLatestFileThumbnail() {
         .not("project_id", "is", null)
         .order("modified_at", { ascending: false });
       if (error) throw error;
-      // Card hero: newest part thumbnail, else newest assembly / STEP, else any file
-      // thumbnail (photos etc.), so projects without a SLDPRT still get a picture.
+      // Card hero: newest STEP render (cloud, api/step-thumbnails — always current),
+      // else a SolidWorks thumbnail, else any file thumbnail (photos etc.).
       const rank = (name: string) => {
         const ext = name.split(".").pop()?.toLowerCase() ?? "";
-        return ext === "sldprt" ? 0 : ["sldasm", "step", "stp"].includes(ext) ? 1 : 2;
+        return ["step", "stp"].includes(ext) ? 0 : ["sldprt", "sldasm"].includes(ext) ? 1 : 2;
       };
       const best = new Map<string, { url: string; rank: number }>();
       for (const row of (data ?? []) as Array<{ project_id: string; filename: string; thumbnail_url: string }>) {
