@@ -44,7 +44,16 @@ interface SnapRow {
   locations: Record<string, number>; // every location's on-hand, for reference (totals above are STOCK_LOCATIONS only)
 }
 
+// Called from the browser by the finance Sync button (financeSync.js) — without
+// CORS the preflight ran the whole job and the real POST was blocked.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+
 serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const started = Date.now();
   let body: Json = {};
   try { body = await req.json(); } catch { /* GET or empty body */ }
@@ -146,13 +155,13 @@ serve(async (req) => {
       ok: true, snapshot_date: snapshotDate, products: prodList.length, availability_rows: availRows,
       unmatched, snapshot_rows: snapList.length, stock_value: Math.round(stockValue), ms: Date.now() - started,
       stock_locations: STOCK_LOCATIONS, locations_seen: Object.fromEntries(seenLocations),
-    }), { headers: { "Content-Type": "application/json" } });
+    }), { headers: jsonHeaders });
   } catch (e) {
     const msg = String(e);
     console.error("[stock-turn-snapshot]", msg);
     await sc.from("cin7_stat_sync_state").update({ last_snapshot_error: msg }).eq("id", 1);
     return new Response(JSON.stringify({ ok: false, error: msg }), {
-      status: 500, headers: { "Content-Type": "application/json" },
+      status: 500, headers: jsonHeaders,
     });
   }
 });

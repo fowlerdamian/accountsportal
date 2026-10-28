@@ -188,7 +188,16 @@ function saleToRows(sale: Json, ctype: string, buckets: Map<string, string>): { 
   return { stat: [...acc.values()], product: [...prod.values()] };
 }
 
+// Called from the browser by the finance Sync button (financeSync.js) — without
+// CORS the preflight ran the whole job and the real POST was blocked.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+
 serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const started = Date.now();
   let body: Json = {};
   try { body = await req.json(); } catch { /* GET or empty body */ }
@@ -204,7 +213,7 @@ serve(async (req) => {
     console.error("[stat-breakdown]", msg);
     await sc.from("cin7_stat_sync_state").update({ last_run: new Date().toISOString(), last_error: msg }).eq("id", 1);
     return new Response(JSON.stringify({ ok: false, error: msg, ...extra }), {
-      status: 500, headers: { "Content-Type": "application/json" },
+      status: 500, headers: jsonHeaders,
     });
   };
 
@@ -218,7 +227,7 @@ serve(async (req) => {
     .select("id");
   if (!leased?.length) {
     return new Response(JSON.stringify({ ok: true, skipped: "another sync run is active" }), {
-      headers: { "Content-Type": "application/json" },
+      headers: jsonHeaders,
     });
   }
   const releaseLease = () => sc.from("cin7_stat_sync_state").update({ running_until: null }).eq("id", 1);
@@ -331,7 +340,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok: true, queued, processed, pending: pending ?? 0, ms: Date.now() - started,
-    }), { headers: { "Content-Type": "application/json" } });
+    }), { headers: jsonHeaders });
   } catch (e) {
     await releaseLease();
     return await fail(String(e));
