@@ -12,7 +12,7 @@
     "api/opportunity-sync.js":       { "maxDuration": 10 },
     "api/dialpad-mcp.js":            { "maxDuration": 60 },
     "api/dialpad-sync.js":           { "maxDuration": 60 },
-    "api/step-thumbnails.js":        { "maxDuration": 300, "memory": 2048, "includeFiles": "node_modules/occt-import-js/dist/**" }
+    "api/step-thumbnails.js":        { "maxDuration": 300, "includeFiles": "node_modules/occt-import-js/dist/**" }
   },
   "crons": [
     { "path": "/api/sales-sync-cin7",      "schedule": "0 12 * * 1-5" },
