@@ -501,11 +501,11 @@ serve(async (req) => {
 
       const { data: existing } = await sb
         .from("files")
-        .select("id, drive_file_id, file_size, source, filename")
+        .select("id, drive_file_id, file_size, source, filename, thumbnail_source_mtime")
         .eq("project_id", project_id)
         .not("drive_file_id", "is", null);
 
-      type ExistingRow = { id: string; drive_file_id: string; file_size: number | null; source: string; filename: string };
+      type ExistingRow = { id: string; drive_file_id: string; file_size: number | null; source: string; filename: string; thumbnail_source_mtime: string | null };
       const existingArr: ExistingRow[] = (existing ?? []) as ExistingRow[];
       const existingByDriveId = new Map(existingArr.map((f) => [f.drive_file_id, f]));
       const driveIds = new Set(driveFiles.map((f) => f.id));
@@ -582,16 +582,25 @@ serve(async (req) => {
 
       for (const f of changedFiles) {
         const ex = existingByDriveId.get(f.id)!;
+        // The local SLDPRT renderer often draws the new version from the Drive mount
+        // before Drive's cloud size catches up — keep a thumbnail that is already
+        // at least as new as this version (2 s slack for mtime rounding).
+        const fresh = !!ex.thumbnail_source_mtime && !!f.modifiedTime &&
+          Date.parse(ex.thumbnail_source_mtime) >= Date.parse(f.modifiedTime) - 2000;
         await sb.from("files")
           .update({
             filename:      f.name,
             file_size:     parseInt(f.size!, 10),
-            stl_url:       null,
-            thumbnail_url: null,
             modified_at:   f.modifiedTime ?? new Date().toISOString(),
+            ...(fresh ? {} : {
+              stl_url:       null,
+              thumbnail_url: null,
+              // un-stamp so the local renderer treats it as never attempted and redraws it
+              thumbnail_source_mtime: null,
+            }),
           })
           .eq("id", ex.id);
-        console.log("[sync_from_drive] size change on", f.name, "— cleared stl_url/thumbnail_url");
+        console.log("[sync_from_drive] size change on", f.name, fresh ? "— thumbnail already current, kept" : "— cleared stl_url/thumbnail_url");
       }
 
       let removed = 0;

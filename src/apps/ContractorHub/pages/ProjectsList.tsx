@@ -86,6 +86,8 @@ function ProjectCard({
   const borderClass = isProduct
     ? (activeStage ? color.border : "border-l-zinc-600")
     : "border-l-zinc-600";
+  // Hero image candidates in order; a broken one (deleted storage object) falls through to the next.
+  const [heroFailed, setHeroFailed] = useState(0);
 
   return (
     <div
@@ -103,7 +105,7 @@ function ProjectCard({
           to the manually-uploaded project image, then to a tinted initials
           tile. */}
       {(() => {
-        const heroSrc = latestFileThumb || project.thumbnail_url;
+        const heroSrc = [latestFileThumb, project.thumbnail_url].filter(Boolean)[heroFailed] as string | undefined;
         return (
       <div className="relative w-full aspect-[16/9] bg-muted overflow-hidden">
         {heroSrc ? (
@@ -111,6 +113,7 @@ function ProjectCard({
             src={heroSrc}
             alt=""
             loading="lazy"
+            onError={() => setHeroFailed(n => n + 1)}
             className="w-full h-full object-cover"
           />
         ) : (

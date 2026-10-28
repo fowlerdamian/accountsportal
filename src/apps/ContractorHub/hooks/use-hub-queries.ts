@@ -1122,17 +1122,24 @@ export function useAllProjectLatestFileThumbnail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("files")
-        .select("project_id, thumbnail_url, modified_at")
+        .select("project_id, filename, thumbnail_url, modified_at")
         .not("thumbnail_url", "is", null)
         .not("project_id", "is", null)
-        .ilike("filename", "%.sldprt")
         .order("modified_at", { ascending: false });
       if (error) throw error;
-      const map = new Map<string, string>();
-      for (const row of (data ?? []) as Array<{ project_id: string; thumbnail_url: string }>) {
-        if (!map.has(row.project_id)) map.set(row.project_id, row.thumbnail_url);
+      // Card hero: newest part thumbnail, else newest assembly / STEP, else any file
+      // thumbnail (photos etc.), so projects without a SLDPRT still get a picture.
+      const rank = (name: string) => {
+        const ext = name.split(".").pop()?.toLowerCase() ?? "";
+        return ext === "sldprt" ? 0 : ["sldasm", "step", "stp"].includes(ext) ? 1 : 2;
+      };
+      const best = new Map<string, { url: string; rank: number }>();
+      for (const row of (data ?? []) as Array<{ project_id: string; filename: string; thumbnail_url: string }>) {
+        const r = rank(row.filename);
+        const cur = best.get(row.project_id);
+        if (!cur || r < cur.rank) best.set(row.project_id, { url: row.thumbnail_url, rank: r });
       }
-      return map;
+      return new Map([...best].map(([pid, v]) => [pid, v.url]));
     },
   });
 }

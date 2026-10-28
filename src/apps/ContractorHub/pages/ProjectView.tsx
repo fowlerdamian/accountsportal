@@ -126,7 +126,7 @@ function ProjectViewContent() {
   const completed = !!project && isArchived(project, existingStages.find(s => s.is_active));
   useSyncDriveFiles(id, completed ? null : project?.drive_folder_id);
   useGenerateStepThumbnails(files);
-  useGenerateServerThumbnails(completed ? [] : files);
+  useGenerateServerThumbnails(files);  // also for archived: harmless if the Drive file is gone
   const { mutateAsync: uploadThumbnail }       = useUploadProjectThumbnail();
   const { mutateAsync: softDelete }            = useSoftDeleteProject();
   const { mutateAsync: createTask }            = useCreateTask();
