@@ -2,9 +2,7 @@
   "functions": {
     "api/cin7-lookup.js":            { "maxDuration": 60 },
     "api/cin7-product.js":           { "maxDuration": 10 },
-    "api/sales-sync-cin7.js":        { "maxDuration": 10 },
-    "api/sales-sync-research.js":    { "maxDuration": 10 },
-    "api/sales-sync-list.js":        { "maxDuration": 10 },
+    "api/sales-sync.js":             { "maxDuration": 10 },
     "api/notify-task-assignee.js":   { "maxDuration": 10 },
     "api/task-reminders.js":         { "maxDuration": 30 },
     "api/finance-snapshot.js":       { "maxDuration": 60 },
@@ -12,7 +10,7 @@
     "api/opportunity-sync.js":       { "maxDuration": 10 },
     "api/dialpad-mcp.js":            { "maxDuration": 60 },
     "api/dialpad-sync.js":           { "maxDuration": 60 },
-    "api/step-thumbnails.js":        { "maxDuration": 300, "includeFiles": "node_modules/occt-import-js/dist/**" }
+    "api/step-thumbnails.js":        { "maxDuration": 60, "includeFiles": "node_modules/occt-import-js/dist/**" }
   },
   "crons": [
     { "path": "/api/sales-sync-cin7",      "schedule": "0 12 * * 1-5" },
@@ -25,6 +23,9 @@
     { "path": "/api/dialpad-sync",         "schedule": "30 19 * * *" }
   ],
   "rewrites": [
+    { "source": "/api/sales-sync-cin7",     "destination": "/api/sales-sync?job=cin7" },
+    { "source": "/api/sales-sync-research", "destination": "/api/sales-sync?job=research" },
+    { "source": "/api/sales-sync-list",     "destination": "/api/sales-sync?job=list" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)",     "destination": "/index.html" }
   ]

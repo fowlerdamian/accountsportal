@@ -12,7 +12,7 @@
 import { stepTriangles, renderPng } from './_lib/step-render.js'
 
 const BUCKET = 'contractor-hub-files'
-const BUDGET_MS = 240_000
+const BUDGET_MS = 45_000  // Hobby plan: function capped at 60 s; backlog drains over several runs
 
 export default async function handler(req, res) {
   const cronSecret = process.env.CRON_SECRET
@@ -35,6 +35,9 @@ export default async function handler(req, res) {
   for (const f of queue) {
     if (Date.now() - started > BUDGET_MS) break
     try {
+      // Stamp first: if a huge part blows the 60 s limit mid-render, it is skipped
+      // next run instead of wedging the head of the queue.
+      await patch(base, h, f.id, { thumbnail_source_mtime: f.modified_at })
       const bytes = await fetchStep(base, h, f)
       const png = renderPng(await stepTriangles(bytes))
       const path = `file-thumbnails/${f.id}.png`
