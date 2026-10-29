@@ -73,6 +73,14 @@ function compact(v) {
   if (a >= 1e3) return `${s}$${Math.round(a / 1e3)}k`
   return `${s}$${Math.round(a)}`
 }
+// '4m ago' / '2h ago' / '3d ago'
+function ago(iso) {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  if (mins < 48 * 60) return `${Math.round(mins / 60)}h ago`
+  return `${Math.round(mins / 1440)}d ago`
+}
 const pct = (v, dp = 1) => (v == null || !Number.isFinite(v) ? '—' : `${(v * 100).toFixed(dp)}%`)
 
 function useStatBreakdown() {
@@ -500,6 +508,12 @@ export default function StatBreakdown() {
               }}>
               {SYNC_LABEL[syncState] ?? 'Sync all'}
             </button>
+            {data.state?.last_run && (
+              <span title={new Date(data.state.last_run).toLocaleString('en-AU')}
+                style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO, whiteSpace: 'nowrap' }}>
+                Last sync {ago(data.state.last_run)}
+              </span>
+            )}
           </div>
         </div>
 
