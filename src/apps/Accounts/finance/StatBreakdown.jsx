@@ -95,6 +95,10 @@ function useStatBreakdown() {
     // Persisted to localStorage (App.jsx) — keep it in cache as long as the saved copy lives.
     gcTime: 24 * 60 * 60_000,
     refetchOnWindowFocus: false,
+    // Phones often wake with the network not ready yet — back off and keep trying
+    // rather than giving up after two quick attempts.
+    retry: 4,
+    retryDelay: (n) => Math.min(1000 * 2 ** n, 8000),
     // While a backfill/sync is draining, keep the tab filling in by itself.
     refetchInterval: (query) => (query.state.data?.pending > 0 ? 30_000 : false),
   })
@@ -415,7 +419,14 @@ export default function StatBreakdown() {
   const chartMonths = useMemo(() => effAnchor ? chartKeys(grain, effAnchor) : [], [grain, effAnchor])
 
   if (isLoading) return <Centered>Loading stat breakdown…</Centered>
-  if (error) return <Centered tone={C.red}>Failed to load: {error.message}</Centered>
+  // A failed background refetch keeps the cached figures on screen; only an
+  // empty cache gets the full-page error.
+  if (error && !data) return (
+    <Centered tone={C.red}>
+      Failed to load: {error.message}
+      <button onClick={() => refetch()} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, cursor: 'pointer', fontSize: 11.5, fontFamily: MONO, padding: '4px 10px' }}>Retry</button>
+    </Centered>
+  )
 
   return (
     <div style={{ height: '100%', overflow: 'auto', background: C.bg, padding: isMobile ? 12 : 20, fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -500,6 +511,12 @@ export default function StatBreakdown() {
               Figures below are incomplete and will fill in automatically.
             </span>
             <button onClick={() => refetch()} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, fontFamily: MONO }}>refresh</button>
+          </div>
+        )}
+        {error && (
+          <div style={{ fontSize: 11.5, color: C.faint, fontFamily: MONO }}>
+            Couldn't refresh — showing saved figures.{' '}
+            <button onClick={() => refetch()} style={{ background: 'transparent', border: 'none', padding: 0, color: C.accent, cursor: 'pointer', fontSize: 11.5, fontFamily: MONO }}>retry</button>
           </div>
         )}
         {data.state?.last_error && (
