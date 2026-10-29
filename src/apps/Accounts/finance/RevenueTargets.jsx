@@ -9,7 +9,7 @@ import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import { computeSeasonalityTargets, applyRollingReallocation, computeRearViewForecast } from './seasonalityTargets.js'
-import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
+import FinanceSyncButton from './FinanceSyncButton.jsx'
 
 // Theme mirrors FinanceDashboard.jsx (concrete hex so recharts SVG resolves).
 const C = {
@@ -387,30 +387,6 @@ function PacingPanel({ title, right, gaugeLabel, ratio, gauge, rows, emptyHint }
   )
 }
 
-function SyncButton({ state, onClick }) {
-  const busy = state === 'syncing' || state === 'waiting'
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-      <button
-        onClick={onClick}
-        disabled={busy}
-        style={{
-          background: state === 'done' ? 'rgba(51,92,103,0.2)' : C.panel,
-          border: `1px solid ${state === 'error' ? C.red : C.border}`,
-          color: state === 'error' ? C.red : state === 'done' ? C.green : C.text,
-          borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: busy ? 'wait' : 'pointer',
-          fontFamily: '"JetBrains Mono", monospace', opacity: busy ? 0.7 : 1,
-        }}
-      >
-        {SYNC_LABEL[state]}
-      </button>
-      <span style={{ fontSize: 10, color: C.faint, fontFamily: '"JetBrains Mono", monospace' }}>
-        ⚠ uses Xero API quota — use sparingly
-      </span>
-    </div>
-  )
-}
-
 export default function RevenueTargets() {
   const { data, isLoading, error } = useTargetsData()
   const qc = useQueryClient()
@@ -420,8 +396,6 @@ export default function RevenueTargets() {
   const thisMonth = now.getMonth() + 1
   const [selYearsRaw, setSelYears] = useState(null) // null → default to current year
   // Shared with every finance app — one press syncs all of them (financeSync.js).
-  const { state: syncState, run: runSync } = useFinanceSync()
-  const handleSync = () => runSync(qc)
 
   const upsert = useMutation({
     mutationFn: async (row) => {
@@ -636,7 +610,7 @@ export default function RevenueTargets() {
               Actuals: Xero P&amp;L revenue (GST-exclusive) — same source as the Finance Dashboard · targets editable inline
             </span>
           </div>
-          <SyncButton state={syncState} onClick={handleSync} />
+          <FinanceSyncButton />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: isMobile ? 8 : 12 }}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
   CartesianGrid, Cell, ReferenceLine,
@@ -14,7 +14,7 @@ import {
   GRAINS, buildOptions, periodKeys, chartKeys, aggregate, toKey, monthLabel,
   prevAnchor, ytdWindow, periodElapsed, breakevenOf,
 } from './periods.js'
-import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
+import FinanceSyncButton from './FinanceSyncButton.jsx'
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 // Every value maps to a portal design token (src/index.css). Concrete hex is used
@@ -332,9 +332,6 @@ export default function FinanceDashboard() {
   // nightly cron hits → xero-pl-snapshot edge fn → finance_snapshot), then refetches
   // so the dashboard shows live figures without waiting for the 01:00 AEST cron.
   // Shared with every finance app — one press syncs all of them (financeSync.js).
-  const qc = useQueryClient()
-  const { state: syncState, run: runSync } = useFinanceSync()
-  const handleSync = () => runSync(qc)
 
   // ── Share current view as an image ────────────────────────────────────────────
   // Rasterises the dashboard exactly as it's currently filtered/sorted, then —
@@ -403,7 +400,7 @@ export default function FinanceDashboard() {
               grain={grain} setGrain={(g) => { setGrain(g); setAnchor(null) }}
               options={options} anchor={effAnchor} setAnchor={setAnchor}
             />
-            <SyncButton state={syncState} onClick={handleSync} />
+            <FinanceSyncButton />
             <ShareButton state={shareState} onClick={handleShare} />
           </div>
         </div>
@@ -652,31 +649,6 @@ function SnapshotCard({ cardRef, periodLabel, curr, currCases, prev, showCmp, as
         <div style={{ marginTop: 22, fontSize: 11, color: C.faint, fontFamily: MONO }}>app.automotivegroup.com.au · Finance Dashboard</div>
       </div>
     </div>
-  )
-}
-
-// Manually re-run the Xero snapshot, then refetch.
-function SyncButton({ state, onClick }) {
-  const busy = state === 'syncing' || state === 'waiting'
-  const done = state === 'done'
-  return (
-    <button onClick={onClick} disabled={busy}
-      title="Sync Xero + Cin7 across all finance apps"
-      data-html2canvas-ignore="true"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6, cursor: busy ? 'default' : 'pointer',
-        background: done ? C.accent : C.panel, color: done ? C.bg : (state === 'error' ? C.red : C.text),
-        border: `1px solid ${done ? C.accent : C.border}`, borderRadius: 7,
-        padding: '7px 12px', fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace',
-        transition: 'background 120ms, color 120ms',
-      }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-        style={busy ? { animation: 'spin 0.8s linear infinite' } : undefined}>
-        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
-        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M21 21v-5h-5" />
-      </svg>
-      {SYNC_LABEL[state] ?? 'Sync all'}
-    </button>
   )
 }
 

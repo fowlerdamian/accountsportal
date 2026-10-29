@@ -5,16 +5,16 @@
 // supabase/functions/cashflow-forecast/index.ts.
 
 import { useMemo } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis, Tooltip,
   CartesianGrid, ReferenceArea, ReferenceDot,
 } from 'recharts'
-import { WalletIcon, RefreshIcon } from '@portal/components/icons'
+import { WalletIcon } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
-import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
+import FinanceSyncButton from './FinanceSyncButton.jsx'
 
 // ─── Colour — by cash direction only. `breach` is reserved for a floor breach. ──
 const C = {
@@ -116,8 +116,6 @@ function ChartTip({ active, payload, floor }) {
 export default function CashFlow() {
   const isMobile = useIsMobile()
   const { data, isLoading, error, isFetching } = useCashFlow()
-  const qc = useQueryClient()
-  const { state: syncState, busy: syncBusy, run: runSync } = useFinanceSync()
 
   const chartData = useMemo(() => data?.weeks ?? [], [data])
   const yDomain = useMemo(() => {
@@ -153,9 +151,7 @@ export default function CashFlow() {
             <h1 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: 0 }}>Cash Flow</h1>
             <Sub>13-week forecast · Xero + Cin7 Core · AUD incl. GST</Sub>
           </div>
-          <button onClick={() => runSync(qc)} disabled={syncBusy || isFetching} title="Sync Xero + Cin7 across all finance apps" style={{ background: 'transparent', border: `1px solid ${syncState === 'error' ? C.breach : C.border}`, color: syncState === 'done' ? C.inflow : syncState === 'error' ? C.breach : C.muted, borderRadius: 5, padding: '5px 8px', cursor: syncBusy ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontFamily: MONO }}>
-            <RefreshIcon size={13} strokeWidth={1.5} /> {isFetching && syncState === 'idle' ? 'loading' : SYNC_LABEL[syncState]}
-          </button>
+          <FinanceSyncButton disabled={isFetching} />
         </div>
 
         {/* Hero + tiles */}

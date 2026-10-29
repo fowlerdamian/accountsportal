@@ -9,7 +9,7 @@
 // time, credit notes subtracted). Sync: hourly pg_cron + the shared Sync button.
 
 import { useMemo, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   PieChart, Pie, Cell,
@@ -19,7 +19,7 @@ import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import { GRAINS, buildOptions, periodKeys, chartKeys, toKey, monthLabel } from './periods.js'
-import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
+import FinanceSyncButton from './FinanceSyncButton.jsx'
 
 const C = {
   bg: '#0a0a0a', panel: '#161616', surface: '#1e1e1e',
@@ -72,14 +72,6 @@ function compact(v) {
   if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}m`
   if (a >= 1e3) return `${s}$${Math.round(a / 1e3)}k`
   return `${s}$${Math.round(a)}`
-}
-// '4m ago' / '2h ago' / '3d ago'
-function ago(iso) {
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (mins < 48 * 60) return `${Math.round(mins / 60)}h ago`
-  return `${Math.round(mins / 1440)}d ago`
 }
 const pct = (v, dp = 1) => (v == null || !Number.isFinite(v) ? '—' : `${(v * 100).toFixed(dp)}%`)
 
@@ -391,9 +383,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
 
 export default function StatBreakdown() {
   const { data, isLoading, error, refetch } = useStatBreakdown()
-  const qc = useQueryClient()
   const isMobile = useIsMobile()
-  const { state: syncState, busy: syncBusy, run: runSync } = useFinanceSync()
   const [metric, setMetric] = useState('revenue')
   // Same period filter as the Finance Dashboard: grain + anchor (periods.js).
   const [grain, setGrain] = useState('month')
@@ -498,22 +488,7 @@ export default function StatBreakdown() {
               }}>
               {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <button onClick={() => runSync(qc)} disabled={syncBusy}
-              title="Sync Xero + Cin7 across all finance apps"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, cursor: syncBusy ? 'wait' : 'pointer',
-                background: C.panel, color: syncState === 'error' ? C.red : syncState === 'done' ? C.green : C.text,
-                border: `1px solid ${C.border}`, borderRadius: 7,
-                padding: '7px 12px', fontSize: 11.5, fontFamily: MONO,
-              }}>
-              {SYNC_LABEL[syncState] ?? 'Sync all'}
-            </button>
-            {data.state?.last_run && (
-              <span title={new Date(data.state.last_run).toLocaleString('en-AU')}
-                style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO, whiteSpace: 'nowrap' }}>
-                Last sync {ago(data.state.last_run)}
-              </span>
-            )}
+            <FinanceSyncButton />
           </div>
         </div>
 

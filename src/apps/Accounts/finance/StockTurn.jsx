@@ -18,7 +18,7 @@
 // of stock, or with no COGS in the window are hidden here, everywhere on the page.
 
 import { useMemo, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, Cell,
 } from 'recharts'
@@ -27,7 +27,7 @@ import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import { monthLabel, toKey } from './periods.js'
-import { useFinanceSync, SYNC_LABEL } from './financeSync.js'
+import FinanceSyncButton from './FinanceSyncButton.jsx'
 
 const C = {
   bg: '#0a0a0a', panel: '#161616', surface: '#1e1e1e',
@@ -261,8 +261,6 @@ function LineCard({ r }) {
 
 export default function StockTurn() {
   const isMobile = useIsMobile()
-  const qc = useQueryClient()
-  const { state: syncState, busy: syncBusy, run: runSync } = useFinanceSync()
   const [months, setMonths] = useState(12)
   const { data, isLoading, error, refetch } = useStockTurn(months)
 
@@ -398,15 +396,7 @@ export default function StockTurn() {
                 </button>
               ))}
             </div>
-            <button onClick={() => runSync(qc)} disabled={syncBusy}
-              title="Sync Xero + Cin7 across all finance apps (includes a fresh stock snapshot)"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: syncBusy ? 'wait' : 'pointer',
-                background: C.panel, color: syncState === 'error' ? C.red : syncState === 'done' ? C.green : C.text,
-                border: `1px solid ${C.border}`, borderRadius: 7, padding: '7px 12px', fontSize: 11.5, fontFamily: MONO,
-              }}>
-              {SYNC_LABEL[syncState] ?? 'Sync all'}
-            </button>
+            <FinanceSyncButton />
           </div>
         </div>
 

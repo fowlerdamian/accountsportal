@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from 'react'
 import { supabase } from '@portal/lib/supabase'
 
-export const FINANCE_QUERY_KEYS = [['finance-dashboard'], ['revenue-targets'], ['cashflow-forecast'], ['stat-breakdown'], ['stock-turn']]
+export const FINANCE_QUERY_KEYS = [['finance-dashboard'], ['revenue-targets'], ['cashflow-forecast'], ['stat-breakdown'], ['stock-turn'], ['finance-sync-stamp']]
 
 // Invoice sync is fired async by pg_net; give it this long before refetching targets.
 const INVOICE_SYNC_SETTLE_MS = 75_000
