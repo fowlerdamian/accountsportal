@@ -137,8 +137,17 @@ const CONFIG = {
     trailingMonths: 3,
   },
 
-  /** Xero. Bank accounts to exclude from "cash at bank" (e.g. credit cards). Case-insensitive names. */
-  xero: { excludeBankAccounts: [] as string[], observedPaymentDays: 180 },
+  /**
+   * Xero. Bank accounts to exclude from "cash at bank" (credit cards), and payment-
+   * processor clearing accounts whose NEGATIVE balance is a payout-timing artefact,
+   * not cash owed — those are floored at 0 (a positive balance is funds in transit and
+   * still counts). Case-insensitive names. Matches Xero's own cash figure.
+   */
+  xero: {
+    excludeBankAccounts: ["Credit Card"] as string[],
+    clearingAccounts: ["Stripe", "New Stripe", "Square Balance", "PayPal"] as string[],
+    observedPaymentDays: 180,
+  },
 
   /** Cin7 Core. */
   cin7: { cacheMinutes: 120, maxPoDetailCalls: 60, poLookbackDays: 180, maxSoDetailCalls: 60, soLookbackDays: 120 },
@@ -250,7 +259,8 @@ async function bankClosing(auth: { token: string; tenantId: string }, toDate: st
   // Balance Sheet "Bank" section (scope accounting.reports.balancesheet.read — BankSummary needs reports.read).
   const j = await xeroGet(auth, `/Reports/BalanceSheet?date=${toDate}&standardLayout=true`);
   const excl = CONFIG.xero.excludeBankAccounts.map((s) => s.toLowerCase());
-  let total = 0; const accounts: { name: string; balance: number }[] = [];
+  const clearing = CONFIG.xero.clearingAccounts.map((s) => s.toLowerCase());
+  let total = 0; const accounts: { name: string; balance: number; counted?: number }[] = [];
   const walk = (rs: any[], section: string) => {
     for (const r of rs ?? []) {
       const title = r.Title ? String(r.Title) : section;
@@ -260,17 +270,27 @@ async function bankClosing(auth: { token: string; tenantId: string }, toDate: st
       if (!(cells[0]?.Attributes ?? []).some((a: any) => a.Id === "account")) continue;
       if (excl.includes(name.toLowerCase())) continue;
       const bal = parseFloat(String(cells[1]?.Value ?? "0").replace(/,/g, "")) || 0;
-      accounts.push({ name, balance: bal }); total += bal;
+      const counted = clearing.includes(name.toLowerCase()) ? Math.max(0, bal) : bal;
+      accounts.push({ name, balance: bal, ...(counted !== bal ? { counted } : {}) }); total += counted;
     }
   };
   walk(j?.Reports?.[0]?.Rows, "");
   return { total, accounts };
 }
 
+// Most recent dated bank activity: spend/receive money (BankTransactions) OR an
+// invoice/bill payment (Payments) — reconciling an invoice creates only the latter,
+// so BankTransactions alone reported the balance as days older than it was.
 async function latestBankTxnDate(auth: { token: string; tenantId: string }): Promise<Date | null> {
-  const j = await xeroGet(auth, `/BankTransactions?order=${encodeURIComponent("Date DESC")}&page=1`);
+  const order = encodeURIComponent("Date DESC");
+  const [bt, pay] = await Promise.all([
+    xeroGet(auth, `/BankTransactions?order=${order}&page=1`),
+    xeroGet(auth, `/Payments?order=${order}&page=1`),
+  ]);
   let max: Date | null = null;
-  for (const t of j.BankTransactions ?? []) { const d = xeroDate(t.Date); if (d && (!max || d > max)) max = d; }
+  for (const t of [...(bt.BankTransactions ?? []), ...(pay.Payments ?? [])]) {
+    const d = xeroDate(t.Date); if (d && (!max || d > max)) max = d;
+  }
   return max;
 }
 
