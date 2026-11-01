@@ -77,7 +77,9 @@ const pct = (v, dp = 1) => (v == null || !Number.isFinite(v) ? '—' : `${(v * 1
 
 function useStatBreakdown() {
   return useQuery({
-    queryKey: ['stat-breakdown'],
+    // Version suffix: bump when the result shape changes so a persisted cache
+    // from an older bundle (localStorage, App.jsx) is refetched, not reused.
+    queryKey: ['stat-breakdown', 'v2'],
     queryFn: async () => {
       const [rows, cross, pending, state] = await Promise.all([
         supabase.from('stat_breakdown_monthly').select('*').order('period_month'),
