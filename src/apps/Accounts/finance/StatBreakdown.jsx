@@ -206,8 +206,36 @@ function PieTip({ active, payload }) {
 
 // One cross-section: chart (stacked monthly bars or period pie) + table for the
 // selected period.
-function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, chartType }) {
+// Bar / Pie switch in a panel header. Bar is disabled on Month grain (pie only).
+function ChartTypeToggle({ value, onChange, pieOnly }) {
+  return (
+    <div style={{ display: 'flex', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 2 }}>
+      {[{ key: 'bar', label: 'Bar' }, { key: 'pie', label: 'Pie' }].map((t) => {
+        const disabled = t.key === 'bar' && pieOnly
+        const active = value === t.key
+        return (
+          <button key={t.key} onClick={() => !disabled && onChange(t.key)} disabled={disabled}
+            title={disabled ? 'Single-month view is always a pie' : undefined}
+            style={{
+              border: 'none', cursor: disabled ? 'default' : 'pointer', padding: '3px 9px', borderRadius: 4, fontSize: 10.5,
+              fontFamily: MONO, background: active ? C.accent : 'transparent',
+              color: active ? C.bg : disabled ? C.faint : C.muted, fontWeight: active ? 600 : 400,
+              opacity: disabled ? 0.5 : 1, transition: 'background 120ms, color 120ms',
+            }}>
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, pieOnly }) {
   const isMobile = useIsMobile()
+
+  // Each panel picks its own chart style; a single month has no trend to stack.
+  const [chartTypeRaw, setChartTypeRaw] = useState('bar')
+  const chartType = pieOnly ? 'pie' : chartTypeRaw
 
   // Segments switched off via the legend — removed from the chart only.
   const [hidden, setHidden] = useState(() => new Set())
@@ -299,7 +327,12 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   }
 
   return (
-    <Panel title={title} icon={icon} right={<Legend segments={segments} hidden={hidden} onToggle={toggleHidden} />}>
+    <Panel title={title} icon={icon} right={(
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Legend segments={segments} hidden={hidden} onToggle={toggleHidden} />
+        <ChartTypeToggle value={chartType} onChange={setChartTypeRaw} pieOnly={pieOnly} />
+      </div>
+    )}>
       {chartType === 'pie' ? (
         <ResponsiveContainer width="100%" height={isMobile ? 210 : 240}>
           <PieChart>
@@ -392,10 +425,6 @@ export default function StatBreakdown() {
   // Same period filter as the Finance Dashboard: grain + anchor (periods.js).
   const [grain, setGrain] = useState('month')
   const [anchor, setAnchor] = useState(null)
-  // Chart style — a single month has no trend to stack, so Month grain is
-  // always a pie; Bar becomes selectable on CY/FY.
-  const [chartTypeRaw, setChartTypeRaw] = useState('bar')
-  const chartType = grain === 'month' ? 'pie' : chartTypeRaw
 
   // 'YYYY-MM' → segment → {revenue, cost, profit}, per dimension
   const { customerByMonth, categoryByMonth, availableKeys } = useMemo(() => {
@@ -455,28 +484,6 @@ export default function StatBreakdown() {
                 </button>
               ))}
             </div>
-            {/* Chart style — Bar is disabled on Month grain (pie only) */}
-            <div style={{ display: 'flex', background: C.panel, border: `1px solid ${C.border}`, borderRadius: 7, padding: 2 }}>
-              {[{ key: 'bar', label: 'Bar' }, { key: 'pie', label: 'Pie' }].map((t) => {
-                const disabled = t.key === 'bar' && grain === 'month'
-                const active = chartType === t.key
-                return (
-                  <button key={t.key} onClick={() => !disabled && setChartTypeRaw(t.key)}
-                    disabled={disabled}
-                    title={disabled ? 'Single-month view is always a pie' : undefined}
-                    style={{
-                      border: 'none', cursor: disabled ? 'default' : 'pointer', padding: '6px 12px', borderRadius: 5, fontSize: 11.5,
-                      fontFamily: MONO,
-                      background: active ? C.accent : 'transparent',
-                      color: active ? C.bg : disabled ? C.faint : C.muted, fontWeight: active ? 600 : 400,
-                      opacity: disabled ? 0.5 : 1,
-                      transition: 'background 120ms, color 120ms',
-                    }}>
-                    {t.label}
-                  </button>
-                )
-              })}
-            </div>
             {/* Same period filter as the Finance Dashboard */}
             <div style={{ display: 'flex', background: C.panel, border: `1px solid ${C.border}`, borderRadius: 7, padding: 2 }}>
               {GRAINS.map((g) => (
@@ -529,10 +536,10 @@ export default function StatBreakdown() {
           <>
             <Breakdown title="By Customer Type" icon={TargetIcon} segments={CUSTOMER_SEGMENTS}
               rowsByMonth={customerByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
-              periodLabel={periodLabel} metric={metric} chartType={chartType} />
+              periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'} />
             <Breakdown title="By Product Category" icon={ChartBarIcon} segments={CATEGORY_SEGMENTS}
               rowsByMonth={categoryByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
-              periodLabel={periodLabel} metric={metric} chartType={chartType} />
+              periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'} />
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Customer types from Cin7 customer tags (D = Distributors, F = Fleet, A = Bespoke, otherwise Consumers).
               Electrical = Lighting + Behind Grille Lighting + Electrical; Other = all remaining Cin7 categories.
