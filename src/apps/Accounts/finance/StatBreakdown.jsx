@@ -11,14 +11,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
-  PieChart, Pie, Cell,
+  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid,
+  PieChart, Pie, Cell, Legend as RLegend,
 } from 'recharts'
 import { LayersIcon, TargetIcon, TriangleAlertIcon, ChartBarIcon } from '@portal/components/icons'
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
-import { GRAINS, buildOptions, periodKeys, chartKeys, toKey, monthLabel } from './periods.js'
+import { GRAINS, buildOptions, periodKeys, chartKeys, toKey, monthLabel, fyLabel } from './periods.js'
 import FinanceSyncButton from './FinanceSyncButton.jsx'
 
 const C = {
@@ -206,12 +206,13 @@ function PieTip({ active, payload }) {
 
 // One cross-section: chart (stacked monthly bars or period pie) + table for the
 // selected period.
-// Bar / Pie switch in a panel header. Bar is disabled on Month grain (pie only).
+// Bar / Pie / Years switch overlaid on a chart. Month grain is pie only — one
+// month has no trend to stack or overlay.
 function ChartTypeToggle({ value, onChange, pieOnly }) {
   return (
     <div style={{ display: 'flex', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 2 }}>
-      {[{ key: 'bar', label: 'Bar' }, { key: 'pie', label: 'Pie' }].map((t) => {
-        const disabled = t.key === 'bar' && pieOnly
+      {[{ key: 'bar', label: 'Bar' }, { key: 'pie', label: 'Pie' }, { key: 'years', label: 'Years' }].map((t) => {
+        const disabled = t.key !== 'pie' && pieOnly
         const active = value === t.key
         return (
           <button key={t.key} onClick={() => !disabled && onChange(t.key)} disabled={disabled}
@@ -230,7 +231,24 @@ function ChartTypeToggle({ value, onChange, pieOnly }) {
   )
 }
 
-function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, pieOnly }) {
+// Line colours for the Years overlay: selected year first (accent), earlier years
+// in descending prominence.
+const YEAR_HUES = [palette.accent, palette.blue, palette.aqua, palette.purple, '#808080']
+const MAX_YEARS = YEAR_HUES.length
+
+function YearsTip({ active, payload, label, hueOf }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 5, padding: '8px 10px', fontFamily: MONO, fontSize: 11 }}>
+      <div style={{ color: C.muted, marginBottom: 4 }}>{label}</div>
+      {payload.filter((p) => p.value != null).map((p) => (
+        <div key={p.dataKey} style={{ color: hueOf(p.dataKey) }}>{p.name}: {money(p.value)}</div>
+      ))}
+    </div>
+  )
+}
+
+function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, pieOnly, grain, anchor, yearAnchors }) {
   const isMobile = useIsMobile()
 
   // Each panel picks its own chart style; a single month has no trend to stack.
@@ -257,6 +275,27 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
     for (const s of segments) row[s.key] = segmentValues(byseg, s)[metric]
     return row
   }), [chartMonths, segments, rowsByMonth, metric])
+
+  // Years overlay: the selected year and up to four earlier ones, each a line of
+  // the metric (visible segments summed) across the period's 12 month slots.
+  // Months without data are null so a part-year line stops where the data does.
+  const years = useMemo(() => {
+    if (pieOnly || !anchor) return { anchors: [], data: [], label: () => '' }
+    const anchors = yearAnchors.filter((a) => a <= anchor).slice(-MAX_YEARS).reverse() // selected first
+    const label = (a) => (grain === 'fy' ? fyLabel(Number(a)) : a)
+    const slots = periodKeys(grain, anchor)
+    const data = slots.map((selKey, i) => {
+      const row = { label: monthLabel(selKey).slice(0, 3) }
+      for (const a of anchors) {
+        const key = periodKeys(grain, a)[i]
+        const byseg = rowsByMonth.get(key)
+        row[a] = byseg ? chartSegments.reduce((sum, s) => sum + segmentValues(byseg, s)[metric], 0) : null
+      }
+      return row
+    })
+    return { anchors, data, label }
+  }, [pieOnly, anchor, yearAnchors, grain, rowsByMonth, chartSegments, metric])
+  const yearHue = (a) => YEAR_HUES[Math.max(0, years.anchors.indexOf(a))]
 
   const tableRows = useMemo(() => {
     const rows = segments.map((s) => ({
@@ -327,12 +366,12 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   }
 
   return (
-    <Panel title={title} icon={icon} right={(
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Legend segments={segments} hidden={hidden} onToggle={toggleHidden} />
+    <Panel title={title} icon={icon} right={<Legend segments={segments} hidden={hidden} onToggle={toggleHidden} />}>
+      {/* Chart with its own Bar/Pie switch overlaid in the top-right corner */}
+      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
         <ChartTypeToggle value={chartType} onChange={setChartTypeRaw} pieOnly={pieOnly} />
       </div>
-    )}>
       {chartType === 'pie' ? (
         <ResponsiveContainer width="100%" height={isMobile ? 210 : 240}>
           <PieChart>
@@ -352,9 +391,29 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
             </text>
           </PieChart>
         </ResponsiveContainer>
+      ) : chartType === 'years' ? (
+      <ResponsiveContainer width="100%" height={isMobile ? 210 : 250}>
+        <ComposedChart data={years.data} margin={{ top: 26, right: 8, left: isMobile ? 0 : 6, bottom: 0 }}>
+          <CartesianGrid stroke={C.borderSoft} vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
+          <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={isMobile ? 40 : 48} />
+          <Tooltip content={<YearsTip hueOf={yearHue} />} cursor={{ stroke: C.border }} />
+          <RLegend verticalAlign="bottom" iconType="plainline" iconSize={14}
+            wrapperStyle={{ fontSize: 10.5, fontFamily: MONO, paddingTop: 6 }} />
+          {/* Earlier years first so the selected year draws on top */}
+          {[...years.anchors].reverse().map((a) => {
+            const selected = a === years.anchors[0]
+            return (
+              <Line key={a} type="monotone" dataKey={a} name={years.label(a)} stroke={yearHue(a)}
+                strokeWidth={selected ? 2.4 : 1.4} strokeOpacity={selected ? 1 : 0.75}
+                dot={false} activeDot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
+            )
+          })}
+        </ComposedChart>
+      </ResponsiveContainer>
       ) : (
       <ResponsiveContainer width="100%" height={isMobile ? 190 : 230}>
-        <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: isMobile ? 0 : 6, bottom: 0 }}>
+        <ComposedChart data={chartData} margin={{ top: 26, right: 8, left: isMobile ? 0 : 6, bottom: 0 }}>
           <CartesianGrid stroke={C.borderSoft} vertical={false} />
           <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
           <YAxis tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={compact} width={isMobile ? 40 : 48} />
@@ -367,6 +426,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
         </ComposedChart>
       </ResponsiveContainer>
       )}
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...grid, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
@@ -444,6 +504,8 @@ export default function StatBreakdown() {
   const effAnchor = (anchor && options.some((o) => o.value === anchor) ? anchor : null)
     ?? options[options.length - 1]?.value ?? null
   const periodLabel = options.find((o) => o.value === effAnchor)?.label ?? '—'
+  // Every year with data, for the Years overlay (CY: '2025'; FY: ending year '2026').
+  const yearAnchors = useMemo(() => options.map((o) => o.value), [options])
   const periodMonths = useMemo(() => effAnchor ? periodKeys(grain, effAnchor) : [], [grain, effAnchor])
   const chartMonths = useMemo(() => effAnchor ? chartKeys(grain, effAnchor) : [], [grain, effAnchor])
 
@@ -536,10 +598,12 @@ export default function StatBreakdown() {
           <>
             <Breakdown title="By Customer Type" icon={TargetIcon} segments={CUSTOMER_SEGMENTS}
               rowsByMonth={customerByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
-              periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'} />
+              periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'}
+              grain={grain} anchor={effAnchor} yearAnchors={yearAnchors} />
             <Breakdown title="By Product Category" icon={ChartBarIcon} segments={CATEGORY_SEGMENTS}
               rowsByMonth={categoryByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
-              periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'} />
+              periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'}
+              grain={grain} anchor={effAnchor} yearAnchors={yearAnchors} />
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Customer types from Cin7 customer tags (D = Distributors, F = Fleet, A = Bespoke, otherwise Consumers).
               Electrical = Lighting + Behind Grille Lighting + Electrical; Other = all remaining Cin7 categories.
