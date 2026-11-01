@@ -79,14 +79,18 @@ function useStatBreakdown() {
   return useQuery({
     queryKey: ['stat-breakdown'],
     queryFn: async () => {
-      const [rows, pending, state] = await Promise.all([
+      const [rows, cross, pending, state] = await Promise.all([
         supabase.from('stat_breakdown_monthly').select('*').order('period_month'),
+        // customer_type × bucket per month — feeds the cross-filter panel
+        supabase.from('stat_breakdown_cross').select('*').order('period_month'),
         supabase.from('cin7_stat_pending').select('*', { count: 'exact', head: true }),
         supabase.from('cin7_stat_sync_state').select('last_run, last_error').eq('id', 1).maybeSingle(),
       ])
       if (rows.error) throw rows.error
+      if (cross.error) throw cross.error
       return {
         rows: rows.data ?? [],
+        cross: cross.data ?? [],
         pending: pending.count ?? 0,
         state: state.data ?? null,
       }
@@ -248,7 +252,7 @@ function YearsTip({ active, payload, label, hueOf }) {
   )
 }
 
-function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, pieOnly, grain, anchor, yearAnchors }) {
+function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, pieOnly, grain, anchor, yearAnchors, toolbar }) {
   const isMobile = useIsMobile()
 
   // Each panel picks its own chart style; a single month has no trend to stack.
@@ -367,6 +371,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
 
   return (
     <Panel title={title} icon={icon} right={<Legend segments={segments} hidden={hidden} onToggle={toggleHidden} />}>
+      {toolbar}
       {/* Chart with its own Bar/Pie switch overlaid in the top-right corner */}
       <div style={{ position: 'relative' }}>
       <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
@@ -478,6 +483,97 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   )
 }
 
+// Leaf bucket keys a top-level category segment covers (its children, or itself).
+const leavesOf = (seg) => (seg.children ?? [seg]).map((c) => c.key)
+
+// Pill-style multi-select used by the cross-filter toolbar.
+function FilterChips({ label, segments, selected, onToggle, onAll }) {
+  const all = selected.size === segments.length
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontFamily: MONO, fontSize: 10.5 }}>
+      <span style={{ color: C.faint, textTransform: 'uppercase', letterSpacing: '0.07em', fontSize: 9.5, marginRight: 2 }}>{label}</span>
+      <button onClick={onAll} style={{
+        border: `1px solid ${all ? C.accent : C.border}`, background: all ? C.accentSubtle : 'transparent', color: all ? C.accent : C.muted,
+        borderRadius: 999, padding: '2px 9px', fontSize: 10.5, fontFamily: MONO, cursor: 'pointer',
+      }}>All</button>
+      {segments.map((s) => {
+        const on = selected.has(s.key)
+        return (
+          <button key={s.key} onClick={() => onToggle(s.key)} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer',
+            border: `1px solid ${on ? C.border : C.borderSoft}`, background: on ? C.surface : 'transparent',
+            color: on ? C.text : C.faint, borderRadius: 999, padding: '2px 9px', fontSize: 10.5, fontFamily: MONO,
+            opacity: on ? 1 : 0.6, transition: 'background 120ms, color 120ms',
+          }}>
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: on ? s.hue : C.faint, display: 'inline-block' }} />
+            {s.key}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Third panel: stack by one dimension while filtering on the other, from the
+// customer_type × bucket cross-tab. Pick any customer types AND any product
+// categories; the chart/table show only sales matching both.
+function CrossBreakdown({ crossByMonth, ...shared }) {
+  const [by, setBy] = useState('customer') // 'customer' | 'category' — the stacked dimension
+  const [customers, setCustomers] = useState(() => new Set(CUSTOMER_SEGMENTS.map((s) => s.key)))
+  const [categories, setCategories] = useState(() => new Set(CATEGORY_SEGMENTS.map((s) => s.key)))
+  const toggleIn = (set) => (key) => set((prev) => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
+  const allOf = (set, segs) => () => set(new Set(segs.map((s) => s.key)))
+
+  const segments = by === 'customer' ? CUSTOMER_SEGMENTS : CATEGORY_SEGMENTS
+  const rowsByMonth = useMemo(() => {
+    const leafOk = new Set(CATEGORY_SEGMENTS.filter((s) => categories.has(s.key)).flatMap(leavesOf))
+    const out = new Map()
+    for (const [m, lines] of crossByMonth) {
+      const byseg = new Map()
+      for (const l of lines) {
+        if (!customers.has(l.customer_type) || !leafOk.has(l.bucket)) continue
+        const key = by === 'customer' ? l.customer_type : l.bucket
+        const acc = byseg.get(key) ?? { revenue: 0, cost: 0, profit: 0 }
+        acc.revenue += l.revenue; acc.cost += l.cost; acc.profit += l.profit
+        byseg.set(key, acc)
+      }
+      out.set(m, byseg)
+    }
+    return out
+  }, [crossByMonth, by, customers, categories])
+
+  const toolbar = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ color: C.faint, textTransform: 'uppercase', letterSpacing: '0.07em', fontSize: 9.5, fontFamily: MONO }}>Stack by</span>
+        <div style={{ display: 'flex', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 2 }}>
+          {[{ key: 'customer', label: 'Customer Type' }, { key: 'category', label: 'Product Category' }].map((t) => (
+            <button key={t.key} onClick={() => setBy(t.key)} style={{
+              border: 'none', cursor: 'pointer', padding: '3px 9px', borderRadius: 4, fontSize: 10.5, fontFamily: MONO,
+              background: by === t.key ? C.accent : 'transparent', color: by === t.key ? C.bg : C.muted, fontWeight: by === t.key ? 600 : 400,
+              transition: 'background 120ms, color 120ms',
+            }}>{t.label}</button>
+          ))}
+        </div>
+      </div>
+      <FilterChips label="Customers" segments={CUSTOMER_SEGMENTS} selected={customers}
+        onToggle={toggleIn(setCustomers)} onAll={allOf(setCustomers, CUSTOMER_SEGMENTS)} />
+      <FilterChips label="Categories" segments={CATEGORY_SEGMENTS} selected={categories}
+        onToggle={toggleIn(setCategories)} onAll={allOf(setCategories, CATEGORY_SEGMENTS)} />
+    </div>
+  )
+
+  return (
+    <Breakdown title="Customer Type × Product Category" icon={LayersIcon} segments={segments}
+      rowsByMonth={rowsByMonth} toolbar={toolbar} {...shared} />
+  )
+}
+
 export default function StatBreakdown() {
   const { data, isLoading, error, refetch } = useStatBreakdown()
   const isMobile = useIsMobile()
@@ -498,6 +594,17 @@ export default function StatBreakdown() {
       target.get(m).set(r.segment, { revenue: Number(r.revenue), cost: Number(r.cost), profit: Number(r.profit) })
     }
     return { customerByMonth: cust, categoryByMonth: cat, availableKeys: [...keySet].sort() }
+  }, [data])
+
+  // 'YYYY-MM' → [{customer_type, bucket, revenue, cost, profit}] for the cross-filter panel
+  const crossByMonth = useMemo(() => {
+    const out = new Map()
+    for (const r of data?.cross ?? []) {
+      const m = toKey(String(r.period_month))
+      if (!out.has(m)) out.set(m, [])
+      out.get(m).push({ customer_type: r.customer_type, bucket: r.bucket, revenue: Number(r.revenue), cost: Number(r.cost), profit: Number(r.profit) })
+    }
+    return out
   }, [data])
 
   const options = useMemo(() => buildOptions(grain, availableKeys), [grain, availableKeys])
@@ -602,6 +709,10 @@ export default function StatBreakdown() {
               grain={grain} anchor={effAnchor} yearAnchors={yearAnchors} />
             <Breakdown title="By Product Category" icon={ChartBarIcon} segments={CATEGORY_SEGMENTS}
               rowsByMonth={categoryByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
+              periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'}
+              grain={grain} anchor={effAnchor} yearAnchors={yearAnchors} />
+            <CrossBreakdown crossByMonth={crossByMonth}
+              chartMonths={chartMonths} periodMonths={periodMonths}
               periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'}
               grain={grain} anchor={effAnchor} yearAnchors={yearAnchors} />
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
