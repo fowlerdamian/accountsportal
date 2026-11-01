@@ -18,7 +18,7 @@ import { LayersIcon, TargetIcon, TriangleAlertIcon, ChartBarIcon } from '@portal
 import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
-import { GRAINS, buildOptions, periodKeys, chartKeys, toKey, monthLabel, fyLabel } from './periods.js'
+import { GRAINS, buildOptions, periodKeys, chartKeys, toKey, monthLabel, fyLabel, ymParts } from './periods.js'
 import FinanceSyncButton from './FinanceSyncButton.jsx'
 
 const C = {
@@ -287,8 +287,10 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   // Months without data are null so a part-year line stops where the data does.
   const years = useMemo(() => {
     if (pieOnly || !anchor) return { anchors: [], data: [], label: () => '' }
-    const anchors = yearAnchors.filter((a) => a <= anchor).slice(-MAX_YEARS).reverse() // selected first
-    const label = (a) => (grain === 'fy' ? fyLabel(Number(a)) : a)
+    // Rolling 12M: only windows a whole year apart overlay cleanly (same month slots).
+    const sameSlot = (a) => grain !== 'r12' || ymParts(a).m === ymParts(anchor).m
+    const anchors = yearAnchors.filter((a) => a <= anchor && sameSlot(a)).slice(-MAX_YEARS).reverse() // selected first
+    const label = (a) => (grain === 'fy' ? fyLabel(Number(a)) : grain === 'r12' ? `12m to ${monthLabel(a)}` : a)
     const slots = periodKeys(grain, anchor)
     const data = slots.map((selKey, i) => {
       const row = { label: monthLabel(selKey).slice(0, 3) }

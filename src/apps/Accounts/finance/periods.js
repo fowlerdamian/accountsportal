@@ -3,8 +3,11 @@
 // Financial-Year views are sums over the underlying months. AU FY = 1 Jul→30 Jun;
 // "FY26" spans Jul-2025 → Jun-2026 (labelled by the year it ends in).
 
+// 'r12' = rolling 12 months ending at the anchor month (default: the current
+// month, i.e. the latest month with data — "to today").
 export const GRAINS = [
   { key: 'month', label: 'Month' },
+  { key: 'r12', label: 'Rolling 12M' },
   { key: 'cy', label: 'Calendar Year' },
   { key: 'fy', label: 'Financial Year' },
 ]
@@ -70,6 +73,10 @@ export function buildOptions(grain, availableKeys) {
   if (grain === 'month') {
     return keys.map((k) => ({ value: k, label: monthLabel(k) }))
   }
+  if (grain === 'r12') {
+    // Any month can end the window; the last option (current month) is the default.
+    return keys.map((k) => ({ value: k, label: `12m to ${monthLabel(k)}` }))
+  }
   if (grain === 'cy') {
     const years = [...new Set(keys.map((k) => ymParts(k).y))].sort()
     return years.map((y) => ({ value: String(y), label: String(y) }))
@@ -82,21 +89,30 @@ export function buildOptions(grain, availableKeys) {
 // Month-keys included in the currently-selected period.
 export function periodKeys(grain, anchor) {
   if (grain === 'month') return [anchor]
+  if (grain === 'r12') return trailing(anchor, 12)
   if (grain === 'cy') return cyMonths(Number(anchor))
   return fyMonths(Number(anchor))
 }
 
+// Same month a year earlier ('2026-10' → '2025-10').
+export function sameMonthPrevYear(key) {
+  const { y, m } = ymParts(key)
+  return `${y - 1}-${String(m).padStart(2, '0')}`
+}
+
 // Month-keys of the previous comparable period (for period-over-period deltas).
+// Rolling 12M compares against the 12 months before its window.
 export function prevPeriodKeys(grain, anchor) {
   if (grain === 'month') return [prevMonthKey(anchor)]
+  if (grain === 'r12') return trailing(sameMonthPrevYear(anchor), 12)
   if (grain === 'cy') return cyMonths(Number(anchor) - 1)
   return fyMonths(Number(anchor) - 1)
 }
 
 // The selector/anchor value that a given month-key belongs to, for a grain.
-// month → the key itself; cy → 'YYYY'; fy → the ending year as a string.
+// month/r12 → the key itself; cy → 'YYYY'; fy → the ending year as a string.
 export function anchorOfMonth(grain, key) {
-  if (grain === 'month') return key
+  if (grain === 'month' || grain === 'r12') return key
   if (grain === 'cy') return String(ymParts(key).y)
   return String(fyOf(key))
 }
@@ -104,7 +120,17 @@ export function anchorOfMonth(grain, key) {
 // Previous comparable anchor value (for period-over-period comparisons).
 export function prevAnchor(grain, anchor) {
   if (grain === 'month') return prevMonthKey(anchor)
+  if (grain === 'r12') return sameMonthPrevYear(anchor)
   return String(Number(anchor) - 1)
+}
+
+// Anchors of the same grain that don't overlap `anchor` — for "average of other
+// periods". CY/FY periods never overlap; rolling windows do, so only windows a
+// whole number of years apart count.
+export function nonOverlappingAnchors(grain, anchor, anchors) {
+  if (grain !== 'r12') return anchors.filter((a) => a !== anchor)
+  const { y, m } = ymParts(anchor)
+  return anchors.filter((a) => a !== anchor && ymParts(a).m === m && ymParts(a).y !== y)
 }
 
 // The first `len` month-keys of a period — its "year/period-to-date" window.
@@ -127,7 +153,7 @@ export function periodElapsed(grain, anchor, hasData) {
 // Months to plot in the trend charts for the selected period.
 export function chartKeys(grain, anchor) {
   if (grain === 'month') return trailing(anchor, 12)
-  return periodKeys(grain, anchor)
+  return periodKeys(grain, anchor) // r12 is already its 12 trailing months
 }
 
 // Breakeven revenue = fixed costs ÷ contribution margin %. When variable costs

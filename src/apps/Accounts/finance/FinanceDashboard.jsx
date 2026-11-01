@@ -12,7 +12,7 @@ import { supabase } from '@portal/lib/supabase'
 import { palette } from '@portal/lib/palette'
 import {
   GRAINS, buildOptions, periodKeys, chartKeys, aggregate, toKey, monthLabel,
-  prevAnchor, ytdWindow, periodElapsed, breakevenOf,
+  prevAnchor, ytdWindow, periodElapsed, breakevenOf, nonOverlappingAnchors,
 } from './periods.js'
 import FinanceSyncButton from './FinanceSyncButton.jsx'
 
@@ -248,7 +248,7 @@ export default function FinanceDashboard() {
   // partial year isn't measured against full prior years.
   const expenseRows = useMemo(() => {
     if (!effAnchor) return []
-    const otherAnchors = options.map((o) => o.value).filter((a) => a !== effAnchor)
+    const otherAnchors = nonOverlappingAnchors(grain, effAnchor, options.map((o) => o.value))
     const byCode = new Map() // code → { name, perMonth: Map(monthKey → amount) }
     for (const l of data?.lines ?? []) {
       if (l.bucket !== 'opex') continue
