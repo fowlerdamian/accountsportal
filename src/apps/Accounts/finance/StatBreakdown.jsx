@@ -411,7 +411,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
           {[...years.anchors].reverse().map((a) => {
             const selected = a === years.anchors[0]
             return (
-              <Line key={a} type="monotone" dataKey={a} name={years.label(a)} stroke={yearHue(a)}
+              <Line key={a} type="linear" dataKey={a} name={years.label(a)} stroke={yearHue(a)}
                 strokeWidth={selected ? 2.4 : 1.4} strokeOpacity={selected ? 1 : 0.75}
                 dot={false} activeDot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
             )
