@@ -7,11 +7,14 @@ rem PRINTER with no dialog. Set "DYMO LabelWriter 550" as the default printer on
 rem this PC first (Settings > Printers, untick "Let Windows manage my default").
 rem Sign in once; the profile remembers the session. Put a shortcut to this file
 rem in shell:startup so it comes back after a reboot.
+rem The --disable-*background* flags keep it printing while the window is
+rem minimised or covered (Chrome otherwise slows hidden windows right down).
 
 set PROFILE=%LOCALAPPDATA%\AGA\label-station
 set CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe
 if not exist "%CHROME%" set CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe
 
 start "" "%CHROME%" --kiosk-printing --no-first-run --no-default-browser-check ^
+  --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows ^
   --user-data-dir="%PROFILE%" ^
   --app=https://app.automotivegroup.com.au/labels/station

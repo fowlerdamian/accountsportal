@@ -69,5 +69,15 @@ export function postToOpener(msg: LabelPrintMessage) {
   if (inPrintFrame()) window.parent.postMessage(msg, window.location.origin);
 }
 
-/** Two animation frames — enough for layout + paint after the DOM settles. */
-export const nextPaint = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+/**
+ * Two animation frames — enough for layout + paint after the DOM settles.
+ * Chrome never runs animation frames in a minimised or hidden window, so a
+ * timer is the fallback: without it a minimised print station would wait
+ * here until the window was restored.
+ */
+export const nextPaint = () => new Promise<void>(r => {
+  let done = false;
+  const finish = () => { if (!done) { done = true; r(); } };
+  requestAnimationFrame(() => requestAnimationFrame(finish));
+  window.setTimeout(finish, 250);
+});
