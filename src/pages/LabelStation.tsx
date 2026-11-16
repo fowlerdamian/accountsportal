@@ -204,7 +204,18 @@ export default function LabelStation() {
         const latest = entryScript(await res.text());
         if (!latest || latest === current) return;
         reloading = true;
-        exclusive(async () => { window.location.reload(); });
+        // Never reload a hidden window: a page reloaded while the station is
+        // minimised sat on "loading" until someone restored it, and printed
+        // nothing meanwhile (2026-11-17). The old build keeps printing; the
+        // reload happens the moment the window is next shown.
+        const reload = () => exclusive(async () => { window.location.reload(); });
+        if (document.visibilityState === "visible") { reload(); return; }
+        const onShow = () => {
+          if (document.visibilityState !== "visible") return;
+          document.removeEventListener("visibilitychange", onShow);
+          reload();
+        };
+        document.addEventListener("visibilitychange", onShow);
       } catch { /* offline: try again next time */ }
     };
     const t = window.setInterval(check, VERSION_POLL_MS);
