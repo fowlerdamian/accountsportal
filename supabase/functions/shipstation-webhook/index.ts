@@ -3,7 +3,13 @@
 // ShipStation POSTs { resource_url, resource_type }. We never trust the payload: we
 // fetch resource_url (which must be on ssapi.shipstation.com) with our own credentials.
 //
-// ORDER_NOTIFY — a new order landed in ShipStation. Cin7 sends a sale across when it
+// GUIDE LABELS (LABEL_TRIGGER = "picked", since 2026-11-17): the every-minute
+//   `poll-orders` cron asks Cin7 for sales updated since the last run; every
+//   fulfilment whose Pick is authorised and which has not shipped yet has its pick
+//   lines sent to guide-delivery `queue-labels` (SKU → guide, copies = qty) for the
+//   /labels/station page. Each fulfilment is claimed once in label_orders_seen
+//   (key cin7:<TaskID>), so it never prints twice.
+// ORDER_NOTIFY (only when LABEL_TRIGGER = "packed") — a new order landed in ShipStation. Cin7 sends a sale across when it
 //   is packed, so this is the "packed" signal: the order's lines go to guide-delivery
 //   `queue-labels`, which matches SKUs to guides and queues DYMO guide labels
 //   (copies = qty) for the /labels/station page. Each order is claimed once in
@@ -19,8 +25,10 @@
 //
 // Staff/cron actions (POST JSON, staff JWT or service key):
 //   { action: "sync" }    — poll ShipStation for shipments of open picks (backup for the webhook, cron every 30 min)
-//   { action: "poll-orders" } — queue guide labels for packed orders the webhook missed (cron every minute);
-//                           { seed: true } marks every order now awaiting shipment as seen without printing
+//   { action: "poll-orders" } — queue guide labels (cron every minute): picked Cin7 sales, or in "packed"
+//                           mode the ShipStation orders the webhook missed; { seed: true } marks what is
+//                           already there as seen without printing
+//   { action: "cin7-stages" } — diagnostic: pick / pack / ship status of recently updated Cin7 sales
 //   { action: "setup" }   — register the SHIP_NOTIFY + ORDER_NOTIFY webhooks pointing at this function (idempotent)
 //   { action: "status" }  — list webhooks + open picks awaiting shipment
 // Deploy with --no-verify-jwt (ShipStation cannot send a Supabase JWT).
@@ -39,11 +47,15 @@ const SS = "https://ssapi.shipstation.com";
 const PORTAL_URL = "https://app.automotivegroup.com.au";
 /**
  * When DYMO guide labels are queued automatically:
- *   "packed"  — the order lands in ShipStation (Cin7 sends it once packed). Damian, 2026-11-17.
+ *   "picked"  — the pick is authorised in Cin7 (one stage before packed). Damian, 2026-11-17.
+ *   "packed"  — the order lands in ShipStation (Cin7 sends it once packed).
  *   "shipped" — the shipping label is created (the original trigger, off since 2026-11-17).
  *   "off"     — never; only the Guide portal Print buttons print.
  */
-const LABEL_TRIGGER = "packed" as "packed" | "shipped" | "off";
+const LABEL_TRIGGER = "picked" as "picked" | "packed" | "shipped" | "off";
+const CIN7 = "https://inventory.dearsystems.com/ExternalApi/v2";
+/** Row in label_orders_seen whose note holds the time of the last successful Cin7 poll. */
+const CIN7_WATERMARK = "cin7-watermark";
 /** Newest awaiting-shipment orders the backup poll looks at, and how many it will queue per run. */
 const POLL_PAGE = 50, POLL_MAX = 15;
 
@@ -185,8 +197,93 @@ async function labelsForPackedOrder(db: SupabaseClient, o: Order, opts: { seed?:
   }
 }
 
+async function cin7Get(path: string) {
+  const headers = { "api-auth-accountid": Deno.env.get("CIN7_ACCOUNT_ID") ?? "", "api-auth-applicationkey": Deno.env.get("CIN7_API_KEY") ?? "" };
+  if (!headers["api-auth-accountid"] || !headers["api-auth-applicationkey"]) throw new Error("CIN7_ACCOUNT_ID / CIN7_API_KEY not configured");
+  let res: Response | undefined, lastErr: unknown;
+  for (let attempt = 0; attempt < 3 && !res; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 400 * attempt));
+    try { res = await fetch(`${CIN7}${path}`, { headers }); } catch (e) { lastErr = e; }
+  }
+  if (!res) throw lastErr;
+  if (!res.ok) throw new Error(`Cin7 GET ${path} → ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return res.json();
+}
+
+/**
+ * Picked trigger: queue guide labels for every Cin7 fulfilment whose pick is
+ * authorised and which has not shipped. Sales are found by UpdatedSince the last
+ * successful run (authorising a pick updates the sale), so one list call per
+ * minute plus one detail call per sale that is at the pick/pack stage.
+ */
+async function pollPickedSales(db: SupabaseClient, seed: boolean) {
+  const started = new Date();
+  const { data: wm } = await db.from("label_orders_seen").select("note").eq("shipstation_order_id", CIN7_WATERMARK).maybeSingle();
+  // First run: take stock of what is already picked instead of printing it.
+  if (!wm?.note) seed = true;
+  const since = seed
+    ? new Date(started.getTime() - 48 * 3600_000)
+    : new Date(Math.max(new Date(wm!.note).getTime() - 90_000, started.getTime() - 48 * 3600_000));
+
+  const sales: any[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const data = await cin7Get(`/saleList?UpdatedSince=${encodeURIComponent(since.toISOString())}&Limit=200&Page=${page}`);
+    const list: any[] = data.SaleList ?? [];
+    sales.push(...list);
+    if (list.length < 200) break;
+  }
+  // Only sales sitting between pick and ship are worth a detail call.
+  const atPick = sales.filter((s) => /PICK/.test(String(s.CombinedPickingStatus ?? "")) && !/^NOT /.test(String(s.CombinedPickingStatus ?? ""))
+    && String(s.CombinedShippingStatus ?? "") !== "SHIPPED" && !["VOIDED", "CANCELLED"].includes(String(s.Status ?? "")));
+
+  const results: Record<string, string> = {};
+  let failed = false;
+  for (const s of atPick.slice(0, 40)) {
+    try {
+      const sale = await cin7Get(`/sale?ID=${encodeURIComponent(s.SaleID)}`);
+      for (const f of sale.Fulfilments ?? []) {
+        if (f?.Pick?.Status !== "AUTHORISED" || f?.Ship?.Status === "AUTHORISED" || !f.TaskID) continue;
+        const label = `${s.OrderNumber}${(sale.Fulfilments ?? []).length > 1 ? `/${f.FulfillmentNumber}` : ""}`;
+        const id = `cin7:${f.TaskID}`;
+        const { data: claim, error } = await db.from("label_orders_seen")
+          .upsert({ shipstation_order_id: id, order_number: s.OrderNumber ?? null, note: seed ? "seeded" : null }, { onConflict: "shipstation_order_id", ignoreDuplicates: true })
+          .select("shipstation_order_id");
+        if (error) throw new Error(`label_orders_seen: ${error.message}`);
+        if (!claim?.length) { results[label] = "already done"; continue; }
+        if (seed) { results[label] = "seeded"; continue; }
+        try {
+          const a = sale.ShippingAddress ?? {};
+          const r = await queueGuideLabels(db, {
+            orderNumber: s.OrderNumber, source: "picked",
+            items: (f.Pick.Lines ?? []).map((l: any) => ({ sku: l.SKU ?? null, name: l.Name ?? null, quantity: Number(l.Quantity) || 1 })),
+            who: {
+              customer_name: sale.Customer ?? a.Contact ?? null,
+              ship_to: [String(a.City ?? "").split(";")[0], a.State, a.Postcode].filter(Boolean).join(" ").trim() || null,
+            },
+          });
+          if (!r.ok) throw new Error(`queue-labels: ${JSON.stringify(r.out).slice(0, 200)}`);
+          await db.from("label_orders_seen").update({ labels_queued: r.queued }).eq("shipstation_order_id", id);
+          results[label] = r.queued ? `queued ${r.queued}` : "no guide labels";
+        } catch (e) {
+          await db.from("label_orders_seen").delete().eq("shipstation_order_id", id); // release the claim; next run retries
+          throw e;
+        }
+      }
+    } catch (e) {
+      failed = true;
+      results[s.OrderNumber] = `error: ${String((e as any)?.message ?? e)}`;
+    }
+  }
+  // Only move the watermark forward when everything in this window was handled.
+  if (!failed && atPick.length <= 40) {
+    await db.from("label_orders_seen").upsert({ shipstation_order_id: CIN7_WATERMARK, note: started.toISOString(), seen_at: started.toISOString() }, { onConflict: "shipstation_order_id" });
+  }
+  return { trigger: "picked", since: since.toISOString(), updated: sales.length, at_pick: atPick.length, seeded: seed, results };
+}
+
 /** Backup for ORDER_NOTIFY: queue labels for any recent awaiting-shipment order not yet seen. */
 async function pollPackedOrders(db: SupabaseClient, seed: boolean) {
+  if (LABEL_TRIGGER === "picked") return pollPickedSales(db, seed);
   if (LABEL_TRIGGER !== "packed") return { trigger: LABEL_TRIGGER, checked: 0 };
   const data = await ssGet(`/orders?orderStatus=awaiting_shipment&sortBy=CreateDate&sortDir=DESC&pageSize=${POLL_PAGE}`);
   const orders: Order[] = (data.orders ?? []).filter((o: Order) => !isSupportOrder(o));
@@ -334,6 +431,13 @@ Deno.serve(async (req) => {
     switch (body.action) {
       case "sync":
         return json({ ok: true, ...(await syncOpenPicks(db)) });
+      case "cin7-stages": {
+        // Diagnostic: where recently-updated Cin7 sales sit in pick / pack / ship.
+        const since = new Date(Date.now() - (Number(body.hours) || 3) * 3600_000).toISOString();
+        const data = await cin7Get(`/saleList?UpdatedSince=${encodeURIComponent(since)}&Limit=200&Page=1`);
+        const rows = (data.SaleList ?? []).map((s: any) => [s.OrderNumber, s.InvoiceNumber, s.Status, s.CombinedPickingStatus, s.CombinedPackingStatus, s.CombinedShippingStatus, s.Updated].join("|"));
+        return json({ ok: true, total: data.Total, rows });
+      }
       case "poll-orders":
         return json({ ok: true, ...(await pollPackedOrders(db, body.seed === true)) });
       case "setup": {
