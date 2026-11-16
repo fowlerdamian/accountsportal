@@ -49,6 +49,12 @@ const MAX_ATTEMPTS = 3;
 const HISTORY = 100;
 /** Queued jobs older than this are a backlog: listed with a Print button, not auto-printed. */
 export const AUTO_PRINT_MS = 15 * 60_000;
+/**
+ * A "printing" job claimed longer ago than this is from a station that stopped
+ * mid-print. Longer than printLabelRoute can take (20s render + 5 min dialog
+ * timeout), so a print that is still running is never handed out twice.
+ */
+const STUCK_MS = 6 * 60_000;
 const SELECT = "*, instruction_sets(title, product_code)";
 
 const readLs = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -94,7 +100,8 @@ export default function LabelStation() {
     return next;
   }, []);
 
-  const printJob = useCallback(async (job: Job) => {
+  /** Resolves false when the job couldn't be claimed (another station has it, or the update failed). */
+  const printJob = useCallback(async (job: Job): Promise<boolean> => {
     // Claim atomically so a second open station can't print the same job.
     const { data: claimed } = await supabase
       .from("label_print_jobs")
@@ -103,7 +110,7 @@ export default function LabelStation() {
       .eq("status", "queued")
       .select("id")
       .maybeSingle();
-    if (!claimed) return;
+    if (!claimed) return false;
     setPrinting(job);
     try {
       if (job.kind === "barcode") {
@@ -124,13 +131,28 @@ export default function LabelStation() {
     } finally {
       setPrinting(null);
     }
+    return true;
   }, [user?.id]);
+
+  // A job left in "printing" (station tab closed or reloaded mid-print) would
+  // otherwise never print again: hand it back to the queue, or fail it once
+  // it has used up its attempts.
+  const recoverStuck = useCallback(async () => {
+    const cutoff = new Date(Date.now() - STUCK_MS).toISOString();
+    await supabase.from("label_print_jobs")
+      .update({ status: "failed", error: "Print station stopped mid-print" })
+      .eq("status", "printing").lt("claimed_at", cutoff).gte("attempts", MAX_ATTEMPTS);
+    await supabase.from("label_print_jobs")
+      .update({ status: "queued", error: "Print station stopped mid-print — retrying" })
+      .eq("status", "printing").lt("claimed_at", cutoff).lt("attempts", MAX_ATTEMPTS);
+  }, []);
 
   // Print every recent queued job, oldest first, until none are left.
   const drain = useCallback(async () => {
     if (draining.current) { again.current = true; return; }
     draining.current = true;
     try {
+      await recoverStuck();
       do {
         again.current = false;
         for (;;) {
@@ -139,14 +161,16 @@ export default function LabelStation() {
             .eq("status", "queued").gte("created_at", since).order("created_at").limit(1);
           const job = (data?.[0] ?? null) as Job | null;
           if (!job) break;
-          await exclusive(() => printJob(job));
+          // Not claimed: stop instead of re-fetching the same row in a tight
+          // loop. The next Realtime event or the 60s poll tries again.
+          if (!(await exclusive(() => printJob(job)))) break;
         }
       } while (again.current);
     } finally {
       draining.current = false;
       load();
     }
-  }, [exclusive, printJob, load]);
+  }, [exclusive, printJob, load, recoverStuck]);
 
   useEffect(() => {
     load();
