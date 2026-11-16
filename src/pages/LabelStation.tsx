@@ -18,7 +18,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@portal/lib/supabase";
 import { useAuth } from "@portal/context/AuthContext.jsx";
-import { printLabels } from "@portal/lib/labels/printLabels";
+import { printBarcodeLabel, printLabels } from "@portal/lib/labels/printLabels";
+import type { BarcodeLabelInput } from "@portal/lib/labels/barcodeLabelPdf";
 
 interface Job {
   id: string;
@@ -29,7 +30,9 @@ interface Job {
   customer_name: string | null;
   ship_to: string | null;
   sku: string | null;
-  guide_id: string;
+  kind: "guide" | "barcode";
+  guide_id: string | null;
+  payload: BarcodeLabelInput | null;
   brand_key: string | null;
   copies: number;
   status: "queued" | "printing" | "printed" | "failed" | "cancelled";
@@ -52,7 +55,9 @@ const readLs = (k: string) => { try { return localStorage.getItem(k); } catch { 
 const writeLs = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private window */ } };
 
 const fmtTime = (iso: string | null) => iso ? new Date(iso).toLocaleString("en-AU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
-const guideName = (j: Job) => j.instruction_sets?.title ?? j.guide_id;
+const guideName = (j: Job) => j.kind === "barcode"
+  ? `Barcode: ${[j.payload?.title, j.payload?.subtitle].filter(Boolean).join(" ") || j.payload?.barcode || "label"}`
+  : j.instruction_sets?.title ?? j.guide_id ?? "—";
 const isStale = (j: Job) => j.status === "queued" && Date.now() - new Date(j.created_at).getTime() > AUTO_PRINT_MS;
 
 const STATUS_CLASS: Record<Job["status"], string> = {
@@ -101,7 +106,13 @@ export default function LabelStation() {
     if (!claimed) return;
     setPrinting(job);
     try {
-      await printLabels({ ids: [job.guide_id], brand: job.brand_key, copies: job.copies });
+      if (job.kind === "barcode") {
+        if (!job.payload) throw new Error("Barcode job has no label data");
+        await printBarcodeLabel(job.payload, { copies: job.copies });
+      } else {
+        if (!job.guide_id) throw new Error("Guide job has no guide");
+        await printLabels({ ids: [job.guide_id], brand: job.brand_key, copies: job.copies });
+      }
       await supabase.from("label_print_jobs")
         .update({ status: "printed", printed_at: new Date().toISOString(), printed_by: user?.id ?? null, error: null })
         .eq("id", job.id);
@@ -163,7 +174,7 @@ export default function LabelStation() {
     try {
       const { data: g } = await supabase.from("instruction_sets").select("id, product_code").order("updated_at", { ascending: false }).limit(1).maybeSingle();
       if (!g) return;
-      await supabase.from("label_print_jobs").insert({ source: "manual", order_number: "TEST", customer_name: user?.email ?? "Station test", sku: g.product_code, guide_id: g.id, copies: 1 });
+      await supabase.from("label_print_jobs").insert({ source: "manual", kind: "guide", order_number: "TEST", customer_name: user?.email ?? "Station test", sku: g.product_code, guide_id: g.id, copies: 1 });
       load(); drain();
     } finally {
       setTesting(false);
@@ -212,7 +223,7 @@ export default function LabelStation() {
           </thead>
           <tbody>
             {jobs.length === 0 && (
-              <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No label jobs yet. They appear here as orders ship or Print is pressed in the Guide portal.</td></tr>
+              <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No label jobs yet. They appear here when Print is pressed in the Guide portal or the warehouse barcode tool.</td></tr>
             )}
             {jobs.map(j => {
               const stale = isStale(j);

@@ -15,7 +15,7 @@ import {
   LABEL_SIZES, LABEL_SIZE_OPTIONS, DEFAULT_LABEL_SIZE, resolveLabelSize,
   type BarcodeLabelInput, type LabelOutput, type LabelSizeKey,
 } from "@portal/lib/labels/barcodeLabelPdf";
-import { printBarcodeLabel } from "@portal/lib/labels/printLabels";
+import { queueBarcodeLabelPrint } from "@portal/lib/labels/queueLabelPrint";
 import { splitProductName } from "@portal/lib/labels/productName";
 import { BARCODE_LOGO_OPTIONS, DEFAULT_BARCODE_LOGO, loadBarcodeLogo, resolveBarcodeLogo, type LoadedLogo } from "@portal/lib/labels/barcodeLogos";
 
@@ -193,17 +193,22 @@ export default function BarcodeLabels() {
     buildBarcodeLabelPdf(input, { output, size, copies: copiesN, logoImage: img }).save(barcodeLabelFileName(input));
   };
 
-  // Print straight to the LabelWriter: hidden iframe on /labels/print-barcode,
-  // Chrome's print dialog picks the queue (same pipeline as the Guide labels).
+  // Send to the print station PC (/labels/station), which prints it on the
+  // LabelWriter with no dialog (same queue as the Guide labels).
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
+  const [printNote, setPrintNote] = useState<string | null>(null);
   const printDymo = async () => {
     touchAll();
     if (!valid || printing) return;
     setPrinting(true);
     setPrintError(null);
+    setPrintNote(null);
     try {
-      await printBarcodeLabel(input, { copies: copiesN });
+      const result = await queueBarcodeLabelPrint(input, { copies: copiesN });
+      setPrintNote(result === "printed"
+        ? `Printed ${copiesN} ${copiesN === 1 ? "label" : "labels"}`
+        : "Queued — the print station isn't responding. It prints when the station PC is back online (within 15 min).");
     } catch (e: any) {
       setPrintError(e?.message ?? String(e));
     } finally {
@@ -347,7 +352,7 @@ export default function BarcodeLabels() {
                   </Field>
                 </div>
                 <div style={hintStyle}>
-                  Print to DYMO uses the Large Address (99012) layout whatever size is picked above — in Chrome's print dialog pick the LabelWriter, paper size 99012 Large Address (36 × 89 mm), scale 100%, margins none. An Address / 30252 paper size prints the label at 70% in the top corner.
+                  Print to DYMO sends the label to the print station PC, which prints it on the LabelWriter straight away (no print dialog). It always uses the Large Address (99012) layout, whatever size is picked above.
                 </div>
               </>
             )}
@@ -371,6 +376,7 @@ export default function BarcodeLabels() {
               </div>
             </div>
             {printError && <div style={{ ...errorStyle, marginTop: 0 }}>Couldn't print: {printError}</div>}
+            {printNote && !printError && <div style={{ ...hintStyle, marginTop: 0 }}>{printNote}</div>}
             {previewUrl ? (
               <iframe
                 title="Label preview"
