@@ -56,6 +56,10 @@ export const AUTO_PRINT_MS = 15 * 60_000;
  */
 const STUCK_MS = 6 * 60_000;
 const SELECT = "*, instruction_sets(title, product_code)";
+/** How often the station checks whether a newer build has been deployed. */
+const VERSION_POLL_MS = 2 * 60_000;
+/** The hashed entry bundle named in an index.html — changes on every deploy. */
+const entryScript = (html: string) => html.match(/\/assets\/index-[\w-]+\.js/)?.[0] ?? null;
 
 const readLs = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const writeLs = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private window */ } };
@@ -182,6 +186,29 @@ export default function LabelStation() {
     const t = window.setInterval(drain, POLL_MS);
     return () => { supabase.removeChannel(ch); window.clearInterval(t); };
   }, [load, drain]);
+
+  // The station window stays open for days, so it would keep running an old
+  // build after a deploy. Compare the entry script in the live index.html
+  // with the one this page loaded, and reload when it changes. The reload
+  // goes through the print chain, so it never interrupts a label mid-print.
+  useEffect(() => {
+    const current = entryScript(document.documentElement.innerHTML);
+    if (!current) return; // dev server: no hashed bundle to compare
+    let reloading = false;
+    const check = async () => {
+      if (reloading) return;
+      try {
+        const res = await fetch(`/index.html?nc=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const latest = entryScript(await res.text());
+        if (!latest || latest === current) return;
+        reloading = true;
+        exclusive(async () => { window.location.reload(); });
+      } catch { /* offline: try again next time */ }
+    };
+    const t = window.setInterval(check, VERSION_POLL_MS);
+    return () => window.clearInterval(t);
+  }, [exclusive]);
 
   // Print / Reprint one job now (also how a backlog job gets printed).
   const printNow = async (job: Job) => {
