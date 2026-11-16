@@ -82,6 +82,8 @@ Runs on the PC connected to the LabelWriter 550 (the shared queue host). Opens
 dialog. Set the LabelWriter as the default printer on that PC, run the .cmd, sign in
 once, and drop a shortcut in `shell:startup`.
 
-Flow: ShipStation label created → `shipstation-webhook` (SHIP_NOTIFY, re-fetched with
-items) → `guide-delivery` `queue-labels` (SKU → guide, copies = qty) → `label_print_jobs`
-→ station prints via `/labels/print`. Reprint / Cancel / Test print live on the station page.
+Flow: order packed (Cin7 sends it to ShipStation) → `shipstation-webhook` (ORDER_NOTIFY,
+re-fetched; `poll-orders` cron every minute as backup; each order claimed once in
+`label_orders_seen`) → `guide-delivery` `queue-labels` (SKU → guide, copies = qty) →
+`label_print_jobs` (source `packed`) → station prints via `/labels/print`. Switch the
+trigger with `LABEL_TRIGGER` in `shipstation-webhook` (`packed` / `shipped` / `off`). Reprint / Cancel / Test print live on the station page.
