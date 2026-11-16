@@ -3,7 +3,7 @@
 // When a label is created, ShipStation POSTs a SHIP_NOTIFY event ({ resource_url,
 // resource_type }). We never trust the payload: we fetch resource_url (which must be on
 // ssapi.shipstation.com) with our own credentials — WITH shipment items — then:
-//   • EVERY shipment: shipped lines (SKU + qty) go to guide-delivery `queue-labels`, which
+//   • (OFF since 2026-11-17, QUEUE_GUIDE_LABELS) shipped lines went to guide-delivery `queue-labels`, which
 //     matches them to guides and queues DYMO labels for the /labels/station page.
 //   • SUPPORT-<case> shipments additionally close the replacement pick:
 //   • action_items: dispatched_at, status=done, shipstation_shipment_id, tracking
@@ -28,6 +28,8 @@ const json = (body: unknown, status = 200) =>
 
 const SS = "https://ssapi.shipstation.com";
 const PORTAL_URL = "https://app.automotivegroup.com.au";
+/** Ship-time DYMO guide labels. Off (Damian, 2026-11-17): the DYMO prints only when someone presses Print in the Guide portal. */
+const QUEUE_GUIDE_LABELS = false;
 
 function ssAuth() {
   const key = Deno.env.get("SHIPSTATION_API_KEY"), secret = Deno.env.get("SHIPSTATION_API_SECRET");
@@ -205,7 +207,7 @@ Deno.serve(async (req) => {
       const results = [];
       const labels = [];
       for (const sh of shipments) {
-        if (!sh.voided) labels.push({ order: sh.orderNumber, result: await queueGuideLabels(db, sh) });
+        if (QUEUE_GUIDE_LABELS && !sh.voided) labels.push({ order: sh.orderNumber, result: await queueGuideLabels(db, sh) });
         if (!/^SUPPORT-/i.test(sh.orderNumber ?? "") && !(sh.orderKey ?? "").startsWith("support-")) continue;
         results.push({ order: sh.orderNumber, result: await applyShipment(db, sh) });
       }
