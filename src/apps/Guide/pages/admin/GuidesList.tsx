@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { Checkbox } from "@guide/components/ui/checkbox";
 import { Label } from "@guide/components/ui/label";
 import { brandShort } from "@guide/lib/utils";
-import { printLabels } from "@portal/lib/labels/printLabels";
+import { queueLabelPrint } from "@portal/lib/labels/queueLabelPrint";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -129,7 +129,9 @@ export default function GuidesList() {
     if (!published) toast.message("Guide is not published yet — label QR will point at the first brand", { action: shareAction(guide) });
     setPrintingId(guide.id);
     try {
-      await printLabels({ ids: [guide.id] });
+      const result = await queueLabelPrint({ guideId: guide.id, sku: guide.product_code ?? null });
+      if (result === "printed") toast.success("Label printed", { description: guide.title });
+      else toast.message("Label queued — the print station isn't responding", { description: "It prints when the station PC is back online (within 15 min)." });
     } catch (err: any) {
       toast.error("Couldn't print the label", { description: err?.message, action: shareAction(guide) });
     } finally {

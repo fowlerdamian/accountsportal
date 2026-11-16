@@ -10,7 +10,7 @@ import { supabase } from "@guide/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { buildDymoLabelXml, dymoLabelFileContents, escapeXml } from "@guide/lib/dymoLabel";
-import { printLabels } from "@portal/lib/labels/printLabels";
+import { queueLabelPrint } from "@portal/lib/labels/queueLabelPrint";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -103,13 +103,15 @@ export default function GuideShare() {
     }
   };
 
-  // Print straight to the LabelWriter queue through the browser print pipeline
-  // (hidden iframe on /labels/print) — no DYMO Connect needed.
+  // Send the label to the print station PC (/labels/station), which prints it
+  // on the LabelWriter with no dialog.
   const printLabel = async (brand: { key: string }) => {
     if (!id) return;
     setPrinting(brand.key);
     try {
-      await printLabels({ ids: [id], brand: brand.key });
+      const result = await queueLabelPrint({ guideId: id, brand: brand.key });
+      if (result === "printed") toast.success("Label printed");
+      else toast.message("Label queued — the print station isn't responding", { description: "It prints when the station PC is back online (within 15 min)." });
     } catch (err: any) {
       toast.error("Couldn't print the label", { description: err?.message });
     } finally {
