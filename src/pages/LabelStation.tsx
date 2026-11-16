@@ -4,7 +4,8 @@
  * Runs in Chrome on the office host PC next to the LabelWriter 550, launched
  * with --kiosk-printing (tools/label-station.cmd) so print() goes straight to
  * the Windows default printer with no dialog. Jobs land in label_print_jobs
- * at ship time (ShipStation SHIP_NOTIFY → guide-delivery queue-labels) and
+ * when an order is packed (it reaches ShipStation from Cin7 → shipstation-webhook
+ * ORDER_NOTIFY / poll-orders → guide-delivery queue-labels, source "packed") and
  * from the Guide portal Print buttons (queueLabelPrint, source "manual").
  *
  * No confirm dialog (removed 2026-11-17 at Damian's request): queued jobs
@@ -274,7 +275,7 @@ export default function LabelStation() {
           </thead>
           <tbody>
             {jobs.length === 0 && (
-              <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No label jobs yet. They appear here when Print is pressed in the Guide portal or the warehouse barcode tool.</td></tr>
+              <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No label jobs yet. They appear here when an order is packed, or when Print is pressed in the Guide portal or the warehouse barcode tool.</td></tr>
             )}
             {jobs.map(j => {
               const stale = isStale(j);
