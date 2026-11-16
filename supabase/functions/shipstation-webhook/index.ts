@@ -55,7 +55,14 @@ function ssAuth() {
 async function ssGet(pathOrUrl: string) {
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${SS}${pathOrUrl}`;
   if (!url.startsWith(SS + "/")) throw new Error(`Refusing to fetch non-ShipStation URL: ${url}`);
-  const res = await fetch(url, { headers: ssAuth() });
+  // ShipStation drops the odd connection ("http2 error: connection error received");
+  // a GET is safe to repeat, so retry network failures before giving up.
+  let res: Response | undefined, lastErr: unknown;
+  for (let attempt = 0; attempt < 3 && !res; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 400 * attempt));
+    try { res = await fetch(url, { headers: ssAuth() }); } catch (e) { lastErr = e; }
+  }
+  if (!res) throw lastErr;
   if (!res.ok) throw new Error(`ShipStation GET ${url} → ${res.status} ${await res.text()}`);
   return res.json();
 }
@@ -370,7 +377,8 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("shipstation-webhook error:", err);
     const detail = String((err as any)?.message ?? err);
-    await notifyChat(`⚠️ *ShipStation sync error*\n\`${detail.slice(0, 300)}\``);
+    // The every-minute label poll just runs again; a failed run is not worth a Chat alert.
+    if (body?.action !== "poll-orders") await notifyChat(`⚠️ *ShipStation sync error*\n\`${detail.slice(0, 300)}\``);
     return json({ error: detail }, 500);
   }
 });
