@@ -33,6 +33,7 @@ export const BARCODE_LABEL_PRINT_PATH = "/labels/print-barcode";
 
 export type LabelPrintMessage =
   | { type: "labels:ready"; count: number }
+  | { type: "labels:stage"; stage: string }
   | { type: "labels:error"; message: string };
 
 export function labelPrintUrl(opts: PrintLabelsOptions): string {
@@ -75,7 +76,7 @@ export function barcodeLabelFromParams(params: URLSearchParams): BarcodeLabelInp
   };
 }
 
-const READY_TIMEOUT_MS = 20_000;
+const READY_TIMEOUT_MS = 15_000;
 /** How long a dismissed-but-silent print dialog may keep the iframe alive before it is torn down anyway. */
 const AFTERPRINT_TIMEOUT_MS = 5 * 60_000;
 
@@ -96,6 +97,8 @@ export function printLabelRoute(url: string): Promise<void> {
     } satisfies Partial<CSSStyleDeclaration>);
 
     let settled = false;
+    let printed = false;
+    let stage = "page not loaded";
     let readyTimer = 0;
     let afterTimer = 0;
 
@@ -117,8 +120,14 @@ export function printLabelRoute(url: string): Promise<void> {
       const msg = event.data;
       if (!msg || typeof msg !== "object") return;
       if (msg.type === "labels:error") return finish(new Error(msg.message || "Label render failed"));
+      if (msg.type === "labels:stage") { stage = msg.stage; return; }
       if (msg.type !== "labels:ready") return;
+      print();
+    };
 
+    const print = () => {
+      if (printed || settled) return;
+      printed = true;
       window.clearTimeout(readyTimer);
       const win = iframe.contentWindow;
       if (!win) return finish(new Error("Print frame was closed"));
@@ -135,7 +144,14 @@ export function printLabelRoute(url: string): Promise<void> {
     };
 
     window.addEventListener("message", onMessage);
-    readyTimer = window.setTimeout(() => finish(new Error("Label print timed out before the labels rendered")), READY_TIMEOUT_MS);
+    readyTimer = window.setTimeout(() => {
+      // The labels are laid out as soon as they are in the DOM, so a route that
+      // never reported ready (stuck waiting on a font or a paint) still prints.
+      let rendered = 0;
+      try { rendered = iframe.contentDocument?.querySelectorAll("[data-labels] .label").length ?? 0; } catch { /* frame gone */ }
+      if (rendered > 0) return print();
+      finish(new Error(`Label print timed out before the labels rendered (reached: ${stage}; station window ${document.visibilityState})`));
+    }, READY_TIMEOUT_MS);
     iframe.src = url;
     document.body.appendChild(iframe);
   });

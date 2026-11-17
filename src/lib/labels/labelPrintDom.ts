@@ -69,6 +69,19 @@ export function postToOpener(msg: LabelPrintMessage) {
   if (inPrintFrame()) window.parent.postMessage(msg, window.location.origin);
 }
 
+/** Progress marker for the opener: a print that times out reports the last stage reached. */
+export const postStage = (stage: string) => postToOpener({ type: "labels:stage", stage });
+
+/**
+ * Wait for `p`, but never longer than `ms`. Font and image loads can stay
+ * pending for as long as the station window is hidden, and a label printed in
+ * a fallback font beats a label that never prints.
+ */
+export const settle = (p: Promise<unknown> | undefined | null, ms = 1500) => Promise.race([
+  Promise.resolve(p).then(() => undefined, () => undefined),
+  new Promise<void>(r => window.setTimeout(r, ms)),
+]);
+
 /**
  * Two animation frames — enough for layout + paint after the DOM settles.
  * Chrome never runs animation frames in a minimised or hidden window, so a

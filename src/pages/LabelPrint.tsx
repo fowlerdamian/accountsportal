@@ -15,11 +15,11 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { focusManager, useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@guide/integrations/supabase/client";
 import { SCAN_LINES, codeLines, computeLabelLayout, resolveLabelStock, type LabelStockKey } from "@portal/lib/labels/labelStock";
-import { abs, fitTexts, inPrintFrame, nextPaint, postToOpener as post, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
+import { abs, fitTexts, inPrintFrame, nextPaint, postStage, postToOpener as post, settle, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
 
 interface GuideRow { id: string; title: string; product_code: string | null; slug: string }
 interface BrandRow { id: string; key: string; name: string; domain: string; dymo_label_size: string | null }
@@ -73,9 +73,16 @@ export default function LabelPrint() {
   const preview = params.get("preview") === "1";
   const rootRef = useRef<HTMLDivElement>(null);
 
+  // The print frame usually lives in a hidden station window, where TanStack
+  // Query would park a retry until the window is shown again. Do it before the
+  // query below subscribes.
+  useMemo(() => { if (inPrintFrame()) focusManager.setFocused(true); }, []);
+  useEffect(() => { postStage("signed in, loading guide"); }, []);
+
   const { data, error, isLoading } = useQuery({
     queryKey: ["label-print", ids, brandKey],
     enabled: ids.length > 0,
+    networkMode: "always",
     queryFn: async () => {
       const [guides, brands, pubs] = await Promise.all([
         supabase.from("instruction_sets").select("id, title, product_code, slug").in("id", ids),
@@ -128,9 +135,10 @@ export default function LabelPrint() {
     if (!root || !built || built.labels.length === 0) return;
     let cancelled = false;
     (async () => {
+      postStage("labels in page");
       fitTexts(root);
-      await whenImagesSettled(root);
-      await (document.fonts?.ready ?? Promise.resolve());
+      await settle(whenImagesSettled(root));
+      await settle(document.fonts?.ready);
       await nextPaint();
       if (cancelled) return;
       fitTexts(root);

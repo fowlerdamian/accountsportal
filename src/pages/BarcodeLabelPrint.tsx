@@ -24,7 +24,7 @@ import {
 import { barcodeLogoScale, barcodeLogoUrl } from "@portal/lib/labels/barcodeLogos";
 import { EAN13_MODULES, ean13Bars, ean13Groups, isGuardModule } from "@portal/lib/labels/ean13";
 import { LEAGUE_SPARTAN_LIGHT, LEAGUE_SPARTAN_MEDIUM } from "@portal/lib/labels/leagueSpartanFonts";
-import { abs, fitTexts, inPrintFrame, mm, nextPaint, postToOpener as post, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
+import { abs, fitTexts, inPrintFrame, mm, nextPaint, postStage, postToOpener as post, settle, stockCss, whenImagesSettled } from "@portal/lib/labels/labelPrintDom";
 import { barcodeLabelFromParams } from "@portal/lib/labels/printLabels";
 import type { LabelStockKey } from "@portal/lib/labels/labelStock";
 
@@ -152,12 +152,13 @@ export default function BarcodeLabelPrint() {
     if (!root || !code) return;
     let cancelled = false;
     (async () => {
+      postStage("labels in page");
       fitTexts(root);
-      await whenImagesSettled(root);
+      await settle(whenImagesSettled(root));
       const fonts = document.fonts;
       if (fonts) {
-        await Promise.all([fonts.load(`${MEDIUM} 16pt "${FONT}"`), fonts.load(`${LIGHT} 10pt "${FONT}"`)]).catch(() => undefined);
-        await fonts.ready;
+        await settle(Promise.all([fonts.load(`${MEDIUM} 16pt "${FONT}"`), fonts.load(`${LIGHT} 10pt "${FONT}"`)]), 3000);
+        await settle(fonts.ready);
       }
       await nextPaint();
       if (cancelled) return;

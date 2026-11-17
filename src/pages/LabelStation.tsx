@@ -52,7 +52,7 @@ const HISTORY = 100;
 export const AUTO_PRINT_MS = 15 * 60_000;
 /**
  * A "printing" job claimed longer ago than this is from a station that stopped
- * mid-print. Longer than printLabelRoute can take (20s render + 5 min dialog
+ * mid-print. Longer than printLabelRoute can take (15s render + 5 min dialog
  * timeout), so a print that is still running is never handed out twice.
  */
 const STUCK_MS = 6 * 60_000;
