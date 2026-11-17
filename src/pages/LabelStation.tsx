@@ -62,6 +62,21 @@ const VERSION_POLL_MS = 2 * 60_000;
 /** The hashed entry bundle named in an index.html — changes on every deploy. */
 const entryScript = (html: string) => html.match(/\/assets\/index-[\w-]+\.js/)?.[0] ?? null;
 
+/**
+ * Short id for this window, kept across reloads. Stamped on every claim so two
+ * station windows open at once (one of them hidden and stalling) show up in
+ * label_print_jobs.station instead of looking like one flaky station.
+ */
+const INSTANCE = (() => {
+  try {
+    let id = sessionStorage.getItem("label-station:instance");
+    if (!id) { id = Math.random().toString(36).slice(2, 6); sessionStorage.setItem("label-station:instance", id); }
+    return id;
+  } catch { return Math.random().toString(36).slice(2, 6); }
+})();
+/** After a failed print this window leaves the queue alone this long, so another open station can take the retry. */
+const BACKOFF_MS = 45_000;
+
 const readLs = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const writeLs = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private window */ } };
 
@@ -91,6 +106,9 @@ export default function LabelStation() {
   /** Serialises every print so two hidden iframes never print at once. */
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   const stationRef = useRef(station);
+  const backoffUntil = useRef(0);
+  const backoffTimer = useRef(0);
+  const drainRef = useRef<() => void>(() => undefined);
 
   useEffect(() => { stationRef.current = station; writeLs(STATION_KEY, station); }, [station]);
 
@@ -110,7 +128,7 @@ export default function LabelStation() {
     // Claim atomically so a second open station can't print the same job.
     const { data: claimed } = await supabase
       .from("label_print_jobs")
-      .update({ status: "printing", station: stationRef.current, claimed_at: new Date().toISOString(), attempts: job.attempts + 1, decided_by: user?.id ?? null, decided_at: new Date().toISOString() })
+      .update({ status: "printing", station: `${stationRef.current} #${INSTANCE}`, claimed_at: new Date().toISOString(), attempts: job.attempts + 1, decided_by: user?.id ?? null, decided_at: new Date().toISOString() })
       .eq("id", job.id)
       .eq("status", "queued")
       .select("id")
@@ -126,12 +144,13 @@ export default function LabelStation() {
         await printLabels({ ids: [job.guide_id], brand: job.brand_key, copies: job.copies });
       }
       await supabase.from("label_print_jobs")
-        .update({ status: "printed", printed_at: new Date().toISOString(), printed_by: user?.id ?? null, error: null })
+        .update({ status: "printed", printed_at: new Date().toISOString(), printed_by: user?.id ?? null })
         .eq("id", job.id);
     } catch (e: any) {
       const retry = job.attempts + 1 < MAX_ATTEMPTS;
+      backoffUntil.current = Date.now() + BACKOFF_MS;
       await supabase.from("label_print_jobs")
-        .update({ status: retry ? "queued" : "failed", error: e?.message ?? String(e) })
+        .update({ status: retry ? "queued" : "failed", error: `${e?.message ?? String(e)} [#${INSTANCE}, try ${job.attempts + 1}]` })
         .eq("id", job.id);
     } finally {
       setPrinting(null);
@@ -155,6 +174,12 @@ export default function LabelStation() {
   // Print every recent queued job, oldest first, until none are left.
   const drain = useCallback(async () => {
     if (draining.current) { again.current = true; return; }
+    const wait = backoffUntil.current - Date.now();
+    if (wait > 0) {
+      // Come back by itself once the back-off is over rather than waiting for the next poll.
+      if (!backoffTimer.current) backoffTimer.current = window.setTimeout(() => { backoffTimer.current = 0; drainRef.current(); }, wait + 250);
+      return;
+    }
     draining.current = true;
     try {
       await recoverStuck();
@@ -176,6 +201,7 @@ export default function LabelStation() {
       load();
     }
   }, [exclusive, printJob, load, recoverStuck]);
+  useEffect(() => { drainRef.current = drain; }, [drain]);
 
   useEffect(() => {
     load();
@@ -301,7 +327,7 @@ export default function LabelStation() {
                   <td className="p-2">
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${stale ? STATUS_CLASS.cancelled : STATUS_CLASS[j.status]}`}>{stale ? "waiting" : j.status}</span>
                     {j.status === "printed" && <span className="block text-xs text-muted-foreground">{fmtTime(j.printed_at)}{j.station ? ` · ${j.station}` : ""}</span>}
-                    {j.error && <span className="block text-xs text-red-500 max-w-xs">{j.error}</span>}
+                    {j.error && <span className={`block text-xs max-w-xs ${j.status === "printed" ? "text-muted-foreground" : "text-red-500"}`}>{j.status === "printed" ? `Earlier try: ${j.error}` : j.error}</span>}
                   </td>
                   <td className="p-2 whitespace-nowrap text-right">
                     {stale && <button onClick={() => printNow(j)} className="text-xs underline mr-3">Print</button>}
