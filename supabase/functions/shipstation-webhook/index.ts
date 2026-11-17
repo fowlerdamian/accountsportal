@@ -29,6 +29,9 @@
 //                           mode the ShipStation orders the webhook missed; { seed: true } marks what is
 //                           already there as seen without printing
 //   { action: "cin7-stages" } — diagnostic: pick / pack / ship status of recently updated Cin7 sales
+//   { action: "cin7-webhooks" } — list Cin7's webhooks; { register: true } subscribes Sale/PickAuthorised to
+//                           this function (?source=cin7, bearer token) so labels queue the moment a pick
+//                           is authorised; the poll stays as the backup
 //   { action: "setup" }   — register the SHIP_NOTIFY + ORDER_NOTIFY webhooks pointing at this function (idempotent)
 //   { action: "status" }  — list webhooks + open picks awaiting shipment
 // Deploy with --no-verify-jwt (ShipStation cannot send a Supabase JWT).
@@ -210,6 +213,63 @@ async function cin7Get(path: string) {
   return res.json();
 }
 
+async function cin7Send(method: "POST" | "DELETE", path: string, payload?: unknown) {
+  const res = await fetch(`${CIN7}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", "api-auth-accountid": Deno.env.get("CIN7_ACCOUNT_ID") ?? "", "api-auth-applicationkey": Deno.env.get("CIN7_API_KEY") ?? "" },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let out: unknown = text.slice(0, 500);
+  try { out = JSON.parse(text); } catch { /* plain text */ }
+  return { ok: res.ok, status: res.status, out };
+}
+
+/** Bearer token Cin7 sends with its webhooks — derived, so there is no extra secret to store. */
+async function cin7HookToken() {
+  const data = new TextEncoder().encode(`${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}:cin7-webhook`);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Queue guide labels for one Cin7 sale: every fulfilment whose pick is authorised
+ * and which has not shipped, each claimed once in label_orders_seen. Throws when a
+ * fulfilment could not be queued (its claim is released so the next run retries).
+ */
+async function labelsForPickedSale(db: SupabaseClient, saleId: string, orderNumber: string | null, seed: boolean, results: Record<string, string>) {
+  const sale = await cin7Get(`/sale?ID=${encodeURIComponent(saleId)}`);
+  const order = orderNumber ?? sale.Order?.SaleOrderNumber ?? saleId;
+  for (const f of sale.Fulfilments ?? []) {
+    if (f?.Pick?.Status !== "AUTHORISED" || f?.Ship?.Status === "AUTHORISED" || !f.TaskID) continue;
+    const label = `${order}${(sale.Fulfilments ?? []).length > 1 ? `/${f.FulfillmentNumber}` : ""}`;
+    const id = `cin7:${f.TaskID}`;
+    const { data: claim, error } = await db.from("label_orders_seen")
+      .upsert({ shipstation_order_id: id, order_number: order, note: seed ? "seeded" : null }, { onConflict: "shipstation_order_id", ignoreDuplicates: true })
+      .select("shipstation_order_id");
+    if (error) throw new Error(`label_orders_seen: ${error.message}`);
+    if (!claim?.length) { results[label] = "already done"; continue; }
+    if (seed) { results[label] = "seeded"; continue; }
+    try {
+      const a = sale.ShippingAddress ?? {};
+      const r = await queueGuideLabels(db, {
+        orderNumber: order, source: "picked",
+        items: (f.Pick.Lines ?? []).map((l: any) => ({ sku: l.SKU ?? null, name: l.Name ?? null, quantity: Number(l.Quantity) || 1 })),
+        who: {
+          customer_name: sale.Customer ?? a.Contact ?? null,
+          ship_to: [String(a.City ?? "").split(";")[0], a.State, a.Postcode].filter(Boolean).join(" ").trim() || null,
+        },
+      });
+      if (!r.ok) throw new Error(`queue-labels: ${JSON.stringify(r.out).slice(0, 200)}`);
+      await db.from("label_orders_seen").update({ labels_queued: r.queued }).eq("shipstation_order_id", id);
+      results[label] = r.queued ? `queued ${r.queued}` : "no guide labels";
+    } catch (e) {
+      await db.from("label_orders_seen").delete().eq("shipstation_order_id", id); // release the claim; next run retries
+      throw e;
+    }
+  }
+}
+
 /**
  * Picked trigger: queue guide labels for every Cin7 fulfilment whose pick is
  * authorised and which has not shipped. Sales are found by UpdatedSince the last
@@ -240,35 +300,7 @@ async function pollPickedSales(db: SupabaseClient, seed: boolean) {
   let failed = false;
   for (const s of atPick.slice(0, 40)) {
     try {
-      const sale = await cin7Get(`/sale?ID=${encodeURIComponent(s.SaleID)}`);
-      for (const f of sale.Fulfilments ?? []) {
-        if (f?.Pick?.Status !== "AUTHORISED" || f?.Ship?.Status === "AUTHORISED" || !f.TaskID) continue;
-        const label = `${s.OrderNumber}${(sale.Fulfilments ?? []).length > 1 ? `/${f.FulfillmentNumber}` : ""}`;
-        const id = `cin7:${f.TaskID}`;
-        const { data: claim, error } = await db.from("label_orders_seen")
-          .upsert({ shipstation_order_id: id, order_number: s.OrderNumber ?? null, note: seed ? "seeded" : null }, { onConflict: "shipstation_order_id", ignoreDuplicates: true })
-          .select("shipstation_order_id");
-        if (error) throw new Error(`label_orders_seen: ${error.message}`);
-        if (!claim?.length) { results[label] = "already done"; continue; }
-        if (seed) { results[label] = "seeded"; continue; }
-        try {
-          const a = sale.ShippingAddress ?? {};
-          const r = await queueGuideLabels(db, {
-            orderNumber: s.OrderNumber, source: "picked",
-            items: (f.Pick.Lines ?? []).map((l: any) => ({ sku: l.SKU ?? null, name: l.Name ?? null, quantity: Number(l.Quantity) || 1 })),
-            who: {
-              customer_name: sale.Customer ?? a.Contact ?? null,
-              ship_to: [String(a.City ?? "").split(";")[0], a.State, a.Postcode].filter(Boolean).join(" ").trim() || null,
-            },
-          });
-          if (!r.ok) throw new Error(`queue-labels: ${JSON.stringify(r.out).slice(0, 200)}`);
-          await db.from("label_orders_seen").update({ labels_queued: r.queued }).eq("shipstation_order_id", id);
-          results[label] = r.queued ? `queued ${r.queued}` : "no guide labels";
-        } catch (e) {
-          await db.from("label_orders_seen").delete().eq("shipstation_order_id", id); // release the claim; next run retries
-          throw e;
-        }
-      }
+      await labelsForPickedSale(db, s.SaleID, s.OrderNumber ?? null, seed, results);
     } catch (e) {
       failed = true;
       results[s.OrderNumber] = `error: ${String((e as any)?.message ?? e)}`;
@@ -424,6 +456,25 @@ Deno.serve(async (req) => {
       return json({ ok: true, shipments: shipments.length, results, labels });
     }
 
+    // ── Cin7 webhook (Sale/PickAuthorised) — prints the labels without waiting for the poll ──
+    if (new URL(req.url).searchParams.get("source") === "cin7") {
+      if (req.headers.get("authorization") !== `Bearer ${await cin7HookToken()}`) return json({ error: "unauthorised" }, 401);
+      if (LABEL_TRIGGER !== "picked") return json({ ok: true, ignored: "trigger is not picked" });
+      const evt = Array.isArray(body) ? body[0] : body;
+      const saleId = String(evt?.SaleID ?? evt?.SaleId ?? evt?.ID ?? "");
+      const results: Record<string, string> = {};
+      try {
+        // The payload only names the sale; everything else is re-fetched from Cin7.
+        if (/^[0-9a-f-]{36}$/i.test(saleId)) await labelsForPickedSale(db, saleId, null, false, results);
+        else { console.log("cin7 webhook without a SaleID, keys:", Object.keys(evt ?? {})); return json({ ok: true, ...(await pollPickedSales(db, false)) }); }
+      } catch (e) {
+        // Answer 200 anyway: the 15-second poll picks the sale up, a Cin7 retry would only repeat the work.
+        console.error("cin7 webhook:", e);
+        return json({ ok: false, sale: saleId, error: String((e as any)?.message ?? e), results });
+      }
+      return json({ ok: true, sale: saleId, results });
+    }
+
     // ── Staff / cron actions ──
     const auth = await requireStaff(req, corsHeaders);
     if (!auth.ok) return auth.response;
@@ -440,6 +491,22 @@ Deno.serve(async (req) => {
       }
       case "poll-orders":
         return json({ ok: true, ...(await pollPackedOrders(db, body.seed === true)) });
+      case "cin7-webhooks": {
+        // List Cin7's webhooks; { register: true } adds Sale/PickAuthorised → this function, { remove: "<ID>" } deletes one.
+        const target = `${Deno.env.get("SUPABASE_URL")}/functions/v1/shipstation-webhook?source=cin7`;
+        const strip = (list: any[]) => list.map((w) => ({ ID: w.ID, Type: w.Type, Name: w.Name, IsActive: w.IsActive, ExternalUrl: w.ExternalUrl, ExternalAuthorizationType: w.ExternalAuthorizationType }));
+        let hooks: any[] = (await cin7Get("/webhooks")).Webhooks ?? [];
+        let change: unknown = null;
+        if (body.remove) change = await cin7Send("DELETE", `/webhooks?ID=${encodeURIComponent(String(body.remove))}`);
+        else if (body.register === true && !hooks.some((w) => w.Type === "Sale/PickAuthorised" && w.ExternalUrl === target)) {
+          change = await cin7Send("POST", "/webhooks", {
+            Type: "Sale/PickAuthorised", Name: "AGA guide labels - pick authorised", IsActive: true, ExternalUrl: target,
+            ExternalAuthorizationType: "bearerauth", ExternalBearerToken: await cin7HookToken(), ExternalHeaders: [],
+          });
+        }
+        if (change) hooks = (await cin7Get("/webhooks")).Webhooks ?? [];
+        return json({ ok: true, target, change, webhooks: strip(hooks) });
+      }
       case "setup": {
         const target = `${Deno.env.get("SUPABASE_URL")}/functions/v1/shipstation-webhook`;
         const existing = await ssGet("/webhooks");

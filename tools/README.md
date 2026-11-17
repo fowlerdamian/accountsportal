@@ -82,7 +82,7 @@ Runs on the PC connected to the LabelWriter 550 (the shared queue host). Opens
 dialog. Set the LabelWriter as the default printer on that PC, run the .cmd, sign in
 once, and drop a shortcut in `shell:startup`.
 
-Flow: pick authorised in Cin7 → `shipstation-webhook` `poll-orders` (pg_cron every minute:
+Flow: pick authorised in Cin7 → `shipstation-webhook` `poll-orders` (pg_cron every 15 seconds:
 Cin7 sales updated since the last run, fulfilments with Pick authorised and not shipped;
 each claimed once in `label_orders_seen` as `cin7:<TaskID>`) → `guide-delivery`
 `queue-labels` (SKU → guide, copies = qty) → `label_print_jobs` (source `picked`) →
