@@ -10,9 +10,9 @@ import Layout from './components/Layout.jsx'
 import GlobalChat from './components/GlobalChat'
 import LoginPage from './components/LoginPage.jsx'
 import PortalDashboard from './pages/Dashboard.jsx'
-import TileSettings from './pages/TileSettings.jsx'
 import Settings from './pages/Settings.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
+import { APPS } from './config/apps.js'
 import { TaskDock } from './components/TaskDock'
 import { GlobalShortcuts } from './components/GlobalShortcuts'
 import { GlobalMentions } from './components/GlobalMentions'
@@ -94,6 +94,19 @@ function RouteFallback() {
   )
 }
 
+// Public guide viewer at /:slug. On the staff host that pattern also catches any
+// mistyped one-segment portal URL, so a signed-in staff member whose "slug"
+// matches no guide goes to the dashboard instead of a customer "not available" card.
+function PublicGuide() {
+  const { user } = useAuth()
+  const staffHost = !window.location.hostname.startsWith('guide.')
+  return (
+    <GuideAuthProvider>
+      <GuideViewer notFoundFallback={staffHost && user ? <Navigate to="/dashboard" replace /> : undefined} />
+    </GuideAuthProvider>
+  )
+}
+
 // Redirect old viewer URL formats to the current /:slug public route
 function SlugRedirect() {
   const { slug } = useParams()
@@ -162,33 +175,22 @@ const persistOptions = {
   },
 }
 
-// Longest prefix wins — more specific paths must come before their parents.
+// First match wins — sub-pages are listed first, then every app in the
+// registry (config/apps.js) supplies its own top-level title.
 const PATH_TITLES = [
   ['/accounts/xero',         'Xero'],
-  ['/accounts',              'Finance'],
   ['/logistics/invoices',    'Invoices'],
   ['/logistics/settings',    'Settings'],
   ['/logistics/disputes',    'Disputes'],
   ['/logistics/tracking',    'Tracking Lookup'],
-  ['/logistics',             'Logistics'],
-  ['/purchase-orders',       'Purchasing'],
   ['/sales/opportunities',   'Opportunities'],
-  ['/sales',                 'Sales'],
-  ['/marketing',             'Marketing'],
-  ['/compliance',            'Compliance'],
   ['/support/customers',     'Customers'],
-  ['/support',               'Cases'],
   ['/projects/ideas',        'Ideas'],
   ['/projects/archive',      'Archive'],
   ['/projects/drawings',     'Drawings'],
-  ['/projects',              'R&D'],
-  ['/tasks',                 'Tasks'],
-  ['/guide',                 'Guide Portal'],
-  ['/warehouse',             'Warehouse'],
+  ...APPS.map(app => [app.route, app.name]),
   ['/labels',                'Labels'],
-  ['/dashboard/settings',    'Tile Settings'],
   ['/dashboard',             'Dashboard'],
-  ['/settings',              'Settings'],
   ['/login',                 'Login'],
 ]
 
@@ -252,7 +254,7 @@ export default function App() {
             <Route path="/guide/view/:slug" element={<SlugRedirect />} />
 
             {/* Guide Portal — public viewer */}
-            <Route path="/:slug" element={<GuideAuthProvider><GuideViewer /></GuideAuthProvider>} />
+            <Route path="/:slug" element={<PublicGuide />} />
 
             {/* Guide Portal — protected admin */}
             <Route path="/guide/*" element={<GuideAppRouter />} />
@@ -313,7 +315,8 @@ export default function App() {
             >
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<PortalDashboard />} />
-              <Route path="dashboard/settings" element={<TileSettings />} />
+              {/* Manage Access merged into Settings → Users. */}
+              <Route path="dashboard/settings" element={<Navigate to="/settings" replace />} />
               <Route path="settings" element={<Settings />} />
               <Route path="accounts" element={<AccountsLayout />}>
                 <Route index element={<FinanceDashboard />} />

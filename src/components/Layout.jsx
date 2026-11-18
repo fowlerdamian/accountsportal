@@ -2,23 +2,19 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import InvoiceDropZone from '../apps/Logistics/components/InvoiceDropZone.jsx'
+import { APPS } from '../config/apps.js'
 
+// Top-level labels come from the app registry; only sub-pages are listed here.
 const ROUTE_LABELS = {
+  ...Object.fromEntries(APPS.map(app => [app.route, app.name])),
   '/dashboard':               null,
-  '/accounts':                'Finance',
-  '/accounts/xero':           'Accounts / Xero',
-  '/logistics':               'Logistics',
+  '/accounts/xero':           'Finance / Xero',
   '/logistics/invoices':      'Logistics / Invoices',
   '/logistics/settings':      'Logistics / Settings',
   '/logistics/disputes':      'Logistics / Disputes',
-  '/purchase-orders':         'Purchasing',
-  '/sales':                   'Sales',
+  '/logistics/tracking':      'Logistics / Tracking Lookup',
   '/sales/opportunities':     'Sales / Opportunities',
-  '/marketing':               'Marketing',
-  '/compliance':              'Compliance',
-  '/warehouse':               'Warehouse',
   '/warehouse/barcodes':      'Warehouse / Barcodes',
-  '/settings':                'Settings',
 }
 
 export default function Layout() {

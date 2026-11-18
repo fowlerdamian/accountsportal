@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { submitFocusedTextBlock } from "../utils/submitTextBlock";
+import { APPS } from "../config/apps.js";
 
 // Press Esc this many times within ESC_WINDOW_MS to jump straight to the
 // dashboard instead of stepping back one page at a time.
@@ -28,18 +29,13 @@ export type Shortcut = {
 
 // Top-level portal navigation. Sub-app sub-routes deliberately omitted —
 // each app can still keep its own internal shortcuts inside its own layout.
+// Letters and labels live on each app in config/apps.js, so a new tile gets
+// its shortcut (and the right name) by adding one field there.
 export const NAV_SHORTCUTS: Array<{ letter: string; path: string; label: string }> = [
-  { letter: "d", path: "/dashboard",       label: "Dashboard" },
-  { letter: "t", path: "/tasks",           label: "Tasks" },
-  { letter: "p", path: "/projects",        label: "R&D" },
-  { letter: "s", path: "/support",         label: "Customer Service" },
-  { letter: "l", path: "/logistics",       label: "Logistics" },
-  { letter: "o", path: "/purchase-orders", label: "Purchasing" },
-  { letter: "c", path: "/compliance",      label: "Compliance" },
-  { letter: "g", path: "/guide",           label: "Guide Portal" },
-  { letter: "a", path: "/accounts",        label: "Finance" },
-  { letter: "x", path: "/sales",           label: "Sales" },
-  { letter: "e", path: "/settings",        label: "Settings" },
+  { letter: "d", path: "/dashboard", label: "Dashboard" },
+  ...(APPS as Array<{ name: string; route: string; shortcut?: string }>)
+    .filter((app) => app.shortcut)
+    .map((app) => ({ letter: app.shortcut as string, path: app.route, label: app.name })),
 ];
 
 export const SHORTCUTS: Shortcut[] = [

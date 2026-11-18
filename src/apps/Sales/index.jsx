@@ -18,7 +18,7 @@ export default function Sales() {
   const onOpportunities = pathname.startsWith('/sales/opportunities')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <nav style={{ display: 'flex', gap: '4px', padding: '0 18px', borderBottom: '1px solid #222222', flexShrink: 0 }}>
         {TABS.map((tab) => {
           const active = tab.to === '/sales' ? !onOpportunities : onOpportunities

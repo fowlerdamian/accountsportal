@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings as SettingsIcon,
-  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck, ShieldCheck, Target,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { supabase } from '../lib/supabase.js'
@@ -12,7 +12,7 @@ import { palette } from '../lib/palette.js'
 
 const ICON_MAP = {
   BarChart3, Truck, ShoppingCart, Headphones, Wrench, BookOpen, Settings: SettingsIcon,
-  Package, Users, DollarSign, TrendingUp, ClipboardCheck,
+  Package, Users, DollarSign, TrendingUp, ClipboardCheck, ShieldCheck, Target,
 }
 
 function AppIcon({ name }) {
@@ -22,6 +22,33 @@ function AppIcon({ name }) {
 }
 
 const LIVE_APPS = APPS.filter(a => (a.status === 'live' || a.status === 'beta') && a.route !== '/settings')
+
+// Cases has a third access level: 'warehouse' locks the user to the Warehouse
+// screen only. Stored under the legacy '/support/dashboard-only' key, which
+// Support's AppLayout/AppSidebar read.
+const SUPPORT_MODES = [['full', 'Full'], ['warehouse', 'Warehouse only'], ['off', 'Off']]
+
+function SupportModeSelector({ tiles, disabled, onSet }) {
+  const mode = tiles['/support'] === false ? 'off' : tiles['/support/dashboard-only'] === true ? 'warehouse' : 'full'
+  return (
+    <div style={{ display: 'inline-flex', border: '1px solid #222', borderRadius: '4px', overflow: 'hidden' }}>
+      {SUPPORT_MODES.map(([value, label]) => (
+        <button
+          key={value}
+          onClick={() => !disabled && value !== mode && onSet(value)}
+          disabled={disabled}
+          style={{
+            padding: '4px 10px', fontSize: '10px', border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
+            fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase',
+            background: mode === value ? 'var(--brand-accent)' : '#1a1a1a',
+            color: mode === value ? '#000' : '#777',
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >{label}</button>
+      ))}
+    </div>
+  )
+}
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -354,16 +381,25 @@ function UserManagement() {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u))
   }
 
-  const toggleTile = async (userId, tileRoute, enabled) => {
-    setSaving(true)
-    await supabase.from('user_tile_settings')
-      .upsert({ user_id: userId, tile_route: tileRoute, enabled }, { onConflict: 'user_id,tile_route' })
+  // changes: { [tile_route]: enabled } — written together, and only reflected
+  // in the UI once the save has actually succeeded.
+  const saveTiles = async (userId, changes) => {
+    setSaving(true); setError(null)
+    const rows = Object.entries(changes).map(([tile_route, enabled]) => ({ user_id: userId, tile_route, enabled }))
+    const { error: upErr } = await supabase.from('user_tile_settings')
+      .upsert(rows, { onConflict: 'user_id,tile_route' })
     setSaving(false)
+    if (upErr) { setError(upErr.message); return }
     setTileSettings(prev => ({
       ...prev,
-      [userId]: { ...(prev[userId] || {}), [tileRoute]: enabled },
+      [userId]: { ...(prev[userId] || {}), ...changes },
     }))
   }
+  const toggleTile = (userId, tileRoute, enabled) => saveTiles(userId, { [tileRoute]: enabled })
+  const setSupportMode = (userId, mode) => saveTiles(userId, {
+    '/support': mode !== 'off',
+    '/support/dashboard-only': mode === 'warehouse',
+  })
 
   const sendPasswordReset = async (userId, email) => {
     setResetError(prev => ({ ...prev, [userId]: null }))
@@ -495,7 +531,9 @@ function UserManagement() {
                                 <AppIcon name={app.icon} />
                                 <span style={{ fontSize: '12px', color: '#ffffff' }}>{app.name}</span>
                               </div>
-                              <Toggle checked={enabled} disabled={saving} onChange={val => toggleTile(u.id, app.route, val)} />
+                              {app.route === '/support'
+                                ? <SupportModeSelector tiles={userTiles} disabled={saving} onSet={mode => setSupportMode(u.id, mode)} />
+                                : <Toggle checked={enabled} disabled={saving} onChange={val => toggleTile(u.id, app.route, val)} />}
                             </div>
                           )
                         })}

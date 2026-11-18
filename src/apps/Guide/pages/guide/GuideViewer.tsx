@@ -142,7 +142,9 @@ function UnavailableCard({ brand, title, body }: { brand: Brand | undefined; tit
   );
 }
 
-export default function GuideViewer() {
+// notFoundFallback: rendered instead of the "not available" card when the slug
+// matches no guide (the staff host passes a redirect to the dashboard).
+export default function GuideViewer({ notFoundFallback }: { notFoundFallback?: ReactNode } = {}) {
   const { data: brands = [] } = useBrands();
   const brand = useMemo(() => resolveBrand(brands), [brands]);
 
@@ -158,7 +160,7 @@ export default function GuideViewer() {
           />
         }
       >
-        <GuideViewerInner brand={brand} />
+        <GuideViewerInner brand={brand} notFoundFallback={notFoundFallback} />
       </GuideErrorBoundary>
     </>
   );
@@ -189,7 +191,7 @@ function parseNav(p: URLSearchParams) {
   return { variant, stepIdx, finished };
 }
 
-function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
+function GuideViewerInner({ brand, notFoundFallback }: { brand: Brand | undefined; notFoundFallback?: ReactNode }) {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -361,6 +363,7 @@ function GuideViewerInner({ brand }: { brand: Brand | undefined }) {
   }
 
   if (!guide) {
+    if (notFoundFallback) return <>{notFoundFallback}</>;
     return (
       <UnavailableCard
         brand={brand}

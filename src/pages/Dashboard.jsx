@@ -39,7 +39,7 @@ export default function PortalDashboard() {
 
         {isAdmin && (
           <Link
-            to="/dashboard/settings"
+            to="/settings"
             style={{
               fontSize: '11px', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
               color: '#a0a0a0', background: 'none', border: '1px solid #222222', borderRadius: '4px',

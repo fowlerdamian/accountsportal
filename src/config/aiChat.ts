@@ -28,7 +28,7 @@ export const APP_CHAT_CONTEXTS: ChatContextEntry[] = [
     suggestions: ["What's on today's call list?", 'Show me top leads by score', 'How many leads per channel?'],
   },
   {
-    prefix: '/support', context: 'support', label: 'Customer Service',
+    prefix: '/support', context: 'support', label: 'Cases',
     suggestions: ['How many open cases?', "What's overdue?", 'Show me urgent cases'],
   },
   {
