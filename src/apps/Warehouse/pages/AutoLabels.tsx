@@ -76,7 +76,7 @@ const btn: CSSProperties = {
 };
 const btnOff: CSSProperties = { ...btn, color: "#555", borderColor: "#222", cursor: "not-allowed" };
 const link: CSSProperties = { background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "12px", fontFamily: "inherit", color: "#a0a0a0", textDecoration: "underline" };
-const th: CSSProperties = { ...labelStyle, marginBottom: 0, padding: "8px 10px", textAlign: "left", fontWeight: 400, borderBottom: "1px solid #1e1e1e" };
+const th: CSSProperties = { ...labelStyle, display: "table-cell", marginBottom: 0, padding: "8px 10px", textAlign: "left", fontWeight: 400, borderBottom: "1px solid #1e1e1e" };
 const td: CSSProperties = { padding: "10px", fontSize: "13px", color: "#e5e5e5", borderBottom: "1px solid #161616", verticalAlign: "top" };
 const mono: CSSProperties = { fontFamily: '"JetBrains Mono", monospace', fontSize: "12px" };
 
