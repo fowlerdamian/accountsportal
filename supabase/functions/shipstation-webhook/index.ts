@@ -13,6 +13,7 @@
 //   queues the warehouse product barcode label (label_print_jobs kind "barcode") for
 //   every pick line whose SKU is on the product_label_skus list (/warehouse/auto-labels),
 //   copies = picked qty x copies_per_unit. Claimed separately (key cin7-product:<TaskID>).
+//   Sales whose Cin7 customer is in product_label_excluded_customers get none.
 // ORDER_NOTIFY (only when LABEL_TRIGGER = "packed") — a new order landed in ShipStation. Cin7 sends a sale across when it
 //   is packed, so this is the "packed" signal: the order's lines go to guide-delivery
 //   `queue-labels`, which matches SKUs to guides and queues DYMO guide labels
@@ -264,6 +265,15 @@ async function queueProductLabels(db: SupabaseClient, o: { taskId: string; order
     if (!qty.size) return "";
     const { data: list, error } = await db.from("product_label_skus").select("sku, payload, copies_per_unit").eq("enabled", true).in("sku", [...qty.keys()]);
     if (error) throw new Error(`product_label_skus: ${error.message}`);
+    if (!list?.length) return "";
+    // Customers on the exclusion list (/warehouse/auto-labels) never get product labels.
+    const norm = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+    const customer = norm(o.who.customer_name);
+    if (customer) {
+      const { data: excluded, error: xErr } = await db.from("product_label_excluded_customers").select("customer");
+      if (xErr) throw new Error(`product_label_excluded_customers: ${xErr.message}`);
+      if ((excluded ?? []).some((r) => norm(r.customer) === customer)) return "product labels skipped (customer excluded)";
+    }
     // A label without a product name or a 12/13-digit EAN cannot print; leave it out rather than fail at the station.
     const printable = (p: any) => !!String(p?.title ?? "").trim() && /^\d{12,13}$/.test(String(p?.barcode ?? "").replace(/[\s-]/g, ""));
     const skipped = (list ?? []).filter((r) => !printable(r.payload)).map((r) => r.sku);

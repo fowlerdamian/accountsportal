@@ -96,7 +96,19 @@ export default function AutoLabels() {
   const [rowMsg, setRowMsg] = useState<Record<string, { kind: "ok" | "err"; text: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
+  // Customers whose orders never auto-print (matched on the Cin7 customer name).
+  const [excluded, setExcluded] = useState<string[]>([]);
+  const [customer, setCustomer] = useState("");
+  const [customerMsg, setCustomerMsg] = useState<string | null>(null);
+  const [known, setKnown] = useState<string[]>([]);
+
   const load = useCallback(async () => {
+    supabase.from("product_label_excluded_customers").select("customer").order("customer")
+      .then(({ data }) => { if (data) setExcluded(data.map(r => r.customer as string)); });
+    // Customer names as Cin7 sends them, for the suggestions under the box.
+    supabase.from("label_print_jobs").select("customer_name").eq("source", "picked").not("customer_name", "is", null)
+      .order("created_at", { ascending: false }).limit(400)
+      .then(({ data }) => { if (data) setKnown([...new Set(data.map(r => String(r.customer_name).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))); });
     const [list, jobs] = await Promise.all([
       supabase.from("product_label_skus").select("sku, payload, copies_per_unit, enabled, updated_at").order("sku"),
       supabase.from("label_print_jobs").select("id, created_at, order_number, customer_name, sku, copies, status, error")
@@ -171,6 +183,23 @@ export default function AutoLabels() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const excludeCustomer = async () => {
+    const name = customer.replace(/\s+/g, " ").trim();
+    if (!name) return;
+    setCustomerMsg(null);
+    if (excluded.some(c => c.toLowerCase() === name.toLowerCase())) { setCustomerMsg(`${name} is already excluded`); return; }
+    const { data: auth } = await supabase.auth.getUser();
+    const { error } = await supabase.from("product_label_excluded_customers").insert({ customer: name, created_by: auth.user?.id ?? null });
+    if (error) { setCustomerMsg(error.message); return; }
+    setExcluded(list => [...list, name].sort((a, b) => a.localeCompare(b)));
+    setCustomer("");
+  };
+  const includeCustomer = async (name: string) => {
+    setExcluded(list => list.filter(c => c !== name));
+    const { error } = await supabase.from("product_label_excluded_customers").delete().eq("customer", name);
+    if (error) { setCustomerMsg(error.message); load(); }
   };
 
   const startEdit = (row: Row) => { setEditing(row.sku); setDraft({ ...row.payload }); };
@@ -300,6 +329,31 @@ export default function AutoLabels() {
             })}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ ...cardStyle, marginBottom: "20px" }}>
+        <label style={labelStyle}>Excluded customers</label>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 420px) auto", gap: "12px", justifyContent: "start" }}>
+          <input
+            style={inputStyle} value={customer} onChange={e => setCustomer(e.target.value)} list="auto-label-customers" spellCheck={false}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); excludeCustomer(); } }}
+            placeholder="Customer name, exactly as in Cin7"
+          />
+          <datalist id="auto-label-customers">{known.filter(k => !excluded.includes(k)).map(k => <option key={k} value={k} />)}</datalist>
+          <button type="button" style={customer.trim() ? btn : btnOff} disabled={!customer.trim()} onClick={excludeCustomer}>Exclude</button>
+        </div>
+        {customerMsg && <div style={errorStyle}>{customerMsg}</div>}
+        <div style={hintStyle}>Orders for these customers never auto-print product labels, whatever SKUs are on them.</div>
+        {excluded.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+            {excluded.map(name => (
+              <span key={name} style={{ display: "inline-flex", alignItems: "center", gap: "8px", border: "1px solid #222", borderRadius: "999px", padding: "4px 6px 4px 12px", fontSize: "12px", color: "#e5e5e5" }}>
+                {name}
+                <button type="button" onClick={() => includeCustomer(name)} aria-label={`Stop excluding ${name}`} title="Remove" style={{ ...link, textDecoration: "none", fontSize: "14px", lineHeight: 1, padding: "0 4px" }}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ ...cardStyle, padding: 0, overflowX: "auto" }}>
