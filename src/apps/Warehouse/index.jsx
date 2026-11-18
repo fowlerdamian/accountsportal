@@ -6,6 +6,7 @@ import WarehouseNav from './components/WarehouseNav.jsx'
 // until the Barcodes tab is actually used.
 const Barcodes = lazy(() => import('./pages/Barcodes'))
 const ManualLabel = lazy(() => import('./pages/ManualLabel.jsx'))
+const AutoLabels = lazy(() => import('./pages/AutoLabels'))
 
 function Loading() {
   return <div style={{ padding: '40px 0', color: '#666', fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}>Loading…</div>
@@ -26,6 +27,7 @@ export default function Warehouse() {
           <Routes>
             <Route index element={<Navigate to="/warehouse/barcodes" replace />} />
             <Route path="barcodes" element={<Barcodes />} />
+            <Route path="auto-labels" element={<AutoLabels />} />
             <Route path="manual-label" element={<ManualLabel />} />
             <Route path="*" element={<Navigate to="/warehouse/barcodes" replace />} />
           </Routes>
