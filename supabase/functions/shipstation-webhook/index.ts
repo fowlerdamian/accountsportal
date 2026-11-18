@@ -9,6 +9,10 @@
 //   lines sent to guide-delivery `queue-labels` (SKU → guide, copies = qty) for the
 //   /labels/station page. Each fulfilment is claimed once in label_orders_seen
 //   (key cin7:<TaskID>), so it never prints twice.
+// PRODUCT LABELS (warehouse auto labels, 2026-11-18): the same picked trigger also
+//   queues the warehouse product barcode label (label_print_jobs kind "barcode") for
+//   every pick line whose SKU is on the product_label_skus list (/warehouse/auto-labels),
+//   copies = picked qty x copies_per_unit. Claimed separately (key cin7-product:<TaskID>).
 // ORDER_NOTIFY (only when LABEL_TRIGGER = "packed") — a new order landed in ShipStation. Cin7 sends a sale across when it
 //   is packed, so this is the "packed" signal: the order's lines go to guide-delivery
 //   `queue-labels`, which matches SKUs to guides and queues DYMO guide labels
@@ -134,6 +138,7 @@ function withItems(resourceUrl: string): string {
 }
 
 type LabelItem = { sku: string | null; name: string | null; quantity: number };
+type Who = { customer_name: string | null; ship_to: string | null };
 
 /**
  * Queue DYMO guide labels for one order's lines. SKU→guide matching lives in
@@ -142,7 +147,7 @@ type LabelItem = { sku: string | null; name: string | null; quantity: number };
  */
 async function queueGuideLabels(
   db: SupabaseClient,
-  o: { orderNumber: string; source: string; shipmentId?: string; items: LabelItem[]; who: { customer_name: string | null; ship_to: string | null } },
+  o: { orderNumber: string; source: string; shipmentId?: string; items: LabelItem[]; who: Who },
 ): Promise<{ ok: boolean; queued: number; out: any }> {
   const items = o.items.filter((i) => i.sku).map((i) => ({ sku: i.sku, title: i.name ?? "", quantity: i.quantity ?? 1 }));
   if (!items.length) return { ok: true, queued: 0, out: "no items" };
@@ -232,10 +237,60 @@ async function cin7HookToken() {
   return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Insert the once-only claim for a fulfilment; false when someone already holds it. */
+async function claimOnce(db: SupabaseClient, id: string, order: string, seed: boolean): Promise<boolean> {
+  const { data: claim, error } = await db.from("label_orders_seen")
+    .upsert({ shipstation_order_id: id, order_number: order, note: seed ? "seeded" : null }, { onConflict: "shipstation_order_id", ignoreDuplicates: true })
+    .select("shipstation_order_id");
+  if (error) throw new Error(`label_orders_seen: ${error.message}`);
+  return !!claim?.length;
+}
+
 /**
- * Queue guide labels for one Cin7 sale: every fulfilment whose pick is authorised
- * and which has not shipped, each claimed once in label_orders_seen. Throws when a
- * fulfilment could not be queued (its claim is released so the next run retries).
+ * Warehouse product labels for one picked fulfilment: every pick line whose SKU is
+ * on the product_label_skus list gets one barcode job (the label stored with the
+ * SKU, copies = picked qty x copies_per_unit). Has its own claim, so a retry of the
+ * guide labels never reprints these and vice versa. Returns "" when nothing queued.
+ */
+async function queueProductLabels(db: SupabaseClient, o: { taskId: string; orderNumber: string; seed: boolean; items: LabelItem[]; who: Who }): Promise<string> {
+  const id = `cin7-product:${o.taskId}`;
+  if (!(await claimOnce(db, id, o.orderNumber, o.seed)) || o.seed) return "";
+  try {
+    const qty = new Map<string, number>();
+    for (const i of o.items) {
+      const sku = String(i.sku ?? "").trim().toUpperCase();
+      if (sku) qty.set(sku, (qty.get(sku) ?? 0) + Math.max(1, Math.ceil(Number(i.quantity) || 1)));
+    }
+    if (!qty.size) return "";
+    const { data: list, error } = await db.from("product_label_skus").select("sku, payload, copies_per_unit").eq("enabled", true).in("sku", [...qty.keys()]);
+    if (error) throw new Error(`product_label_skus: ${error.message}`);
+    // A label without a product name or a 12/13-digit EAN cannot print; leave it out rather than fail at the station.
+    const printable = (p: any) => !!String(p?.title ?? "").trim() && /^\d{12,13}$/.test(String(p?.barcode ?? "").replace(/[\s-]/g, ""));
+    const skipped = (list ?? []).filter((r) => !printable(r.payload)).map((r) => r.sku);
+    const rows = (list ?? []).filter((r) => printable(r.payload)).map((r) => ({
+      kind: "barcode", source: "picked", order_number: o.orderNumber, sku: r.sku, payload: r.payload,
+      copies: Math.min(50, (qty.get(r.sku) ?? 1) * (Number(r.copies_per_unit) || 1)), ...o.who,
+    }));
+    if (rows.length) {
+      const { error: iErr } = await db.from("label_print_jobs").insert(rows);
+      if (iErr) throw new Error(`label_print_jobs: ${iErr.message}`);
+      await db.from("label_orders_seen").update({ labels_queued: rows.length }).eq("shipstation_order_id", id);
+    }
+    return [
+      rows.length ? `${rows.length} product label${rows.length === 1 ? "" : "s"} (${rows.map((r) => `${r.copies}x ${r.sku}`).join(", ")})` : "",
+      skipped.length ? `product label incomplete: ${skipped.join(", ")}` : "",
+    ].filter(Boolean).join("; ");
+  } catch (e) {
+    await db.from("label_orders_seen").delete().eq("shipstation_order_id", id); // release the claim; next run retries
+    throw e;
+  }
+}
+
+/**
+ * Queue labels for one Cin7 sale: every fulfilment whose pick is authorised and
+ * which has not shipped gets its guide labels and its warehouse product labels,
+ * each claimed once in label_orders_seen. Throws when a fulfilment could not be
+ * queued (that claim is released so the next run retries).
  */
 async function labelsForPickedSale(db: SupabaseClient, saleId: string, orderNumber: string | null, seed: boolean, results: Record<string, string>) {
   const sale = await cin7Get(`/sale?ID=${encodeURIComponent(saleId)}`);
@@ -243,30 +298,32 @@ async function labelsForPickedSale(db: SupabaseClient, saleId: string, orderNumb
   for (const f of sale.Fulfilments ?? []) {
     if (f?.Pick?.Status !== "AUTHORISED" || f?.Ship?.Status === "AUTHORISED" || !f.TaskID) continue;
     const label = `${order}${(sale.Fulfilments ?? []).length > 1 ? `/${f.FulfillmentNumber}` : ""}`;
+    const a = sale.ShippingAddress ?? {};
+    const items: LabelItem[] = (f.Pick.Lines ?? []).map((l: any) => ({ sku: l.SKU ?? null, name: l.Name ?? null, quantity: Number(l.Quantity) || 1 }));
+    const who: Who = {
+      customer_name: sale.Customer ?? a.Contact ?? null,
+      ship_to: [String(a.City ?? "").split(";")[0], a.State, a.Postcode].filter(Boolean).join(" ").trim() || null,
+    };
+
+    // Guide labels.
     const id = `cin7:${f.TaskID}`;
-    const { data: claim, error } = await db.from("label_orders_seen")
-      .upsert({ shipstation_order_id: id, order_number: order, note: seed ? "seeded" : null }, { onConflict: "shipstation_order_id", ignoreDuplicates: true })
-      .select("shipstation_order_id");
-    if (error) throw new Error(`label_orders_seen: ${error.message}`);
-    if (!claim?.length) { results[label] = "already done"; continue; }
-    if (seed) { results[label] = "seeded"; continue; }
-    try {
-      const a = sale.ShippingAddress ?? {};
-      const r = await queueGuideLabels(db, {
-        orderNumber: order, source: "picked",
-        items: (f.Pick.Lines ?? []).map((l: any) => ({ sku: l.SKU ?? null, name: l.Name ?? null, quantity: Number(l.Quantity) || 1 })),
-        who: {
-          customer_name: sale.Customer ?? a.Contact ?? null,
-          ship_to: [String(a.City ?? "").split(";")[0], a.State, a.Postcode].filter(Boolean).join(" ").trim() || null,
-        },
-      });
-      if (!r.ok) throw new Error(`queue-labels: ${JSON.stringify(r.out).slice(0, 200)}`);
-      await db.from("label_orders_seen").update({ labels_queued: r.queued }).eq("shipstation_order_id", id);
-      results[label] = r.queued ? `queued ${r.queued}` : "no guide labels";
-    } catch (e) {
-      await db.from("label_orders_seen").delete().eq("shipstation_order_id", id); // release the claim; next run retries
-      throw e;
+    if (!(await claimOnce(db, id, order, seed))) results[label] = "already done";
+    else if (seed) results[label] = "seeded";
+    else {
+      try {
+        const r = await queueGuideLabels(db, { orderNumber: order, source: "picked", items, who });
+        if (!r.ok) throw new Error(`queue-labels: ${JSON.stringify(r.out).slice(0, 200)}`);
+        await db.from("label_orders_seen").update({ labels_queued: r.queued }).eq("shipstation_order_id", id);
+        results[label] = r.queued ? `queued ${r.queued}` : "no guide labels";
+      } catch (e) {
+        await db.from("label_orders_seen").delete().eq("shipstation_order_id", id); // release the claim; next run retries
+        throw e;
+      }
     }
+
+    // Warehouse product labels (SKUs on the /warehouse/auto-labels list).
+    const product = await queueProductLabels(db, { taskId: String(f.TaskID), orderNumber: order, seed, items, who });
+    if (product) results[label] = `${results[label]}; ${product}`;
   }
 }
 
