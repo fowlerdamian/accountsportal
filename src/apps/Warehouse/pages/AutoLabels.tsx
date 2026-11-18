@@ -96,7 +96,7 @@ export default function AutoLabels() {
   const [rowMsg, setRowMsg] = useState<Record<string, { kind: "ok" | "err"; text: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
-  // Customers whose orders never auto-print (matched on the Cin7 customer name).
+  // Customers whose orders never auto-print, product or guide labels (matched on the Cin7 customer name).
   const [excluded, setExcluded] = useState<string[]>([]);
   const [customer, setCustomer] = useState("");
   const [customerMsg, setCustomerMsg] = useState<string | null>(null);
@@ -343,7 +343,7 @@ export default function AutoLabels() {
           <button type="button" style={customer.trim() ? btn : btnOff} disabled={!customer.trim()} onClick={excludeCustomer}>Exclude</button>
         </div>
         {customerMsg && <div style={errorStyle}>{customerMsg}</div>}
-        <div style={hintStyle}>Orders for these customers never auto-print product labels, whatever SKUs are on them.</div>
+        <div style={hintStyle}>Orders for these customers never auto-print — no product labels and no guide labels.</div>
         {excluded.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
             {excluded.map(name => (

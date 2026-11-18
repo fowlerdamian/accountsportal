@@ -13,7 +13,8 @@
 //   queues the warehouse product barcode label (label_print_jobs kind "barcode") for
 //   every pick line whose SKU is on the product_label_skus list (/warehouse/auto-labels),
 //   copies = picked qty x copies_per_unit. Claimed separately (key cin7-product:<TaskID>).
-//   Sales whose Cin7 customer is in product_label_excluded_customers get none.
+// EXCLUDED CUSTOMERS: sales whose Cin7 customer is in product_label_excluded_customers
+//   (/warehouse/auto-labels) get no automatic labels — neither guide nor product.
 // ORDER_NOTIFY (only when LABEL_TRIGGER = "packed") — a new order landed in ShipStation. Cin7 sends a sale across when it
 //   is packed, so this is the "packed" signal: the order's lines go to guide-delivery
 //   `queue-labels`, which matches SKUs to guides and queues DYMO guide labels
@@ -247,6 +248,16 @@ async function claimOnce(db: SupabaseClient, id: string, order: string, seed: bo
   return !!claim?.length;
 }
 
+/** True when the sale's Cin7 customer is on the auto-label exclusion list (case-insensitive). */
+async function customerExcluded(db: SupabaseClient, name: string | null): Promise<boolean> {
+  const norm = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  const customer = norm(name);
+  if (!customer) return false;
+  const { data, error } = await db.from("product_label_excluded_customers").select("customer");
+  if (error) throw new Error(`product_label_excluded_customers: ${error.message}`);
+  return (data ?? []).some((r) => norm(r.customer) === customer);
+}
+
 /**
  * Warehouse product labels for one picked fulfilment: every pick line whose SKU is
  * on the product_label_skus list gets one barcode job (the label stored with the
@@ -266,14 +277,6 @@ async function queueProductLabels(db: SupabaseClient, o: { taskId: string; order
     const { data: list, error } = await db.from("product_label_skus").select("sku, payload, copies_per_unit").eq("enabled", true).in("sku", [...qty.keys()]);
     if (error) throw new Error(`product_label_skus: ${error.message}`);
     if (!list?.length) return "";
-    // Customers on the exclusion list (/warehouse/auto-labels) never get product labels.
-    const norm = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-    const customer = norm(o.who.customer_name);
-    if (customer) {
-      const { data: excluded, error: xErr } = await db.from("product_label_excluded_customers").select("customer");
-      if (xErr) throw new Error(`product_label_excluded_customers: ${xErr.message}`);
-      if ((excluded ?? []).some((r) => norm(r.customer) === customer)) return "product labels skipped (customer excluded)";
-    }
     // A label without a product name or a 12/13-digit EAN cannot print; leave it out rather than fail at the station.
     const printable = (p: any) => !!String(p?.title ?? "").trim() && /^\d{12,13}$/.test(String(p?.barcode ?? "").replace(/[\s-]/g, ""));
     const skipped = (list ?? []).filter((r) => !printable(r.payload)).map((r) => r.sku);
@@ -315,8 +318,18 @@ async function labelsForPickedSale(db: SupabaseClient, saleId: string, orderNumb
       ship_to: [String(a.City ?? "").split(";")[0], a.State, a.Postcode].filter(Boolean).join(" ").trim() || null,
     };
 
-    // Guide labels.
+    // Customers on the exclusion list (/warehouse/auto-labels) get no automatic labels at
+    // all, guide or product. Both claims are still taken, so taking the customer off the
+    // list later never prints for an order that was picked while they were on it.
     const id = `cin7:${f.TaskID}`;
+    if (!seed && await customerExcluded(db, who.customer_name)) {
+      const fresh = await claimOnce(db, id, order, false);
+      await claimOnce(db, `cin7-product:${f.TaskID}`, order, false);
+      results[label] = fresh ? "skipped (customer excluded)" : "already done";
+      continue;
+    }
+
+    // Guide labels.
     if (!(await claimOnce(db, id, order, seed))) results[label] = "already done";
     else if (seed) results[label] = "seeded";
     else {
