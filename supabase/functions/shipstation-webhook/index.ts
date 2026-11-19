@@ -277,8 +277,16 @@ async function queueProductLabels(db: SupabaseClient, o: { taskId: string; order
     const { data: list, error } = await db.from("product_label_skus").select("sku, payload, copies_per_unit").eq("enabled", true).in("sku", [...qty.keys()]);
     if (error) throw new Error(`product_label_skus: ${error.message}`);
     if (!list?.length) return "";
-    // A label without a product name or a 12/13-digit EAN cannot print; leave it out rather than fail at the station.
-    const printable = (p: any) => !!String(p?.title ?? "").trim() && /^\d{12,13}$/.test(String(p?.barcode ?? "").replace(/[\s-]/g, ""));
+    // A label without a product name or a valid EAN-13 (12 digits, or 13 with the right check digit) cannot
+    // print; leave it out rather than fail at the station, where each failed try stalls the queue for 45s.
+    const eanOk = (raw: unknown) => {
+      const d = String(raw ?? "").replace(/[\s-]/g, "");
+      if (/^\d{12}$/.test(d)) return true;
+      if (!/^\d{13}$/.test(d)) return false;
+      const sum = [...d.slice(0, 12)].reduce((t, c, i) => t + Number(c) * (i % 2 ? 3 : 1), 0);
+      return (10 - (sum % 10)) % 10 === Number(d[12]);
+    };
+    const printable = (p: any) => !!String(p?.title ?? "").trim() && eanOk(p?.barcode);
     const skipped = (list ?? []).filter((r) => !printable(r.payload)).map((r) => r.sku);
     const rows = (list ?? []).filter((r) => printable(r.payload)).map((r) => ({
       kind: "barcode", source: "picked", order_number: o.orderNumber, sku: r.sku, payload: r.payload,
