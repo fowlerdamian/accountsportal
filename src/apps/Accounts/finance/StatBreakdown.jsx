@@ -4,9 +4,12 @@
 //   2. Product category — Electrical (parent, broken down into Lighting,
 //      Behind Grille Lighting and Electrical), Communication, Storage, Safety,
 //      Other (every remaining Cin7 category)
-// Figures come from stat_breakdown_monthly (fed by the stat-breakdown-sync edge
-// fn from Cin7 invoice lines; GST-exclusive, cost = Cin7 AverageCost at invoice
-// time, credit notes subtracted). Sync: hourly pg_cron + the shared Sync button.
+// Figures come from stat_breakdown_cross (customer type × product bucket per
+// month, fed by the stat-breakdown-sync edge fn from Cin7 invoice lines;
+// GST-exclusive, cost = Cin7 AverageCost at invoice time, credit notes
+// subtracted). Sync: hourly pg_cron + the shared Sync button.
+// The two legends are cross-filters: switching a customer type off also removes
+// its sales from the product category panel, and vice versa.
 
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -79,19 +82,17 @@ function useStatBreakdown() {
   return useQuery({
     // Version suffix: bump when the result shape changes so a persisted cache
     // from an older bundle (localStorage, App.jsx) is refetched, not reused.
-    queryKey: ['stat-breakdown', 'v2'],
+    queryKey: ['stat-breakdown', 'v3'],
     queryFn: async () => {
-      const [rows, cross, pending, state] = await Promise.all([
-        supabase.from('stat_breakdown_monthly').select('*').order('period_month'),
-        // customer_type × bucket per month — feeds the cross-filter panel
+      const [cross, pending, state] = await Promise.all([
+        // customer_type × bucket per month — both panels are cut from this, so a
+        // legend filter on one dimension can be applied to the other
         supabase.from('stat_breakdown_cross').select('*').order('period_month'),
         supabase.from('cin7_stat_pending').select('*', { count: 'exact', head: true }),
         supabase.from('cin7_stat_sync_state').select('last_run, last_error').eq('id', 1).maybeSingle(),
       ])
-      if (rows.error) throw rows.error
       if (cross.error) throw cross.error
       return {
-        rows: rows.data ?? [],
         cross: cross.data ?? [],
         pending: pending.count ?? 0,
         state: state.data ?? null,
@@ -140,14 +141,15 @@ function ChartTip({ active, payload, label, segments }) {
   )
 }
 
-// Click an item to hide/show that segment in the chart (table is unaffected).
+// Click an item to filter that segment out / back in. The filter is shared:
+// it also removes the segment's sales from the other panel.
 function Legend({ segments, hidden, onToggle }) {
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
       {segments.map((s) => {
         const off = hidden.has(s.key)
         return (
-          <span key={s.key} onClick={() => onToggle(s.key)} title={off ? 'Show in chart' : 'Hide from chart'}
+          <span key={s.key} onClick={() => onToggle(s.key)} title={off ? 'Include' : 'Filter out'}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: off ? C.faint : C.muted, fontFamily: MONO, cursor: 'pointer', userSelect: 'none', opacity: off ? 0.5 : 1, textDecoration: off ? 'line-through' : 'none' }}>
             <span style={{ width: 9, height: 9, borderRadius: 2, background: off ? C.faint : s.hue, display: 'inline-block' }} />
             {s.key}
@@ -254,21 +256,16 @@ function YearsTip({ active, payload, label, hueOf }) {
   )
 }
 
-function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, pieOnly, grain, anchor, yearAnchors, toolbar }) {
+function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMonths, periodLabel, metric, pieOnly, grain, anchor, yearAnchors, hidden, onToggle, crossFilter }) {
   const isMobile = useIsMobile()
 
   // Each panel picks its own chart style; a single month has no trend to stack.
   const [chartTypeRaw, setChartTypeRaw] = useState('bar')
   const chartType = pieOnly ? 'pie' : chartTypeRaw
 
-  // Segments switched off via the legend — removed from the chart only.
-  const [hidden, setHidden] = useState(() => new Set())
-  const toggleHidden = (key) => setHidden((h) => {
-    const next = new Set(h)
-    if (next.has(key)) next.delete(key)
-    else next.add(key)
-    return next
-  })
+  // `hidden` = this panel's segments switched off via its legend (state lives in
+  // the page so the other panel can filter on it too). They drop out of the
+  // chart and the total; their table rows stay, dimmed, so they can be compared.
   const chartSegments = useMemo(() => {
     const vis = segments.filter((s) => !hidden.has(s.key))
     // Recharts stacks in render order (first = bottom); stackTop segments go last
@@ -310,9 +307,10 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
       key: s.key, hue: s.hue, ...segmentPeriodValues(rowsByMonth, periodMonths, s),
       children: s.children?.map((c) => ({ key: c.key, hue: c.hue, ...segmentPeriodValues(rowsByMonth, periodMonths, c) })),
     }))
-    const total = rows.reduce((t, r) => ({ revenue: t.revenue + r.revenue, cost: t.cost + r.cost, profit: t.profit + r.profit }), { revenue: 0, cost: 0, profit: 0 })
+    const total = rows.filter((r) => !hidden.has(r.key))
+      .reduce((t, r) => ({ revenue: t.revenue + r.revenue, cost: t.cost + r.cost, profit: t.profit + r.profit }), { revenue: 0, cost: 0, profit: 0 })
     return { rows, total }
-  }, [rowsByMonth, periodMonths, segments])
+  }, [rowsByMonth, periodMonths, segments, hidden])
 
   // Click a column header to sort; click again to flip. key null = the fixed
   // segment order. Children sort within their parent by the same column.
@@ -374,8 +372,20 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
   }
 
   return (
-    <Panel title={title} icon={icon} right={<Legend segments={segments} hidden={hidden} onToggle={toggleHidden} />}>
-      {toolbar}
+    <Panel title={title} icon={icon} right={<Legend segments={segments} hidden={hidden} onToggle={onToggle} />}>
+      {crossFilter && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontFamily: MONO, fontSize: 10.5, color: C.muted }}>
+          <span style={{ color: C.faint, textTransform: 'uppercase', letterSpacing: '0.07em', fontSize: 9.5 }}>{crossFilter.label}</span>
+          {crossFilter.segments.map((s) => (
+            <span key={s.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 2, background: s.hue, display: 'inline-block' }} />
+              {s.key}
+            </span>
+          ))}
+          {crossFilter.segments.length === 0 && <span style={{ color: C.faint }}>none selected</span>}
+          <button onClick={crossFilter.onClear} style={{ background: 'transparent', border: 'none', padding: 0, color: C.accent, cursor: 'pointer', fontSize: 10.5, fontFamily: MONO }}>clear</button>
+        </div>
+      )}
       {/* Chart with its own Bar/Pie switch overlaid in the top-right corner */}
       <div style={{ position: 'relative' }}>
       <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
@@ -447,7 +457,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
           {!isMobile && <SortHeader label="% of Rev" colKey="share" sort={sort} onSort={toggleSort} style={th} />}
         </div>
         {sortedRows.map((r) => (
-          <div key={r.key}>
+          <div key={r.key} style={hidden.has(r.key) ? { opacity: 0.35 } : undefined}>
             <div style={{ ...grid, fontSize: 12.5, padding: '8px 0', borderBottom: r.children ? 'none' : `1px solid ${C.borderSoft}`, fontWeight: r.children ? 600 : 400 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.text, minWidth: 0 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: r.hue, flexShrink: 0 }} />
@@ -457,7 +467,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
               <span style={{ textAlign: 'right', fontFamily: MONO, color: C.muted }}>{money(r.cost)}</span>
               <span style={{ textAlign: 'right', fontFamily: MONO, color: r.profit >= 0 ? C.green : C.red }}>{money(r.profit)}</span>
               {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.muted }}>{r.revenue ? pct(r.profit / r.revenue) : '—'}</span>}
-              {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{tableRows.total.revenue ? pct(r.revenue / tableRows.total.revenue) : '—'}</span>}
+              {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{tableRows.total.revenue && !hidden.has(r.key) ? pct(r.revenue / tableRows.total.revenue) : '—'}</span>}
             </div>
             {r.children?.map((c, ci) => (
               <div key={c.key} style={{ ...grid, fontSize: 12, padding: '6px 0', color: C.muted, borderBottom: ci === r.children.length - 1 ? `1px solid ${C.borderSoft}` : 'none' }}>
@@ -469,7 +479,7 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
                 <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{money(c.cost)}</span>
                 <span style={{ textAlign: 'right', fontFamily: MONO, color: c.profit >= 0 ? C.green : C.red, opacity: 0.85 }}>{money(c.profit)}</span>
                 {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO }}>{c.revenue ? pct(c.profit / c.revenue) : '—'}</span>}
-                {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{tableRows.total.revenue ? pct(c.revenue / tableRows.total.revenue) : '—'}</span>}
+                {!isMobile && <span style={{ textAlign: 'right', fontFamily: MONO, color: C.faint }}>{tableRows.total.revenue && !hidden.has(r.key) ? pct(c.revenue / tableRows.total.revenue) : '—'}</span>}
               </div>
             ))}
           </div>
@@ -490,93 +500,14 @@ function Breakdown({ title, icon, segments, rowsByMonth, chartMonths, periodMont
 // Leaf bucket keys a top-level category segment covers (its children, or itself).
 const leavesOf = (seg) => (seg.children ?? [seg]).map((c) => c.key)
 
-// Pill-style multi-select used by the cross-filter toolbar.
-function FilterChips({ label, segments, selected, onToggle, onAll }) {
-  const all = selected.size === segments.length
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontFamily: MONO, fontSize: 10.5 }}>
-      <span style={{ color: C.faint, textTransform: 'uppercase', letterSpacing: '0.07em', fontSize: 9.5, marginRight: 2 }}>{label}</span>
-      <button onClick={onAll} style={{
-        border: `1px solid ${all ? C.accent : C.border}`, background: all ? C.accentSubtle : 'transparent', color: all ? C.accent : C.muted,
-        borderRadius: 999, padding: '2px 9px', fontSize: 10.5, fontFamily: MONO, cursor: 'pointer',
-      }}>All</button>
-      {segments.map((s) => {
-        const on = selected.has(s.key)
-        return (
-          <button key={s.key} onClick={() => onToggle(s.key)} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer',
-            border: `1px solid ${on ? C.border : C.borderSoft}`, background: on ? C.surface : 'transparent',
-            color: on ? C.text : C.faint, borderRadius: 999, padding: '2px 9px', fontSize: 10.5, fontFamily: MONO,
-            opacity: on ? 1 : 0.6, transition: 'background 120ms, color 120ms',
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: 2, background: on ? s.hue : C.faint, display: 'inline-block' }} />
-            {s.key}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-// Third panel: stack by one dimension while filtering on the other, from the
-// customer_type × bucket cross-tab. Pick any customer types AND any product
-// categories; the chart/table show only sales matching both.
-function CrossBreakdown({ crossByMonth, ...shared }) {
-  const [by, setBy] = useState('customer') // 'customer' | 'category' — the stacked dimension
-  const [customers, setCustomers] = useState(() => new Set(CUSTOMER_SEGMENTS.map((s) => s.key)))
-  const [categories, setCategories] = useState(() => new Set(CATEGORY_SEGMENTS.map((s) => s.key)))
-  const toggleIn = (set) => (key) => set((prev) => {
-    const next = new Set(prev)
-    if (next.has(key)) next.delete(key)
-    else next.add(key)
-    return next
-  })
-  const allOf = (set, segs) => () => set(new Set(segs.map((s) => s.key)))
-
-  const segments = by === 'customer' ? CUSTOMER_SEGMENTS : CATEGORY_SEGMENTS
-  const rowsByMonth = useMemo(() => {
-    const leafOk = new Set(CATEGORY_SEGMENTS.filter((s) => categories.has(s.key)).flatMap(leavesOf))
-    const out = new Map()
-    for (const [m, lines] of crossByMonth) {
-      const byseg = new Map()
-      for (const l of lines) {
-        if (!customers.has(l.customer_type) || !leafOk.has(l.bucket)) continue
-        const key = by === 'customer' ? l.customer_type : l.bucket
-        const acc = byseg.get(key) ?? { revenue: 0, cost: 0, profit: 0 }
-        acc.revenue += l.revenue; acc.cost += l.cost; acc.profit += l.profit
-        byseg.set(key, acc)
-      }
-      out.set(m, byseg)
-    }
-    return out
-  }, [crossByMonth, by, customers, categories])
-
-  const toolbar = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ color: C.faint, textTransform: 'uppercase', letterSpacing: '0.07em', fontSize: 9.5, fontFamily: MONO }}>Stack by</span>
-        <div style={{ display: 'flex', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 2 }}>
-          {[{ key: 'customer', label: 'Customer Type' }, { key: 'category', label: 'Product Category' }].map((t) => (
-            <button key={t.key} onClick={() => setBy(t.key)} style={{
-              border: 'none', cursor: 'pointer', padding: '3px 9px', borderRadius: 4, fontSize: 10.5, fontFamily: MONO,
-              background: by === t.key ? C.accent : 'transparent', color: by === t.key ? C.bg : C.muted, fontWeight: by === t.key ? 600 : 400,
-              transition: 'background 120ms, color 120ms',
-            }}>{t.label}</button>
-          ))}
-        </div>
-      </div>
-      <FilterChips label="Customers" segments={CUSTOMER_SEGMENTS} selected={customers}
-        onToggle={toggleIn(setCustomers)} onAll={allOf(setCustomers, CUSTOMER_SEGMENTS)} />
-      <FilterChips label="Categories" segments={CATEGORY_SEGMENTS} selected={categories}
-        onToggle={toggleIn(setCategories)} onAll={allOf(setCategories, CATEGORY_SEGMENTS)} />
-    </div>
-  )
-
-  return (
-    <Breakdown title="Customer Type × Product Category" icon={LayersIcon} segments={segments}
-      rowsByMonth={rowsByMonth} toolbar={toolbar} {...shared} />
-  )
-}
+// Add/remove a key in a Set held in state.
+const toggleKey = (setState) => (key) => setState((prev) => {
+  const next = new Set(prev)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  return next
+})
+const NONE = () => new Set()
 
 export default function StatBreakdown() {
   const { data, isLoading, error, refetch } = useStatBreakdown()
@@ -586,30 +517,53 @@ export default function StatBreakdown() {
   const [grain, setGrain] = useState('month')
   const [anchor, setAnchor] = useState(null)
 
-  // 'YYYY-MM' → segment → {revenue, cost, profit}, per dimension
-  const { customerByMonth, categoryByMonth, availableKeys } = useMemo(() => {
-    const cust = new Map(), cat = new Map()
-    const keySet = new Set()
-    for (const r of data?.rows ?? []) {
-      const m = toKey(String(r.period_month))
-      keySet.add(m)
-      const target = r.dimension === 'customer' ? cust : cat
-      if (!target.has(m)) target.set(m, new Map())
-      target.get(m).set(r.segment, { revenue: Number(r.revenue), cost: Number(r.cost), profit: Number(r.profit) })
-    }
-    return { customerByMonth: cust, categoryByMonth: cat, availableKeys: [...keySet].sort() }
-  }, [data])
+  // Legend filters, shared by both panels: customer types / top-level product
+  // categories switched off.
+  const [hiddenCustomers, setHiddenCustomers] = useState(NONE)
+  const [hiddenCategories, setHiddenCategories] = useState(NONE)
 
-  // 'YYYY-MM' → [{customer_type, bucket, revenue, cost, profit}] for the cross-filter panel
-  const crossByMonth = useMemo(() => {
+  // 'YYYY-MM' → [{customer_type, bucket, revenue, cost, profit}]
+  const { crossByMonth, availableKeys } = useMemo(() => {
     const out = new Map()
     for (const r of data?.cross ?? []) {
       const m = toKey(String(r.period_month))
       if (!out.has(m)) out.set(m, [])
       out.get(m).push({ customer_type: r.customer_type, bucket: r.bucket, revenue: Number(r.revenue), cost: Number(r.cost), profit: Number(r.profit) })
     }
-    return out
+    return { crossByMonth: out, availableKeys: [...out.keys()].sort() }
   }, [data])
+
+  // 'YYYY-MM' → segment → {revenue, cost, profit}, per dimension. Each panel is
+  // grouped by its own dimension and filtered by the OTHER panel's legend (its
+  // own legend is applied inside Breakdown, which keeps the rows for the table).
+  const { customerByMonth, categoryByMonth } = useMemo(() => {
+    const hiddenLeaves = new Set(CATEGORY_SEGMENTS.filter((s) => hiddenCategories.has(s.key)).flatMap(leavesOf))
+    const cust = new Map(), cat = new Map()
+    const add = (byseg, key, l) => {
+      const acc = byseg.get(key) ?? { revenue: 0, cost: 0, profit: 0 }
+      acc.revenue += l.revenue; acc.cost += l.cost; acc.profit += l.profit
+      byseg.set(key, acc)
+    }
+    for (const [m, lines] of crossByMonth) {
+      const c = new Map(), b = new Map()
+      for (const l of lines) {
+        if (!hiddenLeaves.has(l.bucket)) add(c, l.customer_type, l)
+        if (!hiddenCustomers.has(l.customer_type)) add(b, l.bucket, l)
+      }
+      cust.set(m, c); cat.set(m, b)
+    }
+    return { customerByMonth: cust, categoryByMonth: cat }
+  }, [crossByMonth, hiddenCustomers, hiddenCategories])
+
+  // "Filtered to ..." strip shown on a panel while the other panel's legend is filtering it.
+  const customerFilter = hiddenCustomers.size ? {
+    label: 'Customer types', segments: CUSTOMER_SEGMENTS.filter((s) => !hiddenCustomers.has(s.key)),
+    onClear: () => setHiddenCustomers(NONE()),
+  } : null
+  const categoryFilter = hiddenCategories.size ? {
+    label: 'Categories', segments: CATEGORY_SEGMENTS.filter((s) => !hiddenCategories.has(s.key)),
+    onClear: () => setHiddenCategories(NONE()),
+  } : null
 
   const options = useMemo(() => buildOptions(grain, availableKeys), [grain, availableKeys])
   const effAnchor = (anchor && options.some((o) => o.value === anchor) ? anchor : null)
@@ -710,19 +664,18 @@ export default function StatBreakdown() {
             <Breakdown title="By Customer Type" icon={TargetIcon} segments={CUSTOMER_SEGMENTS}
               rowsByMonth={customerByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
               periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'}
-              grain={grain} anchor={effAnchor} yearAnchors={yearAnchors} />
+              grain={grain} anchor={effAnchor} yearAnchors={yearAnchors}
+              hidden={hiddenCustomers} onToggle={toggleKey(setHiddenCustomers)} crossFilter={categoryFilter} />
             <Breakdown title="By Product Category" icon={ChartBarIcon} segments={CATEGORY_SEGMENTS}
               rowsByMonth={categoryByMonth} chartMonths={chartMonths} periodMonths={periodMonths}
               periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'}
-              grain={grain} anchor={effAnchor} yearAnchors={yearAnchors} />
-            <CrossBreakdown crossByMonth={crossByMonth}
-              chartMonths={chartMonths} periodMonths={periodMonths}
-              periodLabel={periodLabel} metric={metric} pieOnly={grain === 'month'}
-              grain={grain} anchor={effAnchor} yearAnchors={yearAnchors} />
+              grain={grain} anchor={effAnchor} yearAnchors={yearAnchors}
+              hidden={hiddenCategories} onToggle={toggleKey(setHiddenCategories)} crossFilter={customerFilter} />
             <span style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO }}>
               Customer types from Cin7 customer tags (D = Distributors, F = Fleet, A = Bespoke, otherwise Consumers).
               Electrical = Lighting + Behind Grille Lighting + Electrical; Other = all remaining Cin7 categories.
               Product lines only (freight/charges excluded); credit notes subtracted in their month.
+              Click a legend item to filter both panels.
             </span>
           </>
         )}
