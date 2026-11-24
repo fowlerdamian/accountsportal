@@ -34,6 +34,11 @@ Extract the following and return ONLY valid JSON — no markdown, no preamble, n
   "carrier_name": "string — carrier or company name that issued this invoice",
   "invoice_date": "YYYY-MM-DD or null",
   "due_date": "YYYY-MM-DD or null",
+  "totals": {
+    "net_ex_gst": number or null — total charges of THIS invoice excluding GST (consignment note billing plus debits/adjustments). NEVER include balance brought forward, payments or total outstanding,
+    "gst": number or null — GST of THIS invoice,
+    "total_inc_gst": number or null — total of THIS invoice including GST
+  },
   "lines": [
     {
       "description": "string — charge description as printed",
@@ -53,6 +58,10 @@ Rules:
 - carrier_name: the company that ISSUED the invoice (not the recipient)
 - lines: one per distinct charge row — freight legs, fuel levy, surcharges, handling, GST. Skip payment/credit/balance rows (negative "Payment, Thank You" style entries).
 - charged_total: the line total EXCLUDING GST. When the invoice shows both GST-inclusive and GST-exclusive totals per line (TNT style), ALWAYS use the "Total excluding GST" figure (it already includes any per-line fuel/security surcharge). Never use the GST-inclusive figure.
+- TNT / FedEx row layout (text is extracted in this order): "<S|R|T> <service code> <items> <cubic m3> <weight kg> <V|W> <Freight/Other Charges> <Warranty> <GST> <Total including GST> <sender/receiver> <origin/destination OR rating code> <consignment number> <date> <Fuel/Security Surcharge> <Total excluding GST>". charged_total is the LAST number of the row (Total excluding GST) — NOT the first dollar figure (Freight/Other Charges, which excludes the fuel surcharge). Example: "S 76 1 0.0183 7.000 W 17.95 0.00 2.29 25.18 ARMIDALE/J SMITH ARM/BNE/// UAR267481566 10/08/26 4.94 22.89" → charged_total 22.89, weight_kg 7, tracking "UAR267481566", service "Road Express".
+- A row whose origin/destination slot holds a rating code instead (RSD, RSP, MHP, RED, RES, OS1…, FUT etc.) is a SURCHARGE row for that consignment: set description AND service to the surcharge's name from the invoice's code legend (e.g. MHP → "Manual Handling", RSD → "Residential Pickup / Delivery Fee", RED → "Redelivery / Futile Delivery"), never the freight service name, and set weight_kg to null.
+- Debit/adjustment rows (e.g. "2.99 0.30 3.29 Consignment UAR736250317 RSD 75571204 15/08/26 2.99") are charge lines too: the LAST number is the amount excluding GST and the consignment number is the tracking.
+- Self-check before answering: the sum of every non-GST line's charged_total must equal totals.net_ex_gst. If it does not, you have used the wrong column or missed rows — fix the lines.
 - service: normalise to the carrier's service name; use 'Fuel Levy' for standalone fuel surcharge lines, 'Manual Handling' for MHP / manual handling process fees, and 'GST' for tax lines
 - origin/destination: use 3-letter city codes where identifiable (SYD, MEL, BNE, ADL, PER, HBA, DRW, CBR); otherwise the name as printed; null if not applicable (e.g. levy lines)
 - tracking: the con note / consignment / article / tracking number tied to the shipment — critical for weight verification; null for levy/tax lines
@@ -159,7 +168,23 @@ Deno.serve(async (req) => {
         weight_kg: l.weight_kg != null ? Number(l.weight_kg) : null,
         qty: l.qty != null ? Number(l.qty) : null,
       }))
-      .filter((l: { charged_total: number }) => !Number.isNaN(l.charged_total));
+      .filter((l: { charged_total: number }) => !Number.isNaN(l.charged_total))
+      // Statement rows are not charges of this invoice — importing them
+      // corrupts the invoice total (seen: "Payment, Thank You" −$1,564.89).
+      .filter((l: { description: string }) =>
+        !/payment|thank you|balance brought forward|total outstanding/i.test(String(l.description)));
+
+    // Control total: do the extracted lines add up to what the invoice says?
+    const num = (v: unknown) => (v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
+    const totals = {
+      net_ex_gst:    num(parsed.totals?.net_ex_gst),
+      gst:           num(parsed.totals?.gst),
+      total_inc_gst: num(parsed.totals?.total_inc_gst),
+    };
+    if (totals.net_ex_gst == null && totals.total_inc_gst != null && totals.gst != null) {
+      totals.net_ex_gst = Math.round((totals.total_inc_gst - totals.gst) * 100) / 100;
+    }
+    parsed.totals = totals;
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

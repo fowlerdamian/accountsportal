@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@portal/lib/supabase'
 import { DatePicker } from '@portal/components/DatePicker'
 import LogisticsNav from './LogisticsNav.jsx'
-import { aud, fmtDate, invoiceTotal, invoiceOvercharge, missingInvoicePeriods } from '../utils/helpers.js'
-import { parseCsvLines, extractPdfText, importInvoiceRows, runAuditCheck } from '../utils/importInvoice.js'
+import { aud, fmtDate, invoiceTotal, invoiceOvercharge, missingInvoicePeriods, invoiceReconciliation } from '../utils/helpers.js'
+import { parseCsvLines, extractPdfText, importInvoiceRows, runAuditCheck, matchCarrier } from '../utils/importInvoice.js'
 import { useIsMobile } from '../../../hooks/useIsMobile.js'
 import {
   pageWrap, card, mono, thStyle, tdStyle, inputStyle, btnGhost,
   Badge, Spinner, Flash, useFlash, INVOICE_STATUS_STYLE, PageHeader, HoverBtn, Modal, FieldLabel, rowHover,
-  displayStatus, isProcessing, ProcessingIndicator,
+  displayStatus, isProcessing, ProcessingIndicator, stalledReason,
 } from '../utils/ui.jsx'
 
 const ALL_STATUSES = ['pending', 'matched', 'flagged', 'disputed', 'approved', 'resolved']
@@ -171,7 +171,7 @@ export default function InvoiceList() {
         if (result.invoice_date) setUploadInvDate(result.invoice_date)
         if (result.due_date)     setUploadDueDate(result.due_date)
         if (result.carrier_name) {
-          const match = carriers.find(c => c.name.toLowerCase().includes(result.carrier_name.toLowerCase()) || result.carrier_name.toLowerCase().includes(c.name.toLowerCase()))
+          const match = matchCarrier(carriers, result.carrier_name)
           if (match) setUploadCarrierId(match.id)
         }
       } catch (err) {
@@ -200,6 +200,7 @@ export default function InvoiceList() {
       invoice_date: uploadInvDate,
       due_date:     uploadDueDate,
       lines:        uploadPreview.lines,
+      totals:       uploadPreview.totals,
     })
     setUploading(false)
     if (result.status === 'error') { setUploadError(result.message); return }
@@ -314,7 +315,15 @@ export default function InvoiceList() {
                   <td style={tdStyle}>
                     {isProcessing(inv)
                       ? <ProcessingIndicator />
-                      : <Badge map={INVOICE_STATUS_STYLE} value={displayStatus(inv.status)} />}
+                      : stalledReason(inv, lines.length)
+                        ? <span style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-pink)', whiteSpace: 'nowrap' }}>{stalledReason(inv, lines.length)}</span>
+                        : <Badge map={INVOICE_STATUS_STYLE} value={displayStatus(inv.status)} />}
+                    {(() => {
+                      const rec = invoiceReconciliation(inv, lines)
+                      return rec && !rec.ok
+                        ? <span title={`Extracted lines total ${aud(rec.extracted)} but the invoice states ${aud(rec.stated)} (${rec.basis}). Drop the PDF again to re-extract.`} style={{ display: 'block', marginTop: '3px', fontSize: '10px', fontFamily: mono, color: 'var(--brand-accent)', whiteSpace: 'nowrap' }}>⚠ lines don't reconcile</span>
+                        : null
+                    })()}
                   </td>
                   <td style={{ ...tdStyle, whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                     <button
@@ -383,6 +392,15 @@ export default function InvoiceList() {
                     {uploadPreview._source === 'pdf' && uploadPreview.carrier_name ? ` · ${uploadPreview.carrier_name}` : ''}
                   </p>
                 )}
+                {(() => {
+                  if (!uploadPreview || uploadParsing) return null
+                  const rec = invoiceReconciliation({ stated_net: uploadPreview.totals?.net_ex_gst, stated_gst: uploadPreview.totals?.gst }, uploadPreview.lines)
+                  return rec && !rec.ok
+                    ? <p style={{ margin: '6px 0 0', fontSize: '11px', fontFamily: mono, color: 'var(--brand-pink)' }}>
+                        ⚠ Lines total {aud(rec.extracted)} but the invoice states {aud(rec.stated)} — extraction is incomplete or used the wrong column. Re-select the file to retry before importing.
+                      </p>
+                    : null
+                })()}
               </div>
 
               <div>

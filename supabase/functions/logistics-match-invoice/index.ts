@@ -30,6 +30,42 @@ const MAX_RANGE_PAGES = 12;
 
 const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
 
+// Individual-lookup fallback cap for con notes the date-range fetch missed
+// (kept under ShipStation's 40 req/min alongside the paged calls).
+const STRAGGLER_LOOKUPS = 25;
+
+type Line = Record<string, any>;
+const lineText = (l: Line) => `${norm(l.service)} ${norm(l.description)}`;
+const isGstLine  = (l: Line) => norm(l.description).includes("gst") || norm(l.service) === "gst";
+const isLevyLine = (l: Line) => norm(l.service).includes("fuel") || norm(l.description).includes("fuel");
+const isMhpLine  = (l: Line) => norm(l.service).includes("manual") || norm(l.service) === "mhp" ||
+  norm(l.description).includes("manual handling") || norm(l.detail) === "mhp";
+// Accessorial charges billed on a con note alongside (or after) the freight
+// leg. These must never carry the ShipStation booked cost — that is the price
+// of the freight itself.
+const SURCHARGE_RE = /\bfee\b|surcharge|levy|redeliver|futile|residential|oversize|exceeds dimensions|non-conveyable|manual handling|tail[- ]?lift|storage|book-?in|adjustment|credit|payment|\b(rsd|rsp|mhp|red|fut|res|ret|os\d|rd\d|rp\d|td\d|tp\d)\b/i;
+const isSurchargeLine = (l: Line) => isMhpLine(l) || SURCHARGE_RE.test(lineText(l));
+const isFreightLine   = (l: Line) => !isGstLine(l) && !isLevyLine(l) && !isSurchargeLine(l);
+
+class ShipStationError extends Error {}
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// GET with one retry when rate-limited; throws on any other failure so an
+// outage can never masquerade as "no overcharge found".
+async function ssGet(url: string, auth: string): Promise<any> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
+    if (res.ok) return await res.json();
+    if (res.status === 429 && attempt === 0) {
+      const wait = Math.min(Number(res.headers.get("X-Rate-Limit-Reset") ?? 20) || 20, 45);
+      await sleep((wait + 1) * 1000);
+      continue;
+    }
+    throw new ShipStationError(`ShipStation API error ${res.status}`);
+  }
+  throw new ShipStationError("ShipStation API error");
+}
+
 // ─── ShipStation ────────────────────────────────────────────────────────────
 
 function toKg(value: number, units: string | null | undefined): number {
@@ -87,12 +123,10 @@ function mhpSortationCompatible(dimsMm: number[] | null, weightKg: number | null
 
 // Look up one shipment by tracking number
 async function shipstationLookup(tracking: string, auth: string): Promise<ShipInfo | null> {
-  const res = await fetch(
+  const data = await ssGet(
     `https://ssapi.shipstation.com/shipments?trackingNumber=${encodeURIComponent(tracking)}&pageSize=1`,
-    { headers: { Authorization: `Basic ${auth}` } }
+    auth
   );
-  if (!res.ok) return null;
-  const data = await res.json();
   const sh = data?.shipments?.[0];
   if (!sh) return null;
   // Guard: only trust an exact tracking-number match — never a "closest" result
@@ -112,12 +146,10 @@ async function shipstationRangeFetch(wanted: Set<string>, invoiceDate: string, a
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
   for (let page = 1; page <= MAX_RANGE_PAGES; page++) {
-    const res = await fetch(
+    const data = await ssGet(
       `https://ssapi.shipstation.com/shipments?shipDateStart=${fmt(start)}&shipDateEnd=${fmt(end)}&pageSize=500&page=${page}`,
-      { headers: { Authorization: `Basic ${auth}` } }
+      auth
     );
-    if (!res.ok) break;
-    const data = await res.json();
     for (const sh of data?.shipments ?? []) {
       const tn = (sh.trackingNumber ?? "").trim().toLowerCase();
       if (tn && wanted.has(tn) && !found.has(tn)) found.set(tn, shipmentToInfo(sh));
@@ -168,6 +200,8 @@ Deno.serve(async (req) => {
 
     const lines = [...(invoice.freight_invoice_lines ?? [])]
       .sort((a, b) => a.sort_order - b.sort_order);
+    // An invoice with no lines has not been audited — never mark it processed.
+    if (lines.length === 0) throw new Error("Invoice has no line items — drop the PDF again to re-extract them");
 
     // ── ShipStation lookups ──────────────────────────────────────────────────
     const ssKey    = Deno.env.get("SHIPSTATION_API_KEY");
@@ -182,43 +216,63 @@ Deno.serve(async (req) => {
       lines.filter(l => l.tracking_ref).map(l => norm(l.tracking_ref))
     );
     const shipByRef = new Map<string, ShipInfo>();
-    if (ssAuth && uniqueRefs.size > 0) {
-      try {
-        if (uniqueRefs.size > RANGE_FETCH_THRESHOLD) {
-          const found = await shipstationRangeFetch(uniqueRefs, invoice.invoice_date, ssAuth);
-          found.forEach((v, k) => shipByRef.set(k, v));
-          // Individual fallback for stragglers outside the date window (cap it)
-          const missing = [...uniqueRefs].filter(r => !shipByRef.has(r)).slice(0, 15);
-          for (const ref of missing) {
-            try {
-              const one = await shipstationLookup(ref, ssAuth);
-              if (one) shipByRef.set(ref, one);
-            } catch { /* leave unmatched */ }
-          }
-        } else {
-          for (const ref of uniqueRefs) {
-            try {
-              const one = await shipstationLookup(ref, ssAuth);
-              if (one) shipByRef.set(ref, one);
-            } catch { /* leave unmatched */ }
-          }
+    if (uniqueRefs.size > 0) {
+      // No baseline at all is a failure, not a clean result — leave the
+      // invoice unprocessed so it cannot show as "Processed" with $0 found.
+      if (!ssAuth) throw new Error("ShipStation credentials are not configured — rate check not run");
+      let lookupErrors = 0;
+      const lookupEach = async (refs: string[]) => {
+        for (const ref of refs) {
+          try {
+            const one = await shipstationLookup(ref, ssAuth);
+            if (one) shipByRef.set(ref, one);
+          } catch { lookupErrors++; }
         }
-      } catch { /* ShipStation unavailable — everything stays unmatched */ }
+      };
+      if (uniqueRefs.size > RANGE_FETCH_THRESHOLD) {
+        const found = await shipstationRangeFetch(uniqueRefs, invoice.invoice_date, ssAuth);
+        found.forEach((v, k) => shipByRef.set(k, v));
+        // Individual fallback for stragglers outside the date window (capped)
+        await lookupEach([...uniqueRefs].filter(r => !shipByRef.has(r)).slice(0, STRAGGLER_LOOKUPS));
+      } else {
+        await lookupEach([...uniqueRefs]);
+      }
+      if (lookupErrors > 0 && shipByRef.size === 0) {
+        throw new Error("ShipStation is unavailable — rate check not run, try again shortly");
+      }
     }
 
-    // The booked cost covers the whole consignment, but carriers bill it as a
-    // freight line plus surcharge lines on the same con note. Assign the cost
-    // to the PRIMARY (highest-charged, non-levy/GST) line per con note only.
+    // The booked cost covers the freight leg of the consignment, but carriers
+    // bill it as a freight line plus surcharge lines on the same con note.
+    // Assign the cost to the PRIMARY freight line per con note only — never to
+    // MHP, redelivery, residential, oversize or other accessorial lines, even
+    // when one of those is the largest charge on the con note.
     const primaryByRef = new Map<string, string>(); // ref → line.id
     for (const line of lines) {
-      if (!line.tracking_ref) continue;
-      const isGst  = norm(line.description).includes("gst") || norm(line.service) === "gst";
-      const isLevy = norm(line.service).includes("fuel") || norm(line.description).includes("fuel");
-      if (isGst || isLevy) continue;
+      if (!line.tracking_ref || !isFreightLine(line)) continue;
       const ref = norm(line.tracking_ref);
       const current = primaryByRef.get(ref);
       if (!current || Number(line.charged_total) > Number(lines.find(l => l.id === current)!.charged_total)) {
         primaryByRef.set(ref, line.id);
+      }
+    }
+
+    // ── Duplicate billing: the same con note's freight on another invoice ───
+    const dupByRef = new Map<string, string>(); // ref → other invoice_ref
+    {
+      const rawRefs = [...new Set(lines.filter(l => l.tracking_ref && isFreightLine(l)).map(l => String(l.tracking_ref)))];
+      for (let i = 0; i < rawRefs.length; i += 100) {
+        const { data: others, error: dupErr } = await supabase
+          .from("freight_invoice_lines")
+          .select("tracking_ref, service, description, detail, freight_invoices(invoice_ref)")
+          .in("tracking_ref", rawRefs.slice(i, i + 100))
+          .neq("invoice_id", invoice_id);
+        if (dupErr) throw dupErr;
+        for (const o of others ?? []) {
+          if (!isFreightLine(o)) continue;
+          const otherRef = (o as any).freight_invoices?.invoice_ref;
+          if (otherRef && !dupByRef.has(norm(o.tracking_ref))) dupByRef.set(norm(o.tracking_ref), otherRef);
+        }
       }
     }
 
@@ -259,10 +313,9 @@ Deno.serve(async (req) => {
 
     // Pass 1 — freight lines priced from ShipStation bookings
     for (const line of lines) {
-      const isGst  = norm(line.description).includes("gst") || norm(line.service) === "gst";
-      const isLevy = norm(line.service).includes("fuel") || norm(line.description).includes("fuel");
-      const isMhp  = norm(line.service).includes("manual") || norm(line.service) === "mhp" ||
-                     norm(line.description).includes("manual handling") || norm(line.detail) === "mhp";
+      const isGst  = isGstLine(line);
+      const isLevy = isLevyLine(line);
+      const isMhp  = isMhpLine(line);
       if (isGst) {
         results.push({ id: line.id, expected_total: null, match_status: "skipped", source: null, fee_check: null });
         continue;
@@ -328,6 +381,7 @@ Deno.serve(async (req) => {
           actual_dims:          ship?.dimsMm ? ship.dimsMm.map(d => Math.round(d)).join("×") + "mm" : null,
           chargeable_weight_kg: wd?.chargeable ?? null,
           weight_check:         wd?.check ?? null,
+          duplicate_invoice_ref: lineRef && isFreightLine(byLineId.get(r.id)!) ? (dupByRef.get(norm(lineRef)) ?? null) : null,
         })
         .eq("id", r.id);
       if (error) throw error;
@@ -352,12 +406,16 @@ Deno.serve(async (req) => {
       weights_unmatched: [...ssData.values()].filter(w => w.check === "unmatched").length,
       overbilled:        [...ssData.values()].filter(w => w.check === "overbilled").length,
       mhp_challenged:    results.filter(r => r.fee_check === "mhp_unjustified").length,
+      duplicates:        dupByRef.size,
     };
 
-    // Only advance status from pending/matched/flagged — never clobber a dispute
+    // Only advance status from pending/matched/flagged — never clobber a
+    // dispute. matched_at is always stamped so the UI shows the last check.
     let status = invoice.status;
     if (["pending", "matched", "flagged"].includes(invoice.status)) {
-      status = (overcharge > OVERCHARGE_TOLERANCE_AUD || counts.overbilled > 0) ? "flagged" : "matched";
+      status = (overcharge > OVERCHARGE_TOLERANCE_AUD || counts.overbilled > 0 || counts.duplicates > 0) ? "flagged" : "matched";
+    }
+    {
       const { error } = await supabase
         .from("freight_invoices")
         .update({ status, matched_at: new Date().toISOString() })

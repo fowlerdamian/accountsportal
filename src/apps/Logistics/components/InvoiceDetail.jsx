@@ -4,7 +4,7 @@ import { supabase } from '@portal/lib/supabase'
 import LogisticsNav from './LogisticsNav.jsx'
 import DisputeLetterPanel from './DisputeLetterPanel.jsx'
 import TntQueryPanel from './TntQueryPanel.jsx'
-import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal } from '../utils/helpers.js'
+import { aud, fmtDate, lineVariance, invoiceOvercharge, invoiceTotal, invoiceReconciliation, OPEN_DISPUTE_STATUSES } from '../utils/helpers.js'
 import {
   pageWrap, card, mono, sectionLabel, thStyle, tdStyle,
   Badge, Spinner, Flash, useFlash, INVOICE_STATUS_STYLE, DISPUTE_STATUS_STYLE, HoverBtn, btnGhost, rowHover,
@@ -115,7 +115,8 @@ export default function InvoiceDetail() {
     const weightBit = (data.ss_booked > 0 || data.weights_checked > 0)
       ? ` · ${data.ss_booked ?? 0} priced from ShipStation bookings${data.overbilled > 0 ? ` (${data.overbilled} weight OVERBILLED)` : ''}`
       : ''
-    flash('ok', `Checked: ${data.matched} priced, ${data.no_rate} no baseline${data.overcharge_aud > 0 ? ` — ${aud(data.overcharge_aud)} overcharged` : ' — no overcharge'}${weightBit}`)
+    const dupBit = data.duplicates > 0 ? ` · ${data.duplicates} con note${data.duplicates === 1 ? '' : 's'} ALSO BILLED on another invoice` : ''
+    flash('ok', `Checked: ${data.matched} priced, ${data.no_rate} no baseline${data.overcharge_aud > 0 ? ` — ${aud(data.overcharge_aud)} overcharged` : ' — no overcharge'}${weightBit}${dupBit}`)
     await fetchInvoice()
   })
 
@@ -169,9 +170,11 @@ export default function InvoiceDetail() {
   const isTnt = /tnt|fedex/i.test(invoice?.carriers?.name ?? '')
 
   const raiseDispute = () => withBusy('Raising dispute…', async () => {
-    // Reuse an open draft if one exists
-    const draft = disputes.find(d => d.status === 'draft')
+    // One open dispute per invoice — reuse it (draft, sent or acknowledged)
+    // rather than raising a duplicate claim for the same overcharge.
+    const draft = disputes.find(d => d.status === 'draft') ?? disputes.find(d => OPEN_DISPUTE_STATUSES.includes(d.status))
     if (draft) {
+      if (draft.status !== 'draft') flash('ok', `This invoice already has an open dispute (${draft.status}) — opened it instead of raising a second one`)
       if (isTnt) { setTntDispute(draft); setShowTntPanel(true); return }
       setPanelDisputeId(draft.id)
       setPanelLetter(draft.letter_text ?? '')
@@ -186,7 +189,11 @@ export default function InvoiceDetail() {
       amount_claimed: over,
       created_by:     user?.id ?? null,
     }).select().single()
-    if (error) { flash('err', error.message); return }
+    if (error) {
+      flash('err', error.code === '23505' ? 'This invoice already has an open dispute — see the Disputes tab' : error.message)
+      fetchDisputes()
+      return
+    }
 
     await supabase.from('dispute_events').insert({
       dispute_id: dispute.id,
@@ -298,6 +305,12 @@ export default function InvoiceDetail() {
   const flagN   = lines.filter(l => { const v = lineVariance(l); return v != null && v > 0 }).length
   const noRateN = lines.filter(l => l.match_status === 'no_rate').length
   const overbilledN = lines.filter(l => l.weight_check === 'overbilled').length
+  const duplicateN  = lines.filter(l => l.duplicate_invoice_ref).length
+  const recon       = invoiceReconciliation(invoice, lines)
+  const warnBox = {
+    marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', fontSize: '12px', fontFamily: mono,
+    background: 'rgba(var(--brand-pink-rgb),0.08)', border: '1px solid rgba(var(--brand-pink-rgb),0.35)', color: 'var(--brand-pink)',
+  }
 
   return (
     <div style={pageWrap}>
@@ -323,6 +336,18 @@ export default function InvoiceDetail() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <span>No claims email set for this carrier — add one in Settings before sending.</span>
           <button onClick={() => setNoClaimsWarning(false)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+      )}
+
+      {lines.length === 0 && (
+        <div style={warnBox}>
+          This invoice has no line items — extraction did not complete, so nothing has been audited. Drag the invoice PDF onto the page again to re-extract it.
+        </div>
+      )}
+      {recon && !recon.ok && (
+        <div style={warnBox}>
+          Lines don't reconcile: extracted lines total {aud(recon.extracted)} but the invoice states {aud(recon.stated)} ({recon.basis}) — {aud(Math.abs(recon.diff))} {recon.diff < 0 ? 'missing' : 'over'}.
+          {' '}Charges are likely understated (e.g. fuel surcharge left out), so overcharges will be missed. Drag the invoice PDF onto the page again to re-extract, then re-run the rate check.
         </div>
       )}
 
@@ -354,6 +379,7 @@ export default function InvoiceDetail() {
             { label: 'Lines Flagged', value: flagN,                      style: flagN > 0   ? { color: 'var(--brand-pink)' } : {} },
             { label: 'Weight Overbilled', value: overbilledN,            style: overbilledN > 0 ? { color: 'var(--brand-pink)' } : {} },
             { label: 'No Rate Match', value: noRateN,                    style: noRateN > 0 ? { color: 'var(--brand-accent)' } : {} },
+            { label: 'Billed Twice',  value: duplicateN,                 style: duplicateN > 0 ? { color: 'var(--brand-pink)' } : {} },
           ].map(({ label, value, style }) => (
             <div key={label}>
               <p style={{ fontSize: '10px', fontFamily: mono, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>{label}</p>
@@ -387,6 +413,11 @@ export default function InvoiceDetail() {
                       {line.description}
                     </span>
                     {line.detail && <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: mono, marginTop: '2px' }}>{line.detail}</span>}
+                    {line.duplicate_invoice_ref && (
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--brand-pink)', fontFamily: mono, marginTop: '2px' }}>
+                        ⚠ freight for {line.tracking_ref} also billed on invoice {line.duplicate_invoice_ref}
+                      </span>
+                    )}
                   </td>
                   <td style={{ ...tdStyle, fontSize: '12px', color: 'var(--text-tertiary)', fontFamily: mono }}>
                     {line.service ?? '—'}

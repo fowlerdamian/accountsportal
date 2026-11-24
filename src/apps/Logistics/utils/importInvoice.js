@@ -81,7 +81,7 @@ export const matchCarrier = (carriers, name) => {
 
 // Step 1 — import header + lines atomically. Returns fast so the upload
 // window can close as soon as the invoice is in the table.
-export async function importInvoiceRows({ invoice_ref, carrier_id, invoice_date, due_date, lines }) {
+export async function importInvoiceRows({ invoice_ref, carrier_id, invoice_date, due_date, lines, totals }) {
   const { data: invoiceId, error } = await supabase.rpc('import_freight_invoice', {
     _invoice_ref:  invoice_ref.trim(),
     _carrier_id:   carrier_id,
@@ -89,7 +89,18 @@ export async function importInvoiceRows({ invoice_ref, carrier_id, invoice_date,
     _due_date:     due_date || null,
     _lines:        lines,
   })
-  if (error) return { status: 'error', message: error.message }
+  if (error) {
+    return {
+      status: 'error',
+      message: error.code === '23505' ? `Invoice ${invoice_ref.trim()} is already imported` : error.message,
+    }
+  }
+  // Printed control totals (when the parser captured them) for reconciliation
+  if (totals?.net_ex_gst != null || totals?.gst != null) {
+    await supabase.from('freight_invoices')
+      .update({ stated_net: totals.net_ex_gst ?? null, stated_gst: totals.gst ?? null })
+      .eq('id', invoiceId)
+  }
   return { status: 'imported', invoiceId }
 }
 
@@ -111,27 +122,33 @@ export async function importAndCheck(payload) {
 // Step 1b (background) — full line extraction for a header-only import, then
 // the ShipStation cross-reference. Runs while the row shows
 // "Processing invoice…"; fire-and-forget.
+// Also used to RE-extract an existing invoice (PDF dropped again): the lines
+// are replaced atomically and "query lodged" stamps carry over per con note.
+// The rate check only runs when lines actually landed — a failed extraction
+// must never end up looking like a clean, processed invoice.
 export async function extractLinesInBackground(invoiceId, text) {
+  const fail = async (message) => {
+    await supabase.from('freight_invoices')
+      .update({ notes: `Line extraction failed (${new Date().toLocaleDateString('en-AU')}): ${message} — drop the PDF again to retry.` })
+      .eq('id', invoiceId).is('notes', null)
+    return { status: 'error', message }
+  }
   try {
     const { data, error } = await supabase.functions.invoke('logistics-parse-invoice', { body: { text } })
-    if (!error && !data?.error && data?.lines?.length) {
-      const rows = data.lines.map((l, i) => ({
-        invoice_id:    invoiceId,
-        description:   l.description,
-        detail:        l.detail ?? null,
-        service:       l.service ?? null,
-        origin:        l.origin ?? null,
-        destination:   l.destination ?? null,
-        weight_kg:     l.weight_kg ?? null,
-        qty:           l.qty ?? null,
-        charged_total: l.charged_total,
-        tracking_ref:  l.tracking ?? null,
-        sort_order:    i,
-      }))
-      await supabase.from('freight_invoice_lines').insert(rows)
-    }
-  } catch { /* row stays pending — re-run from the invoice detail page */ }
-  return runAuditCheck(invoiceId)
+    if (error || data?.error) return fail(data?.error ?? error.message)
+    if (!data?.lines?.length) return fail('no line items found')
+    const { error: rpcErr } = await supabase.rpc('replace_freight_invoice_lines', {
+      _invoice_id: invoiceId,
+      _lines:      data.lines,
+      _stated_net: data.totals?.net_ex_gst ?? null,
+      _stated_gst: data.totals?.gst ?? null,
+    })
+    if (rpcErr) return fail(rpcErr.message)
+  } catch (err) {
+    return fail(err.message)
+  }
+  await runAuditCheck(invoiceId)
+  return { status: 'extracted' }
 }
 
 // Full drop pipeline. Returns:
@@ -156,6 +173,21 @@ export async function autoImportInvoice(file, carriers) {
   const text = await extractPdfText(new Uint8Array(await file.arrayBuffer()))
   const { data: header, error: fnErr } = await supabase.functions.invoke('logistics-parse-invoice', { body: { text, mode: 'header' } })
   if (fnErr || header?.error) return { status: 'error', message: header?.error ?? fnErr?.message ?? 'Failed to parse PDF' }
+
+  // Already imported? Dropping the PDF again re-extracts its lines — the way
+  // to recover an invoice whose extraction failed (no lines) or whose lines
+  // don't reconcile to the invoice total.
+  if (header.invoice_ref) {
+    const { data: existing } = await supabase.from('freight_invoices')
+      .select('id, status').eq('invoice_ref', String(header.invoice_ref).trim()).maybeSingle()
+    if (existing) {
+      if (['pending', 'matched', 'flagged'].includes(existing.status)) {
+        await supabase.from('freight_invoices').update({ status: 'pending', matched_at: null }).eq('id', existing.id)
+      }
+      extractLinesInBackground(existing.id, text)   // fire-and-forget
+      return { status: 'imported', invoiceId: existing.id, reextracted: true }
+    }
+  }
 
   const carrier = matchCarrier(carriers, header.carrier_name)
   const prefill = {
