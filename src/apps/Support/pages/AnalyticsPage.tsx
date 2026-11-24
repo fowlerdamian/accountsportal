@@ -207,7 +207,7 @@ export default function AnalyticsPage() {
     return {
       name: EXTENDED_LABELS[cat],
       days: rounded,
-      color: rounded <= 1 ? palette.aqua : rounded <= 2 ? palette.orange : palette.pink,
+      color: EXTENDED_COLOURS[cat], // same hue per category as the Cases by Type chart
     };
   }).filter(Boolean) as { name: string; days: number; color: string }[];
 
