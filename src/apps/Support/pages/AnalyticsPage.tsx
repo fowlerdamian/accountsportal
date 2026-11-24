@@ -188,16 +188,19 @@ export default function AnalyticsPage() {
     },
   });
 
-  const { firstActionAt, closedAt } = useMemo(() => {
+  const { firstActionAt, inHandAt, closedAt } = useMemo(() => {
     const first = new Map<string, Date>();
+    const inHand = new Map<string, Date>();
     const closed = new Map<string, Date>();
     for (const n of statusNotes) { // oldest first
       const at = new Date(n.created_at);
       if (!first.has(n.case_id)) first.set(n.case_id, at);
+      // First time the case reached In hand.
+      if (!inHand.has(n.case_id) && /→ In hand|set to In hand/i.test(n.message)) inHand.set(n.case_id, at);
       // Last close wins, so a reopened-then-closed case counts its final close.
       if (/→ Closed|set to Closed/i.test(n.message)) closed.set(n.case_id, at);
     }
-    return { firstActionAt: first, closedAt: closed };
+    return { firstActionAt: first, inHandAt: inHand, closedAt: closed };
   }, [statusNotes]);
 
   // Business days from creation to close (falls back to the last edit for a
@@ -242,10 +245,13 @@ export default function AnalyticsPage() {
     color: STATUS_COLOURS[s],
   })).filter(d => d.value > 0);
 
-  const avgCloseData = (Object.keys(EXTENDED_LABELS) as ExtendedCategory[]).map(cat => {
-    const closed = closedPeriod.filter(c => getExtendedCategory(c) === cat);
-    if (!closed.length) return null;
-    const avg = closed.reduce((s, c) => s + daysToClose(c), 0) / closed.length;
+  // Average business days from creation until the case first reached In hand,
+  // per category. Cases that never reached In hand (still New/Actioned, or
+  // closed straight from an earlier status) are left out.
+  const avgInHandData = (Object.keys(EXTENDED_LABELS) as ExtendedCategory[]).map(cat => {
+    const reached = periodCases.filter(c => getExtendedCategory(c) === cat && inHandAt.has(c.id));
+    if (!reached.length) return null;
+    const avg = reached.reduce((s, c) => s + businessDaysBetween(new Date(c.created_at), inHandAt.get(c.id)!), 0) / reached.length;
     const rounded = Math.round(avg * 10) / 10;
     return {
       name: EXTENDED_LABELS[cat],
@@ -518,18 +524,18 @@ export default function AnalyticsPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Row 4: Avg time to close — only shown when there's data */}
-          {avgCloseData.length > 0 && (
+          {/* Row 4: Avg time until In hand — only shown when there's data */}
+          {avgInHandData.length > 0 && (
             <div className="bg-card border border-border p-4">
-              <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">AVERAGE TIME TO CLOSE BY TYPE</h3>
-              <ResponsiveContainer width="100%" height={avgCloseData.length * 44 + 40}>
-                <BarChart data={avgCloseData} layout="vertical">
+              <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">AVERAGE TIME UNTIL IN HAND BY TYPE</h3>
+              <ResponsiveContainer width="100%" height={avgInHandData.length * 44 + 40}>
+                <BarChart data={avgInHandData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
                   <XAxis type="number" tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} domain={[0, (d: number) => Math.max(d, 1)]} />
                   <YAxis dataKey="name" type="category" tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} width={130} />
                   <Tooltip {...TOOLTIP_STYLE} formatter={(v: number) => [`${v} business days`, 'Avg']} />
                   <Bar dataKey="days" label={{ position: 'right', fill: '#5A5A5A', fontSize: 11, formatter: (v: number) => `${v}d` }}>
-                    {avgCloseData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    {avgInHandData.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
