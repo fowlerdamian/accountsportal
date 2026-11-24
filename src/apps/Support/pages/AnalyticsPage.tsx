@@ -296,41 +296,98 @@ export default function AnalyticsPage() {
     : 13;
   const trendAngled = granularity === 'daily' && trendDayCount > 7;
 
+  // Products per case. Cases don't record a product themselves, so the
+  // products are the lines of the Cin7 sale order each case is linked to
+  // (cin7_sale_product_lines), named from cin7_products.
+  const saleIds = useMemo(
+    () => [...new Set(cases.map(c => c.cin7_sale_id).filter(Boolean) as string[])].sort(),
+    [cases],
+  );
+  const { data: saleProducts } = useQuery({
+    queryKey: ['analytics-case-sale-products', saleIds],
+    enabled: saleIds.length > 0,
+    queryFn: async () => {
+      const CHUNK = 100;
+      const skusBySale = new Map<string, Set<string>>();
+      for (let i = 0; i < saleIds.length; i += CHUNK) {
+        const { data, error } = await supabase
+          .from('cin7_sale_product_lines' as any)
+          .select('sale_id, sku')
+          .in('sale_id', saleIds.slice(i, i + CHUNK))
+          .limit(5000);
+        if (error) throw error;
+        for (const l of (data ?? []) as unknown as { sale_id: string; sku: string }[]) {
+          if (!l.sku) continue;
+          if (!skusBySale.has(l.sale_id)) skusBySale.set(l.sale_id, new Set());
+          skusBySale.get(l.sale_id)!.add(l.sku);
+        }
+      }
+      const skus = [...new Set([...skusBySale.values()].flatMap(set => [...set]))];
+      const info = new Map<string, { name: string; category: string | null }>();
+      for (let i = 0; i < skus.length; i += CHUNK) {
+        const { data, error } = await supabase
+          .from('cin7_products' as any)
+          .select('sku, name, category')
+          .in('sku', skus.slice(i, i + CHUNK));
+        if (error) throw error;
+        for (const r of (data ?? []) as unknown as { sku: string; name: string; category: string | null }[]) {
+          info.set(r.sku, { name: r.name, category: r.category });
+        }
+      }
+      return { skusBySale, info };
+    },
+    staleTime: 5 * 60_000,
+  });
+
   const topProducts = useMemo(() => {
-    const map = new Map<string, { count: number; types: Map<string, number>; lastDate: string }>();
+    if (!saleProducts) return [];
+    const { skusBySale, info } = saleProducts;
+    // Order lines that aren't the product a case is about: surcharges/freight
+    // and the promo merchandise added to orders.
+    const isNoise = (sku: string) =>
+      /surcharge|freight|shipping/i.test(`${sku} ${info.get(sku)?.name ?? ''}`) || info.get(sku)?.category === 'Merchandise';
+
+    const map = new Map<string, { count: number; types: Map<ExtendedCategory, number>; lastDate: string }>();
     periodCases.forEach(c => {
-      const p = c.product_name || 'Unknown';
-      const entry = map.get(p) || { count: 0, types: new Map(), lastDate: c.created_at };
-      entry.count++;
-      entry.types.set(c.type, (entry.types.get(c.type) || 0) + 1);
-      if (c.created_at > entry.lastDate) entry.lastDate = c.created_at;
-      map.set(p, entry);
+      const skus = c.cin7_sale_id ? skusBySale.get(c.cin7_sale_id) : undefined;
+      if (!skus) return;
+      const cat = getExtendedCategory(c);
+      skus.forEach(sku => {
+        if (isNoise(sku)) return;
+        const entry = map.get(sku) || { count: 0, types: new Map(), lastDate: c.created_at };
+        entry.count++; // each product counts once per case
+        entry.types.set(cat, (entry.types.get(cat) || 0) + 1);
+        if (c.created_at > entry.lastDate) entry.lastDate = c.created_at;
+        map.set(sku, entry);
+      });
     });
     return [...map.entries()]
-      .sort((a, b) => b[1].count - a[1].count)
+      .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
       .slice(0, 10)
-      .map(([name, data]) => {
+      .map(([sku, data]) => {
         const mostCommonType = [...data.types.entries()].sort((a, b) => b[1] - a[1])[0];
-        const extCat = getExtendedCategory({ type: mostCommonType[0] });
         return {
-          name,
+          sku,
+          name:       info.get(sku)?.name || sku,
           count:      data.count,
-          commonType: EXTENDED_LABELS[extCat] || mostCommonType[0],
+          commonType: EXTENDED_LABELS[mostCommonType[0]],
           lastDate:   format(new Date(data.lastDate), 'dd MMM yyyy'),
         };
       });
-  }, [periodCases]);
+  }, [periodCases, saleProducts]);
 
   // ── Export ───────────────────────────────────────────────────────────────
 
   const exportCSV = useCallback(() => {
-    const headers = ['Case Number', 'Type', 'Error Origin', 'Status', 'Created At', 'Closed At', 'Business Days Open', 'SO Number', 'Customer', 'Product', 'Resolution Summary'];
+    const headers = ['Case Number', 'Type', 'Error Origin', 'Status', 'Created At', 'Closed At', 'Business Days Open', 'SO Number', 'Customer', 'Order SKUs', 'Resolution Summary'];
     const rows = periodCases.map(c => [
       c.case_number, c.type, c.error_origin || '', c.status,
       format(new Date(c.created_at), 'yyyy-MM-dd HH:mm'),
       c.status === 'closed' ? format(closedAt.get(c.id) ?? new Date(c.updated_at), 'yyyy-MM-dd HH:mm') : '',
       (c.status === 'closed' ? daysToClose(c) : calculateBusinessDaysOpen(new Date(c.created_at))).toString(),
-      c.order_number || '', c.customer_name || '', c.product_name || '', c.description || '',
+      c.order_number || '', c.customer_name || '',
+      [...((c.cin7_sale_id && saleProducts?.skusBySale.get(c.cin7_sale_id)) || [])].join('; '),
+      c.description || '',
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -340,7 +397,7 @@ export default function AnalyticsPage() {
     a.download = `cases-${format(start, 'yyyyMMdd')}-${format(end, 'yyyyMMdd')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [periodCases, start, end, closedAt, daysToClose]);
+  }, [periodCases, start, end, closedAt, daysToClose, saleProducts]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -545,7 +602,8 @@ export default function AnalyticsPage() {
           {/* Row 5: Top products table */}
           {topProducts.length > 0 && (
             <div className="bg-card border border-border p-4">
-              <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">TOP PRODUCTS BY CASE COUNT</h3>
+              <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-1">TOP PRODUCTS BY CASE COUNT</h3>
+              <p className="text-[11px] text-muted-foreground mb-4">Products on each case's linked sales order</p>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
@@ -558,7 +616,7 @@ export default function AnalyticsPage() {
                 <tbody>
                   {topProducts.map((p, i) => (
                     <tr key={i} className="border-b border-border last:border-0">
-                      <td className="px-3 py-2 text-foreground">{p.name}</td>
+                      <td className="px-3 py-2 text-foreground">{p.name}{p.name !== p.sku && <span className="text-muted-foreground text-xs ml-2">{p.sku}</span>}</td>
                       <td className="px-3 py-2 text-right text-foreground font-medium">{p.count}</td>
                       <td className="px-3 py-2 text-muted-foreground">{p.commonType}</td>
                       <td className="px-3 py-2 text-muted-foreground">{p.lastDate}</td>

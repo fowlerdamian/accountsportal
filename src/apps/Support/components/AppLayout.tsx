@@ -29,8 +29,10 @@ export function AppLayout() {
 
   if (isLoading || tileSettings === null) return null;
 
+  // paddingBottom reserves room for the fixed task dock, so the end of a long
+  // page scrolls clear of it instead of sitting underneath.
   return (
-    <div style={{ minHeight: 'calc(100dvh - var(--task-dock-h, 0px))', background: '#000000' }}>
+    <div style={{ minHeight: 'calc(100dvh - var(--task-dock-h, 0px))', paddingBottom: 'var(--task-dock-h, 0px)', background: '#000000' }}>
       <AppSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
       <div className={isMobile ? '' : 'ml-56'} style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - var(--task-dock-h, 0px))' }}>
         <AppHeader onMenuClick={() => setSidebarOpen(true)} />
