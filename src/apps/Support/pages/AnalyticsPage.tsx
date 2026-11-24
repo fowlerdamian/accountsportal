@@ -11,15 +11,18 @@ import {
   LineChart, Line, Legend,
 } from 'recharts';
 import {
-  format, subDays, startOfWeek, startOfMonth, endOfMonth,
-  subMonths, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval,
+  format, startOfMonth, endOfMonth, addMonths,
+  eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval,
   startOfDay, startOfWeek as _startOfWeek,
 } from 'date-fns';
 import { palette } from '@portal/lib/palette';
+// Same period model as the Accounts app (Finance Dashboard / Sales Mix):
+// a grain (Month / Rolling 12M / Calendar Year / Financial Year) + an anchor.
+import { GRAINS, buildOptions, periodKeys, ymParts } from '@portal/apps/Accounts/finance/periods.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Preset = 'this_week' | 'this_month' | 'last_month' | 'last_3_months';
+type Grain = 'month' | 'r12' | 'cy' | 'fy';
 type Granularity = 'daily' | 'weekly' | 'monthly';
 
 type ExtendedCategory =
@@ -68,17 +71,15 @@ function getExtendedCategory(c: { type: string; error_origin?: string | null }):
   return c.type as ExtendedCategory;
 }
 
-function getDateRange(preset: Preset): { start: Date; end: Date } {
-  const now = new Date();
-  switch (preset) {
-    case 'this_week':    return { start: startOfWeek(now, { weekStartsOn: 1 }), end: now };
-    case 'this_month':   return { start: startOfMonth(now), end: now };
-    case 'last_month': {
-      const lm = subMonths(now, 1);
-      return { start: startOfMonth(lm), end: endOfMonth(lm) };
-    }
-    case 'last_3_months': return { start: subMonths(startOfMonth(now), 2), end: now };
-  }
+// 'YYYY-MM' of a date, in local time (cases are bucketed by the local calendar).
+const monthKey = (d: Date) => format(d, 'yyyy-MM');
+const monthStart = (key: string) => { const { y, m } = ymParts(key); return new Date(y, m - 1, 1); };
+
+// Every month-key from `from` through `to`, inclusive.
+function monthKeysBetween(from: Date, to: Date): string[] {
+  const out: string[] = [];
+  for (let d = startOfMonth(from); d <= to; d = addMonths(d, 1)) out.push(monthKey(d));
+  return out;
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -118,10 +119,9 @@ function TargetBar({ label, current, target, isCount, inverse }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
-  const [preset, setPreset]           = useState<Preset>('this_month');
+  const [grain, setGrain]             = useState<Grain>('month');
+  const [anchor, setAnchor]           = useState<string | null>(null);
   const [granularity, setGranularity] = useState<Granularity>('daily');
-
-  const { start, end } = getDateRange(preset);
 
   const { data: cases = [], isLoading } = useQuery({
     queryKey: ['analytics-cases'],
@@ -134,6 +134,26 @@ export default function AnalyticsPage() {
       return data as unknown as Case[];
     },
   });
+
+  // Selectable periods run from the first case's month to the current month
+  // (cases arrive sorted by created_at). Default anchor = the latest period.
+  const firstCaseAt = cases[0]?.created_at;
+  const options = useMemo(() => {
+    const now = new Date();
+    const keys = monthKeysBetween(firstCaseAt ? new Date(firstCaseAt) : now, now);
+    return buildOptions(grain, keys) as { value: string; label: string }[];
+  }, [grain, firstCaseAt]);
+  const effAnchor = (anchor && options.some(o => o.value === anchor) ? anchor : null)
+    ?? options[options.length - 1]?.value ?? monthKey(new Date());
+
+  // The period's date window. `end` stops at now for a period still in progress,
+  // so the trend chart doesn't trail off into empty future days.
+  const { start, end } = useMemo(() => {
+    const keys = periodKeys(grain, effAnchor) as string[];
+    const now = new Date();
+    const last = endOfMonth(monthStart(keys[keys.length - 1]));
+    return { start: monthStart(keys[0]), end: last > now ? now : last };
+  }, [grain, effAnchor]);
 
   // Period-filtered cases
   const periodCases = useMemo(() =>
@@ -281,24 +301,33 @@ export default function AnalyticsPage() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-heading">ANALYTICS & REPORTS</h2>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {([
-            ['this_week',     'This week'],
-            ['this_month',    'This month'],
-            ['last_month',    'Last month'],
-            ['last_3_months', 'Last 3 months'],
-          ] as [Preset, string][]).map(([key, label]) => (
+          {/* Same period filter as the Accounts app: grain + anchor */}
+          {(GRAINS as { key: Grain; label: string }[]).map(g => (
             <button
-              key={key}
-              onClick={() => setPreset(key)}
+              key={g.key}
+              onClick={() => {
+                setGrain(g.key);
+                setAnchor(null);
+                // A year of daily points is unreadable — start year views on monthly.
+                setGranularity(g.key === 'month' ? 'daily' : 'monthly');
+              }}
               className={cn('px-3 py-1.5 text-xs font-medium border transition-colors',
-                preset === key
+                grain === g.key
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-card text-muted-foreground border-border hover:border-foreground'
               )}
             >
-              {label}
+              {g.label}
             </button>
           ))}
+          <select
+            value={effAnchor}
+            onChange={e => setAnchor(e.target.value)}
+            aria-label="Period"
+            className="px-2.5 py-1.5 text-xs font-medium border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:border-foreground"
+          >
+            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
           <button
             onClick={exportCSV}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:text-foreground transition-colors"
