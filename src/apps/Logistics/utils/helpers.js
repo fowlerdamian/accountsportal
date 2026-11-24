@@ -57,6 +57,33 @@ export const invoiceOvercharge = (lines) =>
 export const invoiceTotal = (lines) =>
   lines.reduce((sum, l) => sum + l.charged_total, 0)
 
+// ─── Control total ────────────────────────────────────────────────────────────
+// Do the extracted lines add up to what the invoice itself states? Uses the
+// printed net total when the parser captured it, else implies it from the GST
+// line (GST × 10). Returns null when there is nothing to compare against.
+const isGstLine = (l) => (l.service ?? '').trim().toLowerCase() === 'gst' || (l.description ?? '').toLowerCase().includes('gst')
+
+export function invoiceReconciliation(invoice, lines) {
+  if (!lines?.length) return null
+  const extracted = lines.filter(l => !isGstLine(l)).reduce((s, l) => s + Number(l.charged_total), 0)
+  const gstLine   = lines.filter(isGstLine).reduce((s, l) => s + Number(l.charged_total), 0)
+  let stated = invoice?.stated_net != null ? Number(invoice.stated_net) : null
+  let basis  = 'invoice total'
+  if (stated == null) {
+    const gst = invoice?.stated_gst != null ? Number(invoice.stated_gst) : gstLine
+    if (!(gst > 0)) return null
+    stated = gst * 10
+    basis  = 'GST × 10'
+  }
+  const diff = extracted - stated
+  // GST-implied totals carry rounding noise from per-line GST
+  const tolerance = Math.max(basis === 'GST × 10' ? 3 : 1, Math.abs(stated) * 0.01)
+  return { extracted, stated, diff, basis, ok: Math.abs(diff) <= tolerance }
+}
+
+// Disputes that are still live with the carrier
+export const OPEN_DISPUTE_STATUSES = ['draft', 'sent', 'acknowledged']
+
 // Age in whole days from an ISO timestamp/date to now
 export const daysSince = (iso) =>
   iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null

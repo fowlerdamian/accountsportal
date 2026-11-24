@@ -10,7 +10,7 @@ import {
   Badge, Spinner, Flash, useFlash, DISPUTE_STATUS_STYLE, PageHeader, HoverBtn, Modal, FieldLabel, rowHover,
 } from '../utils/ui.jsx'
 
-const OPEN_STATUSES = ['draft', 'sent', 'acknowledged']
+import { OPEN_DISPUTE_STATUSES as OPEN_STATUSES } from '../utils/helpers.js'
 
 export default function Disputes() {
   const [disputes, setDisputes] = useState([])
@@ -77,6 +77,35 @@ export default function Disputes() {
     fetchDisputes()
   }
 
+  // Closing a claim is a one-way door in the pipeline, so it is confirmed
+  // first — and can be undone with Reopen if it was a mis-click.
+  const [confirmClose, setConfirmClose] = useState(null)   // { dispute, status }
+
+  const reopen = async (d) => {
+    const status = d.sent_at ? 'sent' : 'draft'
+    const { error } = await supabase.from('disputes').update({ status, resolved_at: null }).eq('id', d.id)
+    if (error) {
+      flash('err', error.code === '23505' ? 'This invoice already has another open dispute' : error.message)
+      return
+    }
+    const { data: { user } } = await supabase.auth.getUser()
+    await logEvent(d.id, 'status_changed', `Reopened (was ${d.status.replace('_', ' ')}) → ${status}`, null, user?.id ?? null)
+    await supabase.from('freight_invoices').update({ status: 'disputed' }).eq('id', d.invoice_id)
+    flash('ok', 'Dispute reopened')
+    fetchDisputes()
+  }
+
+  // amount_recovered is always the sum of the logged credits (never
+  // incremented from possibly-stale client state). Returns the new total.
+  const syncRecovered = async (disputeId) => {
+    const { data: rows, error } = await supabase.from('dispute_credits').select('amount').eq('dispute_id', disputeId)
+    if (error) { flash('err', error.message); return null }
+    const total = Math.round(rows.reduce((s, r) => s + Number(r.amount), 0) * 100) / 100
+    const { error: updErr } = await supabase.from('disputes').update({ amount_recovered: total }).eq('id', disputeId)
+    if (updErr) { flash('err', updErr.message); return null }
+    return total
+  }
+
   const openCreditModal = (d) => {
     setCreditFor(d)
     setCredits([...(d.dispute_credits ?? [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)))
@@ -103,8 +132,8 @@ export default function Disputes() {
       flash('err', error.code === '23505' ? `URN ${urn} is already logged on this claim` : error.message)
       return
     }
-    const newRecovered = Number(d.amount_recovered) + amount
-    await supabase.from('disputes').update({ amount_recovered: newRecovered }).eq('id', d.id)
+    const newRecovered = await syncRecovered(d.id)
+    if (newRecovered == null) { setCreditSaving(false); return }
     await logEvent(d.id, 'credit_logged', `Credit received — ${aud(amount)} (URN ${urn})`, amount, user?.id ?? null)
     setCreditSaving(false)
     setCredits(prev => [...prev, row])
@@ -121,8 +150,8 @@ export default function Disputes() {
     const d = creditFor
     const { error } = await supabase.from('dispute_credits').delete().eq('id', c.id)
     if (error) { setCreditSaving(false); flash('err', error.message); return }
-    const newRecovered = Math.max(0, Number(d.amount_recovered) - Number(c.amount))
-    await supabase.from('disputes').update({ amount_recovered: newRecovered }).eq('id', d.id)
+    const newRecovered = await syncRecovered(d.id)
+    if (newRecovered == null) { setCreditSaving(false); return }
     const { data: { user } } = await supabase.auth.getUser()
     await logEvent(d.id, 'note', `Credit removed — ${aud(Number(c.amount))} (URN ${c.urn})`, null, user?.id ?? null)
     setCreditSaving(false)
@@ -280,9 +309,12 @@ export default function Disputes() {
                           {d.status === 'sent' && (
                             <button onClick={() => setStatus(d, 'acknowledged')} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Ack'd</button>
                           )}
-                          <button onClick={() => setStatus(d, 'rejected')} style={{ background: 'none', border: 'none', color: 'var(--brand-pink)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Rejected</button>
-                          <button onClick={() => setStatus(d, 'written_off')} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Write off</button>
+                          <button onClick={() => setConfirmClose({ dispute: d, status: 'rejected' })} style={{ background: 'none', border: 'none', color: 'var(--brand-pink)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Rejected</button>
+                          <button onClick={() => setConfirmClose({ dispute: d, status: 'written_off' })} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Write off</button>
                         </span>
+                      )}
+                      {!isOpen && (
+                        <button onClick={() => reopen(d)} style={{ background: 'none', border: 'none', color: 'var(--brand-accent)', cursor: 'pointer', fontSize: '11px', fontFamily: mono, padding: 0 }}>Reopen</button>
                       )}
                     </td>
                     <td style={{ ...tdStyle, fontSize: '11px', fontFamily: mono, color: 'var(--text-disabled)' }}>{isExpanded ? '▲' : '▼'}</td>
@@ -354,6 +386,31 @@ export default function Disputes() {
         onMarkSent={markSent}
         onSaveDraft={saveDraft}
       />
+
+      {/* ── Confirm closing a claim without credit ─────────────────────────────── */}
+      <Modal open={!!confirmClose} onClose={() => setConfirmClose(null)} width={420}>
+        {confirmClose && (
+          <>
+            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+              {confirmClose.status === 'rejected' ? 'Mark claim rejected?' : 'Write off claim?'}
+            </p>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: mono, margin: '0 0 18px' }}>
+              {confirmClose.dispute.freight_invoices?.invoice_ref} · {aud(Number(confirmClose.dispute.amount_claimed))} claimed
+              {Number(confirmClose.dispute.amount_recovered) > 0 ? ` · ${aud(Number(confirmClose.dispute.amount_recovered))} already credited` : ''}.
+              {' '}This closes the claim and marks the invoice resolved. You can reopen it from the All view.
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => { const c = confirmClose; setConfirmClose(null); setStatus(c.dispute, c.status) }}
+                style={{ ...btnGhost, color: 'var(--brand-pink)', borderColor: 'rgba(var(--brand-pink-rgb),0.4)' }}
+              >
+                {confirmClose.status === 'rejected' ? 'Mark rejected' : 'Write off'}
+              </button>
+              <button onClick={() => setConfirmClose(null)} style={btnGhost}>Cancel</button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       {/* ── Credits & close-out modal (phase 2) ────────────────────────────────── */}
       <Modal open={!!creditFor} onClose={() => { if (!creditSaving) setCreditFor(null) }} width={460}>

@@ -75,7 +75,16 @@ export const displayStatus = (s) => (s === 'matched' ? 'processed' : s)
 // ShipStation (step 2 runs in the background straight after upload).
 export const isProcessing = (inv) =>
   inv.status === 'pending' && inv.matched_at == null &&
-  Date.now() - new Date(inv.created_at).getTime() < 10 * 60 * 1000  // stale-guard
+  // stale-guard — measured from the last touch so a re-extraction (PDF dropped
+  // again on an existing invoice) shows as processing too
+  Date.now() - new Date(inv.updated_at ?? inv.created_at).getTime() < 10 * 60 * 1000
+
+// A pending invoice that is no longer processing never got audited: either
+// line extraction failed (no lines) or the rate check did not complete.
+export const stalledReason = (inv, lineCount) =>
+  inv.status !== 'pending' || isProcessing(inv) ? null
+    : lineCount === 0 ? 'No lines — drop PDF again'
+    : 'Not checked — run rate check'
 
 export function ProcessingIndicator() {
   return (

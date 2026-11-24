@@ -17,8 +17,21 @@ const TNT_FORM_URL = 'https://www.tnt.com/express/en_au/site/support/invoice-que
 // Build the query list from the invoice's disputed lines
 export function buildTntQueries(lines) {
   const queries = []
+  // A weight discrepancy is one query per con note — the billed weight is
+  // repeated on every surcharge row of the consignment, so pick the row that
+  // carries the money (largest variance) and skip the rest.
+  const weightLineByRef = new Map()
+  for (const l of lines ?? []) {
+    if (l.weight_check !== 'overbilled' || l.fee_check === 'mhp_unjustified') continue
+    const ref = (l.tracking_ref ?? l.id).toString().toLowerCase()
+    const v = l.expected_total != null ? l.charged_total - l.expected_total : -Infinity
+    const cur = weightLineByRef.get(ref)
+    if (!cur || v > cur.v) weightLineByRef.set(ref, { id: l.id, v })
+  }
   for (const l of lines ?? []) {
     const variance = l.expected_total != null ? l.charged_total - l.expected_total : null
+    if (l.weight_check === 'overbilled' && l.fee_check !== 'mhp_unjustified' &&
+        weightLineByRef.get((l.tracking_ref ?? l.id).toString().toLowerCase())?.id !== l.id) continue
     if (l.fee_check === 'mhp_unjustified') {
       queries.push({
         line: l,
@@ -50,6 +63,7 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
   const [queries, setQueries] = useState([])
   const [busyId,  setBusyId]  = useState(null)
   const [openedId,  setOpenedId]  = useState(null)   // last query whose form we opened
+  const [lodgeError, setLodgeError] = useState(null)
 
   useEffect(() => {
     if (!open) return
@@ -95,7 +109,9 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
   const markLodged = async (q) => {
     setBusyId(q.line.id)
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('freight_invoice_lines').update({ query_submitted_at: new Date().toISOString() }).eq('id', q.line.id)
+    const { error: lodgeErr } = await supabase.from('freight_invoice_lines').update({ query_submitted_at: new Date().toISOString() }).eq('id', q.line.id)
+    if (lodgeErr) { setBusyId(null); setLodgeError(`Could not mark lodged — ${lodgeErr.message}`); return }
+    setLodgeError(null)
     if (dispute) {
       await supabase.from('dispute_events').insert({
         dispute_id: dispute.id,
@@ -105,14 +121,15 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
       })
     }
     setBusyId(null)
-    setQueries(prev => {
-      const next = prev.map(x => x.line.id === q.line.id ? { ...x, submitted: true } : x)
-      if (dispute && next.every(x => x.submitted)) {
-        supabase.from('disputes').update({ status: 'sent', sent_to: 'TNT invoice query form', sent_at: new Date().toISOString() })
-          .eq('id', dispute.id).then(() => onChange?.())
-      }
-      return next
-    })
+    const next = queries.map(x => x.line.id === q.line.id ? { ...x, submitted: true } : x)
+    setQueries(next)
+    // All queries lodged → the dispute is with the carrier (only ever advance a draft)
+    if (dispute && dispute.status === 'draft' && next.every(x => x.submitted)) {
+      const { error: sentErr } = await supabase.from('disputes')
+        .update({ status: 'sent', sent_to: 'TNT invoice query form', sent_at: new Date().toISOString() })
+        .eq('id', dispute.id).eq('status', 'draft')
+      if (sentErr) setLodgeError(`Queries lodged but the dispute could not be marked sent — ${sentErr.message}`)
+    }
     onChange?.()
   }
 
@@ -178,6 +195,10 @@ export default function TntQueryPanel({ open, onClose, invoice, dispute, onChang
               <div style={{ margin: '14px 0 8px' }}>
                 <FieldLabel>{queries.length} quer{queries.length === 1 ? 'y' : 'ies'} · {remaining} to lodge</FieldLabel>
               </div>
+
+              {lodgeError && (
+                <p style={{ fontSize: '11px', fontFamily: mono, color: 'var(--brand-pink)', margin: '0 0 10px' }}>{lodgeError}</p>
+              )}
 
               {queries.length === 0 && (
                 <p style={{ fontSize: '12px', fontFamily: mono, color: 'var(--text-disabled)' }}>No disputable lines on this invoice.</p>
