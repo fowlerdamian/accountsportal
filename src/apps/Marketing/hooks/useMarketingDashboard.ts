@@ -19,6 +19,8 @@ export interface WebsiteAnalytics {
   configured: boolean;
   error?: string;
   propertyId?: string;
+  /** Visitor countries the figures are limited to (bot traffic from elsewhere is excluded). */
+  countries?: string[];
   activeUsers?: number;
   newUsers?: number;
   sessions?: number;
