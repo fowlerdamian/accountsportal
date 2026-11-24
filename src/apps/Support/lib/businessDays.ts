@@ -37,3 +37,21 @@ export function calculateBusinessDaysOpen(createdAt: Date): number {
 
   return count;
 }
+
+// Business days from one moment to another: 0 if both fall on the same day,
+// 1 if `to` is the next business day, and so on (the start day itself is not
+// counted; weekends and public holidays are skipped).
+export function businessDaysBetween(from: Date, to: Date): number {
+  const current = new Date(from);
+  current.setHours(0, 0, 0, 0);
+  const last = new Date(to);
+  last.setHours(0, 0, 0, 0);
+
+  let count = 0;
+  current.setDate(current.getDate() + 1); // skip the start day
+  while (current <= last) {
+    if (isBusinessDay(current)) count++;
+    current.setDate(current.getDate() + 1);
+  }
+  return count;
+}

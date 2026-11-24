@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import type { Case, CaseType } from '@/lib/types';
-import { calculateBusinessDaysOpen } from '@/lib/businessDays';
+import { calculateBusinessDaysOpen, businessDaysBetween } from '@/lib/businessDays';
 import { Download } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -164,17 +164,60 @@ export default function AnalyticsPage() {
 
   const closedPeriod = periodCases.filter(c => c.status === 'closed');
 
+  // When each case was first actioned and when it was closed. `cases` has no
+  // timestamp for either, so both come from the system status-change notes in
+  // case_updates ("Status changed from New → Actioned", "… → Closed · shipped").
+  const { data: statusNotes = [] } = useQuery({
+    queryKey: ['analytics-case-status-notes'],
+    queryFn: async () => {
+      const PAGE = 1000;
+      const out: { case_id: string; message: string; created_at: string }[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('case_updates')
+          .select('case_id, message, created_at')
+          .eq('author_type', 'system')
+          .ilike('message', 'Status %')
+          .order('created_at', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        out.push(...((data ?? []) as typeof out));
+        if (!data || data.length < PAGE) break;
+      }
+      return out;
+    },
+  });
+
+  const { firstActionAt, closedAt } = useMemo(() => {
+    const first = new Map<string, Date>();
+    const closed = new Map<string, Date>();
+    for (const n of statusNotes) { // oldest first
+      const at = new Date(n.created_at);
+      if (!first.has(n.case_id)) first.set(n.case_id, at);
+      // Last close wins, so a reopened-then-closed case counts its final close.
+      if (/→ Closed|set to Closed/i.test(n.message)) closed.set(n.case_id, at);
+    }
+    return { firstActionAt: first, closedAt: closed };
+  }, [statusNotes]);
+
+  // Business days from creation to close (falls back to the last edit for a
+  // closed case with no close note).
+  const daysToClose = useCallback((c: Case) =>
+    businessDaysBetween(new Date(c.created_at), closedAt.get(c.id) ?? new Date(c.updated_at)),
+  [closedAt]);
+
   // ── Summary stats ────────────────────────────────────────────────────────
 
   const avgResponseDays = useMemo(() => {
-    const withResponse = periodCases.filter(c => c.status !== 'open');
+    // Business days from creation to the first status change.
+    const withResponse = periodCases.filter(c => firstActionAt.has(c.id));
     if (!withResponse.length) return 0;
-    const total = withResponse.reduce((s, c) => s + calculateBusinessDaysOpen(new Date(c.created_at)), 0);
+    const total = withResponse.reduce((s, c) => s + businessDaysBetween(new Date(c.created_at), firstActionAt.get(c.id)!), 0);
     return Math.round((total / withResponse.length) * 10) / 10;
-  }, [periodCases]);
+  }, [periodCases, firstActionAt]);
 
   const resolutionRate = closedPeriod.length > 0
-    ? Math.round((closedPeriod.filter(c => calculateBusinessDaysOpen(new Date(c.created_at)) <= 1).length / closedPeriod.length) * 100)
+    ? Math.round((closedPeriod.filter(c => daysToClose(c) <= 1).length / closedPeriod.length) * 100)
     : 0;
 
   const currentlyOverdue = cases.filter(
@@ -202,7 +245,7 @@ export default function AnalyticsPage() {
   const avgCloseData = (Object.keys(EXTENDED_LABELS) as ExtendedCategory[]).map(cat => {
     const closed = closedPeriod.filter(c => getExtendedCategory(c) === cat);
     if (!closed.length) return null;
-    const avg = closed.reduce((s, c) => s + calculateBusinessDaysOpen(new Date(c.created_at)), 0) / closed.length;
+    const avg = closed.reduce((s, c) => s + daysToClose(c), 0) / closed.length;
     const rounded = Math.round(avg * 10) / 10;
     return {
       name: EXTENDED_LABELS[cat],
@@ -279,8 +322,8 @@ export default function AnalyticsPage() {
     const rows = periodCases.map(c => [
       c.case_number, c.type, c.error_origin || '', c.status,
       format(new Date(c.created_at), 'yyyy-MM-dd HH:mm'),
-      c.status === 'closed' ? format(new Date(c.updated_at), 'yyyy-MM-dd HH:mm') : '',
-      calculateBusinessDaysOpen(new Date(c.created_at)).toString(),
+      c.status === 'closed' ? format(closedAt.get(c.id) ?? new Date(c.updated_at), 'yyyy-MM-dd HH:mm') : '',
+      (c.status === 'closed' ? daysToClose(c) : calculateBusinessDaysOpen(new Date(c.created_at))).toString(),
       c.order_number || '', c.customer_name || '', c.product_name || '', c.description || '',
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','))].join('\n');
@@ -291,7 +334,7 @@ export default function AnalyticsPage() {
     a.download = `cases-${format(start, 'yyyyMMdd')}-${format(end, 'yyyyMMdd')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [periodCases, start, end]);
+  }, [periodCases, start, end, closedAt, daysToClose]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -484,7 +527,7 @@ export default function AnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
                   <XAxis type="number" tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} domain={[0, (d: number) => Math.max(d, 1)]} />
                   <YAxis dataKey="name" type="category" tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} width={130} />
-                  <Tooltip {...TOOLTIP_STYLE} formatter={(v: number) => [`${v} days`, 'Avg']} />
+                  <Tooltip {...TOOLTIP_STYLE} formatter={(v: number) => [`${v} business days`, 'Avg']} />
                   <Bar dataKey="days" label={{ position: 'right', fill: '#5A5A5A', fontSize: 11, formatter: (v: number) => `${v}d` }}>
                     {avgCloseData.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Bar>
