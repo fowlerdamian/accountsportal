@@ -41,12 +41,12 @@ const EXTENDED_LABELS: Record<ExtendedCategory, string> = {
 };
 
 const EXTENDED_COLOURS: Record<ExtendedCategory, string> = {
-  warranty_claim:    palette.pink,
+  warranty_claim:    '#a0a0a0',       // grey
   order_entry_error: palette.orange,
-  warehouse_error:   palette.purple,
-  freight_issue:     palette.blue,
-  complaint:         palette.aqua,
-  general:           '#5A5A5A',
+  warehouse_error:   palette.purple,  // deep red
+  freight_issue:     palette.blue,    // teal
+  complaint:         palette.cat[4],  // cream — the brand aqua aliases the teal used by Freight
+  general:           palette.pink,    // red
 };
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -465,12 +465,12 @@ export default function AnalyticsPage() {
                 />
                 <Tooltip {...TOOLTIP_STYLE} />
                 <Legend formatter={(value) => <span style={{ color: '#9A9A9A', fontSize: '11px' }}>{value}</span>} />
-                <Line type="monotone" dataKey="Warranty"          stroke={palette.pink} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Order Entry Error" stroke={palette.orange} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Warehouse Error"   stroke={palette.purple} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Freight Issue"     stroke={palette.blue} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Complaint"         stroke={palette.aqua} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="General"           stroke="#5A5A5A" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Warranty"          stroke={EXTENDED_COLOURS.warranty_claim} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Order Entry Error" stroke={EXTENDED_COLOURS.order_entry_error} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Warehouse Error"   stroke={EXTENDED_COLOURS.warehouse_error} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Freight Issue"     stroke={EXTENDED_COLOURS.freight_issue} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Complaint"         stroke={EXTENDED_COLOURS.complaint} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="General"           stroke={EXTENDED_COLOURS.general} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
