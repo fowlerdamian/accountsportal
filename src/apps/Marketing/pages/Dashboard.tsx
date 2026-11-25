@@ -229,6 +229,14 @@ function EmailSegmentPanel({ d, accent }: { d: EmailSegment; accent: string }) {
   );
 }
 
+// " · AU + NZ visitors" — the website figures only count these countries (the
+// edge fn filters out overseas bot traffic). Empty until the fn reports a filter.
+const COUNTRY_SHORT: Record<string, string> = { Australia: "AU", "New Zealand": "NZ" };
+function countryNote(w?: { countries?: string[] } | null): string {
+  if (!w?.countries?.length) return "";
+  return ` · ${w.countries.map((c) => COUNTRY_SHORT[c] ?? c).join(" + ")} visitors`;
+}
+
 function TrailbaitView({ data, accent, site }: { data: TrailbaitDashboard; accent: string; site: string }) {
   const [segment, setSegment] = useState<Segment>("consumer");
   const seg: MarketingSegment = data[segment];
@@ -238,7 +246,7 @@ function TrailbaitView({ data, accent, site }: { data: TrailbaitDashboard; accen
     <div className="space-y-6">
       {/* Whole-store website traffic — sits above the Consumer/B2B filter since
           GA4 can't see the TIER tag and so applies to the whole store. */}
-      <Panel title="Website traffic" badge={`${site} · whole store`} accent={palette.purple}>
+      <Panel title="Website traffic" badge={`${site} · whole store${countryNote(data.website)}`} accent={palette.purple}>
         <WebsiteBody w={data.website} accent={palette.purple} />
       </Panel>
 
@@ -331,7 +339,7 @@ function PipelineView({ m, accent, website, site }: {
       </div>
 
       {/* Brand website traffic — period-bound. */}
-      <Panel title="Website traffic" badge={site} accent={palette.purple}>
+      <Panel title="Website traffic" badge={`${site}${countryNote(website)}`} accent={palette.purple}>
         {website ? <WebsiteBody w={website} accent={palette.purple} />
           : <div className="flex items-center justify-center py-6 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>}
       </Panel>

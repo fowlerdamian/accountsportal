@@ -105,6 +105,15 @@ async function getGoogleAccessToken(email: string, privateKeyPem: string, scope:
   return data.access_token;
 }
 
+// Website traffic is limited to these visitor countries. All three brands sell
+// in Australia / New Zealand only, and the GA properties are flooded by overseas
+// bot traffic (e.g. 21–24 Nov 2026 on TrailBait: Singapore = 83% of users at 1%
+// engagement and $0 revenue), which made sessions read 10x too high.
+const GA_COUNTRIES = ["Australia", "New Zealand"];
+const GA_COUNTRY_FILTER = {
+  filter: { fieldName: "country", inListFilter: { values: GA_COUNTRIES } },
+};
+
 // ── Google Analytics (GA4 Data API) — one brand's web property ───────────────
 async function fetchAnalytics(propertyId: string, range?: Range) {
   const email = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
@@ -123,14 +132,14 @@ async function fetchAnalytics(propertyId: string, range?: Range) {
         signal: AbortSignal.timeout(TIMEOUT),
         body: JSON.stringify({
           requests: [
-            { dateRanges: [gaRange], metrics: [
+            { dateRanges: [gaRange], dimensionFilter: GA_COUNTRY_FILTER, metrics: [
                 { name: "activeUsers" }, { name: "newUsers" }, { name: "sessions" },
                 { name: "screenPageViews" }, { name: "keyEvents" }, { name: "engagementRate" },
               ] },
-            { dateRanges: [gaRange], dimensions: [{ name: "date" }],
+            { dateRanges: [gaRange], dimensionFilter: GA_COUNTRY_FILTER, dimensions: [{ name: "date" }],
               metrics: [{ name: "sessions" }, { name: "activeUsers" }],
               orderBys: [{ dimension: { dimensionName: "date" } }] },
-            { dateRanges: [gaRange], dimensions: [{ name: "sessionDefaultChannelGroup" }],
+            { dateRanges: [gaRange], dimensionFilter: GA_COUNTRY_FILTER, dimensions: [{ name: "sessionDefaultChannelGroup" }],
               metrics: [{ name: "sessions" }],
               orderBys: [{ metric: { metricName: "sessions" }, desc: true }], limit: 8 },
           ],
@@ -158,6 +167,7 @@ async function fetchAnalytics(propertyId: string, range?: Range) {
     }));
     return {
       configured: true, ok: true, propertyId,
+      countries: GA_COUNTRIES,
       activeUsers: num(tRow[0]?.value),
       newUsers: num(tRow[1]?.value),
       sessions: num(tRow[2]?.value),
@@ -353,6 +363,45 @@ serve(async (req) => {
     dateRe.test(body.startDate ?? "") && dateRe.test(body.endDate ?? "")
       ? { startDate: body.startDate, endDate: body.endDate }
       : undefined;
+
+  // Diagnostic: an ad-hoc GA4 breakdown for one brand's property, e.g.
+  //   { action: "ga-breakdown", brand, startDate, endDate,
+  //     dimensions: ["country","sessionDefaultChannelGroup"], metrics: ["sessions","engagedSessions"] }
+  // Used to work out where a traffic spike is coming from. Staff-only (requireStaff above).
+  if (body.action === "ga-breakdown") {
+    const nameRe = /^[A-Za-z0-9_:]{1,60}$/;
+    const dims = (Array.isArray(body.dimensions) ? body.dimensions : []).filter((d: unknown) => typeof d === "string" && nameRe.test(d)).slice(0, 6);
+    const mets = (Array.isArray(body.metrics) ? body.metrics : ["sessions"]).filter((m: unknown) => typeof m === "string" && nameRe.test(m)).slice(0, 8);
+    const email = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+    const pk = (Deno.env.get("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") ?? "").replace(/\\n/g, "\n");
+    if (!email || !pk) return json({ ok: false, error: "GA service account not configured" }, 500);
+    try {
+      const token = await getGoogleAccessToken(email, pk, "https://www.googleapis.com/auth/analytics.readonly");
+      const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${resolveProperty(brand)}:runReport`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(TIMEOUT),
+        body: JSON.stringify({
+          dateRanges: [range ?? { startDate: "7daysAgo", endDate: "today" }],
+          dimensions: dims.map((name: string) => ({ name })),
+          metrics: mets.map((name: string) => ({ name })),
+          orderBys: [{ metric: { metricName: mets[0] }, desc: true }],
+          limit: Math.min(Number(body.limit) || 25, 250),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return json({ ok: false, error: data?.error?.message ?? `GA ${res.status}` }, 502);
+      return json({
+        ok: true, dimensions: dims, metrics: mets,
+        rows: (data.rows ?? []).map((r: any) => [
+          ...(r.dimensionValues ?? []).map((v: any) => v.value),
+          ...(r.metricValues ?? []).map((v: any) => num(v.value)),
+        ]),
+      });
+    } catch (e) {
+      return json({ ok: false, error: String(e).slice(0, 200) }, 502);
+    }
+  }
 
   const websiteP = fetchAnalytics(resolveProperty(brand), range);
 

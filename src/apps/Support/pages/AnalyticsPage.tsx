@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import type { Case, CaseType } from '@/lib/types';
-import { calculateBusinessDaysOpen } from '@/lib/businessDays';
+import { calculateBusinessDaysOpen, businessDaysBetween } from '@/lib/businessDays';
 import { Download } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -41,12 +41,12 @@ const EXTENDED_LABELS: Record<ExtendedCategory, string> = {
 };
 
 const EXTENDED_COLOURS: Record<ExtendedCategory, string> = {
-  warranty_claim:    palette.pink,
+  warranty_claim:    '#a0a0a0',       // grey
   order_entry_error: palette.orange,
-  warehouse_error:   palette.purple,
-  freight_issue:     palette.blue,
-  complaint:         palette.aqua,
-  general:           '#5A5A5A',
+  warehouse_error:   palette.purple,  // deep red
+  freight_issue:     palette.blue,    // teal
+  complaint:         palette.cat[4],  // cream — the brand aqua aliases the teal used by Freight
+  general:           palette.pink,    // red
 };
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -164,17 +164,63 @@ export default function AnalyticsPage() {
 
   const closedPeriod = periodCases.filter(c => c.status === 'closed');
 
+  // When each case was first actioned and when it was closed. `cases` has no
+  // timestamp for either, so both come from the system status-change notes in
+  // case_updates ("Status changed from New → Actioned", "… → Closed · shipped").
+  const { data: statusNotes = [] } = useQuery({
+    queryKey: ['analytics-case-status-notes'],
+    queryFn: async () => {
+      const PAGE = 1000;
+      const out: { case_id: string; message: string; created_at: string }[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('case_updates')
+          .select('case_id, message, created_at')
+          .eq('author_type', 'system')
+          .ilike('message', 'Status %')
+          .order('created_at', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        out.push(...((data ?? []) as typeof out));
+        if (!data || data.length < PAGE) break;
+      }
+      return out;
+    },
+  });
+
+  const { firstActionAt, inHandAt, closedAt } = useMemo(() => {
+    const first = new Map<string, Date>();
+    const inHand = new Map<string, Date>();
+    const closed = new Map<string, Date>();
+    for (const n of statusNotes) { // oldest first
+      const at = new Date(n.created_at);
+      if (!first.has(n.case_id)) first.set(n.case_id, at);
+      // First time the case reached In hand.
+      if (!inHand.has(n.case_id) && /→ In hand|set to In hand/i.test(n.message)) inHand.set(n.case_id, at);
+      // Last close wins, so a reopened-then-closed case counts its final close.
+      if (/→ Closed|set to Closed/i.test(n.message)) closed.set(n.case_id, at);
+    }
+    return { firstActionAt: first, inHandAt: inHand, closedAt: closed };
+  }, [statusNotes]);
+
+  // Business days from creation to close (falls back to the last edit for a
+  // closed case with no close note).
+  const daysToClose = useCallback((c: Case) =>
+    businessDaysBetween(new Date(c.created_at), closedAt.get(c.id) ?? new Date(c.updated_at)),
+  [closedAt]);
+
   // ── Summary stats ────────────────────────────────────────────────────────
 
   const avgResponseDays = useMemo(() => {
-    const withResponse = periodCases.filter(c => c.status !== 'open');
+    // Business days from creation to the first status change.
+    const withResponse = periodCases.filter(c => firstActionAt.has(c.id));
     if (!withResponse.length) return 0;
-    const total = withResponse.reduce((s, c) => s + calculateBusinessDaysOpen(new Date(c.created_at)), 0);
+    const total = withResponse.reduce((s, c) => s + businessDaysBetween(new Date(c.created_at), firstActionAt.get(c.id)!), 0);
     return Math.round((total / withResponse.length) * 10) / 10;
-  }, [periodCases]);
+  }, [periodCases, firstActionAt]);
 
   const resolutionRate = closedPeriod.length > 0
-    ? Math.round((closedPeriod.filter(c => calculateBusinessDaysOpen(new Date(c.created_at)) <= 1).length / closedPeriod.length) * 100)
+    ? Math.round((closedPeriod.filter(c => daysToClose(c) <= 1).length / closedPeriod.length) * 100)
     : 0;
 
   const currentlyOverdue = cases.filter(
@@ -199,15 +245,18 @@ export default function AnalyticsPage() {
     color: STATUS_COLOURS[s],
   })).filter(d => d.value > 0);
 
-  const avgCloseData = (Object.keys(EXTENDED_LABELS) as ExtendedCategory[]).map(cat => {
-    const closed = closedPeriod.filter(c => getExtendedCategory(c) === cat);
-    if (!closed.length) return null;
-    const avg = closed.reduce((s, c) => s + calculateBusinessDaysOpen(new Date(c.created_at)), 0) / closed.length;
+  // Average business days from creation until the case first reached In hand,
+  // per category. Cases that never reached In hand (still New/Actioned, or
+  // closed straight from an earlier status) are left out.
+  const avgInHandData = (Object.keys(EXTENDED_LABELS) as ExtendedCategory[]).map(cat => {
+    const reached = periodCases.filter(c => getExtendedCategory(c) === cat && inHandAt.has(c.id));
+    if (!reached.length) return null;
+    const avg = reached.reduce((s, c) => s + businessDaysBetween(new Date(c.created_at), inHandAt.get(c.id)!), 0) / reached.length;
     const rounded = Math.round(avg * 10) / 10;
     return {
       name: EXTENDED_LABELS[cat],
       days: rounded,
-      color: rounded <= 1 ? palette.aqua : rounded <= 2 ? palette.orange : palette.pink,
+      color: EXTENDED_COLOURS[cat], // same hue per category as the Cases by Type chart
     };
   }).filter(Boolean) as { name: string; days: number; color: string }[];
 
@@ -247,41 +296,98 @@ export default function AnalyticsPage() {
     : 13;
   const trendAngled = granularity === 'daily' && trendDayCount > 7;
 
+  // Products per case. Cases don't record a product themselves, so the
+  // products are the lines of the Cin7 sale order each case is linked to
+  // (cin7_sale_product_lines), named from cin7_products.
+  const saleIds = useMemo(
+    () => [...new Set(cases.map(c => c.cin7_sale_id).filter(Boolean) as string[])].sort(),
+    [cases],
+  );
+  const { data: saleProducts } = useQuery({
+    queryKey: ['analytics-case-sale-products', saleIds],
+    enabled: saleIds.length > 0,
+    queryFn: async () => {
+      const CHUNK = 100;
+      const skusBySale = new Map<string, Set<string>>();
+      for (let i = 0; i < saleIds.length; i += CHUNK) {
+        const { data, error } = await supabase
+          .from('cin7_sale_product_lines' as any)
+          .select('sale_id, sku')
+          .in('sale_id', saleIds.slice(i, i + CHUNK))
+          .limit(5000);
+        if (error) throw error;
+        for (const l of (data ?? []) as unknown as { sale_id: string; sku: string }[]) {
+          if (!l.sku) continue;
+          if (!skusBySale.has(l.sale_id)) skusBySale.set(l.sale_id, new Set());
+          skusBySale.get(l.sale_id)!.add(l.sku);
+        }
+      }
+      const skus = [...new Set([...skusBySale.values()].flatMap(set => [...set]))];
+      const info = new Map<string, { name: string; category: string | null }>();
+      for (let i = 0; i < skus.length; i += CHUNK) {
+        const { data, error } = await supabase
+          .from('cin7_products' as any)
+          .select('sku, name, category')
+          .in('sku', skus.slice(i, i + CHUNK));
+        if (error) throw error;
+        for (const r of (data ?? []) as unknown as { sku: string; name: string; category: string | null }[]) {
+          info.set(r.sku, { name: r.name, category: r.category });
+        }
+      }
+      return { skusBySale, info };
+    },
+    staleTime: 5 * 60_000,
+  });
+
   const topProducts = useMemo(() => {
-    const map = new Map<string, { count: number; types: Map<string, number>; lastDate: string }>();
+    if (!saleProducts) return [];
+    const { skusBySale, info } = saleProducts;
+    // Order lines that aren't the product a case is about: surcharges/freight
+    // and the promo merchandise added to orders.
+    const isNoise = (sku: string) =>
+      /surcharge|freight|shipping/i.test(`${sku} ${info.get(sku)?.name ?? ''}`) || info.get(sku)?.category === 'Merchandise';
+
+    const map = new Map<string, { count: number; types: Map<ExtendedCategory, number>; lastDate: string }>();
     periodCases.forEach(c => {
-      const p = c.product_name || 'Unknown';
-      const entry = map.get(p) || { count: 0, types: new Map(), lastDate: c.created_at };
-      entry.count++;
-      entry.types.set(c.type, (entry.types.get(c.type) || 0) + 1);
-      if (c.created_at > entry.lastDate) entry.lastDate = c.created_at;
-      map.set(p, entry);
+      const skus = c.cin7_sale_id ? skusBySale.get(c.cin7_sale_id) : undefined;
+      if (!skus) return;
+      const cat = getExtendedCategory(c);
+      skus.forEach(sku => {
+        if (isNoise(sku)) return;
+        const entry = map.get(sku) || { count: 0, types: new Map(), lastDate: c.created_at };
+        entry.count++; // each product counts once per case
+        entry.types.set(cat, (entry.types.get(cat) || 0) + 1);
+        if (c.created_at > entry.lastDate) entry.lastDate = c.created_at;
+        map.set(sku, entry);
+      });
     });
     return [...map.entries()]
-      .sort((a, b) => b[1].count - a[1].count)
+      .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
       .slice(0, 10)
-      .map(([name, data]) => {
+      .map(([sku, data]) => {
         const mostCommonType = [...data.types.entries()].sort((a, b) => b[1] - a[1])[0];
-        const extCat = getExtendedCategory({ type: mostCommonType[0] });
         return {
-          name,
+          sku,
+          name:       info.get(sku)?.name || sku,
           count:      data.count,
-          commonType: EXTENDED_LABELS[extCat] || mostCommonType[0],
+          commonType: EXTENDED_LABELS[mostCommonType[0]],
           lastDate:   format(new Date(data.lastDate), 'dd MMM yyyy'),
         };
       });
-  }, [periodCases]);
+  }, [periodCases, saleProducts]);
 
   // ── Export ───────────────────────────────────────────────────────────────
 
   const exportCSV = useCallback(() => {
-    const headers = ['Case Number', 'Type', 'Error Origin', 'Status', 'Created At', 'Closed At', 'Business Days Open', 'SO Number', 'Customer', 'Product', 'Resolution Summary'];
+    const headers = ['Case Number', 'Type', 'Error Origin', 'Status', 'Created At', 'Closed At', 'Business Days Open', 'SO Number', 'Customer', 'Order SKUs', 'Resolution Summary'];
     const rows = periodCases.map(c => [
       c.case_number, c.type, c.error_origin || '', c.status,
       format(new Date(c.created_at), 'yyyy-MM-dd HH:mm'),
-      c.status === 'closed' ? format(new Date(c.updated_at), 'yyyy-MM-dd HH:mm') : '',
-      calculateBusinessDaysOpen(new Date(c.created_at)).toString(),
-      c.order_number || '', c.customer_name || '', c.product_name || '', c.description || '',
+      c.status === 'closed' ? format(closedAt.get(c.id) ?? new Date(c.updated_at), 'yyyy-MM-dd HH:mm') : '',
+      (c.status === 'closed' ? daysToClose(c) : calculateBusinessDaysOpen(new Date(c.created_at))).toString(),
+      c.order_number || '', c.customer_name || '',
+      [...((c.cin7_sale_id && saleProducts?.skusBySale.get(c.cin7_sale_id)) || [])].join('; '),
+      c.description || '',
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${(v || '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -291,7 +397,7 @@ export default function AnalyticsPage() {
     a.download = `cases-${format(start, 'yyyyMMdd')}-${format(end, 'yyyyMMdd')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [periodCases, start, end]);
+  }, [periodCases, start, end, closedAt, daysToClose, saleProducts]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -465,28 +571,28 @@ export default function AnalyticsPage() {
                 />
                 <Tooltip {...TOOLTIP_STYLE} />
                 <Legend formatter={(value) => <span style={{ color: '#9A9A9A', fontSize: '11px' }}>{value}</span>} />
-                <Line type="monotone" dataKey="Warranty"          stroke={palette.pink} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Order Entry Error" stroke={palette.orange} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Warehouse Error"   stroke={palette.purple} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Freight Issue"     stroke={palette.blue} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Complaint"         stroke={palette.aqua} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="General"           stroke="#5A5A5A" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Warranty"          stroke={EXTENDED_COLOURS.warranty_claim} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Order Entry Error" stroke={EXTENDED_COLOURS.order_entry_error} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Warehouse Error"   stroke={EXTENDED_COLOURS.warehouse_error} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Freight Issue"     stroke={EXTENDED_COLOURS.freight_issue} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Complaint"         stroke={EXTENDED_COLOURS.complaint} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="General"           stroke={EXTENDED_COLOURS.general} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Row 4: Avg time to close — only shown when there's data */}
-          {avgCloseData.length > 0 && (
+          {/* Row 4: Avg time until In hand — only shown when there's data */}
+          {avgInHandData.length > 0 && (
             <div className="bg-card border border-border p-4">
-              <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">AVERAGE TIME TO CLOSE BY TYPE</h3>
-              <ResponsiveContainer width="100%" height={avgCloseData.length * 44 + 40}>
-                <BarChart data={avgCloseData} layout="vertical">
+              <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">AVERAGE TIME UNTIL IN HAND BY TYPE</h3>
+              <ResponsiveContainer width="100%" height={avgInHandData.length * 44 + 40}>
+                <BarChart data={avgInHandData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
                   <XAxis type="number" tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} domain={[0, (d: number) => Math.max(d, 1)]} />
                   <YAxis dataKey="name" type="category" tick={{ fill: '#5A5A5A', fontSize: 11 }} axisLine={{ stroke: '#1A1A1A' }} width={130} />
-                  <Tooltip {...TOOLTIP_STYLE} formatter={(v: number) => [`${v} days`, 'Avg']} />
+                  <Tooltip {...TOOLTIP_STYLE} formatter={(v: number) => [`${v} business days`, 'Avg']} />
                   <Bar dataKey="days" label={{ position: 'right', fill: '#5A5A5A', fontSize: 11, formatter: (v: number) => `${v}d` }}>
-                    {avgCloseData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    {avgInHandData.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -496,7 +602,8 @@ export default function AnalyticsPage() {
           {/* Row 5: Top products table */}
           {topProducts.length > 0 && (
             <div className="bg-card border border-border p-4">
-              <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-4">TOP PRODUCTS BY CASE COUNT</h3>
+              <h3 className="text-xs font-heading tracking-wider text-muted-foreground mb-1">TOP PRODUCTS BY CASE COUNT</h3>
+              <p className="text-[11px] text-muted-foreground mb-4">Products on each case's linked sales order</p>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
@@ -509,7 +616,7 @@ export default function AnalyticsPage() {
                 <tbody>
                   {topProducts.map((p, i) => (
                     <tr key={i} className="border-b border-border last:border-0">
-                      <td className="px-3 py-2 text-foreground">{p.name}</td>
+                      <td className="px-3 py-2 text-foreground">{p.name}{p.name !== p.sku && <span className="text-muted-foreground text-xs ml-2">{p.sku}</span>}</td>
                       <td className="px-3 py-2 text-right text-foreground font-medium">{p.count}</td>
                       <td className="px-3 py-2 text-muted-foreground">{p.commonType}</td>
                       <td className="px-3 py-2 text-muted-foreground">{p.lastDate}</td>
