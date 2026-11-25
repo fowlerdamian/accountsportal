@@ -40,23 +40,26 @@ Extract the following and return ONLY valid JSON — no markdown, no preamble, n
     "total_inc_gst": number or null — total of THIS invoice including GST
   },
   "lines": [
-    {
-      "description": "string — charge description as printed",
-      "detail": "string or null — shipment ref, zone, extra detail",
-      "tracking": "string or null — con note / consignment / tracking number for this shipment line",
-      "service": "string or null — normalised service name (e.g. 'Road Express', 'Overnight', 'Fuel Levy', 'GST')",
-      "origin": "string or null — origin city/zone code (e.g. 'SYD')",
-      "destination": "string or null — destination city/zone code (e.g. 'MEL')",
-      "weight_kg": number or null,
-      "qty": number or null,
-      "charged_total": number
-    }
+    [description, detail, tracking, service, origin, destination, weight_kg, qty, charged_total]
   ]
 }
+Each line is a JSON ARRAY of exactly 9 values in that fixed order (NOT an object):
+  1 description — string, charge description as printed
+  2 detail — string or null, shipment ref / zone / extra detail (keep it short)
+  3 tracking — string or null, con note / consignment / tracking number for this shipment line
+  4 service — string or null, normalised service name (e.g. "Road Express", "Overnight", "Fuel Levy", "GST")
+  5 origin — string or null, origin city/zone code (e.g. "SYD")
+  6 destination — string or null, destination city/zone code (e.g. "MEL")
+  7 weight_kg — number or null
+  8 qty — number or null
+  9 charged_total — number
+Example line: ["Road Express","ARMIDALE/J SMITH","UAR267481566","Road Express","ARM","BNE",7,1,22.89]
+Output MINIFIED JSON: no indentation, no spaces after commas — large invoices have 150+ rows and must fit in the output.
 Rules:
 - invoice_ref: look for Invoice No, Invoice Number, Ref, Reference, Tax Invoice #
 - carrier_name: the company that ISSUED the invoice (not the recipient)
-- lines: one per distinct charge row — freight legs, fuel levy, surcharges, handling, GST. Skip payment/credit/balance rows (negative "Payment, Thank You" style entries).
+- lines: one per distinct charge row — freight legs, fuel levy, surcharges, handling, GST. Skip payment/credit/balance rows (negative "Payment, Thank You" style entries) and "Credit Adjustment" rows (negative amounts credited against EARLIER invoices).
+- Statement-only documents: when the document bills no charges of its own (Consignment Note Billing 0.00 / Total of this Invoice 0.00, only credit adjustments or payments listed), return "lines": [] with the totals as 0.
 - charged_total: the line total EXCLUDING GST. When the invoice shows both GST-inclusive and GST-exclusive totals per line (TNT style), ALWAYS use the "Total excluding GST" figure (it already includes any per-line fuel/security surcharge). Never use the GST-inclusive figure.
 - TNT / FedEx row layout (text is extracted in this order): "<S|R|T> <service code> <items> <cubic m3> <weight kg> <V|W> <Freight/Other Charges> <Warranty> <GST> <Total including GST> <sender/receiver> <origin/destination OR rating code> <consignment number> <date> <Fuel/Security Surcharge> <Total excluding GST>". charged_total is the LAST number of the row (Total excluding GST) — NOT the first dollar figure (Freight/Other Charges, which excludes the fuel surcharge). Example: "S 76 1 0.0183 7.000 W 17.95 0.00 2.29 25.18 ARMIDALE/J SMITH ARM/BNE/// UAR267481566 10/08/26 4.94 22.89" → charged_total 22.89, weight_kg 7, tracking "UAR267481566", service "Road Express".
 - A row whose origin/destination slot holds a rating code instead (RSD, RSP, MHP, RED, RES, OS1…, FUT etc.) is a SURCHARGE row for that consignment: set description AND service to the surcharge's name from the invoice's code legend (e.g. MHP → "Manual Handling", RSD → "Residential Pickup / Delivery Fee", RED → "Redelivery / Futile Delivery"), never the freight service name, and set weight_kg to null.
@@ -130,6 +133,7 @@ Deno.serve(async (req) => {
 
     // Accumulate the SSE stream into the full response text
     let responseText = "";
+    let stopReason = "";
     const reader = claudeRes.body!.getReader();
     const decoder = new TextDecoder();
     let buf = "";
@@ -144,21 +148,32 @@ Deno.serve(async (req) => {
         let ev;
         try { ev = JSON.parse(line.slice(6)); } catch { continue; } // keepalives/partials
         if (ev.type === "content_block_delta" && ev.delta?.text) responseText += ev.delta.text;
+        if (ev.type === "message_delta" && ev.delta?.stop_reason) stopReason = ev.delta.stop_reason;
         if (ev.type === "error") throw new Error(ev.error?.message ?? "stream error");
       }
     }
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Claude did not return valid JSON");
+    if (stopReason === "max_tokens") {
+      throw new Error("Invoice too large — extraction output was cut off before the last row");
+    }
+    if (!jsonMatch) throw new Error(`Claude did not return valid JSON (stop: ${stopReason || "unknown"})`);
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    let parsed;
+    try { parsed = JSON.parse(jsonMatch[0]); }
+    catch (e) { throw new Error(`Extraction returned malformed JSON: ${(e as Error).message}`); }
     if (isHeader) {
       return new Response(JSON.stringify(parsed), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!Array.isArray(parsed.lines) || parsed.lines.length === 0) {
-      throw new Error("No line items found in the document");
-    }
+    if (!Array.isArray(parsed.lines)) throw new Error("No line items found in the document");
+    // Rows arrive as compact positional arrays (keeps 150+ row invoices inside
+    // the output budget — verbose objects hit the 32k cap and the truncated
+    // JSON failed to parse); objects are still accepted.
+    const KEYS = ["description", "detail", "tracking", "service", "origin", "destination", "weight_kg", "qty", "charged_total"];
+    const blank = (v: unknown) => (v === "" || v === undefined ? null : v);
+    parsed.lines = parsed.lines.map((l: unknown) =>
+      Array.isArray(l) ? Object.fromEntries(KEYS.map((k, i) => [k, blank(l[i])])) : l);
     // Defensive numeric coercion — drop unusable rows rather than fail the import
     parsed.lines = parsed.lines
       .filter((l: Record<string, unknown>) => l.description && l.charged_total != null)
@@ -185,11 +200,15 @@ Deno.serve(async (req) => {
       totals.net_ex_gst = Math.round((totals.total_inc_gst - totals.gst) * 100) / 100;
     }
     parsed.totals = totals;
+    // A statement that bills nothing itself (credits / payments only) is a
+    // valid result, not a failure — the client records it as "no charges".
+    parsed.no_charges = parsed.lines.length === 0;
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    console.error("[logistics-parse-invoice]", (err as Error).message);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

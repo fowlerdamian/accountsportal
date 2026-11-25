@@ -339,7 +339,7 @@ export default function InvoiceDetail() {
         </div>
       )}
 
-      {lines.length === 0 && (
+      {lines.length === 0 && !(invoice.notes ?? '').startsWith('No consignment charges') && (
         <div style={warnBox}>
           This invoice has no line items — extraction did not complete, so nothing has been audited. Drag the invoice PDF onto the page again to re-extract it.
         </div>

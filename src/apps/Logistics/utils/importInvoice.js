@@ -126,16 +126,38 @@ export async function importAndCheck(payload) {
 // are replaced atomically and "query lodged" stamps carry over per con note.
 // The rate check only runs when lines actually landed — a failed extraction
 // must never end up looking like a clean, processed invoice.
+export const NO_CHARGES_NOTE = 'No consignment charges on this statement (credits / payments only) — nothing to audit.'
+
 export async function extractLinesInBackground(invoiceId, text) {
   const fail = async (message) => {
     await supabase.from('freight_invoices')
       .update({ notes: `Line extraction failed (${new Date().toLocaleDateString('en-AU')}): ${message} — drop the PDF again to retry.` })
-      .eq('id', invoiceId).is('notes', null)
+      .eq('id', invoiceId).or('notes.is.null,notes.like.Line extraction failed%')
     return { status: 'error', message }
   }
   try {
     const { data, error } = await supabase.functions.invoke('logistics-parse-invoice', { body: { text } })
-    if (error || data?.error) return fail(data?.error ?? error.message)
+    if (error || data?.error) {
+      // supabase-js hides the function's own message behind a generic
+      // "non-2xx status code" — dig the real reason out of the response body
+      let detail = data?.error ?? error.message
+      try { detail = (await error.context.json())?.error ?? detail } catch { /* keep generic */ }
+      return fail(detail)
+    }
+    // Statement that bills nothing itself (credits / payments only): a valid
+    // outcome, not a failed extraction — record it as audited with no charges.
+    if (data?.no_charges) {
+      await supabase.from('freight_invoices')
+        .update({
+          status: 'matched', matched_at: new Date().toISOString(),
+          stated_net: data.totals?.net_ex_gst ?? 0, stated_gst: data.totals?.gst ?? 0,
+        })
+        .eq('id', invoiceId).eq('status', 'pending')
+      await supabase.from('freight_invoices')
+        .update({ notes: NO_CHARGES_NOTE })
+        .eq('id', invoiceId).or('notes.is.null,notes.like.Line extraction failed%')
+      return { status: 'no_charges' }
+    }
     if (!data?.lines?.length) return fail('no line items found')
     const { error: rpcErr } = await supabase.rpc('replace_freight_invoice_lines', {
       _invoice_id: invoiceId,
@@ -144,6 +166,9 @@ export async function extractLinesInBackground(invoiceId, text) {
       _stated_gst: data.totals?.gst ?? null,
     })
     if (rpcErr) return fail(rpcErr.message)
+    // Lines landed — clear any stale failure note from an earlier attempt
+    await supabase.from('freight_invoices')
+      .update({ notes: null }).eq('id', invoiceId).like('notes', 'Line extraction failed%')
   } catch (err) {
     return fail(err.message)
   }
