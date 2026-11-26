@@ -465,11 +465,18 @@ export default function RevenueTargets() {
     // against; open months absorb the YTD shortfall so hitting them lands the
     // year on $2.0m. The stored series sums above the plan when behind — the
     // UI deliberately displays the plan totals instead.
-    const wanted = seasonality.rolling.months.map((m) => ({
-      month: m.month,
-      target: m.completed ? m.planBase : m.base,
-      stretch: m.completed ? m.planStretch : m.stretch,
-    }))
+    // Completed months are NEVER rewritten — their stored row is the target
+    // that was live during the month. (Rewriting them to planBase revised Oct
+    // 26 from $250k to $177k on 1 Nov, because planBase's medians absorb each
+    // newly completed month.) A completed month only gets planBase if it has
+    // no stored row at all.
+    const wanted = seasonality.rolling.months
+      .filter((m) => !m.completed || !stored.has(m.month))
+      .map((m) => ({
+        month: m.month,
+        target: m.completed ? m.planBase : m.base,
+        stretch: m.completed ? m.planStretch : m.stretch,
+      }))
     const dirty = wanted
       .filter((w) => {
         const s = stored.get(w.month)
@@ -486,6 +493,14 @@ export default function RevenueTargets() {
         qc.invalidateQueries({ queryKey: ['revenue-targets'] })
       })
   }, [seasonality, data, thisYear, qc])
+
+  // Target a month is judged against: the stored (locked) row for completed
+  // months, the live catch-up value for open ones.
+  const judgedTarget = (m, key = 'target') => {
+    if (!m.completed) return key === 'target' ? m.base : m.stretch
+    const s = data?.targets?.find((t) => t.year === thisYear && t.month === m.month)?.[key]
+    return s != null ? Number(s) : key === 'target' ? m.planBase : m.planStretch
+  }
 
   // year -> month -> { actual, target, stretch }
   const grid = useMemo(() => {
@@ -754,7 +769,7 @@ export default function RevenueTargets() {
                     {
                       label: '% Achieved', color: C.faint,
                       render: (m) => {
-                        const target = m.completed ? m.planBase : m.base
+                        const target = judgedTarget(m)
                         if (m.actual == null || !target) return '—'
                         const pct = (m.actual / target) * 100
                         const color = pct >= 100 ? C.green : pct >= 95 ? palette.orange : m.completed ? C.red : C.text
@@ -762,7 +777,7 @@ export default function RevenueTargets() {
                       },
                       total: (() => {
                         const withActual = seasonality.rolling.months.filter((m) => m.actual != null)
-                        const target = withActual.reduce((s, m) => s + (m.completed ? m.planBase : m.base), 0)
+                        const target = withActual.reduce((s, m) => s + judgedTarget(m), 0)
                         return target ? `${((seasonality.rolling.ytdActual / target) * 100).toFixed(1)}%` : '—'
                       })(),
                     },
@@ -772,8 +787,9 @@ export default function RevenueTargets() {
                         if (m.actual == null) return '—'
                         if (!m.completed) return `$${fmt0.format(Math.round(m.actual))}`
                         // ✓ hit, ~ within 5% of target (orange), ✗ miss
-                        const near = m.actual < m.planBase && m.actual >= m.planBase * 0.95
-                        const hit = m.actual >= m.planBase
+                        const tgt = judgedTarget(m)
+                        const near = m.actual < tgt && m.actual >= tgt * 0.95
+                        const hit = m.actual >= tgt
                         const mark = hit ? ' ✓' : near ? ' ~' : ' ✗'
                         const color = hit ? C.green : near ? palette.orange : C.red
                         return <span style={{ color }}>{`$${fmt0.format(Math.round(m.actual))}${mark}`}</span>
@@ -783,8 +799,8 @@ export default function RevenueTargets() {
                     // Completed months show their historical plan, open months the
                     // catch-up value. Year cells show rolling.sums (actuals-to-date +
                     // remaining targets) — i.e. the plan totals, not the cell sum.
-                    { label: 'Target', render: (m) => `$${fmt0.format(m.completed ? m.planBase : m.base)}`, color: C.accent, total: money(seasonality.rolling.sums.base) },
-                    { label: 'Stretch', render: (m) => `$${fmt0.format(m.completed ? m.planStretch : m.stretch)}`, color: C.muted, total: money(seasonality.rolling.sums.stretch) },
+                    { label: 'Target', render: (m) => `$${fmt0.format(judgedTarget(m))}`, color: C.accent, total: money(seasonality.rolling.sums.base) },
+                    { label: 'Stretch', render: (m) => `$${fmt0.format(judgedTarget(m, 'stretch'))}`, color: C.muted, total: money(seasonality.rolling.sums.stretch) },
                   ].map((row) => (
                     <tr key={row.label}>
                       <td style={{ padding: '6px 10px', fontFamily: '"JetBrains Mono", monospace', fontSize: 11.5, color: row.color, whiteSpace: 'nowrap', borderBottom: `1px solid ${C.borderSoft}` }}>{row.label}</td>
