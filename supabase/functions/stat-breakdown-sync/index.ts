@@ -25,7 +25,8 @@
 // sale x month x product, qty/revenue/cost) for the Stock Turn tab, so one Cin7
 // sale fetch feeds both reports.
 //
-// POST body (all optional): { "backfill": true, "drainMs": 100000 }
+// POST body (all optional): { "backfill": true, "drainMs": 100000,
+//   "requeueCustomers": ["name fragment"] }  ← force a customer's sales through
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -84,19 +85,63 @@ async function loadProductBuckets(): Promise<Map<string, string>> {
   return map;
 }
 
-// CustomerID → customer type (~8 calls at 1000/page)
-async function loadCustomerTypes(): Promise<Map<string, string>> {
+const MAP_TTL_MS = 12 * 60 * 60_000;
+const CUSTOMER_TTL_MS = 24 * 60 * 60_000; // tag sync (and retag requeue) once a day
+
+// Customer tags live on the customer, not the sale, so retagging never bumps a
+// sale's Updated stamp and the scan never re-queues it. Once a day, refresh the
+// customer map, diff against the cached one, and queue every in-window sale of
+// any customer whose type changed (or of `force` customer names). Returns the
+// fresh map plus how many sales were queued.
+// deno-lint-ignore no-explicit-any
+async function refreshCustomers(sc: any, force: string[] = []): Promise<{ map: Map<string, string>; requeued: number; changed: string[] }> {
+  const { data } = await sc.from("cin7_stat_maps").select("payload, fetched_at").eq("key", "customers").maybeSingle();
+  const old = (data?.payload ?? null) as Record<string, string> | null;
+  const fresh = data && Date.now() - new Date(data.fetched_at).getTime() < CUSTOMER_TTL_MS;
+  if (fresh && !force.length) return { map: new Map(Object.entries(old!)), requeued: 0, changed: [] };
+
   const map = new Map<string, string>();
+  const names = new Map<string, string>();
   for (let page = 1; page <= 25; page++) {
     const d = await cin7("/customer", { Page: page, Limit: 1000 });
     const items = (d.CustomerList as Json[]) ?? [];
-    for (const c of items) map.set(String(c.ID), customerType(c.Tags));
+    for (const c of items) {
+      map.set(String(c.ID), customerType(c.Tags));
+      names.set(String(c.ID), String(c.Name ?? ""));
+    }
     if (items.length < 1000) break;
   }
-  return map;
-}
+  await sc.from("cin7_stat_maps").upsert({
+    key: "customers", payload: Object.fromEntries(map), fetched_at: new Date().toISOString(),
+  });
 
-const MAP_TTL_MS = 12 * 60 * 60_000;
+  const targets = new Map<string, string>(); // id → name
+  if (old) {
+    for (const [id, type] of map) if ((old[id] ?? "Consumers") !== type) targets.set(id, names.get(id) ?? "");
+  }
+  const lc = force.map((f) => f.toLowerCase());
+  for (const [id, name] of names) if (lc.some((f) => name.toLowerCase().includes(f))) targets.set(id, name);
+
+  let requeued = 0;
+  for (const [id, name] of [...targets].slice(0, 25)) {
+    if (!name) continue;
+    for (let page = 1; page <= 5; page++) {
+      const d = await cin7("/saleList", { Page: page, Limit: 500, Search: name });
+      const items = (d.SaleList as Json[]) ?? [];
+      const ids = items
+        .filter((s) => String(s.CustomerID) === id && String(s.Status).toUpperCase() !== "VOIDED")
+        .filter((s) => String(s.InvoiceDate ?? "") >= START || String(s.CreditNoteNumber ?? "") !== "")
+        .map((s) => ({ sale_id: String(s.SaleID) }));
+      if (ids.length) {
+        const { error } = await sc.from("cin7_stat_pending").upsert(ids, { onConflict: "sale_id" });
+        if (error) throw new Error(`requeue upsert: ${error.message}`);
+        requeued += ids.length;
+      }
+      if (items.length < 500) break;
+    }
+  }
+  return { map, requeued, changed: [...targets.values()] };
+}
 
 // Lookup maps cached in cin7_stat_maps for 12h — new/unknown ids fall back to
 // sensible defaults (Consumers / Other) so a stale cache never blocks a sale.
@@ -263,12 +308,18 @@ serve(async (req) => {
       if (items.length < 500) break;
     }
 
+    // ── Customer retags → requeue that customer's sales ─────────────────────
+    const force = Array.isArray(body.requeueCustomers) ? (body.requeueCustomers as unknown[]).map(String) : [];
+    const cust = await refreshCustomers(sc, force);
+    queued += cust.requeued;
+    if (cust.changed.length) console.info("[stat-breakdown] retagged/forced:", cust.changed.join(", "), `→ ${cust.requeued} sale(s) requeued`);
+
     // ── Maps (9-ish cheap calls) — only when there is work to do ─────────────
     const { count: pendingBefore } = await sc.from("cin7_stat_pending").select("*", { count: "exact", head: true });
     let processed = 0;
     if ((pendingBefore ?? 0) > 0) {
       const buckets = await cachedMap(sc, "products", loadProductBuckets);
-      const ctypes = await cachedMap(sc, "customers", loadCustomerTypes);
+      const ctypes = cust.map;
 
       // ── Drain until the time budget runs out ───────────────────────────────
       // Details fetched 3-at-a-time (DEAR's concurrency cap); DB writes batched
@@ -339,7 +390,7 @@ serve(async (req) => {
     }).eq("id", 1);
 
     return new Response(JSON.stringify({
-      ok: true, queued, processed, pending: pending ?? 0, ms: Date.now() - started,
+      ok: true, queued, processed, pending: pending ?? 0, retagged: cust.changed, ms: Date.now() - started,
     }), { headers: jsonHeaders });
   } catch (e) {
     await releaseLease();
